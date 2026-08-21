@@ -4,6 +4,7 @@ import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
 import { downloadAdult, searchAdult, type AdultProvider } from '../services/adult.js'
 import { sendCarousel } from '../services/interactive.js'
+import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 function assertAdultAccess(ctx: CommandContext) {
   if (!settings.adultEnabled) throw new Error(`El módulo 18+ está desactivado globalmente. El owner puede habilitarlo con ${ctx.prefix}adultmode on.`)
@@ -24,6 +25,7 @@ async function searchOrDownload(ctx: CommandContext, provider: AdultProvider) {
         video: { url: result.filePath }, mimetype: 'video/mp4',
         caption: `🔞 ${provider.toUpperCase()} · ${(result.size / 1024 / 1024).toFixed(1)} MB\nContenido solicitado bajo responsabilidad del usuario.`,
       }, { quoted: ctx.message })
+      recordSubbotDownload(ctx.instanceId, result.size)
     } finally { await result.cleanup() }
     return
   }
@@ -67,6 +69,7 @@ export const adultCommands: BotCommand[] = [
       const result = await downloadAdult(url)
       try {
         await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `🔞 Descarga completada · ${(result.size / 1024 / 1024).toFixed(1)} MB` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
