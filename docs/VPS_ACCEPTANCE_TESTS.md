@@ -570,7 +570,7 @@ Finalmente:
 .privaterevoke @usuario
 ```
 
-La cuenta debe quedar bloqueada nuevamente en privado. La revocación explícita elimina cualquier `private_access` activo de ese usuario, incluido uno comprado previamente, por lo que debe tratarse como una acción administrativa sensible.
+La concesión manual debe desaparecer inmediatamente. Si el usuario no tiene ninguna suscripción comprada, volverá a quedar bloqueado. Si todavía conserva tiempo pagado mediante `.buy`, ese acceso comprado debe seguir vigente: `.privaterevoke` **no elimina suscripciones pagadas**.
 
 ## 17. Persistencia
 
