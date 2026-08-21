@@ -403,7 +403,7 @@ Los archivos grandes se manejan mediante almacenamiento temporal en disco para e
 
 La guía de primera instalación explica la configuración completa con dominio, DNS, nginx y Let's Encrypt:
 
-[🔒 **Configurar instalación y HTTPS**](docs/FIRST_INSTALL.md#12-instalar-directamente-con-dominio-y-https-automático)
+[🔒 **Configurar instalación y HTTPS**](docs/FIRST_INSTALL.md)
 
 Ejemplo para `main`:
 
