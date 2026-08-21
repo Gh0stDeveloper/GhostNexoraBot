@@ -2,7 +2,7 @@
 
 Esta guía valida la rama `feature/ghost-nexora-bot-v1` antes de quitar el estado Draft del PR y antes de cualquier merge a `main`.
 
-> No hacer merge únicamente porque GitHub Actions esté verde. Las integraciones con WhatsApp, YouTube móvil, yt1s, FFmpeg, webpmux y proveedores externos necesitan prueba real desde la VPS.
+> No hacer merge únicamente porque GitHub Actions esté verde. Las integraciones con WhatsApp, YouTube móvil, yt1s, Erome, Google, FFmpeg, webpmux y proveedores externos necesitan prueba real desde la VPS.
 
 ## 1. Actualizar la VPS
 
@@ -413,7 +413,166 @@ Con NSFW y consentimiento habilitados:
 
 No deben aceptar términos bloqueados relacionados con menores.
 
-## 14. Persistencia
+## 14. Erome — explorar, buscar y descargar solo video
+
+Prerrequisitos:
+
+```text
+.adult18 accept
+```
+
+El staff debe tener el módulo adulto global activo y, si se prueba en grupo, el grupo debe permitir NSFW.
+
+### Explorar
+
+```text
+.erome
+.erome hot 1
+.erome new 1
+```
+
+Verificar:
+
+- carrusel interactivo de álbumes;
+- hasta 10 álbumes por página;
+- botones `Ver videos` y `Abrir álbum`;
+- navegación Anterior/Siguiente;
+- cambiar HOT/NEW desde botones;
+- no se envían imágenes del contenido del álbum como resultado descargable.
+
+### Buscar
+
+```text
+.erome search <consulta adulta permitida>
+```
+
+Abrir uno de los álbumes del carrusel. Debe mostrar únicamente sus fuentes de video MP4.
+
+También probar directamente:
+
+```text
+.erome album <album-id>
+```
+
+Si el álbum tiene más de 10 videos, probar la paginación interna.
+
+### Descargar
+
+Desde el botón `Descargar` o manualmente:
+
+```text
+.erome dl <album-id> 1
+```
+
+Verificar:
+
+- archivo MP4 válido;
+- se envía por WhatsApp;
+- se respeta `MAX_DOWNLOAD_MB`;
+- la descarga directa conserva Referer/cookies;
+- cualquier redirección final fuera de `*.erome.com` es rechazada;
+- un álbum que solo tenga imágenes devuelve un mensaje indicando que las imágenes se omitieron.
+
+### Sesión opcional
+
+Sin configurar credenciales:
+
+```text
+.erome status
+```
+
+Debe indicar `ANÓNIMO`.
+
+El login web actual de Erome utiliza e-mail, contraseña y CAPTCHA. Ghost Nexora Bot **no intenta saltarse CAPTCHA ni almacena la contraseña**. Para una sesión autenticada opcional se exporta manualmente la cookie de una sesión legítima y se guarda únicamente en la VPS:
+
+```env
+EROME_COOKIE=nombre=valor; otra=valor
+```
+
+Después:
+
+```bash
+sudo systemctl restart ghost-nexora-bot
+```
+
+Y:
+
+```text
+.erome status
+```
+
+Debe indicar una sesión por cookie sin mostrar el valor secreto. Las cookies renovadas por Erome se persisten en `${DATA_DIR}/erome-session.json` con permisos privados.
+
+## 15. Google y Wikipedia
+
+### Google
+
+```text
+.google OpenAI
+```
+
+Verificar carrusel con título, fragmento y botón `Abrir resultado`.
+
+Desde una IP de datacenter Google puede activar anti-bot. En ese caso el bot debe enviar un error breve indicando verificación temporal, nunca HTML de CAPTCHA ni una traza interna.
+
+### Wikipedia
+
+```text
+.wiki México
+```
+
+Verificar:
+
+- resultados desde MediaWiki API;
+- resumen introductorio;
+- imagen cuando Wikipedia disponga de ella;
+- botón `Leer artículo`;
+- enlaces de Wikipedia en español.
+
+## 16. Acceso privado concedido por staff
+
+Usar una cuenta normal sin suscripción. Primero confirmar en chat privado:
+
+```text
+.ping
+```
+
+Debe quedar bloqueado.
+
+Desde Owner/staff, en un grupo o chat donde pueda identificar al usuario:
+
+```text
+.privategrant @usuario 30d
+.privatestatus @usuario
+.privateusers
+```
+
+El permiso administrativo no debe descontar NXC.
+
+Volver a la cuenta objetivo y probar por privado:
+
+```text
+.ping
+.profile
+```
+
+Deben funcionar inmediatamente, sin reiniciar.
+
+Probar también permiso permanente:
+
+```text
+.privategrant @usuario permanent
+```
+
+Finalmente:
+
+```text
+.privaterevoke @usuario
+```
+
+La cuenta debe quedar bloqueada nuevamente en privado. La revocación explícita elimina cualquier `private_access` activo de ese usuario, incluido uno comprado previamente, por lo que debe tratarse como una acción administrativa sensible.
+
+## 17. Persistencia
 
 Reiniciar:
 
@@ -426,21 +585,25 @@ Volver a comprobar:
 - saldo/economía;
 - perfiles;
 - staff global;
+- acceso privado concedido manualmente;
 - banners;
 - sticker pack;
 - identidad del subbot;
 - grupo `bot on/off`;
 - welcome/goodbye;
+- sesión/cookies de Erome si se configuró;
 - partidas persistentes que deban seguir activas.
 
-## 15. Criterio para quitar Draft
+## 18. Criterio para quitar Draft
 
 El PR puede considerarse candidato a `Ready for review` cuando:
 
 - GitHub Actions esté verde en el HEAD actual;
 - el MainBot conecte sin error;
-- paywall privado haya sido verificado con cuenta sin acceso y con cuenta suscrita;
+- paywall privado haya sido verificado con cuenta sin acceso, cuenta suscrita y cuenta autorizada manualmente;
 - YouTube búsqueda/descarga funcione o falle limpiamente usando fallbacks;
+- Erome permita explorar/buscar/abrir álbum/descargar video o falle limpiamente ante cambios del sitio;
+- Google y Wikipedia funcionen o reporten limitaciones externas de forma limpia;
 - menú/banners/stickers funcionen en WhatsApp real;
 - al menos una partida PvP y una partida de damas se completen;
 - subbot reciba comandos y eventos de participantes;
