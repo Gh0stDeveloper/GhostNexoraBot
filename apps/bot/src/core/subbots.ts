@@ -3,6 +3,7 @@ import { Boom } from '@hapi/boom'
 import { DisconnectReason, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
 import { economy, type SubbotRecord } from '../services/economy.js'
+import { recordSubbotMessage } from '../services/subbot-metrics.js'
 import { logger } from '../utils/logger.js'
 import { createSocket } from './session.js'
 
@@ -41,7 +42,7 @@ class SubbotManager {
       return { code: null, alreadyLinked: true }
     }
 
-    return new Promise<{ code: string; alreadyLinked: false }>((resolve, reject) => {
+    return new Promise<{ code: string; alreadyLinked: false } | { code: null; alreadyLinked: true }>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('WhatsApp no entregó la solicitud de pairing a tiempo.')), 45_000)
       let requested = false
       const listener = async ({ qr }: { qr?: string }) => {
@@ -74,6 +75,7 @@ class SubbotManager {
       if (!live || live.id !== record.id || live.expiresAt <= Date.now()) return
       for (const message of messages) {
         if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
+        recordSubbotMessage(record.id)
         await this.handler(socket, message, live).catch((error) => logger.error({ error, subbotId: record.id }, 'subbot message failed'))
       }
     })
