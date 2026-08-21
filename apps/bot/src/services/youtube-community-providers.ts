@@ -124,7 +124,7 @@ export async function resolveOgMp3YouTube(
   const direct = `${OG_BASE}/${hash()}/download/${encodeURIComponent(xorEncode(completed.i))}/${hash()}/`
   return {
     url: direct,
-    provider: 'OGMP3',
+    provider: 'https://ogmp3.lat',
     title: typeof completed.t === 'string' ? completed.t : undefined,
     thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
     fileName: `${id}.${kind}`,
@@ -170,7 +170,7 @@ export async function resolveSiputzxYouTube(youtubeUrl: string, kind: CommunityY
   const payload = await response.json() as JsonRecord
   const direct = extractDirect(payload)
   if (!direct) throw new Error('SiputZX no devolvió una URL de descarga.')
-  return { url: direct, provider: 'SiputZX', title: extractTitle(payload) }
+  return { url: direct, provider: 'https://api.siputzx.my.id', title: extractTitle(payload) }
 }
 
 export async function resolveApiCausasYouTube(youtubeUrl: string, kind: CommunityYouTubeKind): Promise<CommunityYouTubeResolved> {
@@ -191,5 +191,5 @@ export async function resolveApiCausasYouTube(youtubeUrl: string, kind: Communit
   const direct = validHttpUrl(download?.url)
   if (payload.status !== true || !direct) throw new Error(typeof payload.message === 'string' ? payload.message : 'ApiCausas no devolvió una URL de descarga.')
   const title = typeof data?.title === 'string' ? data.title : undefined
-  return { url: direct, provider: 'ApiCausas', title }
+  return { url: direct, provider: 'https://rest.apicausas.xyz', title }
 }
