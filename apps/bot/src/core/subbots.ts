@@ -84,8 +84,8 @@ class SubbotManager {
     socket.ev.on('group-participants.update', (update) => {
       const live = economy.getActiveSubbot(record.ownerJid)
       if (!live || live.id !== record.id || live.expiresAt <= Date.now()) return
-      void handleParticipantUpdate(socket, update as never, record.id)
-        .catch((error) => logger.error({ error, subbotId: record.id }, 'subbot participant update failed'))
+      void handleParticipantUpdate(socket, update, record.id)
+        .catch((error) => logger.error({ error, subbotId: record.id, groupId: update.id, action: update.action }, 'subbot participant update failed'))
     })
 
     socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
