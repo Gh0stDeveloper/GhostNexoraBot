@@ -6,11 +6,51 @@ Bot profesional, modular y extensible para **WhatsApp Multi-Device**, desarrolla
 
 > ⚠️ Proyecto no oficial. Ghost Nexora Bot no está afiliado con WhatsApp, Meta, YouTube, MyAnimeList ni las plataformas soportadas. Usa cada módulo de forma responsable y respeta las condiciones, licencias y derechos aplicables.
 
-## 🔗 Enlaces oficiales
+## 🔗 Enlaces y documentación
 
 [📢 **Canal oficial de WhatsApp**](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i) · [📦 **Repositorio GitHub**](https://github.com/Gh0stDeveloper/GhostNexoraBot) · [🧪 **GitHub Actions**](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions) · [🔀 **PR de desarrollo V1**](https://github.com/Gh0stDeveloper/GhostNexoraBot/pull/1)
 
+### 📚 Guías
+
+[🚀 **Primera instalación y activación**](docs/FIRST_INSTALL.md) · [🔄 **Actualizar Ghost Nexora Bot**](docs/UPDATING.md)
+
 El canal oficial se utilizará para **noticias, releases, mantenimiento, cambios importantes, avisos del desarrollador y enlaces a grupos oficiales**.
+
+---
+
+## ⚡ Instalación rápida
+
+### Rama estable `main`
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo bash
+```
+
+### V1 Draft actual
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/feature/ghost-nexora-bot-v1/scripts/install.sh | sudo env BRANCH=feature/ghost-nexora-bot-v1 bash
+```
+
+Durante la primera instalación el script puede solicitar el número principal de WhatsApp y generar el **pairing code**.
+
+Para todos los pasos, pairing, servicios, logs, firewall, dominio y HTTPS consulta [🚀 **Primera instalación y activación**](docs/FIRST_INSTALL.md).
+
+### Actualización rápida
+
+Estable:
+
+```bash
+sudo /opt/ghost-nexora-bot/scripts/update.sh
+```
+
+Draft:
+
+```bash
+sudo env BRANCH=feature/ghost-nexora-bot-v1 /opt/ghost-nexora-bot/scripts/update.sh
+```
+
+Antes de una actualización importante consulta [🔄 **la guía completa de actualización y rollback**](docs/UPDATING.md).
 
 ---
 
@@ -18,30 +58,30 @@ El canal oficial se utilizará para **noticias, releases, mantenimiento, cambios
 
 Ghost Nexora Bot incluye actualmente:
 
-- 🔗 WhatsApp Multi-Device con **Baileys 7**.
-- 🔐 Vinculación mediante **número + pairing code**, con QR de respaldo.
-- 💾 Sesión persistente y reconexión automática.
-- ⚙️ Prefijo configurable; `.` por defecto.
-- 📜 Menú completo mediante `.menu`.
-- ❤️ Reacciones a comandos y reacciones conversacionales opcionales.
-- 🎵 búsqueda y descarga multimedia.
-- 🖼️ stickers y efectos.
-- 🪙 economía propia con **Nexora Coins (NXC)**.
-- 🌸 sistema coleccionable **Nexora Waifu Collection**.
-- 🤖 subbots comprables con NXC y sesiones independientes.
-- 👥 moderación y políticas persistentes por grupo.
-- 🔞 módulo 18+ opt-in con allowlist por grupo.
-- 📦 F-Droid, Google Drive, MediaFire y GitHub ZIP.
-- 🎌 búsqueda de anime/manga.
-- 🌐 dashboard Next.js + Tailwind CSS.
-- 🔒 instalación HTTPS opcional mediante nginx + Let's Encrypt.
+- 🔗 WhatsApp Multi-Device con **Baileys 7**;
+- 🔐 vinculación mediante **número + pairing code**, con QR de respaldo;
+- 💾 sesión persistente y reconexión automática;
+- ⚙️ prefijo configurable, `.` por defecto;
+- 📜 menú completo mediante `.menu`;
+- ❤️ reacciones a comandos y reacciones conversacionales opcionales;
+- 🎵 búsquedas y descargas multimedia;
+- 🖼️ stickers y efectos;
+- 🪙 economía propia con **Nexora Coins (NXC)**;
+- 🌸 sistema coleccionable **Nexora Waifu Collection**;
+- 🤖 subbots comprables con NXC y sesiones independientes;
+- 👥 moderación y políticas persistentes por grupo;
+- 🔞 módulo 18+ opt-in con allowlist por grupo;
+- 📦 F-Droid, Google Drive, MediaFire y GitHub ZIP;
+- 🎌 búsquedas de anime/manga;
+- 🌐 dashboard Next.js + Tailwind CSS;
+- 🔒 HTTPS opcional mediante nginx + Let's Encrypt;
 - 🧪 CI para TypeScript, build, Bash y auditoría de dependencias de producción.
 
 ---
 
 # 🤖 WhatsApp Multi-Device
 
-La capa de WhatsApp utiliza Baileys 7 y contempla el modelo actual de identificadores **PN/LID**.
+La capa de WhatsApp utiliza Baileys 7 y contempla identificadores **PN/LID**.
 
 ### Características
 
@@ -53,7 +93,7 @@ La capa de WhatsApp utiliza Baileys 7 y contempla el modelo actual de identifica
 - cuenta principal reconocida como owner;
 - subbots con directorios de sesión independientes.
 
-El prefijo predeterminado es:
+Prefijo predeterminado:
 
 ```text
 .
@@ -88,30 +128,20 @@ El owner puede cambiarlo sin recompilar:
 | MP4 | `.ytmp4 <url> [calidad]` |
 | SoundCloud | `.soundcloud <url|texto>` |
 
-`.yts` intenta responder mediante un **carrusel interactivo horizontal** con:
-
-- miniatura;
-- título;
-- autor/canal;
-- duración;
-- vistas;
-- likes cuando están disponibles;
-- botones de **Audio**, **Letra** y **Relacionadas**.
+`.yts` intenta responder mediante un **carrusel interactivo horizontal** con miniatura, título, autor/canal, duración, vistas, likes cuando están disponibles y botones de **Audio**, **Letra** y **Relacionadas**.
 
 Las letras utilizan [**LRCLIB**](https://lrclib.net/) sin requerir una API de pago.
 
-YouTube utiliza `yt-dlp + FFmpeg + Node` como runtime JS. El bot no exige cookies por defecto.
+YouTube utiliza `yt-dlp + FFmpeg + Node` como runtime JavaScript. El bot no exige cookies por defecto.
 
 ## TikTok / Instagram / Facebook
 
-La estrategia es:
+La estrategia actual es:
 
 1. resolvedor web público;
 2. fallback local mediante `yt-dlp`.
 
 En TikTok se prioriza un enlace **HD/sin marca de agua** cuando el proveedor lo entrega.
-
-No es necesario guardar una cuenta personal de Facebook únicamente para intentar descargar contenido público.
 
 ## Archivos y recursos
 
@@ -123,13 +153,11 @@ No es necesario guardar una cuenta personal de Facebook únicamente para intenta
 .apkdl <url-fdroid>
 ```
 
-Las APK se priorizan desde [**F-Droid**](https://f-droid.org/) y fuentes públicas legítimas. El bot no automatiza catálogos de APK crackeadas/modificadas de procedencia dudosa.
+Las APK se priorizan desde [**F-Droid**](https://f-droid.org/) y fuentes públicas legítimas.
 
 ---
 
 # 🎨 Stickers
-
-Comandos principales:
 
 ```text
 .sticker
@@ -138,16 +166,12 @@ Comandos principales:
 .toimg
 ```
 
-Efectos disponibles actualmente:
+Efectos disponibles:
 
 - normal;
-- espejo horizontal;
-- espejo vertical;
-- rotación 90°;
-- rotación 180°;
-- rotación 270°;
-- zoom in;
-- zoom out;
+- espejo horizontal/vertical;
+- rotación 90°/180°/270°;
+- zoom in/out;
 - circular;
 - cuadrado;
 - blanco y negro.
@@ -162,7 +186,7 @@ La moneda interna es **Nexora Coins (`NXC`)**.
 
 NXC **no representa dinero real ni una criptomoneda blockchain**. Es una unidad virtual interna para economía, colecciones, acceso privado y subbots.
 
-## Comandos
+## Obtener y administrar NXC
 
 | Acción | Comando / alias |
 |---|---|
@@ -176,16 +200,35 @@ NXC **no representa dinero real ni una criptomoneda blockchain**. Es una unidad 
 | Tienda | `.shop` |
 | Comprar | `.buy <producto>` |
 
+`.work` entrega actualmente entre **45 y 200 NXC** y tiene cooldown de 15 minutos. El promedio teórico de actividad continua ronda 490 NXC/h, por lo que las suscripciones están deliberadamente por encima de unas pocas ejecuciones de `.work`.
+
 El dinero guardado en el **banco no puede ser robado** mediante `.rob`.
 
-### Productos iniciales
+## 💎 Suscripciones y precios
+
+| Producto | Duración | Precio | Uso |
+|---|---:|---:|---|
+| `private1d` | 1 día | **2,000 NXC** | Uso privado del bot |
+| `private7d` | 7 días | **10,000 NXC** | Uso privado del bot |
+| `private30d` | 30 días | **30,000 NXC** | Uso privado del bot |
+| `subbot1d` | 1 día | **6,000 NXC** | Sesión de subbot |
+| `subbot7d` | 7 días | **30,000 NXC** | Sesión de subbot |
+| `subbot30d` | 30 días | **100,000 NXC** | Sesión de subbot |
+
+Los planes largos tienen **descuento por día**. Los subbots son más caros porque mantienen una sesión de WhatsApp independiente y consumen RAM, CPU, red y almacenamiento de la VPS durante toda la suscripción.
+
+Ejemplo:
 
 ```text
-private1d
-private7d
-subbot1d
-subbot7d
-subbot30d
+.shop
+.buy private7d
+```
+
+O:
+
+```text
+.buy subbot7d
+.subbot pair 521234567890
 ```
 
 Comprar más tiempo de subbot extiende la instancia existente.
@@ -194,22 +237,11 @@ Comprar más tiempo de subbot extiende la instancia existente.
 
 # 🌸 Nexora Waifu Collection
 
-Sistema coleccionable conectado directamente con Nexora Economy.
+Sistema coleccionable conectado con Nexora Economy.
 
 Como referencia funcional se revisó el comportamiento de `.waifu` de TheMystic-Bot-MD, pero Ghost Nexora Bot utiliza un sistema propio y persistente basado en personajes identificables desde [**Jikan**](https://jikan.moe/) / [**MyAnimeList**](https://myanimelist.net/).
 
-Cada personaje tiene:
-
-- ID estable de MyAnimeList;
-- nombre;
-- imagen;
-- enlace a su ficha;
-- favoritos/popularidad;
-- rareza;
-- valor NXC;
-- precio de claim;
-- propietario global;
-- estado **disponible / reclamado**.
+Cada personaje tiene ID estable, nombre, imagen, ficha, popularidad/favoritos, rareza, valor NXC, precio de claim, propietario global y estado disponible/reclamado.
 
 ## Rarezas
 
@@ -221,8 +253,6 @@ Cada personaje tiene:
 🟠 Legendary
 🔴 Mythic
 ```
-
-La rareza se deriva de la popularidad del personaje en la fuente pública, por lo que no depende de una lista cerrada incluida manualmente en el bot.
 
 ## Comandos
 
@@ -236,9 +266,9 @@ La rareza se deriva de la popularidad del personaje en la fuente pública, por l
 | Información | `.winfo <id>` |
 | Regalar personaje | `.wgive @usuario <id>` |
 | Vender al sistema | `.wsell <id>` |
-| Ranking de colecciones | `.wtop` |
+| Ranking | `.wtop` |
 
-### Flujo
+Flujo básico:
 
 ```text
 .rw
@@ -246,13 +276,7 @@ La rareza se deriva de la popularidad del personaje en la fuente pública, por l
 .harem
 ```
 
-Un roll tiene un tiempo limitado para ser reclamado. Si otro usuario ya posee ese personaje, el resultado muestra que **ya está reclamado** y no puede duplicarse globalmente.
-
-Los claims consumen NXC de la **cartera**. Si el usuario tiene las monedas guardadas en el banco debe retirarlas antes con `.withdraw`.
-
-`.wsell` devuelve al usuario una parte del valor del personaje y lo deja nuevamente disponible para futuros rolls.
-
-El harem utiliza carruseles interactivos y admite paginación.
+Los claims consumen NXC de la **cartera**. `.wsell` devuelve una parte del valor y libera nuevamente el personaje.
 
 ---
 
@@ -266,8 +290,6 @@ El harem utiliza carruseles interactivos y admite paginación.
 - Anime: [**Jikan / MyAnimeList**](https://jikan.moe/)
 - Manga: [**MangaDex**](https://mangadex.org/)
 
-No se requiere una API comercial para estas búsquedas.
-
 ---
 
 # 🤖 Subbots
@@ -277,18 +299,10 @@ Los usuarios pueden comprar tiempo de subbot usando NXC.
 ```text
 .shop
 .buy subbot7d
-.subbot pair 5215512345678
+.subbot pair 521234567890
 ```
 
-Cada subbot mantiene:
-
-- sesión Baileys independiente;
-- owner asociado;
-- teléfono vinculado;
-- fecha de vencimiento;
-- estado;
-- mensajes procesados;
-- bytes descargados.
+Cada subbot mantiene sesión independiente, owner asociado, teléfono, vencimiento, estado y métricas básicas de actividad.
 
 ### Usuario
 
@@ -307,9 +321,7 @@ Cada subbot mantiene:
 .adminpanel
 ```
 
-El panel owner puede consultar todas las instancias.
-
-`.adminpanel` solo entrega el enlace administrativo en chat privado.
+El panel owner puede consultar todas las instancias. `.adminpanel` solo entrega el enlace administrativo en chat privado.
 
 ---
 
@@ -332,15 +344,12 @@ Protecciones:
 .enable welcome
 .enable antilink
 .enable antispam
-
 .disable welcome
 .disable antilink
 .disable antispam
 ```
 
-La bienvenida no necesita consultar ni compartir la fotografía de perfil del nuevo participante.
-
-Si `WELCOME_IMAGE_URL` está definido, se utiliza una imagen fija del bot.
+La bienvenida no necesita consultar ni compartir la fotografía de perfil del nuevo participante. Si `WELCOME_IMAGE_URL` está definido, se utiliza una imagen fija del bot.
 
 ---
 
@@ -380,69 +389,27 @@ El módulo bloquea solicitudes que indiquen contenido sexual relacionado con men
 
 ---
 
-# 📦 Límites de descarga
-
-Configuración inicial:
+# 📦 Límite de descarga
 
 ```env
 MAX_DOWNLOAD_MB=1900
 ```
 
-Los archivos grandes se manejan mediante almacenamiento temporal en disco para evitar cargar varios gigabytes completos en RAM.
-
-El límite real de envío depende también de los límites que WhatsApp aplique al tipo de mensaje y cliente.
+Los archivos grandes se manejan mediante almacenamiento temporal en disco para evitar cargar varios gigabytes completos en RAM. El límite real de envío depende también de WhatsApp.
 
 ---
 
-# 🚀 Instalación en VPS
+# 🔒 HTTPS
 
-## Versión publicada en `main`
+La guía de primera instalación explica la configuración completa con dominio, DNS, nginx y Let's Encrypt:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo bash
-```
+[🔒 **Configurar instalación y HTTPS**](docs/FIRST_INSTALL.md#12-instalar-directamente-con-dominio-y-https-automático)
 
-El instalador prepara:
-
-1. Node.js 24;
-2. npm;
-3. FFmpeg;
-4. Git;
-5. `yt-dlp`;
-6. nginx;
-7. usuario Linux dedicado;
-8. sesión persistente;
-9. SQLite;
-10. subbots;
-11. pairing code;
-12. servicios `systemd`;
-13. web Next.js;
-14. token owner para dashboard.
-
-## Probar el PR Draft actual
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/feature/ghost-nexora-bot-v1/scripts/install.sh | sudo env BRANCH=feature/ghost-nexora-bot-v1 bash
-```
-
-El instalador acepta el número con `+`, espacios o guiones y conserva únicamente los dígitos para el pairing.
-
----
-
-# 🔒 HTTPS automático
-
-Con un dominio ya apuntando a la VPS:
+Ejemplo para `main`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo env BOT_DOMAIN=bot.tudominio.com LETSENCRYPT_EMAIL=tu-correo@dominio.com bash
 ```
-
-Se configura:
-
-- nginx reverse proxy;
-- certificado Let's Encrypt;
-- renovación mediante Certbot;
-- redirección HTTP → HTTPS.
 
 ---
 
@@ -491,32 +458,27 @@ GhostNexoraBot/
 │   │       │   └── waifu.ts
 │   │       ├── core/
 │   │       ├── services/
-│   │       │   └── waifu.ts
 │   │       └── utils/
 │   └── web/
 │       ├── app/admin/
 │       └── app/subbot/[code]/
+├── docs/
+│   ├── FIRST_INSTALL.md
+│   └── UPDATING.md
 ├── scripts/
+│   ├── install.sh
+│   └── update.sh
 ├── systemd/
 ├── .github/workflows/
 ├── .env.example
 └── package.json
 ```
 
-## Persistencia SQLite
+## Persistencia
 
-La V1 guarda persistentemente:
+La V1 guarda persistentemente economía, ledger, suscripciones, políticas de grupos, subbots, métricas, tokens de portal y colecciones en SQLite.
 
-- usuarios de economía;
-- cartera/banco;
-- ledger;
-- suscripciones;
-- políticas de grupos;
-- subbots;
-- métricas;
-- tokens de portal;
-- rolls de colección;
-- personajes reclamados y propietarios.
+En la instalación VPS los datos importantes se mantienen fuera del repositorio, en `/var/lib/ghost-nexora-bot`.
 
 ---
 
@@ -558,6 +520,8 @@ GitHub Actions valida:
 
 Una versión no debe considerarse lista para producción únicamente porque compile: también se valida pairing, carruseles, descargas y subbots en una VPS real antes de cerrar el PR.
 
+[🧪 **Ver ejecuciones de GitHub Actions**](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
+
 ---
 
 # 🗺️ Roadmap recomendado
@@ -584,7 +548,7 @@ Próximas mejoras:
 - wishlist;
 - mercado entre usuarios;
 - subastas;
-- protección temporal contra venta accidental;
+- protección contra venta accidental;
 - favoritos por usuario;
 - filtros por rareza;
 - eventos de colección;
