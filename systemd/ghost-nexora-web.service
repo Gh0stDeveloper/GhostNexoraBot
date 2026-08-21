@@ -1,0 +1,25 @@
+[Unit]
+Description=Ghost Nexora Bot Web
+After=network-online.target ghost-nexora-bot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_USER__
+WorkingDirectory=__INSTALL_DIR__
+Environment=NODE_ENV=production
+Environment=ENV_FILE=__INSTALL_DIR__/.env
+Environment=PORT=3000
+Environment=BOT_HEALTH_URL=http://127.0.0.1:3001/health
+ExecStart=/usr/bin/env pnpm --dir __INSTALL_DIR__ web
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

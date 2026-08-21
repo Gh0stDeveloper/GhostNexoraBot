@@ -1,0 +1,17 @@
+{
+  "name": "ghost-nexora-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ghost Nexora Bot - WhatsApp Multi-Device bot and Next.js web",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel -r dev",
+    "typecheck": "pnpm -r typecheck",
+    "bot": "pnpm --filter @ghostnexora/bot start",
+    "pair": "pnpm --filter @ghostnexora/bot pair",
+    "web": "pnpm --filter @ghostnexora/web start"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

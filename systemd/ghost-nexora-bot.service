@@ -1,0 +1,25 @@
+[Unit]
+Description=Ghost Nexora WhatsApp Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_USER__
+WorkingDirectory=__INSTALL_DIR__
+Environment=NODE_ENV=production
+Environment=ENV_FILE=__INSTALL_DIR__/.env
+ExecStart=/usr/bin/env pnpm --dir __INSTALL_DIR__ bot
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=__STATE_DIR__
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
