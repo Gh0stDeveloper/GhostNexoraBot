@@ -12,7 +12,8 @@ function inviteCode(input: string) {
 
 async function previewBranding(ctx: CommandContext, slot: BrandingSlot, asset: BrandingAsset) {
   const labels: Record<BrandingSlot, string> = { menu: 'MENÚ', welcome: 'BIENVENIDA', goodbye: 'DESPEDIDA' }
-  const title = `✅ BANNER DE ${labels[slot]} ACTUALIZADO`
+  const scope = ctx.instanceId ? `SUBBOT #${ctx.instanceId}` : 'MAINBOT'
+  const title = `✅ ${labels[slot]} · ${scope}`
   if (asset.kind === 'image') {
     await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
       title,
@@ -25,69 +26,71 @@ async function previewBranding(ctx: CommandContext, slot: BrandingSlot, asset: B
   await ctx.socket.sendMessage(ctx.chatId, {
     video: { url: asset.path },
     gifPlayback: true,
-    caption: `${title}\n━━━━━━━━━━━━━━\nEl GIF/video quedó guardado de forma persistente y se usará en las ${slot === 'welcome' ? 'bienvenidas' : 'despedidas'}.`,
+    caption: `${title}\n━━━━━━━━━━━━━━\nEl GIF/video quedó guardado de forma persistente y se usará en las ${slot === 'welcome' ? 'bienvenidas' : 'despedidas'} de esta instancia.`,
   }, { quoted: ctx.message })
 }
 
 async function setBanner(ctx: CommandContext, slot: BrandingSlot) {
   const media = await downloadMessageMedia(ctx.message)
   if (!media) throw new Error('Envía o cita una imagen. Para bienvenida/despedida también puedes citar un GIF/video corto.')
-  const asset = await saveBrandingAsset(slot, media)
+  const asset = await saveBrandingAsset(slot, media, ctx.instanceId)
   await previewBranding(ctx, slot, asset)
 }
 
+const customizableAuth = { staffOnly: true, subbotOwnerAllowed: true } as const
+
 export const personalizationCommands: BotCommand[] = [
   {
-    name: 'setpfp', aliases: ['setbotpfp', 'botpfp'], category: 'owner', staffOnly: true,
-    description: 'Cambia la foto de perfil de WhatsApp del bot usando una imagen citada.', usage: 'setpfp <responde/cita una imagen>',
+    name: 'setpfp', aliases: ['setbotpfp', 'botpfp'], category: 'owner', ...customizableAuth,
+    description: 'Cambia la foto de perfil de la instancia actual usando una imagen citada.', usage: 'setpfp <responde/cita una imagen>',
     async handler(ctx) {
       const media = await downloadMessageMedia(ctx.message)
       if (!media || media.kind !== 'image') throw new Error('Envía o cita una imagen y usa .setpfp.')
       if (media.buffer.length > 8 * 1024 * 1024) throw new Error('La imagen supera el límite de 8 MB para la foto de perfil.')
       const jid = ctx.socket.user?.id
-      if (!jid) throw new Error('La sesión del bot todavía no tiene un JID autenticado.')
+      if (!jid) throw new Error('La sesión todavía no tiene un JID autenticado.')
       await ctx.socket.updateProfilePicture(jid, media.buffer)
       const current = await ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-        title: '✅ FOTO DEL BOT ACTUALIZADA',
-        body: 'La nueva foto ya pertenece a la cuenta WhatsApp del bot. Si no existe un banner personalizado, esta misma imagen aparece en el menú.',
+        title: ctx.instanceId ? `✅ FOTO DEL SUBBOT #${ctx.instanceId}` : '✅ FOTO DEL MAINBOT ACTUALIZADA',
+        body: 'La foto fue aplicada a la cuenta de WhatsApp de esta instancia. Si no existe un banner personalizado, esta misma imagen aparecerá en su menú.',
         imageUrl: current,
         buttons: [{ type: 'reply', text: '📋 Ver menú', id: `${ctx.prefix}menu` }],
       })
     },
   },
   {
-    name: 'setbanner', aliases: ['sb', 'setbotbanner'], category: 'owner', staffOnly: true,
-    description: 'Cambia el banner del menú; por defecto se usa la foto de perfil del bot.', usage: 'setbanner <cita una imagen>',
+    name: 'setbanner', aliases: ['sb', 'setbotbanner'], category: 'owner', ...customizableAuth,
+    description: 'Cambia el banner del menú de la instancia actual.', usage: 'setbanner <cita una imagen>',
     async handler(ctx) { await setBanner(ctx, 'menu') },
   },
   {
-    name: 'delbanner', aliases: ['delbotbanner'], category: 'owner', staffOnly: true,
+    name: 'delbanner', aliases: ['delbotbanner'], category: 'owner', ...customizableAuth,
     description: 'Elimina el banner del menú y vuelve a usar la foto de perfil.',
     async handler(ctx) {
-      const existed = await deleteBrandingAsset('menu')
-      await ctx.reply(existed ? `🗑️ Banner del menú eliminado. *${ctx.prefix}menu* volverá a usar la foto de perfil real del bot.` : 'ℹ️ No había un banner de menú personalizado.')
+      const existed = await deleteBrandingAsset('menu', ctx.instanceId)
+      await ctx.reply(existed ? `🗑️ Banner del menú eliminado. *${ctx.prefix}menu* volverá a usar la foto de perfil de esta instancia.` : 'ℹ️ No había un banner de menú personalizado en esta instancia.')
     },
   },
   {
-    name: 'welbanner', aliases: ['setwelbanner', 'welcomebanner'], category: 'owner', staffOnly: true,
-    description: 'Configura imagen o GIF/video para las bienvenidas.', usage: 'welbanner <cita imagen/GIF>',
+    name: 'welbanner', aliases: ['setwelbanner', 'welcomebanner'], category: 'owner', ...customizableAuth,
+    description: 'Configura imagen o GIF/video para las bienvenidas de la instancia.', usage: 'welbanner <cita imagen/GIF>',
     async handler(ctx) { await setBanner(ctx, 'welcome') },
   },
   {
-    name: 'byebanner', aliases: ['setbyebanner', 'goodbyebanner'], category: 'owner', staffOnly: true,
-    description: 'Configura imagen o GIF/video para las despedidas.', usage: 'byebanner <cita imagen/GIF>',
+    name: 'byebanner', aliases: ['setbyebanner', 'goodbyebanner'], category: 'owner', ...customizableAuth,
+    description: 'Configura imagen o GIF/video para las despedidas de la instancia.', usage: 'byebanner <cita imagen/GIF>',
     async handler(ctx) { await setBanner(ctx, 'goodbye') },
   },
   {
-    name: 'delwelbanner', aliases: ['delwelcomebanner'], category: 'owner', staffOnly: true,
-    description: 'Restablece la imagen predeterminada de bienvenida.',
-    async handler(ctx) { await deleteBrandingAsset('welcome'); await ctx.reply('✅ Banner de bienvenida restablecido al comportamiento predeterminado.') },
+    name: 'delwelbanner', aliases: ['delwelcomebanner'], category: 'owner', ...customizableAuth,
+    description: 'Restablece la imagen predeterminada de bienvenida de la instancia.',
+    async handler(ctx) { await deleteBrandingAsset('welcome', ctx.instanceId); await ctx.reply('✅ Banner de bienvenida restablecido al comportamiento predeterminado de esta instancia.') },
   },
   {
-    name: 'delbyebanner', aliases: ['delgoodbyebanner'], category: 'owner', staffOnly: true,
-    description: 'Restablece la imagen predeterminada de despedida.',
-    async handler(ctx) { await deleteBrandingAsset('goodbye'); await ctx.reply('✅ Banner de despedida restablecido al comportamiento predeterminado.') },
+    name: 'delbyebanner', aliases: ['delgoodbyebanner'], category: 'owner', ...customizableAuth,
+    description: 'Restablece la imagen predeterminada de despedida de la instancia.',
+    async handler(ctx) { await deleteBrandingAsset('goodbye', ctx.instanceId); await ctx.reply('✅ Banner de despedida restablecido al comportamiento predeterminado de esta instancia.') },
   },
   {
     name: 'join', aliases: ['joingroup', 'solicitarjoin'], category: 'general',
