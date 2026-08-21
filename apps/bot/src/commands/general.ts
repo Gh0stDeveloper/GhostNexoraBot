@@ -84,6 +84,7 @@ export const generalCommands: BotCommand[] = [
 ╰────────────────` : ''
       const staffSection = ctx.isBotStaff ? `
 ╭─〔 🛡️ *STAFF DEL BOT* 〕
+│ ${p}system · ${p}speedtest
 │ ${p}status · ${p}botadmins · ${p}suggestions
 │ ${p}adultmode on|off
 │ ${p}privategrant @user [30d|permanent]
