@@ -89,17 +89,17 @@ export const securityCommands: BotCommand[] = [
   },
   {
     name: 'nsfw', aliases: ['adult', 'adultgroup'], category: 'adult', groupOnly: true, adminOnly: true,
-    description: 'Permite o bloquea los comandos NSFW en el grupo.', usage: 'nsfw on|off',
+    description: 'Permite o bloquea los comandos NSFW únicamente en el grupo actual.', usage: 'nsfw on|off|status',
     async handler(ctx) {
-      const action = (ctx.args[0] ?? '').toLowerCase()
+      const action = (ctx.args[0] ?? 'status').toLowerCase()
       if (action === 'status') {
         const state = economy.getGroupPolicy(ctx.chatId)
-        await ctx.reply(`🔞 *NSFW DEL GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${state.adultAllowed ? 'ON' : 'OFF'}*`)
+        await ctx.reply(`🔞 *NSFW · ESTE GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${state.adultAllowed ? 'ON' : 'OFF'}*\nEste ajuste no afecta a otros grupos.`)
         return
       }
       const enabled = toggle(action)
       economy.setGroupPolicy(ctx.chatId, 'adultAllowed', enabled)
-      await ctx.reply(`🔞 *NSFW DEL GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${enabled ? 'ON' : 'OFF'}*\nEl módulo global también debe estar habilitado por el staff.`)
+      await ctx.reply(`🔞 *NSFW · ESTE GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${enabled ? 'ON' : 'OFF'}*\n✅ El cambio se guardó únicamente para este grupo.`)
     },
   },
 ]
