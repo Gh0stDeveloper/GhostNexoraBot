@@ -39,8 +39,10 @@ async function main() {
     if (finished) return
     const { socket } = await createSocket()
 
-    if (socket.authState.creds.registered) {
-      finish(0, '✅ La sesión ya está vinculada y las credenciales están guardadas.')
+    // Si la sesión ya existía antes de iniciar este comando no hace falta volver a vincular.
+    // Tras un pairing nuevo, en cambio, esperamos un connection=open real para validar el reinicio.
+    if (socket.authState.creds.registered && !pairingCodeRequested) {
+      finish(0, '✅ La sesión ya estaba vinculada y las credenciales están guardadas.')
       return
     }
 
