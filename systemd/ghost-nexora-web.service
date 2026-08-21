@@ -20,6 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+ReadWritePaths=__INSTALL_DIR__/apps/web/.next/cache
 
 [Install]
 WantedBy=multi-user.target
