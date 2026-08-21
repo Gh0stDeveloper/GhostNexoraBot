@@ -1,7 +1,7 @@
 import { jidNormalizedUser, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
 import type { BotCommand, CommandContext } from '../types.js'
-import { digitsFromJid, getMessageText, getSender } from '../utils/message.js'
+import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { settings } from './settings.js'
 
@@ -38,7 +38,8 @@ export class CommandRouter {
     const chatId = message.key.remoteJid
     if (!chatId) return false
     const sender = getSender(message)
-    const isOwner = config.owners.includes(digitsFromJid(sender))
+    const senderNumbers = getSenderCandidates(message).map(digitsFromJid).filter(Boolean)
+    const isOwner = senderNumbers.some((number) => config.owners.includes(number))
     const isGroup = chatId.endsWith('@g.us')
 
     const reply = (replyText: string) => socket.sendMessage(chatId, { text: replyText }, { quoted: message })
