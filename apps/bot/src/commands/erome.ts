@@ -2,7 +2,15 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
-import { downloadEromeVideo, eromeSessionStatus, exploreErome, getEromeAlbum, searchErome } from '../services/erome.js'
+import {
+  downloadEromeVideo,
+  eromeSessionStatus,
+  exploreErome,
+  getEromeAlbum,
+  getEromeProfile,
+  searchErome,
+  searchEromeProfiles,
+} from '../services/erome.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
@@ -115,6 +123,120 @@ async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', 
   await listingUi(ctx, mode, page, query, albums)
 }
 
+async function profileSearchUi(ctx: CommandContext, page: number, query: string, profiles: Awaited<ReturnType<typeof searchEromeProfiles>>['profiles']) {
+  if (!profiles.length) return
+  try {
+    await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+      title: '🔞 EROME · PERFILES',
+      body: `Perfiles para: ${query} · página ${page}`,
+      footer: 'Erome · Ghost Nexora Bot',
+      cards: profiles.map((profile, index) => ({
+        title: `#${index + 1} · ${profile.username}`,
+        body: profile.url,
+        imageUrl: profile.avatar,
+        buttons: [
+          { type: 'reply', text: '👤 Ver perfil', id: `${ctx.prefix}erome profile ${profile.url} 1` },
+          { type: 'url', text: '🌐 Abrir', url: profile.url },
+        ],
+      })),
+    })
+
+    const buttons: InteractiveButton[] = []
+    if (page > 1) buttons.push({ type: 'reply', text: '◀️ Anterior', id: `${ctx.prefix}erome profiles64 ${page - 1} ${encodeQuery(query)}` })
+    buttons.push({ type: 'reply', text: 'Siguiente ▶️', id: `${ctx.prefix}erome profiles64 ${page + 1} ${encodeQuery(query)}` })
+    await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+      title: '🔞 EROME · PERFILES',
+      body: `Página ${page}`,
+      footer: 'Erome',
+      buttons,
+    })
+  } catch {
+    // La lista textual permanece disponible.
+  }
+}
+
+async function showProfileSearch(ctx: CommandContext, query: string, page: number) {
+  const result = await searchEromeProfiles(query, page, 5)
+  if (!result.profiles.length) throw new Error('No encontré perfiles de Erome para esa búsqueda.')
+  const lines = result.profiles.map((profile, index) => [
+    `*${index + 1}. ${profile.username}*`,
+    profile.url,
+    `Ver perfil: *${ctx.prefix}erome profile ${profile.url}*`,
+  ].join('\n'))
+  await ctx.reply([
+    '╭━━〔 🔞 *EROME · PERFILES* 〕━━╮',
+    `┃ Consulta » *${result.query}*`,
+    `┃ Página » *${page}*`,
+    `┃ Resultados » *${result.profiles.length}*`,
+    '╰━━━━━━━━━━━━━━━━━━╯',
+    '',
+    ...lines.flatMap((line) => [line, '']),
+    page > 1 ? `Anterior: *${ctx.prefix}erome profiles64 ${page - 1} ${encodeQuery(result.query)}*` : '',
+    `Siguiente: *${ctx.prefix}erome profiles64 ${page + 1} ${encodeQuery(result.query)}*`,
+  ].filter(Boolean).join('\n'))
+  await profileSearchUi(ctx, page, result.query, result.profiles)
+}
+
+async function profileUi(ctx: CommandContext, profile: Awaited<ReturnType<typeof getEromeProfile>>) {
+  try {
+    if (profile.albums.length) {
+      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+        title: `🔞 ${profile.username}`,
+        body: `Álbumes · lote ${profile.batch}`,
+        footer: 'Erome · Ghost Nexora Bot',
+        cards: profile.albums.map((album, index) => ({
+          title: `#${index + 1} · ${album.title}`.slice(0, 120),
+          body: `Álbum: ${album.id}`,
+          imageUrl: album.thumbnail,
+          buttons: [
+            { type: 'reply', text: '🎬 Ver videos', id: `${ctx.prefix}erome album ${album.id} 1` },
+            { type: 'url', text: '🌐 Abrir álbum', url: album.url },
+          ],
+        })),
+      })
+    }
+
+    const buttons: InteractiveButton[] = []
+    if (profile.batch > 1) buttons.push({ type: 'reply', text: '◀️ Anterior', id: `${ctx.prefix}erome profile64 ${profile.batch - 1} ${encodeQuery(profile.url)}` })
+    if (profile.hasNext) buttons.push({ type: 'reply', text: 'Siguiente ▶️', id: `${ctx.prefix}erome profile64 ${profile.batch + 1} ${encodeQuery(profile.url)}` })
+    buttons.push({ type: 'url', text: '🌐 Abrir perfil', url: profile.url })
+    await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+      title: `👤 ${profile.username}`,
+      body: `Álbumes visibles: ${profile.albums.length} · lote ${profile.batch}`,
+      footer: 'Erome',
+      imageUrl: profile.avatar,
+      buttons,
+    })
+  } catch {
+    // La navegación textual ya fue enviada.
+  }
+}
+
+async function showProfile(ctx: CommandContext, input: string, batch: number) {
+  const profile = await getEromeProfile(input, batch, 10)
+  const albumLines = profile.albums.map((album, index) => [
+    `*${index + 1}. ${album.title}*`,
+    `ID: \`${album.id}\``,
+    `Abrir: ${album.url}`,
+    `Ver videos: *${ctx.prefix}erome album ${album.id}*`,
+  ].join('\n'))
+
+  await ctx.reply([
+    '╭━━〔 🔞 *EROME · PERFIL* 〕━━╮',
+    `┃ Usuario » *${profile.username}*`,
+    `┃ Lote » *${profile.batch}*`,
+    `┃ Álbumes » *${profile.albums.length}*`,
+    '╰━━━━━━━━━━━━━━━━━━╯',
+    profile.url,
+    '',
+    ...albumLines.flatMap((line) => [line, '']),
+    profile.batch > 1 ? `Anterior: *${ctx.prefix}erome profile64 ${profile.batch - 1} ${encodeQuery(profile.url)}*` : '',
+    profile.hasNext ? `Siguiente: *${ctx.prefix}erome profile64 ${profile.batch + 1} ${encodeQuery(profile.url)}*` : '',
+  ].filter(Boolean).join('\n'))
+
+  await profileUi(ctx, profile)
+}
+
 async function albumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof getEromeAlbum>>, page: number, totalPages: number, items: Awaited<ReturnType<typeof getEromeAlbum>>['videos']) {
   try {
     await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -150,7 +272,7 @@ async function albumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof get
 
 async function showAlbum(ctx: CommandContext, input: string, page: number) {
   const id = albumId(input)
-  const album = await getEromeAlbum(id)
+  const album = await getEromeAlbum(input)
   if (!album.videos.length) throw new Error('Ese álbum no contiene videos descargables.')
   const pageSize = 10
   const totalPages = Math.max(1, Math.ceil(album.videos.length / pageSize))
@@ -159,7 +281,7 @@ async function showAlbum(ctx: CommandContext, input: string, page: number) {
 
   const videoLines = items.map((video) => [
     `*Video #${video.index}*${video.title ? ` · ${video.title}` : ''}`,
-    `Descargar: *${ctx.prefix}erome dl ${album.id} ${video.index}*`,
+    `Descargar: *${ctx.prefix}erome dl ${id} ${video.index}*`,
   ].join('\n'))
 
   await ctx.reply([
@@ -169,10 +291,12 @@ async function showAlbum(ctx: CommandContext, input: string, page: number) {
     `┃ Videos » *${album.videos.length}*`,
     `┃ Página » *${safe}/${totalPages}*`,
     '╰━━━━━━━━━━━━━━━━━━╯',
+    album.authorUrl ? `Perfil: ${album.authorUrl}` : '',
+    `Álbum: ${album.url}`,
     '',
     ...videoLines.flatMap((line) => [line, '']),
-    totalPages > 1 && safe > 1 ? `Anterior: *${ctx.prefix}erome album ${album.id} ${safe - 1}*` : '',
-    totalPages > 1 && safe < totalPages ? `Siguiente: *${ctx.prefix}erome album ${album.id} ${safe + 1}*` : '',
+    totalPages > 1 && safe > 1 ? `Anterior: *${ctx.prefix}erome album ${id} ${safe - 1}*` : '',
+    totalPages > 1 && safe < totalPages ? `Siguiente: *${ctx.prefix}erome album ${id} ${safe + 1}*` : '',
   ].filter(Boolean).join('\n'))
 
   await albumUi(ctx, album, safe, totalPages, items)
@@ -181,8 +305,8 @@ async function showAlbum(ctx: CommandContext, input: string, page: number) {
 export const eromeCommands: BotCommand[] = [
   {
     name: 'erome', aliases: ['er'], category: 'adult',
-    description: 'Explora, busca y descarga únicamente videos de álbumes públicos de Erome.',
-    usage: 'erome [hot|new|search|album|dl|status] ...',
+    description: 'Explora, busca perfiles/álbumes y descarga únicamente videos públicos de Erome.',
+    usage: 'erome [hot|new|search|profiles|profile|album|dl|status] ...',
     async handler(ctx) {
       assertAdultAccess(ctx)
       const action = (ctx.args[0] ?? 'hot').toLowerCase()
@@ -219,18 +343,43 @@ export const eromeCommands: BotCommand[] = [
         await showListing(ctx, 'search', page, query)
         return
       }
+      if (['profiles', 'users', 'usersearch', 'profilesearch'].includes(action)) {
+        const query = ctx.args.slice(1).join(' ').trim()
+        if (!query) throw new Error(`Uso: ${ctx.prefix}erome profiles <usuario>`)
+        await showProfileSearch(ctx, query, 1)
+        return
+      }
+      if (action === 'profiles64') {
+        const page = safePage(ctx.args[1])
+        const query = decodeQuery(ctx.args[2] ?? '')
+        await showProfileSearch(ctx, query, page)
+        return
+      }
+      if (action === 'profile' || action === 'user') {
+        const input = ctx.args[1]
+        if (!input) throw new Error(`Uso: ${ctx.prefix}erome profile <usuario|url> [lote]`)
+        await showProfile(ctx, input, safePage(ctx.args[2]))
+        return
+      }
+      if (action === 'profile64') {
+        const batch = safePage(ctx.args[1])
+        const input = decodeQuery(ctx.args[2] ?? '')
+        await showProfile(ctx, input, batch)
+        return
+      }
       if (action === 'album') {
-        const id = ctx.args[1]
-        if (!id) throw new Error(`Uso: ${ctx.prefix}erome album <id|url> [página]`)
-        await showAlbum(ctx, id, safePage(ctx.args[2]))
+        const input = ctx.args[1]
+        if (!input) throw new Error(`Uso: ${ctx.prefix}erome album <id|url> [página]`)
+        await showAlbum(ctx, input, safePage(ctx.args[2]))
         return
       }
       if (action === 'dl' || action === 'download') {
-        const id = ctx.args[1]
+        const albumInput = ctx.args[1]
         const index = Number(ctx.args[2])
-        if (!id || !Number.isInteger(index)) throw new Error(`Uso: ${ctx.prefix}erome dl <album-id> <video>`)
+        if (!albumInput || !Number.isInteger(index)) throw new Error(`Uso: ${ctx.prefix}erome dl <album-id|url> <video>`)
+        const id = albumId(albumInput)
         await ctx.reply(`⬇️ *EROME*\nPreparando video #${index}...`)
-        const result = await downloadEromeVideo(id, index)
+        const result = await downloadEromeVideo(albumInput, index)
         try {
           const caption = `🔞 *EROME · VIDEO ${result.video.index}*\n${result.album.title}\n📦 ${(result.size / 1024 / 1024).toFixed(1)} MB`
           const sent = await ctx.socket.sendMessage(ctx.chatId, {
@@ -253,17 +402,22 @@ export const eromeCommands: BotCommand[] = [
         return
       }
 
-      if (/^https?:\/\//i.test(ctx.argText.trim())) {
-        await showAlbum(ctx, ctx.argText.trim(), 1)
+      const rawInput = ctx.argText.trim()
+      if (/^https?:\/\//i.test(rawInput)) {
+        try {
+          albumId(rawInput)
+          await showAlbum(ctx, rawInput, 1)
+        } catch {
+          await showProfile(ctx, rawInput, 1)
+        }
         return
       }
 
-      const implicitQuery = ctx.argText.trim()
-      if (!implicitQuery) {
+      if (!rawInput) {
         await showListing(ctx, 'hot', 1)
         return
       }
-      await showListing(ctx, 'search', 1, implicitQuery)
+      await showListing(ctx, 'search', 1, rawInput)
     },
   },
 ]

@@ -6,6 +6,7 @@ import { economy, type SubbotRecord } from '../services/economy.js'
 import { handleParticipantUpdate } from '../services/moderation.js'
 import { recordSubbotMessage } from '../services/subbot-metrics.js'
 import { logger } from '../utils/logger.js'
+import { withTimeout } from '../utils/timeout.js'
 import { createSocket } from './session.js'
 
 export type SubbotMessageHandler = (socket: WASocket, message: WAMessage, record: SubbotRecord) => Promise<void>
@@ -70,14 +71,16 @@ class SubbotManager {
     const { socket } = await createSocket(this.sessionDir(record.id))
     this.sockets.set(record.id, socket)
 
-    socket.ev.on('messages.upsert', async ({ messages, type }) => {
+    socket.ev.on('messages.upsert', ({ messages, type }) => {
       if (type !== 'notify' || !this.handler) return
       const live = economy.getActiveSubbot(record.ownerJid)
       if (!live || live.id !== record.id || live.expiresAt <= Date.now()) return
       for (const message of messages) {
         if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
         recordSubbotMessage(record.id)
-        await this.handler(socket, message, live).catch((error) => logger.error({ error, subbotId: record.id }, 'subbot message failed'))
+        const chatId = message.key.remoteJid
+        void withTimeout(this.handler(socket, message, live), 60_000, `subbot routeMessage ${chatId}`)
+          .catch((error) => logger.error({ error, subbotId: record.id, chatId }, 'subbot mensaje colgado o falló'))
       }
     })
 

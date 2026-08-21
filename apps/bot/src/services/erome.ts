@@ -11,6 +11,10 @@ const BASE = 'https://www.erome.com'
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 const sessionFile = path.join(config.dataDir, 'erome-session.json')
 const prohibited = /\b(child|children|underage|minor|preteen|pre-teen|niñ[oa]s?|menor(?:es)?)\b/i
+const reservedProfilePaths = new Set([
+  'a', 'explore', 'search', 'user', 'faq', 'terms', 'dmca', 'abuse', 'creator', 'feedback',
+  'language', 'login', 'register', 'signup', 'signin', 'upload', 'settings', 'notifications',
+])
 
 type StoredCookie = { value: string; expiresAt?: number }
 type CookieStore = Record<string, StoredCookie>
@@ -21,6 +25,19 @@ export type EromeAlbumSummary = {
   url: string
   thumbnail?: string
   author?: string
+  authorUrl?: string
+}
+
+export type EromeProfileSummary = {
+  username: string
+  url: string
+  avatar?: string
+}
+
+export type EromeProfile = EromeProfileSummary & {
+  batch: number
+  albums: EromeAlbumSummary[]
+  hasNext: boolean
 }
 
 export type EromeVideo = {
@@ -35,6 +52,7 @@ export type EromeAlbum = {
   title: string
   url: string
   author?: string
+  authorUrl?: string
   videos: EromeVideo[]
 }
 
@@ -74,6 +92,37 @@ function safeQuery(input: string) {
 function safeFileBase(input: string) {
   const clean = input.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-')
   return clean.slice(0, 90) || 'erome-video'
+}
+
+function profileNameFromUrl(url: URL) {
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (parts.length !== 1) return undefined
+  let username = parts[0]!
+  try { username = decodeURIComponent(username) } catch { /* keep encoded value */ }
+  username = username.trim()
+  if (!username || reservedProfilePaths.has(username.toLowerCase()) || prohibited.test(username)) return undefined
+  return username
+}
+
+function profileName(input: string) {
+  const raw = input.trim()
+  if (!raw) throw new Error('Indica un usuario o enlace de perfil Erome.')
+  if (/^https?:\/\//i.test(raw)) {
+    const url = validatePageUrl(raw)
+    const username = profileNameFromUrl(url)
+    if (!username) throw new Error('El enlace no corresponde a un perfil Erome.')
+    return username
+  }
+  let username = raw
+  try { username = decodeURIComponent(username) } catch { /* keep raw value */ }
+  if (!username || /[\s/?#]/.test(username) || username.length > 80 || reservedProfilePaths.has(username.toLowerCase()) || prohibited.test(username)) {
+    throw new Error('Usuario de Erome inválido.')
+  }
+  return username
+}
+
+function publicProfileUrl(username: string) {
+  return `${BASE}/${encodeURIComponent(username)}`
 }
 
 function parseCookieString(value: string) {
@@ -171,8 +220,9 @@ async function requestErome(input: string, referer = `${BASE}/`) {
 function parseAlbumList(html: string, baseUrl: string, limit = 10): EromeAlbumSummary[] {
   const $ = load(html)
   const found = new Map<string, EromeAlbumSummary>()
+  const cappedLimit = Math.max(1, Math.min(60, limit))
   $('a[href]').each((_, element) => {
-    if (found.size >= Math.max(1, Math.min(12, limit))) return
+    if (found.size >= cappedLimit) return
     const anchor = $(element)
     const href = absolute(baseUrl, anchor.attr('href'))
     if (!href) return
@@ -187,10 +237,66 @@ function parseAlbumList(html: string, baseUrl: string, limit = 10): EromeAlbumSu
     if (!title || prohibited.test(title)) return
     const image = box.find('img').first()
     const thumbnail = absolute(baseUrl, image.attr('data-src') ?? image.attr('data-original') ?? image.attr('src'))
-    const author = (box.find('.album-user, .username, .user-name').first().text() || '').trim() || undefined
-    found.set(id, { id, title: title.slice(0, 180), url: `${BASE}/a/${id}`, thumbnail, author })
+
+    let author: string | undefined
+    let authorUrl: string | undefined
+    box.find('a[href]').each((__, authorElement) => {
+      if (authorUrl) return
+      const candidate = absolute(baseUrl, $(authorElement).attr('href'))
+      if (!candidate) return
+      try {
+        const candidateUrl = validatePageUrl(candidate)
+        const username = profileNameFromUrl(candidateUrl)
+        if (!username) return
+        author = ($(authorElement).text() || username).trim() || username
+        authorUrl = publicProfileUrl(username)
+      } catch { /* ignore non-profile links */ }
+    })
+    if (!author) author = (box.find('.album-user, .username, .user-name').first().text() || '').trim() || undefined
+
+    found.set(id, { id, title: title.slice(0, 180), url: `${BASE}/a/${id}`, thumbnail, author, authorUrl })
   })
   return [...found.values()]
+}
+
+function parseProfileSummaries(html: string, baseUrl: string, query: string, limit = 5): EromeProfileSummary[] {
+  const $ = load(html)
+  const found = new Map<string, EromeProfileSummary>()
+  const needle = query.trim().toLowerCase()
+  $('a[href]').each((_, element) => {
+    if (found.size >= Math.max(1, Math.min(10, limit))) return
+    const anchor = $(element)
+    const href = absolute(baseUrl, anchor.attr('href'))
+    if (!href) return
+    let parsed: URL
+    try { parsed = validatePageUrl(href) } catch { return }
+    const username = profileNameFromUrl(parsed)
+    if (!username) return
+    const label = (anchor.text() || username).replace(/\s+/g, ' ').trim()
+    if (needle && !username.toLowerCase().includes(needle) && !label.toLowerCase().includes(needle)) return
+    const key = username.toLowerCase()
+    if (found.has(key)) return
+    const box = anchor.closest('div, li, article')
+    const image = box.find('img').first()
+    const avatar = absolute(baseUrl, image.attr('data-src') ?? image.attr('data-original') ?? image.attr('src'))
+    found.set(key, { username, url: publicProfileUrl(username), avatar })
+  })
+  return [...found.values()]
+}
+
+async function fetchProfilePage(username: string, page: number) {
+  const endpoint = new URL(publicProfileUrl(username))
+  endpoint.searchParams.set('t', 'posts')
+  if (page > 1) endpoint.searchParams.set('page', String(page))
+  const response = await requestErome(endpoint.toString())
+  const html = await response.text()
+  const $ = load(html)
+  const resolvedUsername = ($('h1').first().text() || username).replace(/\s+/g, ' ').trim() || username
+  if (prohibited.test(resolvedUsername)) throw new Error('Ese perfil está bloqueado por seguridad.')
+  const avatarNode = $('img[src*="avatar.erome.com"], img[data-src*="avatar.erome.com"]').first()
+  const avatar = absolute(endpoint.toString(), avatarNode.attr('data-src') ?? avatarNode.attr('src') ?? $('meta[property="og:image"]').attr('content'))
+  const albums = parseAlbumList(html, endpoint.toString(), 60)
+  return { username: resolvedUsername, url: publicProfileUrl(username), avatar, albums }
 }
 
 export async function exploreErome(mode: 'hot' | 'new' = 'hot', page = 1, limit = 10) {
@@ -214,6 +320,52 @@ export async function searchErome(query: string, page = 1, limit = 10) {
   return { query: text, page: safePage, albums }
 }
 
+export async function searchEromeProfiles(query: string, page = 1, limit = 5) {
+  const text = safeQuery(query)
+  const safePage = Math.max(1, Math.min(200, Math.floor(page) || 1))
+  const endpoint = new URL(`${BASE}/search`)
+  endpoint.searchParams.set('q', text)
+  if (safePage > 1) endpoint.searchParams.set('page', String(safePage))
+  const response = await requestErome(endpoint.toString())
+  const html = await response.text()
+  let profiles = parseProfileSummaries(html, endpoint.toString(), text, limit)
+
+  if (!profiles.length && safePage === 1 && !/[\s/?#]/.test(text)) {
+    try {
+      const direct = await getEromeProfile(text, 1, 1)
+      profiles = [{ username: direct.username, url: direct.url, avatar: direct.avatar }]
+    } catch { /* no direct profile match */ }
+  }
+
+  return { query: text, page: safePage, profiles }
+}
+
+export async function getEromeProfile(input: string, batch = 1, limit = 10): Promise<EromeProfile> {
+  const username = profileName(input)
+  const safeBatch = Math.max(1, Math.min(200, Math.floor(batch) || 1))
+  const safeLimit = Math.max(1, Math.min(10, Math.floor(limit) || 10))
+  const first = await fetchProfilePage(username, 1)
+  if (!first.albums.length) return { ...first, batch: safeBatch, albums: [], hasNext: false }
+
+  const sitePageSize = first.albums.length
+  const start = (safeBatch - 1) * safeLimit
+  const sitePage = Math.floor(start / sitePageSize) + 1
+  const localOffset = start % sitePageSize
+  const current = sitePage === 1 ? first : await fetchProfilePage(username, sitePage)
+  const pool = current.albums.slice(localOffset)
+
+  if (pool.length < safeLimit && current.albums.length >= sitePageSize) {
+    try {
+      const next = await fetchProfilePage(username, sitePage + 1)
+      pool.push(...next.albums)
+    } catch { /* current page remains usable */ }
+  }
+
+  const albums = pool.slice(0, safeLimit)
+  const hasNext = pool.length > safeLimit || (albums.length === safeLimit && current.albums.length >= sitePageSize)
+  return { username: first.username, url: first.url, avatar: first.avatar, batch: safeBatch, albums, hasNext }
+}
+
 function albumId(input: string) {
   const raw = input.trim()
   if (/^[A-Za-z0-9_-]{5,30}$/.test(raw)) return raw
@@ -231,7 +383,23 @@ export async function getEromeAlbum(input: string): Promise<EromeAlbum> {
   const $ = load(html)
   const title = ($('meta[property="og:title"]').attr('content') || $('h1').first().text() || `Álbum ${id}`).trim().slice(0, 180)
   if (prohibited.test(title)) throw new Error('Este álbum está bloqueado por seguridad.')
-  const author = ($('a[href*="/u/"], .username, .user-name').first().text() || '').trim() || undefined
+
+  let author: string | undefined
+  let authorUrl: string | undefined
+  $('a[href]').each((_, element) => {
+    if (authorUrl) return
+    const candidate = absolute(url, $(element).attr('href'))
+    if (!candidate) return
+    try {
+      const candidateUrl = validatePageUrl(candidate)
+      const username = profileNameFromUrl(candidateUrl)
+      if (!username) return
+      author = ($(element).text() || username).trim() || username
+      authorUrl = publicProfileUrl(username)
+    } catch { /* ignore */ }
+  })
+  if (!author) author = ($('.username, .user-name').first().text() || '').trim() || undefined
+
   const videoMap = new Map<string, { poster?: string }>()
 
   $('video').each((_, element) => {
@@ -267,7 +435,7 @@ export async function getEromeAlbum(input: string): Promise<EromeAlbum> {
     poster: meta.poster,
   }))
 
-  return { id, title, url, author, videos }
+  return { id, title, url, author, authorUrl, videos }
 }
 
 export async function downloadEromeVideo(albumInput: string, videoIndex: number) {

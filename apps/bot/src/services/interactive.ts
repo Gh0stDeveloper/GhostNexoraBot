@@ -5,6 +5,7 @@ import {
   type WAMessage,
   type WASocket,
 } from 'baileys'
+import { withTimeout } from '../utils/timeout.js'
 
 export type InteractiveButton =
   | { type: 'reply'; text: string; id: string }
@@ -70,7 +71,11 @@ export async function sendInteractiveCard(
     },
   }, { quoted, userJid })
   try {
-    await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+    await withTimeout(
+      socket.relayMessage(chatId, message.message!, { messageId: message.key.id! }),
+      25_000,
+      'interactive card relay',
+    )
   } catch {
     // El menú y las tarjetas informativas no deben desaparecer si Meta rechaza
     // temporalmente un native-flow interactivo. El fallback evita exponer URLs
@@ -118,7 +123,11 @@ export async function sendCarousel(
   }, { quoted, userJid })
 
   try {
-    await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+    await withTimeout(
+      socket.relayMessage(chatId, message.message!, { messageId: message.key.id! }),
+      25_000,
+      'carousel relay',
+    )
   } catch {
     const summary = input.cards.slice(0, 10).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
     await sendTextFallback(socket, chatId, quoted, input.title, [input.body, summary].filter(Boolean).join('\n\n'), input.footer)

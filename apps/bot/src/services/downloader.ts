@@ -7,6 +7,8 @@ import path from 'node:path'
 import { execa } from 'execa'
 import yts from 'yt-search'
 import { config } from '../config.js'
+import { logger } from '../utils/logger.js'
+import { withTimeout } from '../utils/timeout.js'
 import { youtubeSearchMobile, yt1sResolve } from './youtube-unofficial.js'
 
 export type DownloadPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'twitter'
@@ -301,8 +303,10 @@ export async function searchYouTube(input: string, limit = 10): Promise<YouTubeS
   const count = Math.max(1, Math.min(12, limit))
   let mobileError: unknown
 
+  logger.info({ query, count }, 'youtube search: m.youtube branch started')
   try {
     const results = await youtubeSearchMobile(query, count)
+    logger.info({ query, results: results.length }, 'youtube search: m.youtube branch completed')
     return results.map((video) => ({
       title: video.title,
       description: video.description,
@@ -317,10 +321,13 @@ export async function searchYouTube(input: string, limit = 10): Promise<YouTubeS
     }))
   } catch (error) {
     mobileError = error
+    logger.warn({ error, query }, 'youtube search: m.youtube branch failed')
   }
 
+  logger.info({ query, count }, 'youtube search: yt-search fallback started')
   try {
-    const search = await yts.search({ query, hl: 'es', gl: 'MX' })
+    const search = await withTimeout(yts.search({ query, hl: 'es', gl: 'MX' }), 20_000, 'yt-search fallback')
+    logger.info({ query, results: search.videos.length }, 'youtube search: yt-search fallback completed')
     return search.videos.slice(0, count).map((video) => {
       const info = infoFromYtSearch(video)
       return {
@@ -331,6 +338,7 @@ export async function searchYouTube(input: string, limit = 10): Promise<YouTubeS
       }
     })
   } catch (fallbackError) {
+    logger.warn({ error: fallbackError, query }, 'youtube search: yt-search fallback failed')
     throw new Error(`No pude buscar en YouTube. m.youtube: ${compactError(mobileError)} · fallback: ${compactError(fallbackError)}`)
   }
 }
