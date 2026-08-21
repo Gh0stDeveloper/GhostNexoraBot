@@ -56,19 +56,44 @@ function numericViews(value?: string) {
   return Math.floor(base * multiplier)
 }
 
+function extractJsonObject(source: string, startAt: number) {
+  const start = source.indexOf('{', startAt)
+  if (start < 0) return null
+  let depth = 0
+  let quote: '"' | "'" | null = null
+  let escaped = false
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index]!
+    if (quote) {
+      if (escaped) { escaped = false; continue }
+      if (char === '\\') { escaped = true; continue }
+      if (char === quote) quote = null
+      continue
+    }
+    if (char === '"' || char === "'") { quote = char; continue }
+    if (char === '{') depth += 1
+    else if (char === '}') {
+      depth -= 1
+      if (depth === 0) return source.slice(start, index + 1)
+    }
+  }
+  return null
+}
+
 function parseInitialData(html: string) {
   const $ = cheerio.load(html)
   for (const element of $('script').toArray()) {
     const source = $(element).html()?.trim()
     if (!source) continue
-    for (const marker of ['var ytInitialData = ', 'ytInitialData = ']) {
+    for (const marker of ['var ytInitialData =', 'ytInitialData =', 'window["ytInitialData"] =', "window['ytInitialData'] ="]) {
       const index = source.indexOf(marker)
       if (index < 0) continue
-      const raw = source.slice(index + marker.length).trim().replace(/;\s*$/, '')
-      try { return JSON.parse(raw) as Record<string, unknown> } catch { /* try next script */ }
+      const raw = extractJsonObject(source, index + marker.length)
+      if (!raw) continue
+      try { return JSON.parse(raw) as Record<string, unknown> } catch { /* try next marker/script */ }
     }
   }
-  throw new Error('YouTube no expuso ytInitialData en la respuesta móvil.')
+  throw new Error('YouTube no expuso un ytInitialData válido en la respuesta móvil.')
 }
 
 function collectVideoRenderers(root: unknown) {
