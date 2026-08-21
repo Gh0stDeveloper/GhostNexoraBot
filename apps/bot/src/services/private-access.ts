@@ -20,7 +20,9 @@ export function grantPrivateAccess(userJid: string, durationMs: number | null, g
 }
 
 export function revokePrivateAccess(userJid: string) {
-  const result = db.prepare("DELETE FROM entitlements WHERE user_jid = ? AND kind = 'private_access'").run(userJid)
+  // Solo elimina concesiones administrativas. Los planes pagados mediante .buy se conservan.
+  const result = db.prepare(`DELETE FROM entitlements
+    WHERE user_jid = ? AND kind = 'private_access' AND metadata LIKE '%"source":"manual_staff"%'`).run(userJid)
   return Number(result.changes)
 }
 
