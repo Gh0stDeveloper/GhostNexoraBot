@@ -7,10 +7,12 @@ import {
   eromeSessionStatus,
   exploreErome,
   getEromeAlbum,
-  getEromeProfile,
   searchErome,
-  searchEromeProfiles,
 } from '../services/erome.js'
+import {
+  getEromePublicProfile as getEromeProfile,
+  searchEromePublicProfiles as searchEromeProfiles,
+} from '../services/erome-profile.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { withTimeout } from '../utils/timeout.js'
@@ -150,7 +152,7 @@ async function profileUi(ctx: CommandContext, profile: Awaited<ReturnType<typeof
   buttons.push({ type: 'url', text: '🌐 Abrir perfil', url: profile.url })
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: `👤 ${profile.username}`,
-    body: `Álbumes visibles: ${profile.albums.length} · lote ${profile.batch}`,
+    body: profile.albums.length ? `Álbumes visibles: ${profile.albums.length} · lote ${profile.batch}` : 'El perfil existe, pero Erome no expuso álbumes públicos en esta tanda.',
     footer: 'Erome',
     imageUrl: profile.avatar,
     buttons,
