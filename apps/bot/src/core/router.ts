@@ -51,6 +51,7 @@ export class CommandRouter {
     const senderNumbers = rawSenderCandidates.map(digitsFromJid).filter(Boolean)
     const isOwner = Boolean(message.key.fromMe) || senderNumbers.some((number) => config.owners.includes(number))
     const isBotStaff = isOwner || senderNumbers.some((number) => settings.isBotAdmin(number))
+    const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && normalizeJid(this.options.instanceOwnerJid) === sender
     const isGroup = chatId.endsWith('@g.us')
     const prefix = settings.prefix
 
@@ -82,7 +83,7 @@ export class CommandRouter {
     const command = this.byName.get(typedName.toLowerCase())
     if (!command) return false
 
-    if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && command.name !== 'bot') return false
+    if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && command.name !== 'bot') return false
 
     try {
       await react('⚡')
@@ -90,7 +91,7 @@ export class CommandRouter {
       // Los chats privados son una función premium del bot. Owner/staff quedan exentos.
       // Sin una suscripción private_access solo se permite entrar a la tienda, consultar
       // saldo y comprar el acceso; el resto de módulos queda bloqueado sin excepciones.
-      if (!isGroup && !isBotStaff && !economy.hasEntitlement(sender, 'private_access') && !privateStorefrontCommands.has(command.name)) {
+      if (!isGroup && !isBotStaff && !isSubbotOwner && !economy.hasEntitlement(sender, 'private_access') && !privateStorefrontCommands.has(command.name)) {
         await reply([
           '╭━━〔 🔐 *CHAT PRIVADO PREMIUM* 〕━━╮',
           '┃ Tu cuenta todavía no tiene acceso privado.',
@@ -113,8 +114,8 @@ export class CommandRouter {
         await react('🚫')
         return true
       }
-      if (command.staffOnly && !isBotStaff) {
-        await reply('🛡️ *STAFF DEL BOT*\n━━━━━━━━━━━━━━\nNecesitas ser Owner o administrador global de Ghost Nexora Bot.')
+      if (command.staffOnly && !isBotStaff && !(command.subbotOwnerAllowed && isSubbotOwner)) {
+        await reply('🛡️ *STAFF DEL BOT*\n━━━━━━━━━━━━━━\nNecesitas ser Owner/administrador global o el propietario autorizado de esta instancia de subbot.')
         await react('🚫')
         return true
       }
@@ -134,10 +135,10 @@ export class CommandRouter {
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
         const botCandidates = selfCandidates.map(normalizeJid).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
-        const senderIsAdmin = Boolean(senderParticipant?.admin) || isBotStaff
+        const senderIsAdmin = Boolean(senderParticipant?.admin) || isBotStaff || isSubbotOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
         if (command.adminOnly && !senderIsAdmin) {
-          await reply('🛡️ *PERMISO DE ADMIN*\n━━━━━━━━━━━━━━\nNecesitas ser administrador del grupo o staff global del bot.')
+          await reply('🛡️ *PERMISO DE ADMIN*\n━━━━━━━━━━━━━━\nNecesitas ser administrador del grupo, staff global o dueño de esta instancia.')
           await react('🚫')
           return true
         }
@@ -152,7 +153,7 @@ export class CommandRouter {
         socket, message, chatId, sender,
         pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : 'Usuario'),
         commandName: command.name, args, argText: args.join(' '), prefix, settings,
-        isOwner, isBotStaff, isGroup,
+        isOwner, isBotStaff, isGroup, isSubbotOwner,
         instanceId: this.options.instanceId,
         instanceOwnerJid: this.options.instanceOwnerJid,
         reply, react,
