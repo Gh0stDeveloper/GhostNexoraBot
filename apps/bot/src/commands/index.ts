@@ -1,5 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { generalCommands } from './general.js'
+import { profileCommands } from './profile.js'
 import { stickerCommands } from './stickers.js'
 import { downloadCommands } from './downloads.js'
 import { lyricsCommands } from './lyrics.js'
@@ -14,6 +15,7 @@ import { ownerCommands } from './owner.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
+  ...profileCommands,
   ...stickerCommands,
   ...downloadCommands,
   ...lyricsCommands,
