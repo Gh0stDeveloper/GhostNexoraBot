@@ -14,7 +14,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git ffmpeg build-essential
+apt-get install -y ca-certificates curl git ffmpeg build-essential util-linux
 
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 22 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
@@ -89,7 +89,7 @@ if [[ "${REGISTERED}" != "true" ]]; then
   fi
   if [[ -n "${PHONE}" ]]; then
     echo "Generando codigo de vinculacion..."
-    sudo -u "${SERVICE_USER}" -H env \
+    runuser -u "${SERVICE_USER}" -- env \
       ENV_FILE="${INSTALL_DIR}/.env" \
       PAIRING_NUMBER="${PHONE}" \
       pnpm --dir "${INSTALL_DIR}" pair
