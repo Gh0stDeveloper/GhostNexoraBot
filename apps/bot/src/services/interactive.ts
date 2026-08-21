@@ -5,6 +5,7 @@ import {
   type WAMessage,
   type WASocket,
 } from 'baileys'
+import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
 
 export type InteractiveButton =
@@ -28,9 +29,16 @@ function nativeButtons(buttons: InteractiveButton[]) {
 async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
   if (!imageUrl) return undefined
   try {
-    const content = await generateWAMessageContent({ image: { url: imageUrl } }, { upload: socket.waUploadToServer })
+    const content = await withTimeout(
+      generateWAMessageContent({ image: { url: imageUrl } }, { upload: socket.waUploadToServer }),
+      8_000,
+      'interactive thumbnail',
+    )
     return content.imageMessage ?? undefined
-  } catch {
+  } catch (error) {
+    let host: string | undefined
+    try { host = new URL(imageUrl).hostname } catch { /* ignore */ }
+    logger.warn({ error, host }, 'interactive thumbnail failed; continuing without image')
     return undefined
   }
 }
@@ -76,10 +84,9 @@ export async function sendInteractiveCard(
       25_000,
       'interactive card relay',
     )
-  } catch {
-    // El menú y las tarjetas informativas no deben desaparecer si Meta rechaza
-    // temporalmente un native-flow interactivo. El fallback evita exponer URLs
-    // secretas de botones: solo envía el contenido textual de la tarjeta.
+    logger.info({ chatId, messageId: message.key.id }, 'interactive card relay completed')
+  } catch (error) {
+    logger.warn({ error, chatId }, 'interactive card relay failed; sending text fallback')
     await sendTextFallback(socket, chatId, quoted, input.title, input.body, input.footer)
   }
 }
@@ -93,10 +100,11 @@ export async function sendCarousel(
   const userJid = socket.user?.id
   if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
 
-  const cards = []
-  for (const card of input.cards.slice(0, 12)) {
-    const imageMessage = await imageMessageFromUrl(socket, card.imageUrl)
-    cards.push({
+  const sourceCards = input.cards.slice(0, 12)
+  const preparedImages = await Promise.all(sourceCards.map((card) => imageMessageFromUrl(socket, card.imageUrl)))
+  const cards = sourceCards.map((card, index) => {
+    const imageMessage = preparedImages[index]
+    return {
       body: proto.Message.InteractiveMessage.Body.fromObject({ text: card.body }),
       footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: card.footer ?? 'Ghost Nexora Bot' }),
       header: proto.Message.InteractiveMessage.Header.fromObject({
@@ -105,8 +113,8 @@ export async function sendCarousel(
         ...(imageMessage ? { imageMessage } : {}),
       }),
       nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({ buttons: nativeButtons(card.buttons) }),
-    })
-  }
+    }
+  })
 
   const message = generateWAMessageFromContent(chatId, {
     viewOnceMessage: {
@@ -128,7 +136,9 @@ export async function sendCarousel(
       25_000,
       'carousel relay',
     )
-  } catch {
+    logger.info({ chatId, messageId: message.key.id, cards: cards.length }, 'carousel relay completed')
+  } catch (error) {
+    logger.warn({ error, chatId, cards: cards.length }, 'carousel relay failed; sending text fallback')
     const summary = input.cards.slice(0, 10).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
     await sendTextFallback(socket, chatId, quoted, input.title, [input.body, summary].filter(Boolean).join('\n\n'), input.footer)
   }
