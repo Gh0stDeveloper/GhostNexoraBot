@@ -10,7 +10,7 @@ Group=__SERVICE_USER__
 WorkingDirectory=__INSTALL_DIR__
 Environment=NODE_ENV=production
 Environment=ENV_FILE=__INSTALL_DIR__/.env
-ExecStart=/usr/bin/env pnpm --dir __INSTALL_DIR__ bot
+ExecStart=/usr/bin/env npm --prefix __INSTALL_DIR__ run bot
 Restart=always
 RestartSec=5
 TimeoutStopSec=20

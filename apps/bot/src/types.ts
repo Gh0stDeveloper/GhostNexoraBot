@@ -1,7 +1,7 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { SettingsStore } from './core/settings.js'
 
-export type CommandCategory = 'general' | 'stickers' | 'downloads' | 'groups' | 'owner'
+export type CommandCategory = 'general' | 'stickers' | 'downloads' | 'groups' | 'economy' | 'subbots' | 'adult' | 'owner'
 
 export interface CommandContext {
   socket: WASocket
@@ -14,6 +14,8 @@ export interface CommandContext {
   argText: string
   prefix: string
   settings: SettingsStore
+  instanceId?: number
+  instanceOwnerJid?: string
   reply: (text: string) => Promise<unknown>
   react: (emoji: string) => Promise<unknown>
 }

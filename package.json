@@ -1,17 +1,19 @@
 {
   "name": "ghost-nexora-bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Ghost Nexora Bot - WhatsApp Multi-Device bot and Next.js web",
+  "description": "Ghost Nexora Bot - WhatsApp Multi-Device bot, economy, subbots and Next.js web",
+  "workspaces": ["apps/*"],
   "scripts": {
-    "build": "pnpm -r build",
-    "dev": "pnpm --parallel -r dev",
-    "typecheck": "pnpm -r typecheck",
-    "bot": "pnpm --filter @ghostnexora/bot start",
-    "pair": "pnpm --filter @ghostnexora/bot pair",
-    "web": "pnpm --filter @ghostnexora/web start"
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "bot": "npm run start --workspace=@ghostnexora/bot",
+    "pair": "npm run pair --workspace=@ghostnexora/bot",
+    "web": "npm run start --workspace=@ghostnexora/web"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
   }
 }

@@ -3,28 +3,25 @@ import { config } from '../config.js'
 import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
+import { economy } from '../services/economy.js'
 import { settings } from './settings.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
-  try {
-    return jidNormalizedUser(value)
-  } catch {
-    return value
-  }
+  try { return jidNormalizedUser(value) } catch { return value }
 }
 
 function participantMatches(participant: GroupParticipant, candidates: string[]) {
-  const participantIds = [participant.id, participant.phoneNumber, participant.lid]
-    .map(normalizeJid)
-    .filter(Boolean)
+  const participantIds = [participant.id, participant.phoneNumber, participant.lid].map(normalizeJid).filter(Boolean)
   return participantIds.some((jid) => candidates.includes(jid))
 }
+
+export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
   private readonly byName = new Map<string, BotCommand>()
 
-  constructor(commands: BotCommand[]) {
+  constructor(commands: BotCommand[], private readonly options: RouterOptions = {}) {
     for (const command of commands) {
       this.byName.set(command.name.toLowerCase(), command)
       for (const alias of command.aliases ?? []) this.byName.set(alias.toLowerCase(), command)
@@ -35,7 +32,6 @@ export class CommandRouter {
     const text = getMessageText(message)
     const prefix = settings.prefix
     if (!text.startsWith(prefix)) return false
-
     const raw = text.slice(prefix.length).trim()
     if (!raw) return false
     const [typedName = '', ...args] = raw.split(/\s+/)
@@ -60,6 +56,15 @@ export class CommandRouter {
     try {
       await react('⚡')
 
+      if (!isGroup && settings.privateCommandsRequireAccess && !isOwner) {
+        const freeCategories = new Set(['general', 'economy', 'subbots'])
+        if (!freeCategories.has(command.category) && !economy.hasEntitlement(sender, 'private_access')) {
+          await reply(`🔐 El uso privado de este módulo requiere acceso. Consulta *${prefix}shop* para comprar una suscripción con Nexora Coins.`)
+          await react('🔒')
+          return true
+        }
+      }
+
       if (command.ownerOnly && !isOwner) {
         await reply('⛔ Este comando está disponible únicamente para el propietario del bot.')
         await react('🚫')
@@ -77,14 +82,12 @@ export class CommandRouter {
           await react('🚫')
           return true
         }
-
         const metadata = await socket.groupMetadata(chatId)
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
         const botCandidates = selfCandidates.map(normalizeJid).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
         const senderIsAdmin = Boolean(senderParticipant?.admin) || isOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
-
         if (command.adminOnly && !senderIsAdmin) {
           await reply('🛡️ Necesitas ser administrador del grupo para usar este comando.')
           await react('🚫')
@@ -98,24 +101,18 @@ export class CommandRouter {
       }
 
       const context: CommandContext = {
-        socket,
-        message,
-        chatId,
-        sender,
+        socket, message, chatId, sender,
         pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : 'Usuario'),
-        commandName: command.name,
-        args,
-        argText: args.join(' '),
-        prefix,
-        settings,
-        reply,
-        react,
+        commandName: command.name, args, argText: args.join(' '), prefix, settings,
+        instanceId: this.options.instanceId,
+        instanceOwnerJid: this.options.instanceOwnerJid,
+        reply, react,
       }
       await command.handler(context)
       await react('✅')
       return true
     } catch (error) {
-      logger.error({ error, command: command.name, chatId }, 'command failed')
+      logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')
       await reply(`❌ No pude completar *${prefix}${command.name}*. ${error instanceof Error ? error.message : 'Error inesperado.'}`).catch(() => undefined)
       await react('❌').catch(() => undefined)
       return true
