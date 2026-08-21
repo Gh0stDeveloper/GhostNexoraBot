@@ -25,21 +25,27 @@ function describeDisconnect(error: unknown) {
 
 async function main() {
   const rl = readline.createInterface({ input, output })
+  const providedPhone = process.env.PAIRING_NUMBER ?? ''
   const providedMethod = normalizeMethod(process.env.PAIRING_METHOD ?? '')
-  const methodAnswer = providedMethod
-    ? ''
-    : await rl.question('Método de vinculación [QR/código] (QR recomendado): ')
-  const method = providedMethod ?? normalizeMethod(methodAnswer) ?? 'qr'
+
+  let method: PairingMethod
+  if (providedMethod) {
+    method = providedMethod
+  } else if (providedPhone) {
+    method = 'code'
+  } else {
+    const methodAnswer = await rl.question('Método de vinculación [QR/código] (QR recomendado): ')
+    method = normalizeMethod(methodAnswer) ?? 'qr'
+  }
 
   let phone = ''
   if (method === 'code') {
-    const provided = process.env.PAIRING_NUMBER ?? ''
-    if (!provided) {
+    if (!providedPhone) {
       console.log('\nEscribe el número exactamente en formato internacional como lo reconoce tu WhatsApp.')
       console.log('Puedes escribir +, espacios o guiones; Ghost Nexora Bot los elimina automáticamente.')
       console.log('Ejemplo: +52 55 1234 5678 se convierte internamente en 525512345678.\n')
     }
-    phone = cleanPhone(provided || await rl.question('📱 Número de WhatsApp con código de país: '))
+    phone = cleanPhone(providedPhone || await rl.question('📱 Número de WhatsApp con código de país: '))
     if (phone.length < 8 || phone.length > 15) {
       rl.close()
       throw new Error('Número inválido. Usa el formato internacional completo.')
