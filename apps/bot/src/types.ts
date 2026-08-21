@@ -1,7 +1,7 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { SettingsStore } from './core/settings.js'
 
-export type CommandCategory = 'general' | 'stickers' | 'downloads' | 'groups' | 'economy' | 'subbots' | 'adult' | 'owner'
+export type CommandCategory = 'general' | 'stickers' | 'downloads' | 'groups' | 'economy' | 'collection' | 'subbots' | 'adult' | 'owner'
 
 export interface CommandContext {
   socket: WASocket
