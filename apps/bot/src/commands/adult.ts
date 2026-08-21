@@ -7,10 +7,15 @@ import { sendCarousel } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 function assertAdultAccess(ctx: CommandContext) {
-  if (!settings.adultEnabled) throw new Error(`El módulo 18+ está desactivado globalmente. El owner puede habilitarlo con ${ctx.prefix}adultmode on.`)
   const isGroup = ctx.chatId.endsWith('@g.us')
-  if (isGroup && !economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error('Este grupo no está autorizado para el módulo 18+.')
-  if (!isGroup && !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
+  if (isGroup) {
+    if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
+      throw new Error(`El módulo 18+ está desactivado en este grupo. Un administrador puede habilitarlo aquí con ${ctx.prefix}adultmode on.`)
+    }
+  } else {
+    if (!settings.adultEnabled) throw new Error('El módulo 18+ está desactivado para chats privados.')
+    if (!config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
+  }
   if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) throw new Error(`Antes de usar el módulo debes confirmar que eres mayor de edad con ${ctx.prefix}adult18 accept.`)
 }
 
@@ -78,7 +83,7 @@ export const adultCommands: BotCommand[] = [
     async handler(ctx) {
       if ((ctx.args[0] ?? '').toLowerCase() !== 'accept') throw new Error(`Si eres mayor de edad y deseas habilitar este módulo para tu cuenta, usa ${ctx.prefix}adult18 accept.`)
       economy.grantEntitlement(ctx.sender, 'adult_consent', 365 * 86400_000)
-      await ctx.reply('🔞 Confirmación guardada. El módulo seguirá sujeto a la configuración global y a la autorización de cada grupo.')
+      await ctx.reply(`🔞 Confirmación guardada. En grupos, el acceso depende únicamente del ajuste de ese grupo (${ctx.prefix}adultmode on|off).`)
     },
   },
   { name: 'xvideos', aliases: ['xv'], category: 'adult', description: 'Busca o descarga videos de XVideos.', async handler(ctx) { await searchOrDownload(ctx, 'xvideos') } },
