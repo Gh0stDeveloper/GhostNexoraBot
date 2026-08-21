@@ -35,10 +35,14 @@ export const generalCommands: BotCommand[] = [
 │ ${p}toimg
 ╰─────────────⬣
 
-╭─❖ 🎵 *YOUTUBE*
+╭─❖ 🎵 *YOUTUBE & AUDIO*
+│ ${p}yts <búsqueda>
+│ ${p}play <búsqueda>
+│ ${p}playvideo <búsqueda>
 │ ${p}ytformats <url>
 │ ${p}ytmp3 <url>
 │ ${p}ytmp4 <url> [calidad]
+│ ${p}soundcloud <url|búsqueda>
 ╰─────────────⬣
 
 ╭─❖ 📥 *DESCARGAS*
