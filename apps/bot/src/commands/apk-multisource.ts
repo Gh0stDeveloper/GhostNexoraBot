@@ -1,5 +1,5 @@
 import type { BotCommand, CommandContext } from '../types.js'
-import { sendCarousel } from '../services/interactive.js'
+import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import { downloadAndroidApk, getAndroidApk, searchAndroidApks, type UnifiedApkItem } from '../services/apk-sources.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
@@ -47,6 +47,15 @@ function itemBody(item: UnifiedApkItem) {
   ].filter(Boolean).join('\n')
 }
 
+function resultButtons(ctx: CommandContext, item: UnifiedApkItem): InteractiveButton[] {
+  const buttons: InteractiveButton[] = [
+    { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${item.token}` },
+    { type: 'reply', text: 'ℹ️ Detalles', id: `${ctx.prefix}apkinfo ${item.token}` },
+  ]
+  if (item.pageUrl) buttons.push({ type: 'url', text: '🌐 Fuente', url: item.pageUrl })
+  return buttons
+}
+
 async function showApkResults(ctx: CommandContext, query: string) {
   await ctx.reply(`🔎 *APK · BUSCANDO*\n━━━━━━━━━━━━━━\nConsultando Aptoide, APK.Tools y AndroForever para *${query}*...`)
   const results = await searchAndroidApks(query, 12)
@@ -60,11 +69,7 @@ async function showApkResults(ctx: CommandContext, query: string) {
       body: itemBody(item),
       imageUrl: item.graphic || item.icon,
       footer: `Ghost Nexora Bot · ${item.source}`,
-      buttons: [
-        { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${item.token}` },
-        { type: 'reply', text: 'ℹ️ Detalles', id: `${ctx.prefix}apkinfo ${item.token}` },
-        ...(item.pageUrl ? [{ type: 'url' as const, text: '🌐 Fuente', url: item.pageUrl }] : []),
-      ].slice(0, 3),
+      buttons: resultButtons(ctx, item),
     })),
   })
 }
@@ -81,6 +86,10 @@ export const apkMultisourceCommands: BotCommand[] = [
       const token = ctx.args[0]
       if (!token) throw new Error(`Usa primero ${ctx.prefix}apk <aplicación>.`)
       const item = getAndroidApk(token)
+      const buttons: InteractiveButton[] = [
+        { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${item.token}` },
+      ]
+      if (item.pageUrl) buttons.push({ type: 'url', text: '🌐 Abrir fuente', url: item.pageUrl })
       await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
         title: '🤖 APK · DETALLES',
         body: item.name,
@@ -89,10 +98,7 @@ export const apkMultisourceCommands: BotCommand[] = [
           title: item.name,
           body: itemBody(item),
           imageUrl: item.graphic || item.icon,
-          buttons: [
-            { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${item.token}` },
-            ...(item.pageUrl ? [{ type: 'url' as const, text: '🌐 Abrir fuente', url: item.pageUrl }] : []),
-          ],
+          buttons,
         }],
       })
     },
