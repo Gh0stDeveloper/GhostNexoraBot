@@ -22,6 +22,8 @@ function canonicalUserJid(candidates: string[], fallback: string) {
   return normalizeJid(pn ?? fallback)
 }
 
+const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance'])
+
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
@@ -85,13 +87,25 @@ export class CommandRouter {
     try {
       await react('⚡')
 
-      if (!isGroup && settings.privateCommandsRequireAccess && !isBotStaff) {
-        const freeCategories = new Set(['general', 'profile', 'social', 'economy', 'games', 'collection', 'subbots'])
-        if (!freeCategories.has(command.category) && !economy.hasEntitlement(sender, 'private_access')) {
-          await reply(`🔐 *ACCESO PRIVADO*\n━━━━━━━━━━━━━━\nEste módulo requiere acceso privado. Consulta *${prefix}shop* para adquirirlo con ${settings.currencyName}.`)
-          await react('🔒')
-          return true
-        }
+      // Los chats privados son una función premium del bot. Owner/staff quedan exentos.
+      // Sin una suscripción private_access solo se permite entrar a la tienda, consultar
+      // saldo y comprar el acceso; el resto de módulos queda bloqueado sin excepciones.
+      if (!isGroup && !isBotStaff && !economy.hasEntitlement(sender, 'private_access') && !privateStorefrontCommands.has(command.name)) {
+        await reply([
+          '╭━━〔 🔐 *CHAT PRIVADO PREMIUM* 〕━━╮',
+          '┃ Tu cuenta todavía no tiene acceso privado.',
+          '┃ Los comandos del bot funcionan en grupos,',
+          '┃ pero este chat requiere una suscripción.',
+          '╰━━━━━━━━━━━━━━━━━━━━╯',
+          '',
+          `🛒 Consulta planes: *${prefix}shop*`,
+          `💰 Consulta saldo: *${prefix}balance*`,
+          `✅ Compra acceso: *${prefix}buy private1d|private7d|private30d*`,
+          '',
+          'El acceso se activa inmediatamente después de una compra válida.',
+        ].join('\n'))
+        await react('🔒')
+        return true
       }
 
       if (command.ownerOnly && !isOwner) {
