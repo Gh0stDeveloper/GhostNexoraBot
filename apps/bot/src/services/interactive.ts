@@ -24,6 +24,45 @@ function nativeButtons(buttons: InteractiveButton[]) {
     : { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: button.text, url: button.url, merchant_url: button.url }) })
 }
 
+async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
+  if (!imageUrl) return undefined
+  try {
+    const content = await generateWAMessageContent({ image: { url: imageUrl } }, { upload: socket.waUploadToServer })
+    return content.imageMessage ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function sendInteractiveCard(
+  socket: WASocket,
+  chatId: string,
+  quoted: WAMessage,
+  input: { title: string; body: string; footer?: string; imageUrl?: string; buttons?: InteractiveButton[] },
+) {
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
+  const imageMessage = await imageMessageFromUrl(socket, input.imageUrl)
+  const message = generateWAMessageFromContent(chatId, {
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+        interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+          body: proto.Message.InteractiveMessage.Body.create({ text: input.body }),
+          footer: proto.Message.InteractiveMessage.Footer.create({ text: input.footer ?? 'Ghost Nexora Bot · Ghost Developer / Nexora' }),
+          header: proto.Message.InteractiveMessage.Header.fromObject({
+            title: input.title,
+            hasMediaAttachment: Boolean(imageMessage),
+            ...(imageMessage ? { imageMessage } : {}),
+          }),
+          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({ buttons: nativeButtons(input.buttons ?? []) }),
+        }),
+      },
+    },
+  }, { quoted, userJid })
+  await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+}
+
 export async function sendCarousel(
   socket: WASocket,
   chatId: string,
@@ -35,15 +74,7 @@ export async function sendCarousel(
 
   const cards = []
   for (const card of input.cards.slice(0, 12)) {
-    let imageMessage: proto.Message.IImageMessage | undefined
-    if (card.imageUrl) {
-      try {
-        const content = await generateWAMessageContent({ image: { url: card.imageUrl } }, { upload: socket.waUploadToServer })
-        imageMessage = content.imageMessage ?? undefined
-      } catch {
-        imageMessage = undefined
-      }
-    }
+    const imageMessage = await imageMessageFromUrl(socket, card.imageUrl)
     cards.push({
       body: proto.Message.InteractiveMessage.Body.fromObject({ text: card.body }),
       footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: card.footer ?? 'Ghost Nexora Bot' }),
