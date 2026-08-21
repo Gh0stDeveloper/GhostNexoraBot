@@ -88,27 +88,26 @@ export const downloadCommands: BotCommand[] = [
       const query = requireText(ctx.argText)
       const results = await searchYouTube(query, 10)
       if (!results.length) throw new Error('No encontré resultados para esa búsqueda.')
-      try {
-        await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-          title: '🎵 YOUTUBE MUSIC',
-          body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🎵 ${query}\n\n↔️ Desliza para ver más resultados.`,
-          footer: 'Audio · Letra · Relacionadas',
-          cards: results.map((item, index) => ({
-            title: `🎵 CANCIÓN #${index + 1}`,
-            body: [`🎵 ${item.title}`, `◇ Artista » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
-            imageUrl: item.thumbnail,
-            footer: 'Ghost Nexora Bot',
-            buttons: [
-              { type: 'reply', text: '🎧 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
-              { type: 'reply', text: '📝 Letra', id: `${ctx.prefix}lyrics ${item.title} ${item.channel}` },
-              { type: 'reply', text: '🎶 Relacionadas', id: `${ctx.prefix}yts ${item.title}` },
-            ],
-          })),
-        })
-      } catch {
-        const lines = results.map((item, i) => `${i + 1}. *${item.title}*\n👤 ${item.channel} · ⏱️ ${formatDuration(item.duration)} · 👁️ ${compact(item.views)}\n${item.url}`)
-        await ctx.reply(`🎵 *YOUTUBE MUSIC*\n\n${lines.join('\n\n')}\n\n🎧 ${ctx.prefix}play <búsqueda> · 📝 ${ctx.prefix}lyrics <canción>`)
-      }
+
+      const lines = results.map((item, i) => `${i + 1}. *${item.title}*\n👤 ${item.channel} · ⏱️ ${formatDuration(item.duration)} · 👁️ ${compact(item.views)}\n${item.url}`)
+      await ctx.reply(`🎵 *YOUTUBE MUSIC*\n🔎 ${query}\n\n${lines.join('\n\n')}\n\n🎧 ${ctx.prefix}play <búsqueda> · 📝 ${ctx.prefix}lyrics <canción>`)
+
+      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+        title: '🎵 YOUTUBE MUSIC',
+        body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🎵 ${query}\n\n↔️ Desliza para ver más resultados.`,
+        footer: 'Audio · Letra · Relacionadas',
+        cards: results.map((item, index) => ({
+          title: `🎵 CANCIÓN #${index + 1}`,
+          body: [`🎵 ${item.title}`, `◇ Artista » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
+          imageUrl: item.thumbnail,
+          footer: 'Ghost Nexora Bot',
+          buttons: [
+            { type: 'reply', text: '🎧 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
+            { type: 'reply', text: '📝 Letra', id: `${ctx.prefix}lyrics ${item.title} ${item.channel}` },
+            { type: 'reply', text: '🎶 Relacionadas', id: `${ctx.prefix}yts ${item.title}` },
+          ],
+        })),
+      }).catch(() => undefined)
     },
   },
   {
