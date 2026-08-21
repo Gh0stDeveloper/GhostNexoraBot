@@ -37,6 +37,7 @@ const hosts: Record<DownloadPlatform, string[]> = {
 }
 
 const soundCloudHosts = ['soundcloud.com', 'www.soundcloud.com', 'm.soundcloud.com', 'on.soundcloud.com']
+const ytDlpRuntimeArgs = ['--js-runtimes', 'node'] as const
 
 function validateUrl(value: string, platform: DownloadPlatform) {
   let url: URL
@@ -89,6 +90,7 @@ async function runDownload(source: string, args: string[]): Promise<DownloadResu
   const output = path.join(dir, '%(title).80s-%(id)s.%(ext)s')
   try {
     await execa('yt-dlp', [
+      ...ytDlpRuntimeArgs,
       '--no-playlist',
       '--no-warnings',
       '--restrict-filenames',
@@ -122,7 +124,13 @@ function videoArgs(quality: number) {
 
 export async function getYouTubeFormats(input: string): Promise<YouTubeFormats> {
   const url = validateUrl(input, 'youtube')
-  const { stdout } = await execa('yt-dlp', ['--dump-single-json', '--no-playlist', '--no-warnings', url], { timeout: 60_000 })
+  const { stdout } = await execa('yt-dlp', [
+    ...ytDlpRuntimeArgs,
+    '--dump-single-json',
+    '--no-playlist',
+    '--no-warnings',
+    url,
+  ], { timeout: 60_000 })
   const data = JSON.parse(stdout) as {
     title?: string
     duration?: number
@@ -147,6 +155,7 @@ export async function searchYouTube(input: string, limit = 5): Promise<YouTubeSe
   if (!query) throw new Error('Debes indicar qué quieres buscar en YouTube.')
   const count = Math.max(1, Math.min(10, limit))
   const { stdout } = await execa('yt-dlp', [
+    ...ytDlpRuntimeArgs,
     '--flat-playlist',
     '--dump-single-json',
     '--no-warnings',
