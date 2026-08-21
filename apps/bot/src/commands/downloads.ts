@@ -16,6 +16,7 @@ import { downloadMediaFire } from '../services/mediafire.js'
 import { resolveExternalSocial, type ExternalSocialPlatform } from '../services/social-external.js'
 import { sendCarousel } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+import { getTikTokProfile, searchTikTokProfiles, searchTikTokVideos } from '../services/tiktok-search.js'
 
 function requireUrl(args: string[]) { const url = args[0]; if (!url) throw new Error('Debes indicar una URL.'); return url }
 function requireText(value: string, label = 'Debes indicar una búsqueda.') { const text = value.trim(); if (!text) throw new Error(label); return text }
@@ -51,35 +52,150 @@ async function sendDownloadInfo(ctx: CommandContext, info: MediaInfo | undefined
   await ctx.reply(caption)
 }
 
+async function downloadSocialUrl(
+  ctx: CommandContext,
+  name: string,
+  platform: Exclude<DownloadPlatform, 'youtube'>,
+  icon: string,
+  url: string,
+) {
+  await ctx.reply(`${icon} Analizando *${name}*...`)
+  const info = await getMediaInfo(url, platform).catch(() => undefined)
+
+  if (['facebook', 'instagram', 'tiktok'].includes(platform)) {
+    try {
+      const direct = await resolveExternalSocial(url, platform as ExternalSocialPlatform)
+      await sendDownloadInfo(ctx, info)
+      await ctx.socket.sendMessage(ctx.chatId, {
+        video: { url: direct }, mimetype: 'video/mp4',
+        caption: `${icon} *${name}* · proveedor web público${platform === 'tiktok' ? ' · se priorizó enlace sin marca/HD' : ''}\n👻 ${ctx.prefix}menu`,
+      }, { quoted: ctx.message })
+      return
+    } catch {
+      // El proveedor web es un acelerador/fallback sin cookies; si cambia, continúa yt-dlp.
+    }
+  }
+
+  const result = await downloadSocialVideo(url, platform)
+  try {
+    await sendDownloadInfo(ctx, result.info ?? info, result.size)
+    await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `${icon} *${name}* · ${formatBytes(result.size)}\n👻 ${ctx.prefix}menu` }, { quoted: ctx.message })
+    recordSubbotDownload(ctx.instanceId, result.size)
+  } finally { await result.cleanup() }
+}
+
 const socialCommand = (name: string, aliases: string[], platform: Exclude<DownloadPlatform, 'youtube'>, icon: string): BotCommand => ({
   name, aliases, category: 'downloads', description: `Descarga contenido público de ${name}.`, usage: `${name} <url>`,
   async handler(ctx) {
-    const url = requireUrl(ctx.args)
-    await ctx.reply(`${icon} Analizando *${name}*...`)
-    const info = await getMediaInfo(url, platform).catch(() => undefined)
-
-    if (['facebook', 'instagram', 'tiktok'].includes(platform)) {
-      try {
-        const direct = await resolveExternalSocial(url, platform as ExternalSocialPlatform)
-        await sendDownloadInfo(ctx, info)
-        await ctx.socket.sendMessage(ctx.chatId, {
-          video: { url: direct }, mimetype: 'video/mp4',
-          caption: `${icon} *${name}* · proveedor web público${platform === 'tiktok' ? ' · se priorizó enlace sin marca/HD' : ''}\n👻 ${ctx.prefix}menu`,
-        }, { quoted: ctx.message })
-        return
-      } catch {
-        // El proveedor web es un acelerador/fallback sin cookies; si cambia, continúa yt-dlp.
-      }
-    }
-
-    const result = await downloadSocialVideo(url, platform)
-    try {
-      await sendDownloadInfo(ctx, result.info ?? info, result.size)
-      await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `${icon} *${name}* · ${formatBytes(result.size)}\n👻 ${ctx.prefix}menu` }, { quoted: ctx.message })
-      recordSubbotDownload(ctx.instanceId, result.size)
-    } finally { await result.cleanup() }
+    await downloadSocialUrl(ctx, name, platform, icon, requireUrl(ctx.args))
   },
 })
+
+async function showTikTokVideos(ctx: CommandContext, query: string) {
+  const results = await searchTikTokVideos(query, 10)
+  if (!results.length) throw new Error('TikTok no devolvió videos públicos para esa búsqueda.')
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🎵 TIKTOK · VIDEOS',
+    body: `Resultados para: ${query}`,
+    footer: 'Ghost Nexora Bot',
+    cards: results.map((item, index) => ({
+      title: `#${index + 1} · ${item.username ? `@${item.username}` : 'TikTok'}`,
+      body: [
+        item.title,
+        item.nickname ? `Creador: ${item.nickname}` : '',
+        item.views !== undefined ? `Vistas: ${compact(item.views)}` : '',
+        item.likes !== undefined ? `Likes: ${compact(item.likes)}` : '',
+      ].filter(Boolean).join('\n'),
+      imageUrl: item.thumbnail,
+      buttons: [
+        { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}tiktok ${item.url}` },
+        ...(item.username ? [{ type: 'reply' as const, text: '👤 Perfil', id: `${ctx.prefix}tiktok profile @${item.username}` }] : []),
+        { type: 'url', text: '🌐 Abrir', url: item.url },
+      ],
+    })),
+  })
+}
+
+async function showTikTokProfiles(ctx: CommandContext, query: string) {
+  const profiles = await searchTikTokProfiles(query, 8)
+  if (!profiles.length) throw new Error('TikTok no devolvió perfiles públicos para esa búsqueda.')
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🎵 TIKTOK · PERFILES',
+    body: `Perfiles para: ${query}`,
+    footer: 'Ghost Nexora Bot',
+    cards: profiles.map((profile, index) => ({
+      title: `#${index + 1} · @${profile.username}`,
+      body: [
+        profile.nickname ?? '',
+        profile.followers !== undefined ? `Seguidores: ${compact(profile.followers)}` : '',
+        profile.likes !== undefined ? `Likes: ${compact(profile.likes)}` : '',
+        profile.videos !== undefined ? `Videos: ${compact(profile.videos)}` : '',
+        profile.bio ?? '',
+      ].filter(Boolean).join('\n'),
+      imageUrl: profile.avatar,
+      buttons: [
+        { type: 'reply', text: '👤 Ver perfil', id: `${ctx.prefix}tiktok profile @${profile.username}` },
+        { type: 'reply', text: '🎬 Buscar videos', id: `${ctx.prefix}tiktok search ${profile.username}` },
+        { type: 'url', text: '🌐 Abrir', url: profile.url },
+      ],
+    })),
+  })
+}
+
+async function showTikTokProfile(ctx: CommandContext, input: string) {
+  const profile = await getTikTokProfile(input)
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🎵 TIKTOK · PERFIL',
+    body: `@${profile.username}`,
+    footer: 'Ghost Nexora Bot',
+    cards: [{
+      title: profile.nickname ? `${profile.nickname} · @${profile.username}` : `@${profile.username}`,
+      body: [
+        profile.bio ?? '',
+        profile.followers !== undefined ? `Seguidores: ${compact(profile.followers)}` : '',
+        profile.likes !== undefined ? `Likes: ${compact(profile.likes)}` : '',
+        profile.videos !== undefined ? `Videos: ${compact(profile.videos)}` : '',
+      ].filter(Boolean).join('\n') || `Perfil público @${profile.username}`,
+      imageUrl: profile.avatar,
+      buttons: [
+        { type: 'reply', text: '🎬 Buscar videos', id: `${ctx.prefix}tiktok search ${profile.username}` },
+        { type: 'url', text: '🌐 Abrir perfil', url: profile.url },
+      ],
+    }],
+  })
+}
+
+const tiktokCommand: BotCommand = {
+  name: 'tiktok', aliases: ['tt'], category: 'downloads',
+  description: 'Busca videos/perfiles públicos de TikTok o descarga un video por URL.',
+  usage: 'tiktok <url|búsqueda> | tiktok search <texto> | tiktok profiles <texto> | tiktok profile <usuario|url>',
+  async handler(ctx) {
+    const input = requireText(ctx.argText, 'Indica una URL, búsqueda o perfil de TikTok.')
+    if (/^https?:\/\//i.test(input)) {
+      await downloadSocialUrl(ctx, 'tiktok', 'tiktok', '🎵', input)
+      return
+    }
+
+    const action = (ctx.args[0] ?? '').toLowerCase()
+    if (['profiles', 'users', 'perfiles', 'usuarios'].includes(action)) {
+      const query = requireText(ctx.args.slice(1).join(' '), `Uso: ${ctx.prefix}tiktok profiles <usuario>`)
+      await showTikTokProfiles(ctx, query)
+      return
+    }
+    if (['profile', 'user', 'perfil', 'usuario'].includes(action)) {
+      const target = requireText(ctx.args.slice(1).join(' '), `Uso: ${ctx.prefix}tiktok profile <usuario|url>`)
+      await showTikTokProfile(ctx, target)
+      return
+    }
+    if (['search', 'videos', 'buscar'].includes(action)) {
+      const query = requireText(ctx.args.slice(1).join(' '), `Uso: ${ctx.prefix}tiktok search <texto>`)
+      await showTikTokVideos(ctx, query)
+      return
+    }
+
+    await showTikTokVideos(ctx, input)
+  },
+}
 
 export const downloadCommands: BotCommand[] = [
   {
@@ -88,10 +204,6 @@ export const downloadCommands: BotCommand[] = [
       const query = requireText(ctx.argText)
       const results = await searchYouTube(query, 10)
       if (!results.length) throw new Error('No encontré resultados para esa búsqueda.')
-
-      const lines = results.map((item, i) => `${i + 1}. *${item.title}*\n👤 ${item.channel} · ⏱️ ${formatDuration(item.duration)} · 👁️ ${compact(item.views)}\n${item.url}`)
-      await ctx.reply(`🎵 *YOUTUBE MUSIC*\n🔎 ${query}\n\n${lines.join('\n\n')}\n\n🎧 ${ctx.prefix}play <búsqueda> · 📝 ${ctx.prefix}lyrics <canción>`)
-
       await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
         title: '🎵 YOUTUBE MUSIC',
         body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🎵 ${query}\n\n↔️ Desliza para ver más resultados.`,
@@ -107,7 +219,7 @@ export const downloadCommands: BotCommand[] = [
             { type: 'reply', text: '🎶 Relacionadas', id: `${ctx.prefix}yts ${item.title}` },
           ],
         })),
-      }).catch(() => undefined)
+      })
     },
   },
   {
@@ -182,7 +294,7 @@ export const downloadCommands: BotCommand[] = [
       } finally { await result.cleanup() }
     },
   },
-  socialCommand('tiktok', ['tt'], 'tiktok', '🎵'),
+  tiktokCommand,
   socialCommand('instagram', ['ig', 'insta'], 'instagram', '📸'),
   socialCommand('facebook', ['fb'], 'facebook', '📘'),
   socialCommand('twitter', ['x', 'tweet'], 'twitter', '🐦'),
