@@ -199,24 +199,24 @@ const tiktokCommand: BotCommand = {
 
 export const downloadCommands: BotCommand[] = [
   {
-    name: 'yts', aliases: ['ytsearch', 'buscarvideo', 'ytm'], category: 'downloads', description: 'Busca videos en YouTube como carrusel interactivo.', usage: 'yts <búsqueda>',
+    name: 'yts', aliases: ['ytsearch', 'buscarvideo', 'ytm'], category: 'downloads', description: 'Busca videos en YouTube como carrusel con descarga de audio o video.', usage: 'yts <búsqueda>',
     async handler(ctx) {
       const query = requireText(ctx.argText)
       const results = await searchYouTube(query, 10)
       if (!results.length) throw new Error('No encontré resultados para esa búsqueda.')
       await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-        title: '🎵 YOUTUBE MUSIC',
-        body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🎵 ${query}\n\n↔️ Desliza para ver más resultados.`,
-        footer: 'Audio · Letra · Relacionadas',
+        title: '▶️ YOUTUBE · RESULTADOS',
+        body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🔎 ${query}\n\n↔️ Desliza y elige si quieres audio o video.`,
+        footer: 'Audio · Video · Letra',
         cards: results.map((item, index) => ({
-          title: `🎵 CANCIÓN #${index + 1}`,
-          body: [`🎵 ${item.title}`, `◇ Artista » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
+          title: `▶️ VIDEO #${index + 1}`,
+          body: [`🎵 ${item.title}`, `◇ Canal » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
           imageUrl: item.thumbnail,
           footer: 'Ghost Nexora Bot',
           buttons: [
             { type: 'reply', text: '🎧 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
+            { type: 'reply', text: '🎬 Video 720p', id: `${ctx.prefix}ytmp4 ${item.url} 720` },
             { type: 'reply', text: '📝 Letra', id: `${ctx.prefix}lyrics ${item.title} ${item.channel}` },
-            { type: 'reply', text: '🎶 Relacionadas', id: `${ctx.prefix}yts ${item.title}` },
           ],
         })),
       })
