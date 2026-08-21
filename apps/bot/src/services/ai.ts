@@ -58,7 +58,7 @@ export async function askAI(messages: AiMessage[], maxTokens = 1600) {
       max_tokens: Math.max(256, Math.min(3000, maxTokens)),
       stream: false,
     }),
-    signal: AbortSignal.timeout(50_000),
+    signal: AbortSignal.timeout(35_000),
   })
 
   const type = response.headers.get('content-type') ?? ''
