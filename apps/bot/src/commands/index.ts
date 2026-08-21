@@ -3,6 +3,7 @@ import { generalCommands } from './general.js'
 import { profileCommands } from './profile.js'
 import { stickerCommands } from './stickers.js'
 import { downloadCommands } from './downloads.js'
+import { youtubeFriendlyCommands } from './youtube-friendly.js'
 import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
 import { groupCommands } from './groups.js'
@@ -19,6 +20,7 @@ export const commands: BotCommand[] = [
   ...profileCommands,
   ...stickerCommands,
   ...downloadCommands,
+  ...youtubeFriendlyCommands,
   ...lyricsCommands,
   ...resourceCommands,
   ...groupCommands,
