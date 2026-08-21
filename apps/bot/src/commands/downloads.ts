@@ -1,4 +1,3 @@
-import path from 'node:path'
 import type { BotCommand } from '../types.js'
 import {
   downloadSocialVideo,
@@ -74,7 +73,6 @@ export const downloadCommands: BotCommand[] = [
         await ctx.socket.sendMessage(ctx.chatId, {
           audio: { url: result.filePath },
           mimetype: 'audio/mpeg',
-          fileName: path.basename(result.fileName),
           ptt: false,
         }, { quoted: ctx.message })
       } finally {
