@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio'
 import { logger } from '../utils/logger.js'
 import { resolveCobaltYouTube } from './youtube-cobalt.js'
+import { resolveExternalYouTubeMp3 } from './youtube-mp3-external.js'
 
 const mobileSearchUrl = 'https://m.youtube.com/results'
 const yt1sSearchUrl = 'https://www.yt1s.com/api/ajaxSearch/index'
@@ -235,7 +236,7 @@ async function yt1sLegacyResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', reques
       accept: 'application/json, text/plain, */*',
     },
     body: new URLSearchParams({ q: youtubeUrl, vt: 'home' }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(35_000),
   })
   if (!response.ok) throw new Error(`yt1s respondió HTTP ${response.status}.`)
   const type = response.headers.get('content-type') ?? ''
@@ -266,6 +267,22 @@ function compactProviderError(error: unknown) {
 }
 
 export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', requestedQuality = 720): Promise<Yt1sDirect> {
+  let externalMp3Error: unknown
+  if (kind === 'mp3') {
+    try {
+      const direct = await resolveExternalYouTubeMp3(youtubeUrl)
+      return {
+        url: direct.url,
+        title: direct.title ?? '',
+        duration: direct.duration,
+        fileName: direct.fileName,
+      }
+    } catch (error) {
+      externalMp3Error = error
+      logger.warn({ errorMessage: compactProviderError(error), kind }, 'youtube external mp3 provider failed; trying cobalt')
+    }
+  }
+
   let cobaltError: unknown
   try {
     const direct = await resolveCobaltYouTube(youtubeUrl, kind, requestedQuality)
@@ -277,12 +294,13 @@ export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', reque
     }
   } catch (error) {
     cobaltError = error
-    logger.warn({ error, kind }, 'youtube cobalt providers exhausted; trying yt1s legacy')
+    logger.warn({ errorMessage: compactProviderError(error), kind }, 'youtube cobalt providers exhausted; trying yt1s legacy')
   }
 
   try {
     return await yt1sLegacyResolve(youtubeUrl, kind, requestedQuality)
   } catch (legacyError) {
-    throw new Error(`Cobalt: ${compactProviderError(cobaltError)} · yt1s: ${compactProviderError(legacyError)}`)
+    const external = kind === 'mp3' ? `YTMP3.GE: ${compactProviderError(externalMp3Error)} · ` : ''
+    throw new Error(`${external}Cobalt: ${compactProviderError(cobaltError)} · yt1s: ${compactProviderError(legacyError)}`)
   }
 }
