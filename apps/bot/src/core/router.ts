@@ -23,6 +23,7 @@ function canonicalUserJid(candidates: string[], fallback: string) {
 }
 
 const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance'])
+const disabledGroupBootstrapCommands = new Set(['menu', 'bot'])
 
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
@@ -89,13 +90,11 @@ export class CommandRouter {
     const command = this.byName.get(typedName.toLowerCase())
     if (!command) return false
 
-    if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && command.name !== 'bot') return false
+    if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && !disabledGroupBootstrapCommands.has(command.name)) return false
 
     try {
       await react('⚡')
 
-      // Los chats privados son premium. Sin private_access únicamente queda abierta
-      // la zona de compra para que el usuario pueda consultar saldo/planes y activar acceso.
       if (!hasPrivateAccess && !privateStorefrontCommands.has(command.name)) {
         await reply([
           '╭━━〔 🔐 *CHAT PRIVADO PREMIUM* 〕━━╮',
