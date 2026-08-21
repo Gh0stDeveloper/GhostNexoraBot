@@ -1,4 +1,6 @@
 import * as cheerio from 'cheerio'
+import { logger } from '../utils/logger.js'
+import { resolveCobaltYouTube } from './youtube-cobalt.js'
 
 const mobileSearchUrl = 'https://m.youtube.com/results'
 const yt1sSearchUrl = 'https://www.yt1s.com/api/ajaxSearch/index'
@@ -222,7 +224,7 @@ async function yt1sConvert(videoId: string, key: string) {
   return data.dlink
 }
 
-export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', requestedQuality = 720): Promise<Yt1sDirect> {
+async function yt1sLegacyResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', requestedQuality = 720): Promise<Yt1sDirect> {
   const response = await fetch(yt1sSearchUrl, {
     method: 'POST',
     headers: {
@@ -256,5 +258,31 @@ export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', reque
     quality,
     sizeLabel: typeof selected.size === 'string' ? selected.size : undefined,
     fileName: `${safeTitle}.${extension}`,
+  }
+}
+
+function compactProviderError(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').slice(0, 240)
+}
+
+export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', requestedQuality = 720): Promise<Yt1sDirect> {
+  let cobaltError: unknown
+  try {
+    const direct = await resolveCobaltYouTube(youtubeUrl, kind, requestedQuality)
+    return {
+      url: direct.url,
+      title: '',
+      quality: kind === 'mp4' ? `${requestedQuality}p` : undefined,
+      fileName: direct.fileName,
+    }
+  } catch (error) {
+    cobaltError = error
+    logger.warn({ error, kind }, 'youtube cobalt providers exhausted; trying yt1s legacy')
+  }
+
+  try {
+    return await yt1sLegacyResolve(youtubeUrl, kind, requestedQuality)
+  } catch (legacyError) {
+    throw new Error(`Cobalt: ${compactProviderError(cobaltError)} · yt1s: ${compactProviderError(legacyError)}`)
   }
 }
