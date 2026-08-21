@@ -24,6 +24,7 @@ import { eromeCommands } from './erome.js'
 import { adultRoleplayCommands } from './adult-roleplay.js'
 import { personalizationCommands } from './personalization.js'
 import { privateAccessCommands } from './private-access.js'
+import { systemCommands } from './system.js'
 import { ownerCommands } from './owner.js'
 
 export const commands: BotCommand[] = [
@@ -52,5 +53,6 @@ export const commands: BotCommand[] = [
   ...adultRoleplayCommands,
   ...personalizationCommands,
   ...privateAccessCommands,
+  ...systemCommands,
   ...ownerCommands,
 ]
