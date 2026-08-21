@@ -23,10 +23,13 @@ export const generalCommands: BotCommand[] = [
 
 ╭─❖ 🌐 *GENERAL*
 │ ${p}menu · ${p}ping · ${p}info · ${p}prefix
+│ ${p}anime <título>
+│ ${p}manga <título>
 ╰─────────────⬣
 
 ╭─❖ 🎨 *STICKERS*
-│ ${p}sticker / ${p}s
+│ ${p}sticker / ${p}s [efecto]
+│ ${p}stickereffects
 │ ${p}toimg
 ╰─────────────⬣
 
@@ -34,6 +37,7 @@ export const generalCommands: BotCommand[] = [
 │ ${p}yts <búsqueda>
 │ ${p}play <búsqueda>
 │ ${p}playvideo <búsqueda>
+│ ${p}lyrics <canción>
 │ ${p}ytformats <url>
 │ ${p}ytmp3 <url>
 │ ${p}ytmp4 <url> [calidad]
@@ -46,6 +50,9 @@ export const generalCommands: BotCommand[] = [
 │ ${p}facebook <url>
 │ ${p}twitter <url>
 │ ${p}mediafire <url>
+│ ${p}gdrive <url>
+│ ${p}gitclone <repo>
+│ ${p}apk <búsqueda>
 ╰─────────────⬣
 
 ╭─❖ 🪙 *ECONOMÍA*
@@ -84,7 +91,7 @@ export const generalCommands: BotCommand[] = [
 │ ${p}setprefix <nuevo>
 │ ${p}adultmode on|off
 │ ${p}privatemode on|off
-│ ${p}subbots
+│ ${p}subbots · ${p}adminpanel
 │ ${p}status · ${p}restart
 ╰─────────────⬣
 
