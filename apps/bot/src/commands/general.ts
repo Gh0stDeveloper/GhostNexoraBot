@@ -23,10 +23,9 @@ export const generalCommands: BotCommand[] = [
       const avatar = await botAvatar(ctx)
       const staffSection = ctx.isBotStaff ? `
 ╭─〔 🛡️ *STAFF DEL BOT* 〕
-│ ${p}status · ${p}botadmins
-│ ${p}suggestions · ${p}adultmode on|off
-│ ${p}setbotname <nombre>
-│ ${p}setbotcurrency <nombre>
+│ ${p}status · ${p}botadmins · ${p}suggestions
+│ ${p}adultmode on|off · ${p}setbotname <nombre>
+│ ${p}setbotcurrency <nombre> · ${p}setpfp
 ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode · ${p}restart` : ''}
 ╰────────────────` : ''
       const menu = `
@@ -40,36 +39,58 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 
 ╭─〔 🌐 *GENERAL* 〕
 │ ${p}menu · ${p}help · ${p}ping · ${p}info
-│ ${p}suggest <mensaje> · ${p}cd
-│ ${p}anime <búsqueda> · ${p}manga <búsqueda>
+│ ${p}suggest <mensaje> · ${p}join <enlace>
+│ ${p}cd · ${p}anime <búsqueda> · ${p}manga <búsqueda>
 ╰────────────────
 
 ╭─〔 👤 *PERFIL Y SOCIAL* 〕
 │ ${p}profile · ${p}setdesc · ${p}setbirth DD/MM
-│ ${p}setgender · ${p}level · ${p}tops
-│ ${p}vr · ${p}marry @user · ${p}divorce
+│ ${p}setgender · ${p}level · ${p}tops · ${p}vr
+│ ${p}marry @user · ${p}divorce
 │ ${p}amante @user · ${p}terminar
 ╰────────────────
 
 ╭─〔 🎵 *MÚSICA Y DESCARGAS* 〕
-│ ${p}yts <búsqueda> · ${p}play <búsqueda>
-│ ${p}playvideo <búsqueda> · ${p}lyrics <canción>
+│ ${p}play <búsqueda|url> · nota de voz
+│ ${p}ytmusic <búsqueda|url> · audio
+│ ${p}yt <búsqueda|url> [calidad] · video
+│ ${p}yts <búsqueda> · ${p}lyrics <canción>
 │ ${p}ytmp3 <url> · ${p}ytmp4 <url> [calidad]
-│ ${p}tiktok · ${p}instagram · ${p}facebook
-│ ${p}twitter · ${p}mediafire · ${p}gdrive
+│ ${p}tt · ${p}ig · ${p}fb · ${p}twitter
+│ ${p}mediafire · ${p}gdrive · ${p}soundcloud
 ╰────────────────
 
-╭─〔 🪙 *ECONOMÍA* 〕
-│ ${p}bal · ${p}work · ${p}deposit · ${p}withdraw
-│ ${p}pay @user <monto> · ${p}rob @user
-│ ${p}top · ${p}shop · ${p}buy <producto>
+╭─〔 🪙 *ECONOMÍA Y FINANZAS* 〕
+│ ${p}bal · ${p}daily · ${p}work · ${p}slut · ${p}crime
+│ ${p}deposit · ${p}withdraw · ${p}pay @user <monto>
+│ ${p}rob @user · ${p}invest · ${p}cda
+│ ${p}loan · ${p}paydebt · ${p}lend @user <monto>
+│ ${p}baltop · ${p}balglobal · ${p}shop · ${p}buy
+╰────────────────
+
+╭─〔 🎮 *JUEGOS Y APUESTAS NXC* 〕
+│ ${p}flip [cara|cruz] [apuesta]
+│ ${p}dados [apuesta] · ${p}bj [apuesta]
+│ ${p}ttt [apuesta] · ${p}ttt <1-9>
 ╰────────────────
 
 ╭─〔 🌸 *GACHA / COLECCIÓN* 〕
 │ ${p}rw · ${p}claim · ${p}harem
-│ ${p}wsearch <nombre> · ${p}winfo <id>
-│ ${p}givewaifu @user <id> · ${p}wsell <id>
-│ ${p}wtop · ${p}add <anime/personaje>
+│ ${p}wsearch <nombre> · ${p}winfo <nombre|id>
+│ ${p}wimage <nombre|id> · ${p}ainfo <serie> · ${p}alist
+│ ${p}givewaifu <nombre|id> @user
+│ ${p}giveallharem @user · ${p}trade A / B @user
+│ ${p}delchar <nombre|id> · ${p}setfav <nombre|id>
+│ ${p}setclaim <frase> · ${p}vote <nombre|id>
+│ ${p}topwaifus · ${p}wtop · ${p}add <anime/personaje>
+╰────────────────
+
+╭─〔 💞 *REACCIONES ANIME* 〕
+│ ${p}hug · ${p}kiss · ${p}pat · ${p}nuzzle
+│ ${p}blush · ${p}wink · ${p}wave · ${p}dance
+│ ${p}poke · ${p}bite · ${p}slap · ${p}punch
+│ ${p}patear · ${p}kill · ${p}crazy · ${p}bug
+│ ${p}cry · ${p}spell · ${p}seducir · ${p}saborear
 ╰────────────────
 
 ╭─〔 🎨 *STICKERS Y HERRAMIENTAS* 〕
@@ -98,7 +119,8 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ${staffSection}
 
 ✦ Usa los comandos con responsabilidad.
-✦ Las noticias y cambios oficiales están en el canal mediante el botón inferior.`.trim()
+✦ El menú usa la foto real de perfil del bot.
+✦ Noticias y cambios oficiales: botón *Visitar canal*.`.trim()
 
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
         title: `✦ ${ctx.settings.botDisplayName} · COMMAND CENTER ✦`,
@@ -136,6 +158,7 @@ ${staffSection}
           '│ Panel » Next.js + Tailwind CSS',
           '│ Economía » Nexora Economy',
           '│ Colección » Nexora Gacha',
+          '│ Reacciones » Anime GIF + FFmpeg',
           `│ Prefijo » ${ctx.prefix}`,
           `│ Uptime » ${formatUptime(process.uptime())}`,
           '│ Developer » Ghost Developer / Nexora',
