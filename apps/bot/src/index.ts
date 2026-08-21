@@ -11,7 +11,7 @@ import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
 import { handleParticipantUpdate, moderateIncoming } from './services/moderation.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
-import { getMessageText } from './utils/message.js'
+import { getMessageText, unwrapMessage } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 
@@ -41,14 +41,46 @@ function startHealthServer() {
   server.listen(config.healthPort, '127.0.0.1', () => logger.info({ port: config.healthPort }, 'health server listening'))
 }
 
+function pick<T>(values: readonly T[]) {
+  return values[Math.floor(Math.random() * values.length)]!
+}
+
 async function maybeAutoReact(socket: Awaited<ReturnType<typeof createSocket>>['socket'], message: Parameters<CommandRouter['handle']>[1]) {
   if (!config.autoReact || message.key.fromMe || !message.key.remoteJid) return
   const text = getMessageText(message).toLowerCase().trim()
-  if (!text) return
   let emoji: string | null = null
-  if (/^(hola|holi|buenas|buenos dias|buenas tardes|buenas noches)\b/.test(text)) emoji = '👋'
-  else if (/\b(gracias|thank you|thanks)\b/.test(text)) emoji = '❤️'
-  else if (/\b(jaja+|jeje+|xd+)\b/.test(text)) emoji = '😂'
+
+  const rules: Array<[RegExp, readonly string[]]> = [
+    [/\b(feliz cumple|felicidades|happy birthday)\b/, ['🎂', '🎉', '🥳', '🎈']],
+    [/\b(buenos dias|buen día|buen dia)\b/, ['☀️', '🌤️', '👋', '✨']],
+    [/\b(buenas noches|dulces sueños)\b/, ['🌙', '🌌', '😴', '✨']],
+    [/^(hola|holi|holaa+|hey|buenas|qué tal|que tal)\b/, ['👋', '😊', '✨', '🤝', '👻']],
+    [/\b(gracias|muchas gracias|thank you|thanks|ty)\b/, ['❤️', '🫶', '💙', '💜', '✨']],
+    [/\b(jaja+|jeje+|jiji+|xd+|lol|lmao)\b/, ['😂', '🤣', '😹', '💀', '😆']],
+    [/\b(te amo|te quiero|love you|ily|amor)\b/, ['❤️', '💞', '🥰', '💕', '❤️‍🔥']],
+    [/\b(triste|ando mal|estoy mal|llorar|lloro|sad)\b/, ['🥺', '😢', '💙', '🫂']],
+    [/\b(increíble|increible|genial|brutal|épico|epico|wow|woow+)\b/, ['🤯', '🔥', '✨', '👏', '💯']],
+    [/\b(gol|ganamos|victoria|winner|campeón|campeon)\b/, ['🏆', '🔥', '🎉', '👏']],
+    [/\b(música|musica|canción|cancion|rolita|song)\b/, ['🎵', '🎧', '🎶', '🔥']],
+    [/\b(programar|programación|programacion|código|codigo|python|javascript|typescript|api)\b/, ['💻', '🧠', '⚙️', '🚀']],
+    [/\b(nexora|bot|ghost developer|ghostnexora)\b/, ['👻', '🤖', '⚡', '✨']],
+    [/\b(hambre|comida|pizza|tacos|cenar|desayuno)\b/, ['😋', '🍕', '🌮', '🍽️']],
+    [/\b(hermos[oa]|bonit[oa]|lind[oa]|cute|precioso)\b/, ['🥰', '💖', '✨', '😍']],
+    [/\b(buen trabajo|bien hecho|good job|excelente)\b/, ['👏', '✅', '🔥', '💯']],
+    [/\b(ya quedó|funciona|funcionó|funciono|resuelto|solucionado)\b/, ['✅', '🎉', '🔥', '🚀']],
+  ]
+
+  for (const [pattern, emojis] of rules) {
+    if (pattern.test(text)) { emoji = pick(emojis); break }
+  }
+
+  if (!emoji && !text) {
+    const content = unwrapMessage(message.message)
+    if (content?.imageMessage) emoji = pick(['📸', '✨', '🔥', '💫'])
+    else if (content?.videoMessage) emoji = pick(['🎬', '🔥', '👏', '✨'])
+    else if (content?.stickerMessage) emoji = pick(['😄', '✨', '👻', '😂'])
+  }
+
   if (emoji) await socket.sendMessage(message.key.remoteJid, { react: { text: emoji, key: message.key } }).catch(() => undefined)
 }
 
