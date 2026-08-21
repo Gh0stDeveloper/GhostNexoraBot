@@ -2,6 +2,7 @@ import {
   generateWAMessageContent,
   generateWAMessageFromContent,
   proto,
+  type BinaryNode,
   type WAMessage,
   type WASocket,
 } from 'baileys'
@@ -34,8 +35,8 @@ function nativeFlow(buttons: InteractiveButton[]) {
   })
 }
 
-function interactiveRelayNodes(chatId: string) {
-  const bizNode = {
+function interactiveRelayNodes(chatId: string): BinaryNode[] {
+  const bizNode: BinaryNode = {
     tag: 'biz',
     attrs: {
       actual_actors: '2',
@@ -61,7 +62,8 @@ function interactiveRelayNodes(chatId: string) {
   }
 
   if (chatId.endsWith('@g.us')) return [bizNode]
-  return [{ tag: 'bot', attrs: { biz_bot: '1' } }, bizNode]
+  const botNode: BinaryNode = { tag: 'bot', attrs: { biz_bot: '1' } }
+  return [botNode, bizNode]
 }
 
 async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
