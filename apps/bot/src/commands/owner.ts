@@ -2,6 +2,7 @@ import { config } from '../config.js'
 import type { BotCommand } from '../types.js'
 import { getContextInfo, digitsFromJid } from '../utils/message.js'
 import { community } from '../services/community.js'
+import { subbotCustomization } from '../services/subbot-customization.js'
 
 function toggle(value?: string) {
   const normalized = (value ?? '').toLowerCase()
@@ -17,6 +18,16 @@ function targetNumber(ctx: Parameters<BotCommand['handler']>[0]) {
   const value = fromMention || direct
   if (!value) throw new Error('Menciona al usuario o indica su número internacional.')
   return value
+}
+
+function botNames(input: string) {
+  const parts = input.split('/').map((value) => value.trim()).filter(Boolean)
+  if (!parts.length) throw new Error('Indica el nombre. Formato recomendado: nombre corto / nombre largo.')
+  const shortName = parts[0]!
+  const longName = parts[1] ?? shortName
+  if (shortName.length < 2 || shortName.length > 24) throw new Error('El nombre corto debe tener entre 2 y 24 caracteres.')
+  if (longName.length < 2 || longName.length > 60) throw new Error('El nombre largo debe tener entre 2 y 60 caracteres.')
+  return { shortName, longName }
 }
 
 export const ownerCommands: BotCommand[] = [
@@ -57,21 +68,32 @@ export const ownerCommands: BotCommand[] = [
     },
   },
   {
-    name: 'setbotname', aliases: ['botname'], category: 'owner', staffOnly: true,
-    description: 'Cambia el nombre visible del bot.', usage: 'setbotname <nombre>',
+    name: 'setbotname', aliases: ['botname'], category: 'owner', staffOnly: true, subbotOwnerAllowed: true,
+    description: 'Cambia el nombre corto de WhatsApp y el nombre largo mostrado por la instancia.', usage: 'setbotname <corto> / <largo>',
     async handler(ctx) {
-      const next = ctx.argText.trim()
-      await ctx.settings.setBotDisplayName(next)
-      await ctx.socket.updateProfileName(next).catch(() => undefined)
-      await ctx.reply(`✦ *IDENTIDAD ACTUALIZADA*\n━━━━━━━━━━━━━━\nNombre visible: *${next}*`)
+      const names = botNames(ctx.argText)
+      if (ctx.instanceId) {
+        const saved = subbotCustomization.setNames(ctx.instanceId, names.shortName, names.longName)
+        await ctx.socket.updateProfileName(saved.shortName).catch(() => undefined)
+        await ctx.reply(`✦ *SUBBOT #${ctx.instanceId} PERSONALIZADO*\n━━━━━━━━━━━━━━\nNombre corto: *${saved.shortName}*\nNombre largo: *${saved.longName}*`)
+        return
+      }
+      await ctx.settings.setBotDisplayName(names.longName)
+      await ctx.socket.updateProfileName(names.shortName).catch(() => undefined)
+      await ctx.reply(`✦ *IDENTIDAD DEL MAINBOT ACTUALIZADA*\n━━━━━━━━━━━━━━\nNombre corto de WhatsApp: *${names.shortName}*\nNombre largo del menú: *${names.longName}*`)
     },
   },
   {
-    name: 'setbotcurrency', aliases: ['setcurrency'], category: 'owner', staffOnly: true,
-    description: 'Cambia el nombre visual de la moneda del bot.', usage: 'setbotcurrency <nombre>',
+    name: 'setbotcurrency', aliases: ['setcurrency'], category: 'owner', staffOnly: true, subbotOwnerAllowed: true,
+    description: 'Cambia el nombre visual de la moneda de la instancia.', usage: 'setbotcurrency <nombre>',
     async handler(ctx) {
+      if (ctx.instanceId) {
+        const saved = subbotCustomization.setCurrency(ctx.instanceId, ctx.argText)
+        await ctx.reply(`🪙 Moneda visual del subbot #${ctx.instanceId}: *${saved.currencyName}*\nEl símbolo interno NXC se conserva para compatibilidad.`)
+        return
+      }
       await ctx.settings.setCurrencyName(ctx.argText)
-      await ctx.reply(`🪙 Moneda visual del bot: *${ctx.settings.currencyName}*\nEl símbolo interno NXC se conserva para compatibilidad.`)
+      await ctx.reply(`🪙 Moneda visual del MainBot: *${ctx.settings.currencyName}*\nEl símbolo interno NXC se conserva para compatibilidad.`)
     },
   },
   {
