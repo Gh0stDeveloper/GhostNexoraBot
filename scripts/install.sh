@@ -90,10 +90,15 @@ if [[ "${REGISTERED}" != "true" ]]; then
   fi
   if [[ -n "${PHONE}" ]]; then
     echo "Generando codigo de vinculacion..."
-    runuser -u "${SERVICE_USER}" -- env \
+    if ! runuser -u "${SERVICE_USER}" -- env \
       ENV_FILE="${INSTALL_DIR}/.env" \
       PAIRING_NUMBER="${PHONE}" \
-      pnpm --dir "${INSTALL_DIR}" pair
+      pnpm --dir "${INSTALL_DIR}" pair; then
+      echo
+      echo "AVISO: WhatsApp no termino la vinculacion durante el instalador."
+      echo "La instalacion continuara y podras repetir el pairing sin reinstalar:"
+      echo "cd ${INSTALL_DIR} && sudo -u ${SERVICE_USER} -H env ENV_FILE=${INSTALL_DIR}/.env pnpm pair"
+    fi
   else
     echo "Vinculacion omitida. Ejecuta: cd ${INSTALL_DIR} && sudo -u ${SERVICE_USER} -H env ENV_FILE=${INSTALL_DIR}/.env pnpm pair"
   fi
