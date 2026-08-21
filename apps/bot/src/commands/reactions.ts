@@ -39,9 +39,16 @@ const definitions: ReactionDefinition[] = [
   { name: 'bug', aliases: ['buguear'], category: 'confused', emoji: '🪲', solo: 'se quedó completamente bugueado', directed: 'bugueó de broma a' },
   { name: 'cry', aliases: ['llorar'], category: 'cry', emoji: '😭', solo: 'se puso a llorar', directed: 'llora por' },
   { name: 'spell', aliases: ['hechizo'], category: 'happy', emoji: '✨', solo: 'lanzó un hechizo misterioso', directed: 'lanzó un hechizo de RPG sobre' },
-  { name: 'seducir', aliases: ['seduce'], category: 'wink', emoji: '✨', solo: 'practicó su mejor mirada encantadora', directed: 'intentó conquistar con encanto a' },
+  { name: 'seducir', aliases: ['seduce'], category: 'wink', emoji: '💘', solo: 'practicó su mejor mirada encantadora', directed: 'intentó conquistar con encanto a' },
   { name: 'saborear', aliases: ['nom'], category: 'kiss', emoji: '😋', solo: 'está disfrutando el momento', directed: 'se acercó juguetonamente a' },
   { name: 'bochigood', aliases: ['bochi'], category: 'pat', emoji: '🌟', solo: 'activó el modo bochigood', directed: 'le dio un bochigood a' },
+  { name: 'happy', aliases: ['feliz', 'celebrar'], category: 'happy', emoji: '🥳', solo: 'está celebrando a lo grande', directed: 'celebra junto a' },
+  { name: 'cuddle', aliases: ['mimos', 'mimar'], category: 'cuddle', emoji: '🤗', solo: 'quiere mimos', directed: 'llenó de mimos a' },
+  { name: 'confused', aliases: ['confundido', 'duda'], category: 'confused', emoji: '🤔', solo: 'se quedó pensando demasiado', directed: 'quedó confundido por' },
+  { name: 'spin', aliases: ['girar', 'vueltas'], category: 'spin', emoji: '💫', solo: 'empezó a dar vueltas', directed: 'dio vueltas alrededor de' },
+  { name: 'shoot', aliases: ['disparar', 'bang'], category: 'shoot', emoji: '🎯', solo: 'apuntó a un objetivo imaginario', directed: 'apuntó de caricatura a' },
+  { name: 'cheer', aliases: ['animar', 'aplaudir'], category: 'happy', emoji: '👏', solo: 'empezó a animar a todos', directed: 'aplaudió y animó a' },
+  { name: 'shy', aliases: ['timido', 'tímido'], category: 'blush', emoji: '🙈', solo: 'se puso tímido', directed: 'se puso tímido frente a' },
 ]
 
 function reactionCommand(def: ReactionDefinition): BotCommand {

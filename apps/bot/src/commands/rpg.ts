@@ -3,6 +3,7 @@ import { getContextInfo } from '../utils/message.js'
 import { economy } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
 import { RPG_ITEMS, rpg, type RpgItem } from '../services/rpg.js'
+import { sendCarousel } from '../services/interactive.js'
 
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} NXC`
 
@@ -36,6 +37,12 @@ async function target(ctx: CommandContext) {
   return participant?.phoneNumber ?? participant?.id ?? mention
 }
 
+async function botAvatar(ctx: CommandContext) {
+  const jid = ctx.socket.user?.id
+  if (!jid) return undefined
+  return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
+}
+
 export const rpgCommands: BotCommand[] = [
   {
     name: 'grimorio', aliases: ['grimoire', 'inventario'], category: 'games', description: 'Muestra gemas, inventario y buffs RPG.',
@@ -60,10 +67,26 @@ export const rpgCommands: BotCommand[] = [
     },
   },
   {
-    name: 'tienda', aliases: ['rpgshop', 'grimoriotienda'], category: 'games', description: 'Muestra los artículos del Grimorio RPG.',
+    name: 'tienda', aliases: ['rpgshop', 'grimoriotienda'], category: 'games', description: 'Muestra la tienda del Grimorio RPG en carrusel.',
     async handler(ctx) {
-      const lines = Object.entries(RPG_ITEMS).map(([name, cfg]) => `✦ *${name}* · ${fmt(cfg.price)}\n  ${cfg.description}`)
-      await ctx.reply(`╭━━〔 🛍️ *TIENDA DEL GRIMORIO* 〕━━╮\n${lines.join('\n\n')}\n╰━━━━━━━━━━━━━━━━╯\n\nCompra con *${ctx.prefix}comprar <item> [cantidad]*.\nLa tienda de accesos/subbots sigue disponible con *${ctx.prefix}shop*.`)
+      const avatar = await botAvatar(ctx)
+      const profile = rpg.profile(ctx.sender)
+      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+        title: '🛍️ TIENDA DEL GRIMORIO',
+        body: `💎 Gemas: ${profile.gems}\n🪙 Cartera: ${fmt(economy.balance(ctx.sender).wallet)}\nDesliza para ver los artefactos disponibles.`,
+        footer: 'Grimorio Nexora · RPG',
+        cards: Object.entries(RPG_ITEMS).map(([name, cfg]) => ({
+          title: `✨ ${name.toUpperCase()}`,
+          body: `${cfg.description}\n\n💰 Precio: ${fmt(cfg.price)}`,
+          imageUrl: avatar,
+          footer: 'El artículo se guarda en tu inventario',
+          buttons: [
+            { type: 'reply', text: '🛒 Comprar', id: `${ctx.prefix}comprar ${name}` },
+            { type: 'reply', text: '📖 Grimorio', id: `${ctx.prefix}grimorio` },
+            { type: 'reply', text: '🛒 Nexora Store', id: `${ctx.prefix}shop` },
+          ],
+        })),
+      })
     },
   },
   {
@@ -103,8 +126,9 @@ export const rpgCommands: BotCommand[] = [
     },
   },
   {
-    name: 'work', aliases: ['w', 'trabajar', 'trabajo'], category: 'economy', description: 'Trabaja; los buffs del Grimorio modifican la recompensa.',
+    name: 'work', aliases: ['w', 'trabajar', 'trabajo'], category: 'economy', description: 'Trabaja con tu profesión; los buffs del Grimorio modifican la recompensa.', usage: 'work [profesión]',
     async handler(ctx) {
+      if (ctx.args[0]) economy.setProfession(ctx.sender, ctx.args[0])
       const result = economy.work(ctx.sender)
       if (!result.ok) throw new Error(`Ya trabajaste recientemente. Vuelve en ${duration(result.remaining)}.`)
       const fortune = Boolean(rpg.hasBuff(ctx.sender, 'fortune'))
@@ -114,7 +138,7 @@ export const rpgCommands: BotCommand[] = [
       if (cursed) adjustment -= Math.floor(result.reward * 0.20)
       const balance = adjustment ? rpg.adjustWallet(ctx.sender, adjustment, 'rpg_work_modifier', fortune ? 'fortune' : 'curse') : economy.balance(ctx.sender)
       const finalReward = result.reward + adjustment
-      await ctx.reply(`╭─〔 💼 *TRABAJO COMPLETADO* 〕\n│ Base » ${fmt(result.reward)}\n${fortune ? `│ Fortuna » +${fmt(Math.floor(result.reward * 0.25))}\n` : ''}${cursed ? `│ Maldición » -${fmt(Math.floor(result.reward * 0.20))}\n` : ''}│ Ganancia final » *${fmt(finalReward)}*\n│ Cartera » *${fmt(balance.wallet)}*\n╰──────────────`)
+      await ctx.reply(`╭─〔 💼 *TRABAJO COMPLETADO* 〕\n│ Profesión » ${result.profession.emoji} *${result.profession.label}*\n│ Base » ${fmt(result.reward)}\n${fortune ? `│ Fortuna » +${fmt(Math.floor(result.reward * 0.25))}\n` : ''}${cursed ? `│ Maldición » -${fmt(Math.floor(result.reward * 0.20))}\n` : ''}│ Ganancia final » *${fmt(finalReward)}*\n│ Cartera » *${fmt(balance.wallet)}*\n│ Próximo trabajo » *1 minuto*\n╰──────────────`)
     },
   },
   {

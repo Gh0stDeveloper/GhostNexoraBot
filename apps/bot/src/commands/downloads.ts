@@ -16,6 +16,8 @@ import { downloadMediaFire } from '../services/mediafire.js'
 import { resolveExternalSocial, type ExternalSocialPlatform } from '../services/social-external.js'
 import { sendCarousel } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+import { getTikTokProfile, searchTikTokProfiles, searchTikTokVideos } from '../services/tiktok-search.js'
+import { downloadAptoideApk, getAptoideApp, searchAptoideApps, type AptoideApp } from '../services/aptoide.js'
 
 function requireUrl(args: string[]) { const url = args[0]; if (!url) throw new Error('Debes indicar una URL.'); return url }
 function requireText(value: string, label = 'Debes indicar una búsqueda.') { const text = value.trim(); if (!text) throw new Error(label); return text }
@@ -26,6 +28,16 @@ function formatDuration(seconds?: number) {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
 }
 const compact = (value?: number) => value === undefined ? 'N/D' : new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+
+async function announceDownload(ctx: CommandContext, icon: string, label: string, detail?: string) {
+  await ctx.reply([
+    `${icon} *DESCARGA INICIADA*`,
+    `━━━━━━━━━━━━━━`,
+    `Preparando *${label}*...`,
+    detail ? `📌 ${detail}` : '',
+    `⏳ Espera mientras obtengo y valido el archivo.`,
+  ].filter(Boolean).join('\n'))
+}
 
 function infoText(info: MediaInfo | undefined, size?: number) {
   if (!info) return size ? `📦 Peso: ${formatBytes(size)}` : ''
@@ -51,71 +63,220 @@ async function sendDownloadInfo(ctx: CommandContext, info: MediaInfo | undefined
   await ctx.reply(caption)
 }
 
+async function downloadSocialUrl(
+  ctx: CommandContext,
+  name: string,
+  platform: Exclude<DownloadPlatform, 'youtube'>,
+  icon: string,
+  url: string,
+) {
+  await announceDownload(ctx, icon, `${name} · video`)
+  const info = await getMediaInfo(url, platform).catch(() => undefined)
+
+  if (['facebook', 'instagram', 'tiktok'].includes(platform)) {
+    try {
+      const direct = await resolveExternalSocial(url, platform as ExternalSocialPlatform)
+      await sendDownloadInfo(ctx, info)
+      await ctx.socket.sendMessage(ctx.chatId, {
+        video: { url: direct }, mimetype: 'video/mp4',
+        caption: `${icon} *${name}* · proveedor web público${platform === 'tiktok' ? ' · se priorizó enlace sin marca/HD' : ''}\n👻 ${ctx.prefix}menu`,
+      }, { quoted: ctx.message })
+      return
+    } catch {
+      // Si cambia el proveedor web, continúa con yt-dlp.
+    }
+  }
+
+  const result = await downloadSocialVideo(url, platform)
+  try {
+    await sendDownloadInfo(ctx, result.info ?? info, result.size)
+    await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `${icon} *${name}* · ${formatBytes(result.size)}\n👻 ${ctx.prefix}menu` }, { quoted: ctx.message })
+    recordSubbotDownload(ctx.instanceId, result.size)
+  } finally { await result.cleanup() }
+}
+
 const socialCommand = (name: string, aliases: string[], platform: Exclude<DownloadPlatform, 'youtube'>, icon: string): BotCommand => ({
   name, aliases, category: 'downloads', description: `Descarga contenido público de ${name}.`, usage: `${name} <url>`,
   async handler(ctx) {
-    const url = requireUrl(ctx.args)
-    await ctx.reply(`${icon} Analizando *${name}*...`)
-    const info = await getMediaInfo(url, platform).catch(() => undefined)
-
-    if (['facebook', 'instagram', 'tiktok'].includes(platform)) {
-      try {
-        const direct = await resolveExternalSocial(url, platform as ExternalSocialPlatform)
-        await sendDownloadInfo(ctx, info)
-        await ctx.socket.sendMessage(ctx.chatId, {
-          video: { url: direct }, mimetype: 'video/mp4',
-          caption: `${icon} *${name}* · proveedor web público${platform === 'tiktok' ? ' · se priorizó enlace sin marca/HD' : ''}\n👻 ${ctx.prefix}menu`,
-        }, { quoted: ctx.message })
-        return
-      } catch {
-        // El proveedor web es un acelerador/fallback sin cookies; si cambia, continúa yt-dlp.
-      }
-    }
-
-    const result = await downloadSocialVideo(url, platform)
-    try {
-      await sendDownloadInfo(ctx, result.info ?? info, result.size)
-      await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `${icon} *${name}* · ${formatBytes(result.size)}\n👻 ${ctx.prefix}menu` }, { quoted: ctx.message })
-      recordSubbotDownload(ctx.instanceId, result.size)
-    } finally { await result.cleanup() }
+    await downloadSocialUrl(ctx, name, platform, icon, requireUrl(ctx.args))
   },
 })
 
+async function showTikTokVideos(ctx: CommandContext, query: string) {
+  const results = await searchTikTokVideos(query, 10)
+  if (!results.length) throw new Error('TikTok no devolvió videos públicos para esa búsqueda.')
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🎵 TIKTOK · VIDEOS',
+    body: `Resultados para: ${query}`,
+    footer: 'Ghost Nexora Bot',
+    cards: results.map((item, index) => ({
+      title: `#${index + 1} · ${item.username ? `@${item.username}` : 'TikTok'}`,
+      body: [
+        item.title,
+        item.nickname ? `Creador: ${item.nickname}` : '',
+        item.views !== undefined ? `Vistas: ${compact(item.views)}` : '',
+        item.likes !== undefined ? `Likes: ${compact(item.likes)}` : '',
+      ].filter(Boolean).join('\n'),
+      imageUrl: item.thumbnail,
+      buttons: [
+        { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}tiktok ${item.url}` },
+        ...(item.username ? [{ type: 'reply' as const, text: '👤 Perfil', id: `${ctx.prefix}tiktok profile @${item.username}` }] : []),
+        { type: 'url', text: '🌐 Abrir', url: item.url },
+      ],
+    })),
+  })
+}
+
+async function showTikTokProfiles(ctx: CommandContext, query: string) {
+  const profiles = await searchTikTokProfiles(query, 8)
+  if (!profiles.length) throw new Error('TikTok no devolvió perfiles públicos para esa búsqueda.')
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🎵 TIKTOK · PERFILES',
+    body: `Perfiles para: ${query}`,
+    footer: 'Ghost Nexora Bot',
+    cards: profiles.map((profile, index) => ({
+      title: `#${index + 1} · @${profile.username}`,
+      body: [
+        profile.nickname ?? '',
+        profile.followers !== undefined ? `Seguidores: ${compact(profile.followers)}` : '',
+        profile.likes !== undefined ? `Likes: ${compact(profile.likes)}` : '',
+        profile.videos !== undefined ? `Videos: ${compact(profile.videos)}` : '',
+        profile.bio ?? '',
+      ].filter(Boolean).join('\n'),
+      imageUrl: profile.avatar,
+      buttons: [
+        { type: 'reply', text: '👤 Ver perfil', id: `${ctx.prefix}tiktok profile @${profile.username}` },
+        { type: 'reply', text: '🎬 Buscar videos', id: `${ctx.prefix}tiktok search ${profile.username}` },
+        { type: 'url', text: '🌐 Abrir', url: profile.url },
+      ],
+    })),
+  })
+}
+
+async function showTikTokProfile(ctx: CommandContext, input: string) {
+  const profile = await getTikTokProfile(input)
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🎵 TIKTOK · PERFIL',
+    body: `@${profile.username}`,
+    footer: 'Ghost Nexora Bot',
+    cards: [{
+      title: profile.nickname ? `${profile.nickname} · @${profile.username}` : `@${profile.username}`,
+      body: [
+        profile.bio ?? '',
+        profile.followers !== undefined ? `Seguidores: ${compact(profile.followers)}` : '',
+        profile.likes !== undefined ? `Likes: ${compact(profile.likes)}` : '',
+        profile.videos !== undefined ? `Videos: ${compact(profile.videos)}` : '',
+      ].filter(Boolean).join('\n') || `Perfil público @${profile.username}`,
+      imageUrl: profile.avatar,
+      buttons: [
+        { type: 'reply', text: '🎬 Buscar videos', id: `${ctx.prefix}tiktok search ${profile.username}` },
+        { type: 'url', text: '🌐 Abrir perfil', url: profile.url },
+      ],
+    }],
+  })
+}
+
+function apkTrust(app: AptoideApp) {
+  if (app.trusted) return '✅ TRUSTED'
+  if (app.malwareRank) return `⚠️ ${app.malwareRank}`
+  return '⚠️ Sin clasificación'
+}
+
+function apkBody(app: AptoideApp) {
+  return [
+    `📦 ${app.packageName}`,
+    app.version ? `🔢 Versión » ${app.version}` : '',
+    app.size ? `📏 Peso » ${formatBytes(app.size)}` : '',
+    app.developer ? `👤 Dev » ${app.developer}` : '',
+    app.rating !== undefined ? `⭐ Rating » ${app.rating.toFixed(1)}` : '',
+    app.downloads !== undefined ? `⬇️ Descargas » ${compact(app.downloads)}` : '',
+    `🛡️ Aptoide » ${apkTrust(app)}`,
+    app.updated ? `🗓️ Actualizada » ${app.updated}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+async function showApkSearch(ctx: CommandContext, query: string) {
+  const results = await searchAptoideApps(query, 10)
+  if (!results.length) throw new Error('Aptoide no encontró aplicaciones para esa búsqueda.')
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🤖 ANDROID · APPS',
+    body: `🔎 ${query}\n\nDesliza para revisar resultados y descargar la APK.`,
+    footer: 'Fuente: Aptoide · Ghost Nexora Bot',
+    cards: results.map((app, index) => ({
+      title: `#${index + 1} · ${app.name}`,
+      body: apkBody(app),
+      imageUrl: app.graphic ?? app.icon,
+      footer: app.trusted ? 'Aptoide: TRUSTED' : 'Revisa la clasificación antes de instalar',
+      buttons: [
+        { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${app.id}` },
+        { type: 'reply', text: 'ℹ️ Detalles', id: `${ctx.prefix}apkinfo ${app.id}` },
+      ],
+    })),
+  })
+}
+
+const tiktokCommand: BotCommand = {
+  name: 'tiktok', aliases: ['tt'], category: 'downloads',
+  description: 'Busca videos/perfiles públicos de TikTok o descarga un video por URL.',
+  usage: 'tiktok <url|búsqueda> | tiktok search <texto> | tiktok profiles <texto> | tiktok profile <usuario|url>',
+  async handler(ctx) {
+    const input = requireText(ctx.argText, 'Indica una URL, búsqueda o perfil de TikTok.')
+    if (/^https?:\/\//i.test(input)) {
+      await downloadSocialUrl(ctx, 'tiktok', 'tiktok', '🎵', input)
+      return
+    }
+
+    const action = (ctx.args[0] ?? '').toLowerCase()
+    if (['profiles', 'users', 'perfiles', 'usuarios'].includes(action)) {
+      const query = requireText(ctx.args.slice(1).join(' '), `Uso: ${ctx.prefix}tiktok profiles <usuario>`)
+      await showTikTokProfiles(ctx, query)
+      return
+    }
+    if (['profile', 'user', 'perfil', 'usuario'].includes(action)) {
+      const target = requireText(ctx.args.slice(1).join(' '), `Uso: ${ctx.prefix}tiktok profile <usuario|url>`)
+      await showTikTokProfile(ctx, target)
+      return
+    }
+    if (['search', 'videos', 'buscar'].includes(action)) {
+      const query = requireText(ctx.args.slice(1).join(' '), `Uso: ${ctx.prefix}tiktok search <texto>`)
+      await showTikTokVideos(ctx, query)
+      return
+    }
+
+    await showTikTokVideos(ctx, input)
+  },
+}
+
 export const downloadCommands: BotCommand[] = [
   {
-    name: 'yts', aliases: ['ytsearch', 'buscarvideo', 'ytm'], category: 'downloads', description: 'Busca videos en YouTube como carrusel interactivo.', usage: 'yts <búsqueda>',
+    name: 'yts', aliases: ['ytsearch', 'buscarvideo', 'ytm'], category: 'downloads', description: 'Busca videos en YouTube como carrusel con descarga de audio o video.', usage: 'yts <búsqueda>',
     async handler(ctx) {
       const query = requireText(ctx.argText)
       const results = await searchYouTube(query, 10)
       if (!results.length) throw new Error('No encontré resultados para esa búsqueda.')
-      try {
-        await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-          title: '🎵 YOUTUBE MUSIC',
-          body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🎵 ${query}\n\n↔️ Desliza para ver más resultados.`,
-          footer: 'Audio · Letra · Relacionadas',
-          cards: results.map((item, index) => ({
-            title: `🎵 CANCIÓN #${index + 1}`,
-            body: [`🎵 ${item.title}`, `◇ Artista » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
-            imageUrl: item.thumbnail,
-            footer: 'Ghost Nexora Bot',
-            buttons: [
-              { type: 'reply', text: '🎧 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
-              { type: 'reply', text: '📝 Letra', id: `${ctx.prefix}lyrics ${item.title} ${item.channel}` },
-              { type: 'reply', text: '🎶 Relacionadas', id: `${ctx.prefix}yts ${item.title}` },
-            ],
-          })),
-        })
-      } catch {
-        const lines = results.map((item, i) => `${i + 1}. *${item.title}*\n👤 ${item.channel} · ⏱️ ${formatDuration(item.duration)} · 👁️ ${compact(item.views)}\n${item.url}`)
-        await ctx.reply(`🎵 *YOUTUBE MUSIC*\n\n${lines.join('\n\n')}\n\n🎧 ${ctx.prefix}play <búsqueda> · 📝 ${ctx.prefix}lyrics <canción>`)
-      }
+      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+        title: '▶️ YOUTUBE · RESULTADOS',
+        body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🔎 ${query}\n\n↔️ Desliza y elige si quieres audio o video.`,
+        footer: 'Audio · Video · Letra',
+        cards: results.map((item, index) => ({
+          title: `▶️ VIDEO #${index + 1}`,
+          body: [`🎵 ${item.title}`, `◇ Canal » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
+          imageUrl: item.thumbnail,
+          footer: 'Ghost Nexora Bot',
+          buttons: [
+            { type: 'reply', text: '🎧 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
+            { type: 'reply', text: '🎬 Video 720p', id: `${ctx.prefix}ytmp4 ${item.url} 720` },
+            { type: 'reply', text: '📝 Letra', id: `${ctx.prefix}lyrics ${item.title} ${item.channel}` },
+          ],
+        })),
+      })
     },
   },
   {
     name: 'play', aliases: ['playaudio'], category: 'downloads', description: 'Busca en YouTube y descarga el primer resultado como MP3.', usage: 'play <búsqueda>',
     async handler(ctx) {
       const query = requireText(ctx.argText)
-      await ctx.reply(`🔎 Buscando *${query}*...`)
+      await announceDownload(ctx, '🎧', 'YouTube · audio', `Búsqueda: ${query}`)
       const result = await downloadYouTubeSearchAudio(query)
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
@@ -128,6 +289,7 @@ export const downloadCommands: BotCommand[] = [
     name: 'playvideo', aliases: ['playvid'], category: 'downloads', description: 'Busca en YouTube y descarga el primer resultado como video.', usage: 'playvideo <búsqueda>',
     async handler(ctx) {
       const query = requireText(ctx.argText)
+      await announceDownload(ctx, '🎬', 'YouTube · video 720p', `Búsqueda: ${query}`)
       const result = await downloadYouTubeSearchVideo(query, 720)
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
@@ -149,7 +311,9 @@ export const downloadCommands: BotCommand[] = [
   {
     name: 'ytmp3', aliases: ['yta', 'ytaudio'], category: 'downloads', description: 'Descarga audio de YouTube en MP3.', usage: 'ytmp3 <url>',
     async handler(ctx) {
-      const result = await downloadYouTubeAudio(requireUrl(ctx.args))
+      const url = requireUrl(ctx.args)
+      await announceDownload(ctx, '🎧', 'YouTube · MP3')
+      const result = await downloadYouTubeAudio(url)
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
@@ -164,6 +328,7 @@ export const downloadCommands: BotCommand[] = [
       const requested = Number.parseInt(ctx.args[1] ?? '720', 10)
       const allowed = [144, 240, 360, 480, 720, 1080, 1440, 2160]
       const quality = allowed.includes(requested) ? requested : 720
+      await announceDownload(ctx, '🎬', `YouTube · MP4 ${quality}p`)
       const result = await downloadYouTubeVideo(url, quality)
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
@@ -175,7 +340,9 @@ export const downloadCommands: BotCommand[] = [
   {
     name: 'soundcloud', aliases: ['sc', 'scdl'], category: 'downloads', description: 'Descarga audio público de SoundCloud por URL o búsqueda.', usage: 'soundcloud <url|búsqueda>',
     async handler(ctx) {
-      const result = await downloadSoundCloud(requireText(ctx.argText, 'Debes indicar una URL o búsqueda de SoundCloud.'))
+      const input = requireText(ctx.argText, 'Debes indicar una URL o búsqueda de SoundCloud.')
+      await announceDownload(ctx, '🎵', 'SoundCloud · audio', /^https?:\/\//i.test(input) ? undefined : `Búsqueda: ${input}`)
+      const result = await downloadSoundCloud(input)
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
@@ -183,16 +350,70 @@ export const downloadCommands: BotCommand[] = [
       } finally { await result.cleanup() }
     },
   },
-  socialCommand('tiktok', ['tt'], 'tiktok', '🎵'),
+  tiktokCommand,
   socialCommand('instagram', ['ig', 'insta'], 'instagram', '📸'),
   socialCommand('facebook', ['fb'], 'facebook', '📘'),
   socialCommand('twitter', ['x', 'tweet'], 'twitter', '🐦'),
   {
     name: 'mediafire', aliases: ['mf'], category: 'downloads', description: 'Descarga un archivo desde MediaFire.', usage: 'mediafire <url>',
     async handler(ctx) {
-      const result = await downloadMediaFire(requireUrl(ctx.args))
+      const url = requireUrl(ctx.args)
+      await announceDownload(ctx, '☁️', 'MediaFire · archivo')
+      const result = await downloadMediaFire(url)
       try {
         await ctx.socket.sendMessage(ctx.chatId, { document: { url: result.filePath }, mimetype: result.contentType, fileName: result.fileName, caption: `☁️ *MediaFire*\n📦 ${result.fileName}\n📏 ${formatBytes(result.size)}` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
+      } finally { await result.cleanup() }
+    },
+  },
+  {
+    name: 'apk', aliases: ['aptoide', 'androidapp', 'appsearch'], category: 'downloads', description: 'Busca aplicaciones Android en Aptoide y muestra resultados en carrusel.', usage: 'apk <aplicación>',
+    async handler(ctx) {
+      await showApkSearch(ctx, requireText(ctx.argText, `Uso: ${ctx.prefix}apk <aplicación>`))
+    },
+  },
+  {
+    name: 'apkinfo', aliases: ['appinfo'], category: 'downloads', description: 'Muestra detalles de una aplicación Android de Aptoide.', usage: 'apkinfo <id|package>',
+    async handler(ctx) {
+      const target = requireText(ctx.argText, `Uso: ${ctx.prefix}apkinfo <id|package>`)
+      const app = await getAptoideApp(target)
+      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+        title: '🤖 ANDROID · DETALLES',
+        body: app.name,
+        footer: 'Fuente: Aptoide',
+        cards: [{
+          title: app.name,
+          body: [apkBody(app), app.summary ? `\n📝 ${app.summary.slice(0, 350)}` : ''].filter(Boolean).join('\n'),
+          imageUrl: app.graphic ?? app.icon,
+          buttons: [{ type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${app.id}` }],
+        }],
+      })
+    },
+  },
+  {
+    name: 'apkdl', aliases: ['appdl', 'apkdownload'], category: 'downloads', description: 'Descarga una APK seleccionada desde Aptoide.', usage: 'apkdl <id|package>',
+    async handler(ctx) {
+      const target = requireText(ctx.argText, `Uso: ${ctx.prefix}apkdl <id|package>`)
+      await announceDownload(ctx, '🤖', 'Android · APK', `Aptoide ID/package: ${target}`)
+      const result = await downloadAptoideApk(target)
+      try {
+        if (result.malwareRank && !result.trusted && /(?:critical|malware|virus)/i.test(result.malwareRank)) {
+          throw new Error(`Aptoide marcó esta APK como ${result.malwareRank}; se bloqueó el envío por seguridad.`)
+        }
+        await ctx.socket.sendMessage(ctx.chatId, {
+          document: { url: result.filePath },
+          mimetype: 'application/vnd.android.package-archive',
+          fileName: result.fileName,
+          caption: [
+            `🤖 *ANDROID · APK LISTA*`,
+            `📱 ${result.name}`,
+            `📦 ${result.packageName}`,
+            result.version ? `🔢 ${result.version}` : '',
+            `📏 ${formatBytes(result.size)}`,
+            `🛡️ Aptoide » ${apkTrust(result)}`,
+            `\n⚠️ Instala APKs externas únicamente si confías en la fuente y en la firma de la aplicación.`,
+          ].filter(Boolean).join('\n'),
+        }, { quoted: ctx.message })
         recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },

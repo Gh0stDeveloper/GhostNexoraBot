@@ -5,9 +5,11 @@ import { sendCarousel } from '../services/interactive.js'
 import { searchE621, searchGelbooru, searchSafebooru, type BooruPost } from '../services/booru.js'
 
 function assertAdultAccess(ctx: CommandContext) {
-  if (!ctx.settings.adultEnabled) throw new Error(`El módulo 18+ está desactivado globalmente. El staff puede habilitarlo con ${ctx.prefix}adultmode on.`)
-  if (ctx.isGroup && !economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no tiene NSFW activo. Un admin puede usar ${ctx.prefix}nsfw on.`)
-  if (!ctx.isGroup && !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
+  if (ctx.isGroup) {
+    if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no tiene NSFW activo. Un admin puede usar ${ctx.prefix}adultmode on.`)
+  } else {
+    if (!ctx.settings.adultEnabled || !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
+  }
   if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) throw new Error(`Confirma primero que eres mayor de edad con ${ctx.prefix}adult18 accept.`)
 }
 

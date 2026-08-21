@@ -7,6 +7,21 @@ import { config } from '../config.js'
 export const COIN_NAME = 'Nexora Coins'
 export const COIN_SYMBOL = 'NXC'
 
+export const PROFESSIONS = {
+  developer: { label: 'Desarrollador/a', emoji: '💻', min: 70, max: 190, description: 'Aplicaciones, bots, APIs y automatización.', aliases: ['dev', 'programador', 'programadora', 'developer'] },
+  sysadmin: { label: 'Administrador/a de sistemas', emoji: '🖥️', min: 75, max: 200, description: 'Servidores, redes, Linux y despliegues.', aliases: ['sysadmin', 'servidores', 'admin', 'sistemas'] },
+  security: { label: 'Analista de seguridad', emoji: '🛡️', min: 80, max: 205, description: 'Auditoría, hardening y respuesta a incidentes.', aliases: ['security', 'seguridad', 'cyber', 'ciberseguridad'] },
+  designer: { label: 'Diseñador/a', emoji: '🎨', min: 55, max: 175, description: 'UI, branding, ilustración y contenido visual.', aliases: ['designer', 'disenador', 'disenadora', 'diseño', 'diseno'] },
+  editor: { label: 'Editor/a multimedia', emoji: '🎬', min: 60, max: 185, description: 'Video, audio, clips y producción multimedia.', aliases: ['editor', 'edicion', 'multimedia'] },
+  qa: { label: 'QA / Tester', emoji: '🧪', min: 60, max: 180, description: 'Pruebas, reportes y control de calidad.', aliases: ['qa', 'tester', 'testing', 'pruebas'] },
+  moderator: { label: 'Moderador/a', emoji: '🛡️', min: 50, max: 165, description: 'Moderación de comunidades y soporte de normas.', aliases: ['mod', 'moderador', 'moderadora', 'moderation'] },
+  support: { label: 'Soporte técnico', emoji: '🎧', min: 50, max: 170, description: 'Atención a usuarios y resolución de incidencias.', aliases: ['support', 'soporte', 'helpdesk'] },
+  data: { label: 'Analista de datos', emoji: '📊', min: 65, max: 190, description: 'Datos, reportes, métricas y automatizaciones.', aliases: ['data', 'datos', 'analista'] },
+} as const
+
+export type ProfessionId = keyof typeof PROFESSIONS
+const DEFAULT_PROFESSION: ProfessionId = 'developer'
+
 export type GroupPolicy = {
   welcome: boolean
   antiLink: boolean
@@ -29,6 +44,14 @@ export type SubbotRecord = {
 const now = () => Date.now()
 const int = (value: unknown) => Number(value ?? 0)
 
+function normalizeProfession(value: string): ProfessionId | null {
+  const normalized = value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  for (const [id, config] of Object.entries(PROFESSIONS) as Array<[ProfessionId, typeof PROFESSIONS[ProfessionId]]>) {
+    if (id === normalized || config.aliases.some((alias) => alias.normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalized)) return id
+  }
+  return null
+}
+
 export class EconomyStore {
   readonly file = path.join(config.dataDir, 'ghostnexora.sqlite')
   readonly db: DatabaseSync
@@ -44,6 +67,7 @@ export class EconomyStore {
         bank INTEGER NOT NULL DEFAULT 0,
         last_work INTEGER NOT NULL DEFAULT 0,
         last_rob INTEGER NOT NULL DEFAULT 0,
+        profession TEXT NOT NULL DEFAULT 'developer',
         created_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS economy_ledger (
@@ -93,6 +117,11 @@ export class EconomyStore {
         FOREIGN KEY(subbot_id) REFERENCES subbots(id) ON DELETE CASCADE
       );
     `)
+
+    const columns = this.db.prepare('PRAGMA table_info(economy_users)').all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'profession')) {
+      this.db.exec(`ALTER TABLE economy_users ADD COLUMN profession TEXT NOT NULL DEFAULT '${DEFAULT_PROFESSION}'`)
+    }
   }
 
   private ensureUser(userJid: string) {
@@ -110,16 +139,33 @@ export class EconomyStore {
     return { wallet: int(row.wallet), bank: int(row.bank), total: int(row.wallet) + int(row.bank) }
   }
 
+  profession(userJid: string) {
+    this.ensureUser(userJid)
+    const row = this.db.prepare('SELECT profession FROM economy_users WHERE user_jid = ?').get(userJid) as { profession?: string }
+    const id = normalizeProfession(row.profession ?? '') ?? DEFAULT_PROFESSION
+    if (row.profession !== id) this.db.prepare('UPDATE economy_users SET profession = ? WHERE user_jid = ?').run(id, userJid)
+    return { id, ...PROFESSIONS[id] }
+  }
+
+  setProfession(userJid: string, value: string) {
+    this.ensureUser(userJid)
+    const id = normalizeProfession(value)
+    if (!id) throw new Error(`Profesión inválida. Usa .job para ver las ${Object.keys(PROFESSIONS).length} disponibles.`)
+    this.db.prepare('UPDATE economy_users SET profession = ? WHERE user_jid = ?').run(id, userJid)
+    return { id, ...PROFESSIONS[id] }
+  }
+
   work(userJid: string) {
     this.ensureUser(userJid)
     const row = this.db.prepare('SELECT last_work FROM economy_users WHERE user_jid = ?').get(userJid) as { last_work: number }
-    const cooldownMs = 15 * 60_000
+    const cooldownMs = 60_000
     const remaining = Math.max(0, int(row.last_work) + cooldownMs - now())
     if (remaining > 0) return { ok: false as const, remaining }
-    const reward = 45 + Math.floor(Math.random() * 156)
+    const profession = this.profession(userJid)
+    const reward = profession.min + Math.floor(Math.random() * (profession.max - profession.min + 1))
     this.db.prepare('UPDATE economy_users SET wallet = wallet + ?, last_work = ? WHERE user_jid = ?').run(reward, now(), userJid)
-    this.ledger(userJid, 'work', reward)
-    return { ok: true as const, reward, ...this.balance(userJid) }
+    this.ledger(userJid, 'work', reward, undefined, `profession:${profession.id}`)
+    return { ok: true as const, reward, profession, ...this.balance(userJid) }
   }
 
   deposit(userJid: string, amount: number) {

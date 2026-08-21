@@ -9,6 +9,9 @@ import yts from 'yt-search'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
+import { resolveCobaltYouTube } from './youtube-cobalt.js'
+import { resolveExternalYouTubeMp3 } from './youtube-mp3-external.js'
+import { resolveExternalYouTubeAudio } from './youtube-mp4-external.js'
 import { youtubeSearchMobile, yt1sResolve } from './youtube-unofficial.js'
 
 export type DownloadPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'twitter'
@@ -123,6 +126,30 @@ function infoFromYtSearch(video: {
   }
 }
 
+async function probeDuration(filePath: string) {
+  const { stdout } = await execa('ffprobe', [
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    filePath,
+  ], { timeout: 30_000 })
+  const duration = Number(stdout.trim())
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error('ffprobe no pudo leer una duración válida del audio.')
+  return duration
+}
+
+async function assertCompleteAudio(filePath: string, expectedDuration?: number, provider = 'proveedor') {
+  const actualDuration = await probeDuration(filePath)
+  if (expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 2) {
+    const tolerance = Math.max(8, expectedDuration * 0.06)
+    if (actualDuration + tolerance < expectedDuration) {
+      throw new Error(`Audio truncado de ${provider}: esperado ~${Math.round(expectedDuration)}s, recibido ${Math.round(actualDuration)}s.`)
+    }
+  }
+  logger.info({ provider, expectedDuration, actualDuration }, 'youtube audio integrity verified')
+  return actualDuration
+}
+
 async function runDownload(source: string, args: string[]): Promise<DownloadResult> {
   const dir = await prepareTempDir()
   const output = path.join(dir, '%(title).80s-%(id)s.%(ext)s')
@@ -137,6 +164,7 @@ async function runDownload(source: string, args: string[]): Promise<DownloadResu
     for (let i = lines.length - 1; i >= 0; i--) {
       try { info = infoFrom(JSON.parse(lines[i]!) as Record<string, unknown>); break } catch { /* noop */ }
     }
+    if (result.fileName.toLowerCase().endsWith('.mp3')) await assertCompleteAudio(result.filePath, info?.duration, 'yt-dlp')
     return { ...result, info, cleanup: () => rm(dir, { recursive: true, force: true }) }
   } catch (error) {
     await rm(dir, { recursive: true, force: true })
@@ -176,7 +204,7 @@ async function rubyCoreDownloadUrl(youtubeUrl: string, kind: 'mp3' | 'mp4') {
   return { url: parsed.toString(), fileName: data.download?.filename }
 }
 
-async function downloadRemoteMedia(directUrl: string, ext: 'mp3' | 'mp4', info: MediaInfo, providerFileName?: string): Promise<DownloadResult> {
+async function downloadRemoteMedia(directUrl: string, ext: 'mp3' | 'mp4', info: MediaInfo, providerFileName?: string, provider = 'externo'): Promise<DownloadResult> {
   const dir = await prepareTempDir()
   const fallbackName = `${safeFileBase(info.title)}.${ext}`
   const suggested = providerFileName ? path.basename(providerFileName).replace(/[^a-zA-Z0-9._ -]+/g, '_') : fallbackName
@@ -202,7 +230,57 @@ async function downloadRemoteMedia(directUrl: string, ext: 'mp3' | 'mp4', info: 
     })
     await pipeline(response.body, limiter, createWriteStream(filePath))
     if (size <= 0) throw new Error('El proveedor devolvió un archivo vacío.')
+    if (ext === 'mp3') await assertCompleteAudio(filePath, info.duration, provider)
     return { filePath, fileName, size, info, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true })
+    throw error
+  }
+}
+
+async function downloadPipedAudioAsMp3(
+  directUrl: string,
+  info: MediaInfo,
+  sourceExtension: 'm4a' | 'webm' | 'bin',
+  provider: string,
+): Promise<DownloadResult> {
+  const dir = await prepareTempDir()
+  const sourcePath = path.join(dir, `source.${sourceExtension}`)
+  const fileName = `${safeFileBase(info.title)}.mp3`
+  const filePath = path.join(dir, fileName)
+  try {
+    const response = await fetch(directUrl, {
+      redirect: 'follow',
+      headers: { 'user-agent': 'Mozilla/5.0 GhostNexoraBot/1.1' },
+      signal: AbortSignal.timeout(15 * 60_000),
+    })
+    if (!response.ok || !response.body) throw new Error(`Piped proxy respondió HTTP ${response.status}.`)
+    const declared = Number(response.headers.get('content-length') ?? 0)
+    if (declared > config.maxDownloadBytes) throw new Error(`El audio fuente supera el límite configurado de ${config.maxDownloadMb} MB.`)
+
+    let sourceSize = 0
+    const limiter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        sourceSize += chunk.length
+        if (sourceSize > config.maxDownloadBytes) callback(new Error(`El audio fuente supera el límite configurado de ${config.maxDownloadMb} MB.`))
+        else callback(null, chunk)
+      },
+    })
+    await pipeline(response.body, limiter, createWriteStream(sourcePath))
+    if (sourceSize <= 0) throw new Error('Piped devolvió un stream de audio vacío.')
+
+    await execa('ffmpeg', [
+      '-y', '-v', 'error', '-i', sourcePath,
+      '-vn', '-map_metadata', '-1',
+      '-c:a', 'libmp3lame', '-b:a', '192k',
+      '-id3v2_version', '3', filePath,
+    ], { timeout: 10 * 60_000 })
+
+    const output = await stat(filePath)
+    if (output.size <= 0) throw new Error('FFmpeg produjo un MP3 vacío.')
+    if (output.size > config.maxDownloadBytes) throw new Error(`El MP3 supera el límite configurado de ${config.maxDownloadMb} MB.`)
+    await assertCompleteAudio(filePath, info.duration, `Piped ${new URL(provider).hostname}`)
+    return { filePath, fileName, size: output.size, info, cleanup: () => rm(dir, { recursive: true, force: true }) }
   } catch (error) {
     await rm(dir, { recursive: true, force: true })
     throw error
@@ -252,6 +330,65 @@ async function getYouTubeInfoByUrl(input: string): Promise<MediaInfo> {
 async function downloadYouTubeViaProviders(input: string, kind: 'mp3' | 'mp4', quality = 720): Promise<DownloadResult> {
   const url = validateUrl(input, 'youtube')
   const baseInfo = await getYouTubeInfoByUrl(url).catch((): MediaInfo => ({ title: 'YouTube', webpageUrl: url }))
+
+  if (kind === 'mp3') {
+    let pipedError: unknown
+    try {
+      const stream = await resolveExternalYouTubeAudio(url)
+      const info: MediaInfo = {
+        ...baseInfo,
+        title: stream.title || baseInfo.title,
+        uploader: stream.author ?? baseInfo.uploader,
+        duration: stream.duration ?? baseInfo.duration,
+        thumbnail: stream.thumbnail ?? baseInfo.thumbnail,
+        webpageUrl: url,
+      }
+      return await downloadPipedAudioAsMp3(stream.url, info, stream.sourceExtension, stream.provider)
+    } catch (error) {
+      pipedError = error
+      logger.warn({ errorMessage: compactError(error) }, 'youtube piped audio failed; trying external mp3 converter')
+    }
+
+    let converterError: unknown
+    try {
+      const direct = await resolveExternalYouTubeMp3(url)
+      const info: MediaInfo = {
+        ...baseInfo,
+        title: direct.title || baseInfo.title,
+        duration: direct.duration ?? baseInfo.duration,
+        thumbnail: direct.thumbnail ?? baseInfo.thumbnail,
+        views: direct.views ?? baseInfo.views,
+        webpageUrl: url,
+      }
+      return await downloadRemoteMedia(direct.url, 'mp3', info, direct.fileName, direct.provider)
+    } catch (error) {
+      converterError = error
+      logger.warn({ errorMessage: compactError(error) }, 'youtube external mp3 converter failed integrity check; trying cobalt')
+    }
+
+    let cobaltError: unknown
+    try {
+      const direct = await resolveCobaltYouTube(url, 'mp3', quality)
+      return await downloadRemoteMedia(direct.url, 'mp3', baseInfo, direct.fileName, `Cobalt ${new URL(direct.provider).hostname}`)
+    } catch (error) {
+      cobaltError = error
+    }
+
+    let rubyError: unknown
+    try {
+      const direct = await rubyCoreDownloadUrl(url, 'mp3')
+      return await downloadRemoteMedia(direct.url, 'mp3', baseInfo, direct.fileName, 'Ruby-core')
+    } catch (error) {
+      rubyError = error
+    }
+
+    try {
+      return await runDownload(url, audioArgs)
+    } catch (localError) {
+      throw new Error(`No fue posible descargar un MP3 completo. Piped: ${compactError(pipedError)} · conversor web: ${compactError(converterError)} · Cobalt: ${compactError(cobaltError)} · Ruby-core: ${compactError(rubyError)} · yt-dlp: ${compactError(localError)}`)
+    }
+  }
+
   let yt1sError: unknown
   try {
     const direct = await yt1sResolve(url, kind, quality)
@@ -276,9 +413,9 @@ async function downloadYouTubeViaProviders(input: string, kind: 'mp3' | 'mp4', q
   }
 
   try {
-    return await runDownload(url, kind === 'mp3' ? audioArgs : videoArgs(quality))
+    return await runDownload(url, videoArgs(quality))
   } catch (localError) {
-    throw new Error(`No fue posible descargar desde YouTube. yt1s: ${compactError(yt1sError)} · proveedor alterno: ${compactError(rubyError)} · yt-dlp: ${compactError(localError)}`)
+    throw new Error(`No fue posible descargar desde YouTube. proveedor externo: ${compactError(yt1sError)} · Ruby-core: ${compactError(rubyError)} · yt-dlp: ${compactError(localError)}`)
   }
 }
 
@@ -291,9 +428,6 @@ export async function getMediaInfo(input: string, platform: DownloadPlatform): P
 
 export async function getYouTubeFormats(input: string): Promise<YouTubeFormats> {
   const info = await getYouTubeInfoByUrl(input)
-  // yt1s elige automáticamente entre sus conversiones y la lista puede variar por video.
-  // No inventamos formatos: el comando de descarga acepta la calidad solicitada y selecciona
-  // la mejor opción <= a esa resolución; Ruby/yt-dlp quedan como fallbacks.
   return { ...info, videoHeights: [], audioBitrates: [] }
 }
 

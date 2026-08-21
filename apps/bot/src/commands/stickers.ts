@@ -13,10 +13,10 @@ const effects: Record<string, StickerEffect> = {
 
 export const stickerCommands: BotCommand[] = [
   {
-    name: 'sticker', aliases: ['s', 'stiker'], category: 'stickers', description: 'Convierte imagen/video en sticker usando tu pack personalizado.', usage: 'sticker [efecto]',
+    name: 'sticker', aliases: ['s', 'stiker'], category: 'stickers', description: 'Convierte imagen, GIF o video corto en sticker usando tu pack personalizado.', usage: 'sticker [efecto]',
     async handler(ctx) {
       const media = await downloadMessageMedia(ctx.message)
-      if (!media || !['image', 'video'].includes(media.kind)) throw new Error('Envía o responde a una imagen/video con el comando.')
+      if (!media || !['image', 'video'].includes(media.kind)) throw new Error('Envía o responde a una imagen, GIF o video corto con el comando.')
       const effectName = (ctx.args[0] ?? 'normal').toLowerCase()
       const effect = effects[effectName]
       if (!effect) throw new Error(`Efecto inválido. Consulta ${ctx.prefix}stickereffects.`)
@@ -27,21 +27,37 @@ export const stickerCommands: BotCommand[] = [
   },
   {
     name: 'spack', aliases: ['stickerpack', 'packname'], category: 'stickers',
-    description: 'Configura el nombre del pack que se incrusta en tus stickers.', usage: 'spack <nombre> | spack reset',
+    description: 'Configura nombre del pack y opcionalmente alias del autor.', usage: 'spack <nombre> | <autor> | spack reset',
     async handler(ctx) {
       const input = ctx.argText.trim()
       if (!input) {
         const current = stickerPreferences.get(ctx.sender)
-        await ctx.reply(`🎨 *TU PACK DE STICKERS*\n━━━━━━━━━━━━━━\nPack: *${current.packName}*\nAutor: *${current.publisher}*\n\nCambia el nombre con *${ctx.prefix}spack <nombre>*.`)
+        await ctx.reply(`🎨 *TU PACK DE STICKERS*\n━━━━━━━━━━━━━━\n📦 Pack: *${current.packName}*\n✍️ Autor: *${current.publisher}*\n\nCambia el pack con *${ctx.prefix}spack <nombre>*.\nPack + autor: *${ctx.prefix}spack Mi Pack | Mi Alias*.\nSolo autor: *${ctx.prefix}sauthor <alias>*.`)
         return
       }
       if (['reset', 'off', 'default'].includes(input.toLowerCase())) {
         const current = stickerPreferences.reset(ctx.sender)
-        await ctx.reply(`✅ Pack restablecido a *${current.packName}*.`)
+        await ctx.reply(`✅ *PACK RESTABLECIDO*\n📦 ${current.packName}\n✍️ ${current.publisher}`)
         return
       }
-      const current = stickerPreferences.set(ctx.sender, input)
+      const [packPart = '', ...authorParts] = input.split('|')
+      const author = authorParts.join('|').trim() || undefined
+      const current = stickerPreferences.set(ctx.sender, packPart.trim(), author)
       await ctx.reply(`✅ *PACK PERSONALIZADO*\n━━━━━━━━━━━━━━\nTus próximos stickers usarán:\n📦 *${current.packName}*\n✍️ *${current.publisher}*`)
+    },
+  },
+  {
+    name: 'sauthor', aliases: ['stickerauthor', 'packauthor', 'sautor'], category: 'stickers',
+    description: 'Configura el alias de autor que se incrusta en tus stickers.', usage: 'sauthor <alias>',
+    async handler(ctx) {
+      const alias = ctx.argText.trim()
+      if (!alias) {
+        const current = stickerPreferences.get(ctx.sender)
+        await ctx.reply(`✍️ *AUTOR DEL PACK*\nActual: *${current.publisher}*\n\nCámbialo con *${ctx.prefix}sauthor <alias>*.`)
+        return
+      }
+      const current = stickerPreferences.setPublisher(ctx.sender, alias)
+      await ctx.reply(`✅ Autor actualizado a *${current.publisher}*.\n📦 Pack: *${current.packName}*`)
     },
   },
   {
@@ -64,9 +80,10 @@ export const stickerCommands: BotCommand[] = [
     },
   },
   {
-    name: 'stickereffects', aliases: ['sfx', 'stickerfx', 'efectos'], category: 'stickers', description: 'Muestra efectos disponibles para stickers.',
+    name: 'stickereffects', aliases: ['sfx', 'stickerfx', 'efectos'], category: 'stickers', description: 'Muestra efectos y configuración disponible para stickers.',
     async handler(ctx) {
-      await ctx.reply(`🎨 *MENÚ DE EFECTOS*\n\n🔄 TRANSFORMACIONES\n• normal — sticker clásico\n• fliph — espejo horizontal\n• flipv — espejo vertical\n• rotate90 / rotate180 / rotate270\n• zoomin / zoomout\n\n⭕ FORMAS\n• circle — sticker redondo\n• square — marco cuadrado\n\n🎨 COLORES Y LUZ\n• grayscale — blanco y negro\n\n📦 Pack personalizado: *${ctx.prefix}spack <nombre>*\n🎞️ Sprite animado: *${ctx.prefix}sprite <personaje>*\n\nResponde a una imagen con: *${ctx.prefix}sticker circle*`)
+      const current = stickerPreferences.get(ctx.sender)
+      await ctx.reply(`🎨 *MENÚ DE STICKERS*\n\n🔄 TRANSFORMACIONES\n• normal — sticker clásico\n• fliph — espejo horizontal\n• flipv — espejo vertical\n• rotate90 / rotate180 / rotate270\n• zoomin / zoomout\n\n⭕ FORMAS\n• circle — sticker redondo\n• square — marco cuadrado\n\n🎨 COLORES Y LUZ\n• grayscale — blanco y negro\n\n🎞️ GIF/VIDEO\n• Se aceptan clips cortos de hasta 6 segundos\n• El bot comprime y valida el WebP antes de enviarlo\n\n📦 Pack actual: *${current.packName}*\n✍️ Autor: *${current.publisher}*\n\nConfigura: *${ctx.prefix}spack <nombre> | <autor>*\nSolo autor: *${ctx.prefix}sauthor <alias>*\nResponde a una imagen con: *${ctx.prefix}sticker circle*`)
     },
   },
   {
