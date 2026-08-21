@@ -18,9 +18,11 @@ import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { withTimeout } from '../utils/timeout.js'
 
 function assertAdultAccess(ctx: CommandContext) {
-  if (!settings.adultEnabled) throw new Error(`El módulo 18+ está desactivado globalmente. El owner puede habilitarlo con ${ctx.prefix}adultmode on.`)
-  if (ctx.isGroup && !economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error('Este grupo no está autorizado para el módulo 18+.')
-  if (!ctx.isGroup && !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
+  if (ctx.isGroup) {
+    if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ${ctx.prefix}adultmode on.`)
+  } else {
+    if (!settings.adultEnabled || !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
+  }
   if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) throw new Error(`Antes debes confirmar que eres mayor de edad con ${ctx.prefix}adult18 accept.`)
 }
 
