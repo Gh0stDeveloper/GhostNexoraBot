@@ -2,6 +2,7 @@ import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
 import { economy } from './economy.js'
 import { community } from './community.js'
+import { getBrandingAsset } from './branding.js'
 import { settings } from '../core/settings.js'
 import { getMessageText, getSender } from '../utils/message.js'
 
@@ -66,6 +67,7 @@ export async function handleParticipantUpdate(socket: WASocket, update: { id: st
 
   const metadata = await socket.groupMetadata(update.id).catch(() => null)
   const groupName = metadata?.subject ?? 'este grupo'
+  const customAsset = await getBrandingAsset(update.action === 'add' ? 'welcome' : 'goodbye').catch(() => null)
 
   for (const jid of update.participants) {
     const defaultWelcome = [
@@ -90,10 +92,23 @@ export async function handleParticipantUpdate(socket: WASocket, update: { id: st
       ? groupSettings.welcomeText ?? defaultWelcome
       : groupSettings.goodbyeText ?? defaultGoodbye
     const text = renderTemplate(template, jid, groupName)
+
+    if (customAsset?.kind === 'video') {
+      await socket.sendMessage(update.id, {
+        video: { url: customAsset.path }, gifPlayback: true, caption: text, mentions: [jid],
+      }).catch(() => undefined)
+      continue
+    }
+    if (customAsset?.kind === 'image') {
+      await socket.sendMessage(update.id, {
+        image: { url: customAsset.path }, caption: text, mentions: [jid],
+      }).catch(() => undefined)
+      continue
+    }
+
     const imageUrl = update.action === 'add' && config.welcomeImageUrl
       ? config.welcomeImageUrl
       : await socket.profilePictureUrl(jid, 'image').catch(() => undefined)
-
     const payload = imageUrl
       ? { image: { url: imageUrl }, caption: text, mentions: [jid] }
       : { text, mentions: [jid] }
