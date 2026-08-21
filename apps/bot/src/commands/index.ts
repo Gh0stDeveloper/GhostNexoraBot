@@ -7,6 +7,7 @@ import { downloadCommands } from './downloads.js'
 import { youtubeFriendlyCommands } from './youtube-friendly.js'
 import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
+import { webSearchCommands } from './web-search.js'
 import { booruCommands } from './booru.js'
 import { groupCommands } from './groups.js'
 import { securityCommands } from './security.js'
@@ -19,8 +20,10 @@ import { waifuCommands } from './waifu.js'
 import { waifuExtendedCommands } from './waifu-extended.js'
 import { subbotCommands } from './subbots.js'
 import { adultCommands } from './adult.js'
+import { eromeCommands } from './erome.js'
 import { adultRoleplayCommands } from './adult-roleplay.js'
 import { personalizationCommands } from './personalization.js'
+import { privateAccessCommands } from './private-access.js'
 import { ownerCommands } from './owner.js'
 
 export const commands: BotCommand[] = [
@@ -32,6 +35,7 @@ export const commands: BotCommand[] = [
   ...youtubeFriendlyCommands,
   ...lyricsCommands,
   ...resourceCommands,
+  ...webSearchCommands,
   ...booruCommands,
   ...groupCommands,
   ...securityCommands,
@@ -44,7 +48,9 @@ export const commands: BotCommand[] = [
   ...waifuExtendedCommands,
   ...subbotCommands,
   ...adultCommands,
+  ...eromeCommands,
   ...adultRoleplayCommands,
   ...personalizationCommands,
+  ...privateAccessCommands,
   ...ownerCommands,
 ]
