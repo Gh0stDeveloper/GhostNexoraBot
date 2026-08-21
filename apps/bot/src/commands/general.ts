@@ -33,6 +33,18 @@ function identity(ctx: Parameters<BotCommand['handler']>[0]) {
   return { shortName: ctx.settings.botDisplayName, longName: ctx.settings.botDisplayName, currencyName: ctx.settings.currencyName, label: 'MainBot' }
 }
 
+async function sendMenuPrimary(ctx: Parameters<BotCommand['handler']>[0], artwork: string | undefined, brand: ReturnType<typeof identity>, menu: string) {
+  // El menú principal NO depende de Native Flow. Primero enviamos medios y texto
+  // mediante mensajes WhatsApp estándar, que son los formatos más compatibles.
+  if (artwork) {
+    await ctx.socket.sendMessage(ctx.chatId, {
+      image: { url: artwork },
+      caption: `👻 *${brand.longName}*\nCommand Center · ${brand.label}`,
+    }, { quoted: ctx.message }).catch(() => undefined)
+  }
+  await ctx.reply(menu)
+}
+
 export const generalCommands: BotCommand[] = [
   {
     name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo.',
@@ -197,7 +209,9 @@ ${customizationSection}
 ${staffSection}
 
 ✦ El menú siempre es visible; los permisos se aplican al ejecutar funciones.
-✦ Noticias y cambios oficiales: botón *Visitar canal*.`.trim()
+✦ Los botones son opcionales: el texto funciona aunque WhatsApp no muestre Native Flow.`.trim()
+
+      await sendMenuPrimary(ctx, artwork, brand, menu)
 
       const buttons = !ctx.isGroup && !privateUnlocked
         ? [
@@ -211,13 +225,15 @@ ${staffSection}
             { type: 'reply' as const, text: '🏓 Ping', id: `${p}ping` },
           ]
 
+      // Los controles Native Flow son una mejora visual, nunca la única salida del comando.
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-        title: `✦ ${brand.longName} · COMMAND CENTER ✦`,
-        body: menu,
-        imageUrl: artwork,
+        title: `✦ ${brand.longName} · ACCIONES RÁPIDAS ✦`,
+        body: !ctx.isGroup && !privateUnlocked
+          ? `El menú ya fue enviado arriba. Puedes consultar la tienda y saldo desde estos accesos rápidos.`
+          : `El menú ya fue enviado arriba. Estos botones son accesos rápidos opcionales.`,
         footer: `${brand.shortName} · Ghost Developer / Nexora`,
         buttons,
-      })
+      }).catch(() => undefined)
     },
   },
   {
@@ -235,31 +251,35 @@ ${staffSection}
     async handler(ctx) {
       const artwork = await menuArtwork(ctx)
       const brand = identity(ctx)
+      const body = [
+        '╭─〔 *INFORMACIÓN* 〕',
+        `│ Instancia » ${brand.label}`,
+        '│ Plataforma » WhatsApp Multi-Device',
+        '│ Core » TypeScript + Baileys',
+        '│ Panel » Next.js + Tailwind CSS',
+        '│ Economía » Nexora Economy + Grimorio RPG',
+        '│ Colección » Nexora Gacha',
+        '│ Juegos » IA + PvP persistente',
+        '│ YouTube » m.youtube + yt1s + fallbacks',
+        '│ Búsqueda » Google + Wikipedia',
+        '│ Erome » exploración de video con sesión opcional',
+        `│ Prefijo » ${ctx.prefix}`,
+        `│ Uptime » ${formatUptime(process.uptime())}`,
+        '│ Developer » Ghost Developer / Nexora',
+        '╰──────────────',
+      ].join('\n')
+      if (artwork) {
+        await ctx.socket.sendMessage(ctx.chatId, { image: { url: artwork }, caption: `👻 *${brand.longName}*` }, { quoted: ctx.message }).catch(() => undefined)
+      }
+      await ctx.reply(body)
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
         title: `👻 ${brand.longName}`,
-        imageUrl: artwork,
-        body: [
-          '╭─〔 *INFORMACIÓN* 〕',
-          `│ Instancia » ${brand.label}`,
-          '│ Plataforma » WhatsApp Multi-Device',
-          '│ Core » TypeScript + Baileys',
-          '│ Panel » Next.js + Tailwind CSS',
-          '│ Economía » Nexora Economy + Grimorio RPG',
-          '│ Colección » Nexora Gacha',
-          '│ Juegos » IA + PvP persistente',
-          '│ YouTube » m.youtube + yt1s + fallbacks',
-          '│ Búsqueda » Google + Wikipedia',
-          '│ Erome » exploración de video con sesión opcional',
-          `│ Prefijo » ${ctx.prefix}`,
-          `│ Uptime » ${formatUptime(process.uptime())}`,
-          '│ Developer » Ghost Developer / Nexora',
-          '╰──────────────',
-        ].join('\n'),
+        body: 'Acciones rápidas opcionales',
         buttons: [
           { type: 'url', text: '📢 Ver canal', url: config.officialChannelUrl },
           { type: 'reply', text: '📋 Menú', id: `${ctx.prefix}menu` },
         ],
-      })
+      }).catch(() => undefined)
     },
   },
   {
