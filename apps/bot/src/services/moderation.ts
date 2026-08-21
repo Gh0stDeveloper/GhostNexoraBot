@@ -57,7 +57,11 @@ export async function moderateIncoming(socket: WASocket, message: WAMessage) {
   return false
 }
 
-export async function handleParticipantUpdate(socket: WASocket, update: { id: string; participants: string[]; action: string }) {
+export async function handleParticipantUpdate(
+  socket: WASocket,
+  update: { id: string; participants: string[]; action: string },
+  instanceId?: number,
+) {
   if (!['add', 'remove'].includes(update.action)) return
   const policy = economy.getGroupPolicy(update.id)
   const groupSettings = community.getGroupSettings(update.id)
@@ -67,7 +71,7 @@ export async function handleParticipantUpdate(socket: WASocket, update: { id: st
 
   const metadata = await socket.groupMetadata(update.id).catch(() => null)
   const groupName = metadata?.subject ?? 'este grupo'
-  const customAsset = await getBrandingAsset(update.action === 'add' ? 'welcome' : 'goodbye').catch(() => null)
+  const customAsset = await getBrandingAsset(update.action === 'add' ? 'welcome' : 'goodbye', instanceId).catch(() => null)
 
   for (const jid of update.participants) {
     const defaultWelcome = [
