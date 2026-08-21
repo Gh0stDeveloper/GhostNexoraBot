@@ -10,6 +10,7 @@ import { groupCommands } from './groups.js'
 import { securityCommands } from './security.js'
 import { economyCommands } from './economy.js'
 import { advancedEconomyCommands } from './economy-advanced.js'
+import { gameCommands } from './games.js'
 import { waifuCommands } from './waifu.js'
 import { subbotCommands } from './subbots.js'
 import { adultCommands } from './adult.js'
@@ -27,6 +28,7 @@ export const commands: BotCommand[] = [
   ...securityCommands,
   ...economyCommands,
   ...advancedEconomyCommands,
+  ...gameCommands,
   ...waifuCommands,
   ...subbotCommands,
   ...adultCommands,
