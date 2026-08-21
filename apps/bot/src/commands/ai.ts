@@ -1,5 +1,5 @@
 import type { BotCommand, CommandContext } from '../types.js'
-import { askAI, aiConfigured } from '../services/ai.js'
+import { askAI, aiConfigured, getAIStatus } from '../services/ai.js'
 import { googleSearch, wikipediaSearch, type WebSearchResult } from '../services/web-search.js'
 
 const SYSTEM_PROMPT = [
@@ -104,6 +104,28 @@ async function researchSources(query: string) {
 }
 
 export const aiCommands: BotCommand[] = [
+  {
+    name: 'aistatus', aliases: ['iastatus'], category: 'general', staffOnly: true,
+    description: 'Diagnostica la configuración de IA sin mostrar la API key.',
+    async handler(ctx) {
+      const status = await getAIStatus()
+      const lines = [
+        '╭━━〔 🤖 *IA · DIAGNÓSTICO* 〕━━╮',
+        `┃ Configurada » *${status.configured ? 'SÍ' : 'NO'}*`,
+        `┃ Proveedor » *${status.provider}*`,
+        `┃ Endpoint » *${status.endpointHost}*`,
+        `┃ Modelo » *${status.model}*`,
+        `┃ Formato key » *${status.keyFormat}*`,
+        `┃ Autenticación » *${status.auth}*`,
+        'httpStatus' in status ? `┃ HTTP » *${status.httpStatus}*` : '',
+        'freeTier' in status && status.freeTier !== undefined ? `┃ Free tier » *${status.freeTier ? 'SÍ' : 'NO'}*` : '',
+        'limitRemaining' in status && status.limitRemaining !== undefined && status.limitRemaining !== null ? `┃ Límite restante » *${status.limitRemaining}*` : '',
+        'detail' in status && status.detail ? `┃ Detalle » ${status.detail}` : '',
+        '╰━━━━━━━━━━━━━━━━╯',
+      ].filter(Boolean)
+      await ctx.reply(lines.join('\n'))
+    },
+  },
   {
     name: 'ai', aliases: ['ia', 'ask', 'chat'], category: 'general',
     description: 'Consulta el asistente de IA.', usage: 'ai <pregunta>',
