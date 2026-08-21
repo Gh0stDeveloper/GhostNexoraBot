@@ -76,7 +76,8 @@ export class CommandRouter {
 
         const metadata = await socket.groupMetadata(chatId)
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
-        const botCandidates = [socket.user?.id, socket.user?.lid].map(normalizeJid).filter(Boolean)
+        const me = socket.authState.creds.me
+        const botCandidates = [me?.id, me?.lid].map(normalizeJid).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
         const senderIsAdmin = Boolean(senderParticipant?.admin) || isOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
