@@ -61,6 +61,7 @@ chmod 0640 .env
 
 pnpm install --no-frozen-lockfile
 pnpm build
+install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"
 
 install -m 0644 systemd/ghost-nexora-bot.service /etc/systemd/system/ghost-nexora-bot.service
 install -m 0644 systemd/ghost-nexora-web.service /etc/systemd/system/ghost-nexora-web.service
