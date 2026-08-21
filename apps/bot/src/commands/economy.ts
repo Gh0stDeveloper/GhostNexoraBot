@@ -25,12 +25,17 @@ function targetFromContext(ctx: CommandContext) {
   throw new Error('Menciona al usuario o indica su número.')
 }
 
+// El precio base está equilibrado alrededor del rendimiento medio de .work
+// (45-200 NXC cada 15 min). Los planes largos incluyen descuento por duración.
+// Los subbots cuestan más porque mantienen una sesión independiente y consumen
+// memoria, CPU, red y almacenamiento de la VPS durante toda la suscripción.
 const products = {
-  private1d: { price: 800, kind: 'private_access', durationMs: 86400_000, label: 'Acceso privado · 1 día' },
-  private7d: { price: 4200, kind: 'private_access', durationMs: 7 * 86400_000, label: 'Acceso privado · 7 días' },
-  subbot1d: { price: 2500, kind: 'subbot_slot', durationMs: 86400_000, label: 'Subbot · 1 día' },
-  subbot7d: { price: 12000, kind: 'subbot_slot', durationMs: 7 * 86400_000, label: 'Subbot · 7 días' },
-  subbot30d: { price: 35000, kind: 'subbot_slot', durationMs: 30 * 86400_000, label: 'Subbot · 30 días' },
+  private1d: { price: 2000, kind: 'private_access', durationMs: 86400_000, label: 'Acceso privado · 1 día' },
+  private7d: { price: 10000, kind: 'private_access', durationMs: 7 * 86400_000, label: 'Acceso privado · 7 días' },
+  private30d: { price: 30000, kind: 'private_access', durationMs: 30 * 86400_000, label: 'Acceso privado · 30 días' },
+  subbot1d: { price: 6000, kind: 'subbot_slot', durationMs: 86400_000, label: 'Subbot · 1 día' },
+  subbot7d: { price: 30000, kind: 'subbot_slot', durationMs: 7 * 86400_000, label: 'Subbot · 7 días' },
+  subbot30d: { price: 100000, kind: 'subbot_slot', durationMs: 30 * 86400_000, label: 'Subbot · 30 días' },
 } as const
 
 export const economyCommands: BotCommand[] = [
@@ -117,7 +122,7 @@ export const economyCommands: BotCommand[] = [
     description: 'Muestra productos que se compran con Nexora Coins.',
     async handler(ctx) {
       const lines = Object.entries(products).map(([id, item]) => `• *${id}* — ${item.label}\n  ${fmt(item.price)}`)
-      await ctx.reply(`🛒 *NEXORA STORE*\n\n${lines.join('\n\n')}\n\nCompra con *${ctx.prefix}buy <producto>*.`)
+      await ctx.reply(`🛒 *NEXORA STORE*\n\n${lines.join('\n\n')}\n\n💡 Los planes largos tienen mejor precio por día.\n🤖 Los subbots cuestan más porque mantienen una sesión independiente en la VPS.\n\nCompra con *${ctx.prefix}buy <producto>*.`)
     },
   },
   {
