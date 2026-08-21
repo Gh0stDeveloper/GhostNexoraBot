@@ -60,7 +60,7 @@ async function saveTubeCdn() {
       referer: `${SAVE_TUBE_ORIGIN}/`,
       'user-agent': SAVE_TUBE_HEADERS['user-agent'],
     },
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(10_000),
   })
   if (!response.ok) throw new Error(`SaveTube discovery respondió HTTP ${response.status}.`)
   const data = await response.json() as { cdn?: unknown }
@@ -74,7 +74,7 @@ export async function resolveSaveTubeYouTube(youtubeUrl: string, kind: SaveTubeK
     method: 'POST',
     headers: SAVE_TUBE_HEADERS,
     body: JSON.stringify({ url: youtubeUrl }),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!infoResponse.ok) throw new Error(`SaveTube info respondió HTTP ${infoResponse.status}.`)
   const infoPayload = await infoResponse.json() as { status?: unknown; data?: unknown; message?: unknown }
@@ -96,7 +96,7 @@ export async function resolveSaveTubeYouTube(youtubeUrl: string, kind: SaveTubeK
       downloadType: kind === 'mp3' ? 'audio' : 'video',
       quality: requestedQuality,
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(20_000),
   })
   if (!downloadResponse.ok) throw new Error(`SaveTube download respondió HTTP ${downloadResponse.status}.`)
   const downloadPayload = await downloadResponse.json() as {
@@ -141,7 +141,7 @@ export async function resolveYtmp3WtfYouTube(youtubeUrl: string, kind: SaveTubeK
   const landing = await fetch(`https://v2.ytmp3.wtf/${page}/?url=${encodeURIComponent(youtubeUrl)}`, {
     headers: { 'user-agent': SAVE_TUBE_HEADERS['user-agent'], accept: 'text/html,*/*' },
     redirect: 'follow',
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(10_000),
   })
   if (!landing.ok) throw new Error(`YTMP3.WTF respondió HTTP ${landing.status}.`)
   const html = await landing.text()
@@ -166,21 +166,21 @@ export async function resolveYtmp3WtfYouTube(youtubeUrl: string, kind: SaveTubeK
       token_id: tokenId,
       token_validto: tokenValidTo,
     }),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(12_000),
   })
   if (!start.ok) throw new Error(`YTMP3.WTF convert respondió HTTP ${start.status}.`)
   const job = await start.json() as { jobid?: unknown; error?: unknown }
   if (typeof job.jobid !== 'string' || !job.jobid) throw new Error(typeof job.error === 'string' ? job.error : 'YTMP3.WTF no creó el trabajo de conversión.')
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1_500))
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1_200))
     const check = await fetch(`https://v2.ytmp3.wtf/${endpoint}/?jobid=${encodeURIComponent(job.jobid)}&time=${Date.now()}`, {
       headers: {
         'user-agent': SAVE_TUBE_HEADERS['user-agent'],
         ...(cookie ? { cookie } : {}),
         accept: 'application/json, text/plain, */*',
       },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(6_000),
     })
     if (!check.ok) continue
     const data = await check.json() as { ready?: unknown; dlurl?: unknown; title?: unknown }
@@ -200,16 +200,17 @@ export async function resolveYtmp3WtfYouTube(youtubeUrl: string, kind: SaveTubeK
 }
 
 export async function resolveModernWebYouTube(youtubeUrl: string, kind: SaveTubeKind, quality = 720) {
-  const errors: string[] = []
+  const attempts = [
+    resolveSaveTubeYouTube(youtubeUrl, kind, quality),
+    resolveYtmp3WtfYouTube(youtubeUrl, kind),
+  ]
   try {
-    return await resolveSaveTubeYouTube(youtubeUrl, kind, quality)
+    return await Promise.any(attempts)
   } catch (error) {
-    errors.push(`SaveTube: ${compact(error)}`)
+    if (error instanceof AggregateError) {
+      const details = error.errors.map((item) => compact(item)).slice(0, 2)
+      throw new Error(`SaveTube/YTMP3.WTF agotados: ${details.join(' · ')}`)
+    }
+    throw error
   }
-  try {
-    return await resolveYtmp3WtfYouTube(youtubeUrl, kind)
-  } catch (error) {
-    errors.push(`YTMP3.WTF: ${compact(error)}`)
-  }
-  throw new Error(errors.join(' · '))
 }
