@@ -21,7 +21,9 @@ export async function createSocket(): Promise<{ socket: WASocket; saveCreds: () 
       keys: makeCacheableSignalKeyStore(state.keys, silentWaLogger),
     },
     logger: silentWaLogger,
-    browser: Browsers.ubuntu(config.botName),
+    // Pairing codes are stricter than QR pairing about browser descriptors.
+    // Keep a canonical Ubuntu + Chrome tuple for maximum compatibility.
+    browser: Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: false,
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
