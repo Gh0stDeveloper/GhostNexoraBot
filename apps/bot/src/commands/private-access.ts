@@ -62,17 +62,23 @@ export const privateAccessCommands: BotCommand[] = [
   },
   {
     name: 'privaterevoke', aliases: ['denyprivate', 'privateremove'], category: 'owner', staffOnly: true,
-    description: 'Revoca inmediatamente cualquier acceso privado activo de un usuario.',
+    description: 'Revoca los permisos privados concedidos manualmente por el staff.',
     usage: 'privaterevoke @usuario',
     async handler(ctx) {
       const target = await resolveTarget(ctx)
       const removed = revokePrivateAccess(target)
-      await ctx.socket.sendMessage(ctx.chatId, {
-        text: removed
-          ? `🔒 *ACCESO PRIVADO REVOCADO*\n━━━━━━━━━━━━━━\n@${target.split('@')[0]} ya no puede usar módulos privados hasta volver a comprar o recibir permiso.`
-          : `ℹ️ @${target.split('@')[0]} no tenía un acceso privado activo registrado.`,
-        mentions: [target],
-      }, { quoted: ctx.message })
+      const remaining = privateAccessStatus(target)
+      let text: string
+      if (!removed) {
+        text = remaining
+          ? `ℹ️ @${target.split('@')[0]} no tenía una concesión manual que retirar. Su acceso activo se conserva hasta *${fmtExpiry(remaining.expiresAt, remaining.permanent)}*.`
+          : `ℹ️ @${target.split('@')[0]} no tenía una concesión manual de acceso privado.`
+      } else if (remaining) {
+        text = `🔐 *PERMISO MANUAL REVOCADO*\n━━━━━━━━━━━━━━\nSe retiraron ${removed} concesión(es) administrativas de @${target.split('@')[0]}.\n\nSu acceso comprado sigue activo hasta *${fmtExpiry(remaining.expiresAt, remaining.permanent)}*.`
+      } else {
+        text = `🔒 *PERMISO MANUAL REVOCADO*\n━━━━━━━━━━━━━━\n@${target.split('@')[0]} ya no tiene acceso privado activo.\n\nLas suscripciones compradas nunca se eliminan mediante este comando.`
+      }
+      await ctx.socket.sendMessage(ctx.chatId, { text, mentions: [target] }, { quoted: ctx.message })
     },
   },
   {
