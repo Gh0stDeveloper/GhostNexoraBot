@@ -35,7 +35,6 @@ export async function mediaToSticker(media: DownloadedMedia, effect: StickerEffe
     author: 'Ghost Developer',
     type: StickerTypes.FULL,
     quality: 78,
-    categories: ['👻'],
   })
   return sticker.toBuffer()
 }
