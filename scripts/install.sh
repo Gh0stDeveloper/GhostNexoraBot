@@ -8,11 +8,25 @@ SERVICE_USER="${SERVICE_USER:-ghostbot}"
 BRANCH="${BRANCH:-main}"
 BOT_DOMAIN="${BOT_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
+WEB_PORT="${WEB_PORT:-3000}"
+BOT_HEALTH_PORT="${BOT_HEALTH_PORT:-3001}"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Este instalador debe ejecutarse con sudo/root."
   exit 1
 fi
+
+if [[ "${WEB_PORT}" == "${BOT_HEALTH_PORT}" ]]; then
+  echo "WEB_PORT y BOT_HEALTH_PORT deben ser diferentes."
+  exit 1
+fi
+
+for port in "${WEB_PORT}" "${BOT_HEALTH_PORT}"; do
+  if ! [[ "${port}" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    echo "Puerto interno inválido: ${port}"
+    exit 1
+  fi
+done
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -59,6 +73,9 @@ set_env() {
 set_env SESSION_DIR "${STATE_DIR}/session"
 set_env DATA_DIR "${STATE_DIR}/data"
 set_env MAX_DOWNLOAD_MB "1900"
+set_env WEB_PORT "${WEB_PORT}"
+set_env BOT_HEALTH_PORT "${BOT_HEALTH_PORT}"
+set_env BOT_HEALTH_URL "http://127.0.0.1:${BOT_HEALTH_PORT}/health"
 set_env OFFICIAL_CHANNEL_URL "https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i"
 
 CURRENT_ADMIN_TOKEN="$(grep '^ADMIN_WEB_TOKEN=' .env | cut -d= -f2- || true)"
@@ -69,7 +86,7 @@ fi
 if [[ -n "${BOT_DOMAIN}" ]]; then
   set_env PUBLIC_WEB_URL "https://${BOT_DOMAIN}"
 else
-  set_env PUBLIC_WEB_URL "http://127.0.0.1:3000"
+  set_env PUBLIC_WEB_URL "http://127.0.0.1:${WEB_PORT}"
 fi
 
 chown root:"${SERVICE_USER}" .env
@@ -84,6 +101,8 @@ sed -i \
   -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
   -e "s|__STATE_DIR__|${STATE_DIR}|g" \
   -e "s|__SERVICE_USER__|${SERVICE_USER}|g" \
+  -e "s|__WEB_PORT__|${WEB_PORT}|g" \
+  -e "s|__BOT_HEALTH_PORT__|${BOT_HEALTH_PORT}|g" \
   /etc/systemd/system/ghost-nexora-bot.service \
   /etc/systemd/system/ghost-nexora-web.service
 systemctl daemon-reload
@@ -124,7 +143,7 @@ server {
     server_name ${BOT_DOMAIN};
     client_max_body_size 2g;
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:${WEB_PORT};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -144,7 +163,9 @@ fi
 
 echo
 echo "Ghost Nexora Bot instalado."
-if [[ -n "${BOT_DOMAIN}" ]]; then echo "Web: https://${BOT_DOMAIN}"; else echo "Web local: http://127.0.0.1:3000"; fi
+if [[ -n "${BOT_DOMAIN}" ]]; then echo "Web: https://${BOT_DOMAIN}"; else echo "Web local: http://127.0.0.1:${WEB_PORT}"; fi
+echo "Web interna: http://127.0.0.1:${WEB_PORT}"
+echo "Health interno: http://127.0.0.1:${BOT_HEALTH_PORT}/health"
 echo "Estado: systemctl status ghost-nexora-bot --no-pager"
 echo "Logs: journalctl -u ghost-nexora-bot -f"
 echo "Configuración: ${INSTALL_DIR}/.env"
