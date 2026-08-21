@@ -63,7 +63,7 @@ export class CommandRouter {
       await react('⚡')
 
       if (!isGroup && settings.privateCommandsRequireAccess && !isOwner) {
-        const freeCategories = new Set(['general', 'economy', 'subbots'])
+        const freeCategories = new Set(['general', 'economy', 'collection', 'subbots'])
         if (!freeCategories.has(command.category) && !economy.hasEntitlement(sender, 'private_access')) {
           await reply(`🔐 El uso privado de este módulo requiere acceso. Consulta *${prefix}shop* para comprar una suscripción con Nexora Coins.`)
           await react('🔒')
