@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio'
 import { logger } from '../utils/logger.js'
 import { resolveCobaltYouTube } from './youtube-cobalt.js'
 import { resolveExternalYouTubeMp3 } from './youtube-mp3-external.js'
+import { resolveExternalYouTubeMp4 } from './youtube-mp4-external.js'
 
 const mobileSearchUrl = 'https://m.youtube.com/results'
 const yt1sSearchUrl = 'https://www.yt1s.com/api/ajaxSearch/index'
@@ -213,7 +214,7 @@ async function yt1sConvert(videoId: string, key: string) {
       accept: 'application/json, text/plain, */*',
     },
     body: new URLSearchParams({ vid: videoId, k: key }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(35_000),
   })
   if (!response.ok) throw new Error(`yt1s convert respondió HTTP ${response.status}.`)
   const type = response.headers.get('content-type') ?? ''
@@ -267,7 +268,7 @@ function compactProviderError(error: unknown) {
 }
 
 export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', requestedQuality = 720): Promise<Yt1sDirect> {
-  let externalMp3Error: unknown
+  let primaryError: unknown
   if (kind === 'mp3') {
     try {
       const direct = await resolveExternalYouTubeMp3(youtubeUrl)
@@ -278,8 +279,23 @@ export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', reque
         fileName: direct.fileName,
       }
     } catch (error) {
-      externalMp3Error = error
+      primaryError = error
       logger.warn({ errorMessage: compactProviderError(error), kind }, 'youtube external mp3 provider failed; trying cobalt')
+    }
+  } else {
+    try {
+      const direct = await resolveExternalYouTubeMp4(youtubeUrl, requestedQuality)
+      return {
+        url: direct.url,
+        title: direct.title ?? '',
+        author: direct.author,
+        duration: direct.duration,
+        quality: `${requestedQuality}p`,
+        fileName: direct.fileName,
+      }
+    } catch (error) {
+      primaryError = error
+      logger.warn({ errorMessage: compactProviderError(error), kind }, 'youtube external mp4 provider failed; trying cobalt')
     }
   }
 
@@ -300,7 +316,7 @@ export async function yt1sResolve(youtubeUrl: string, kind: 'mp3' | 'mp4', reque
   try {
     return await yt1sLegacyResolve(youtubeUrl, kind, requestedQuality)
   } catch (legacyError) {
-    const external = kind === 'mp3' ? `YTMP3.GE: ${compactProviderError(externalMp3Error)} · ` : ''
-    throw new Error(`${external}Cobalt: ${compactProviderError(cobaltError)} · yt1s: ${compactProviderError(legacyError)}`)
+    const primaryLabel = kind === 'mp3' ? 'YTMP3.GE' : 'Piped'
+    throw new Error(`${primaryLabel}: ${compactProviderError(primaryError)} · Cobalt: ${compactProviderError(cobaltError)} · yt1s: ${compactProviderError(legacyError)}`)
   }
 }
