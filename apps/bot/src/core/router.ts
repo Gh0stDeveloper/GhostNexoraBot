@@ -24,6 +24,22 @@ function canonicalUserJid(candidates: string[], fallback: string) {
 
 const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance'])
 const disabledGroupBootstrapCommands = new Set(['menu', 'bot'])
+const youtubeDownloadCommands = new Set(['play', 'playvideo', 'ytformats', 'ytmp3', 'ytmp4'])
+const youtubeSafeClientErrors = [
+  /^Debes indicar\b/i,
+  /^URL inválida\b/i,
+  /^Solo se permiten URLs HTTP\/HTTPS\b/i,
+  /^La URL no pertenece a youtube\b/i,
+  /^No (?:encontré|se encontraron)\b/i,
+  /^El archivo supera el límite configurado\b/i,
+]
+
+function publicCommandError(commandName: string, error: unknown) {
+  const message = error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
+  if (!youtubeDownloadCommands.has(commandName)) return message
+  if (youtubeSafeClientErrors.some((pattern) => pattern.test(message))) return message
+  return 'Error interno en el servidor, método no disponible por el momento.'
+}
 
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
@@ -168,7 +184,8 @@ export class CommandRouter {
       return true
     } catch (error) {
       logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')
-      await reply(`❌ *NO PUDE COMPLETAR ${prefix}${command.name}*\n━━━━━━━━━━━━━━\n${error instanceof Error ? error.message : 'Ocurrió un error inesperado.'}`).catch(() => undefined)
+      const publicError = publicCommandError(command.name, error)
+      await reply(`❌ *NO PUDE COMPLETAR ${prefix}${command.name}*\n━━━━━━━━━━━━━━\n${publicError}`).catch(() => undefined)
       await react('❌').catch(() => undefined)
       return true
     }
