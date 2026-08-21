@@ -26,6 +26,44 @@ function nativeButtons(buttons: InteractiveButton[]) {
     : { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: button.text, url: button.url, merchant_url: button.url }) })
 }
 
+function nativeFlow(buttons: InteractiveButton[]) {
+  return proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+    buttons: nativeButtons(buttons),
+    messageParamsJson: '{}',
+    messageVersion: 1,
+  })
+}
+
+function interactiveRelayNodes(chatId: string) {
+  const bizNode = {
+    tag: 'biz',
+    attrs: {
+      actual_actors: '2',
+      host_storage: '2',
+      privacy_mode_ts: String(Math.floor(Date.now() / 1000)),
+    },
+    content: [
+      {
+        tag: 'interactive',
+        attrs: { type: 'native_flow', v: '1' },
+        content: [
+          {
+            tag: 'native_flow',
+            attrs: { v: '9', name: 'mixed' },
+          },
+        ],
+      },
+      {
+        tag: 'quality_control',
+        attrs: { source_type: 'third_party' },
+      },
+    ],
+  }
+
+  if (chatId.endsWith('@g.us')) return [bizNode]
+  return [{ tag: 'bot', attrs: { biz_bot: '1' } }, bizNode]
+}
+
 async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
   if (!imageUrl) return undefined
   try {
@@ -73,18 +111,19 @@ export async function sendInteractiveCard(
             hasMediaAttachment: Boolean(imageMessage),
             ...(imageMessage ? { imageMessage } : {}),
           }),
-          nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({ buttons: nativeButtons(input.buttons ?? []) }),
+          nativeFlowMessage: nativeFlow(input.buttons ?? []),
         }),
       },
     },
   }, { quoted, userJid })
+  const additionalNodes = interactiveRelayNodes(chatId)
   try {
     await withTimeout(
-      socket.relayMessage(chatId, message.message!, { messageId: message.key.id! }),
+      socket.relayMessage(chatId, message.message!, { messageId: message.key.id!, additionalNodes }),
       25_000,
       'interactive card relay',
     )
-    logger.info({ chatId, messageId: message.key.id }, 'interactive card relay completed')
+    logger.info({ chatId, messageId: message.key.id, relayNodes: additionalNodes.map((node) => node.tag) }, 'interactive card relay completed')
   } catch (error) {
     logger.warn({ error, chatId }, 'interactive card relay failed; sending text fallback')
     await sendTextFallback(socket, chatId, quoted, input.title, input.body, input.footer)
@@ -112,7 +151,7 @@ export async function sendCarousel(
         hasMediaAttachment: Boolean(imageMessage),
         ...(imageMessage ? { imageMessage } : {}),
       }),
-      nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({ buttons: nativeButtons(card.buttons) }),
+      nativeFlowMessage: nativeFlow(card.buttons),
     }
   })
 
@@ -130,13 +169,14 @@ export async function sendCarousel(
     },
   }, { quoted, userJid })
 
+  const additionalNodes = interactiveRelayNodes(chatId)
   try {
     await withTimeout(
-      socket.relayMessage(chatId, message.message!, { messageId: message.key.id! }),
+      socket.relayMessage(chatId, message.message!, { messageId: message.key.id!, additionalNodes }),
       25_000,
       'carousel relay',
     )
-    logger.info({ chatId, messageId: message.key.id, cards: cards.length }, 'carousel relay completed')
+    logger.info({ chatId, messageId: message.key.id, cards: cards.length, relayNodes: additionalNodes.map((node) => node.tag) }, 'carousel relay completed')
   } catch (error) {
     logger.warn({ error, chatId, cards: cards.length }, 'carousel relay failed; sending text fallback')
     const summary = input.cards.slice(0, 10).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
