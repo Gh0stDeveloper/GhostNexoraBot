@@ -44,10 +44,14 @@ export class CommandRouter {
 
     const chatId = message.key.remoteJid
     if (!chatId) return false
-    const sender = getSender(message)
-    const senderCandidates = getSenderCandidates(message).map(normalizeJid).filter(Boolean)
-    const senderNumbers = getSenderCandidates(message).map(digitsFromJid).filter(Boolean)
-    const isOwner = senderNumbers.some((number) => config.owners.includes(number))
+    const me = socket.authState.creds.me
+    const selfCandidates = [me?.id, me?.lid].filter((value): value is string => Boolean(value))
+    const incomingCandidates = getSenderCandidates(message)
+    const rawSenderCandidates = message.key.fromMe ? selfCandidates : incomingCandidates
+    const senderCandidates = rawSenderCandidates.map(normalizeJid).filter(Boolean)
+    const sender = message.key.fromMe ? (me?.id ?? getSender(message)) : getSender(message)
+    const senderNumbers = rawSenderCandidates.map(digitsFromJid).filter(Boolean)
+    const isOwner = Boolean(message.key.fromMe) || senderNumbers.some((number) => config.owners.includes(number))
     const isGroup = chatId.endsWith('@g.us')
 
     const reply = (replyText: string) => socket.sendMessage(chatId, { text: replyText }, { quoted: message })
@@ -76,8 +80,7 @@ export class CommandRouter {
 
         const metadata = await socket.groupMetadata(chatId)
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
-        const me = socket.authState.creds.me
-        const botCandidates = [me?.id, me?.lid].map(normalizeJid).filter(Boolean)
+        const botCandidates = selfCandidates.map(normalizeJid).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
         const senderIsAdmin = Boolean(senderParticipant?.admin) || isOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
@@ -99,7 +102,7 @@ export class CommandRouter {
         message,
         chatId,
         sender,
-        pushName: message.pushName ?? 'Usuario',
+        pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : 'Usuario'),
         commandName: command.name,
         args,
         argText: args.join(' '),
