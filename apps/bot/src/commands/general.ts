@@ -3,7 +3,7 @@ import type { BotCommand } from '../types.js'
 import { getBrandingAsset } from '../services/branding.js'
 import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
-import { sendInteractiveCard } from '../services/interactive.js'
+import { sendCarousel, type CarouselCard } from '../services/interactive.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
 
 function formatUptime(seconds: number) {
@@ -33,32 +33,9 @@ function identity(ctx: Parameters<BotCommand['handler']>[0]) {
   return { shortName: ctx.settings.botDisplayName, longName: ctx.settings.botDisplayName, currencyName: ctx.settings.currencyName, label: 'MainBot' }
 }
 
-async function sendMenu(ctx: Parameters<BotCommand['handler']>[0], artwork: string | undefined, menu: string, brand: ReturnType<typeof identity>) {
-  let delivered = false
-  if (artwork) {
-    const sent = await ctx.socket.sendMessage(ctx.chatId, {
-      image: { url: artwork },
-      caption: menu,
-    }, { quoted: ctx.message }).catch(() => null)
-    delivered = Boolean(sent)
-  }
-  if (!delivered) await ctx.reply(menu)
-
-  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: `👻 ${brand.shortName} · ACCESOS RÁPIDOS`,
-    body: 'Selecciona una opción.',
-    footer: 'Ghost Developer / Nexora',
-    buttons: [
-      { type: 'url', text: '📢 Ver canal', url: config.officialChannelUrl },
-      { type: 'reply', text: '👤 Mi perfil', id: `${ctx.prefix}profile` },
-      { type: 'reply', text: '🛒 Tienda', id: `${ctx.prefix}shop` },
-    ],
-  }).catch(() => undefined)
-}
-
 export const generalCommands: BotCommand[] = [
   {
-    name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo.',
+    name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo en un único carrusel interactivo.',
     async handler(ctx) {
       const p = ctx.prefix
       const artwork = await menuArtwork(ctx)
@@ -66,155 +43,129 @@ export const generalCommands: BotCommand[] = [
       const privateUntil = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner ? null : economy.hasEntitlement(ctx.sender, 'private_access')
       const privateUnlocked = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner || Boolean(privateUntil)
       const groupEnabled = !ctx.isGroup || community.getGroupSettings(ctx.chatId).botEnabled
+      const profession = economy.profession(ctx.sender)
+      const role = ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : ctx.isSubbotOwner ? 'Owner del subbot' : 'Usuario'
+      const access = ctx.isGroup
+        ? `Grupo: ${groupEnabled ? 'ON' : 'OFF'}${!groupEnabled ? ` · activa con ${p}bot on` : ''}`
+        : `Privado: ${privateUnlocked ? 'HABILITADO' : 'BLOQUEADO'}${privateUntil ? ` hasta ${new Date(privateUntil).toLocaleString('es-MX')}` : ''}`
 
-      const accessLines = [
-        ctx.isGroup ? `┃ 👥 Grupo » *${groupEnabled ? 'ON' : 'OFF'}*` : `┃ 🔐 Privado » *${privateUnlocked ? 'HABILITADO' : 'BLOQUEADO'}*`,
-        privateUntil ? `┃ ⏳ Acceso hasta » *${new Date(privateUntil).toLocaleString('es-MX')}*` : '',
-        ctx.isGroup && !groupEnabled ? `┃ ▶️ Activar » *${p}bot on*` : '',
-        !ctx.isGroup && !privateUnlocked ? `┃ 🛒 Acceso » *${p}shop*` : '',
-      ].filter(Boolean).join('\n')
+      const cards: CarouselCard[] = [
+        {
+          title: `👻 ${brand.longName}`,
+          body: [
+            `⚙️ ${brand.label}`,
+            `👤 ${ctx.pushName} · ${role}`,
+            `⌨️ Prefijo: ${p}`,
+            `⏱️ Uptime: ${formatUptime(process.uptime())}`,
+            `🪙 ${brand.currencyName} (NXC)`,
+            `💼 ${profession.emoji} ${profession.label}`,
+            `🔐 ${access}`,
+            '',
+            'Desliza para ver todas las categorías.',
+          ].join('\n'),
+          imageUrl: artwork,
+          footer: 'Ghost Developer / Nexora',
+          buttons: [
+            { type: 'url', text: '📢 Ver canal', url: config.officialChannelUrl },
+            { type: 'reply', text: '👤 Mi perfil', id: `${p}profile` },
+            { type: 'reply', text: '🛒 Tienda', id: `${p}shop` },
+          ],
+        },
+        {
+          title: '🧠 IA · BÚSQUEDA',
+          body: `${p}ai <pregunta> · ${p}investiga <tema>\n${p}google <búsqueda> · ${p}wiki <búsqueda>\n${p}anime <título> · ${p}manga <título>\n${p}mangachapters <id|url> [es|en]\n${p}mangadl <id|url> <cap|latest> [es|en]`,
+          buttons: [
+            { type: 'reply', text: '🤖 Estado IA', id: `${p}aistatus` },
+            { type: 'reply', text: '🌐 Wikipedia', id: `${p}wiki WhatsApp` },
+          ],
+        },
+        {
+          title: '🎵 DESCARGAS',
+          body: `YouTube: ${p}yts · ${p}play · ${p}ytmusic · ${p}yt\n${p}ytmp3 · ${p}ytmp4 · ${p}playvideo · ${p}ytformats\n${p}lyrics · ${p}soundcloud\n\nRedes: ${p}tiktok · ${p}instagram · ${p}facebook · ${p}twitter\nArchivos: ${p}mediafire · ${p}gdrive · ${p}gitclone · ${p}apk`,
+          buttons: [
+            { type: 'reply', text: '🎵 Buscar YouTube', id: `${p}yts música` },
+            { type: 'reply', text: '🎬 TikTok', id: `${p}tiktok videos` },
+          ],
+        },
+        {
+          title: '🪙 ECONOMÍA · TRABAJO',
+          body: `${p}bal · ${p}daily · ${p}work [profesión]\n${p}job · ${p}slut · ${p}crime\n${p}deposit · ${p}withdraw · ${p}pay @user <monto>\n${p}rob @user · ${p}invest · ${p}cda\n${p}loan · ${p}paydebt · ${p}lend\n${p}baltop · ${p}balglobal`,
+          buttons: [
+            { type: 'reply', text: '💼 Profesiones', id: `${p}job` },
+            { type: 'reply', text: '🪙 Mi saldo', id: `${p}balance` },
+            { type: 'reply', text: '🛒 Nexora Store', id: `${p}shop` },
+          ],
+        },
+        {
+          title: '📖 RPG · JUEGOS · GACHA',
+          body: `RPG: ${p}grimorio · ${p}tienda · ${p}comprar · ${p}usar\nJuegos: ${p}flip · ${p}dados · ${p}bj · ${p}bjvs\n${p}ttt · ${p}lttt · ${p}tpvp · ${p}damas · ${p}damasbot\nGacha: ${p}rw · ${p}claim · ${p}harem · ${p}wsearch · ${p}winfo\n${p}trade · ${p}setfav · ${p}vote · ${p}wtop`,
+          buttons: [
+            { type: 'reply', text: '📖 Grimorio', id: `${p}grimorio` },
+            { type: 'reply', text: '🛍️ Tienda RPG', id: `${p}tienda` },
+            { type: 'reply', text: '🌸 Waifu', id: `${p}rw` },
+          ],
+        },
+        {
+          title: '💞 SOCIAL · REACCIONES',
+          body: `Perfil: ${p}profile · ${p}setdesc · ${p}setbirth · ${p}setgender\n${p}level · ${p}tops · ${p}vr · ${p}marry · ${p}divorce\n\nReacciones: ${p}hug · ${p}kiss · ${p}pat · ${p}nuzzle · ${p}blush\n${p}wink · ${p}wave · ${p}dance · ${p}poke · ${p}bite\n${p}slap · ${p}punch · ${p}patear · ${p}cry · ${p}spell`,
+          buttons: [
+            { type: 'reply', text: '👤 Perfil', id: `${p}profile` },
+            { type: 'reply', text: '🫂 Abrazo', id: `${p}hug` },
+          ],
+        },
+        {
+          title: '🎨 STICKERS · HERRAMIENTAS',
+          body: `${p}s [efecto] · soporta imagen/GIF/video corto\n${p}spack <nombre> | <autor>\n${p}sauthor <alias> · ${p}stickereffects\n${p}toimage · ${p}sprite <personaje>\n${p}groupinfo · ${p}safebooru [tags]`,
+          buttons: [
+            { type: 'reply', text: '🎨 Efectos', id: `${p}stickereffects` },
+            { type: 'reply', text: '📦 Mi pack', id: `${p}spack` },
+          ],
+        },
+        {
+          title: '👥 ADMINISTRACIÓN DE GRUPOS',
+          body: `${p}bot on|off|status · ${p}tag · ${p}hidetag\n${p}kick · ${p}promote · ${p}demote · ${p}del\n${p}open · ${p}close · ${p}link\n${p}antilink on|off · ${p}nsfw on|off\n${p}welcome on|off · ${p}goodbye on|off\n${p}setwelcome · ${p}setgoodbye`,
+          buttons: [
+            { type: 'reply', text: '🤖 Estado bot', id: `${p}bot status` },
+            { type: 'reply', text: '👥 Info grupo', id: `${p}groupinfo` },
+          ],
+        },
+        {
+          title: '🤖 SUBBOTS · PERSONALIZACIÓN',
+          body: `${p}subbot status\n${p}subbot pair <número>\n${p}subbot qr · fallback QR local\n${p}subbot portal\n\nPersonalización autorizada: ${p}setbotname · ${p}setbotcurrency · ${p}setpfp\n${p}sb · ${p}welbanner · ${p}byebanner`,
+          buttons: [
+            { type: 'reply', text: '🤖 Mi subbot', id: `${p}subbot status` },
+            { type: 'reply', text: '📲 QR subbot', id: `${p}subbot qr` },
+            { type: 'reply', text: '🛒 Comprar subbot', id: `${p}shop` },
+          ],
+        },
+        {
+          title: '🔞 CONTENIDO 18+',
+          body: `${p}adult18 accept\n${p}xvideos <búsqueda|url> · ${p}xnxx <búsqueda|url>\n${p}pornhub <búsqueda|url>\n${p}erome · ${p}erome search <texto>\n${p}erome profiles <usuario> · ${p}erome profile <usuario|url>\n${p}erome album <id|url> · ${p}erome dl <id|url> <video>\n${p}gelbooru [tags] · ${p}e621 [tags]`,
+          buttons: [
+            { type: 'reply', text: '🔞 Erome', id: `${p}erome` },
+          ],
+        },
+      ]
 
-      const customizationSection = ctx.isBotStaff || ctx.isSubbotOwner ? `
-╭─〔 🎛️ *PERSONALIZACIÓN* 〕
-│ ${p}setbotname corto / largo
-│ ${p}setbotcurrency <nombre> · ${p}setpfp
-│ ${p}sb · ${p}welbanner · ${p}byebanner
-│ ${p}delbanner · ${p}delwelbanner · ${p}delbyebanner
-╰────────────────` : ''
+      if (ctx.isBotStaff || ctx.isSubbotOwner) {
+        cards.push({
+          title: '🛡️ STAFF · CONTROL',
+          body: ctx.isBotStaff
+            ? `${p}system · ${p}speedtest · ${p}status\n${p}botadmins · ${p}suggestions · ${p}adultmode on|off\n${p}privategrant · ${p}privaterevoke · ${p}privatestatus\n${p}privateusers${ctx.isOwner ? `\n${p}botadmin add|remove · ${p}setprefix · ${p}restart` : ''}`
+            : `Owner de ${brand.label}\n${p}setbotname · ${p}setbotcurrency · ${p}setpfp\n${p}sb · ${p}welbanner · ${p}byebanner`,
+          buttons: [
+            { type: 'reply', text: '📊 Estado', id: `${p}status` },
+            ...(ctx.isBotStaff ? [{ type: 'reply' as const, text: '🖥️ Sistema', id: `${p}system` }] : []),
+          ],
+        })
+      }
 
-      const staffSection = ctx.isBotStaff ? `
-╭─〔 🛡️ *STAFF DEL BOT* 〕
-│ ${p}system · ${p}speedtest · ${p}status
-│ ${p}botadmins · ${p}suggestions
-│ ${p}adultmode on|off
-│ ${p}privategrant @user [30d|permanent]
-│ ${p}privaterevoke @user · ${p}privatestatus @user
-│ ${p}privateusers
-${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}restart` : ''}
-╰────────────────` : ''
-
-      const menu = `
-╭━━━〔 👻 *${brand.longName.toUpperCase()}* 〕━━━╮
-┃ ⚙️ Instancia » *${brand.label}*
-┃ 👤 Usuario » *${ctx.pushName}*
-┃ ⌨️ Prefijo » *${p}*
-┃ ⏱️ Uptime » *${formatUptime(process.uptime())}*
-┃ 🪙 Moneda » *${brand.currencyName} (NXC)*
-┃ 🏷️ Rol » *${ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : ctx.isSubbotOwner ? 'Owner del subbot' : 'Usuario'}*
-${accessLines}
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-╭─〔 🧠 *IA · BÚSQUEDA · CONOCIMIENTO* 〕
-│ ${p}ai <pregunta> · ${p}investiga <tema>
-│ ${p}google <búsqueda> · ${p}wiki <búsqueda>
-│ ${p}anime <búsqueda> · ${p}manga <búsqueda>
-│ ${p}mangachapters <id|url> [es|en]
-│ ${p}mangadl <id|url> <cap|latest> [es|en]
-╰────────────────
-
-╭─〔 🎵 *DESCARGAS · YOUTUBE Y AUDIO* 〕
-│ ${p}yts <búsqueda> · ${p}play <búsqueda|url>
-│ ${p}ytmusic <búsqueda|url> · ${p}yt <búsqueda|url> [calidad]
-│ ${p}ytmp3 <url> · ${p}ytmp4 <url> [calidad]
-│ ${p}playvideo <búsqueda> · ${p}ytformats <url>
-│ ${p}lyrics <canción> · ${p}soundcloud <url|búsqueda>
-╰────────────────
-
-╭─〔 📲 *DESCARGAS · REDES Y ARCHIVOS* 〕
-│ ${p}tiktok <url|búsqueda> · ${p}tiktok profiles <usuario>
-│ ${p}tiktok profile <@usuario|url>
-│ ${p}instagram <url> · ${p}facebook <url>
-│ ${p}twitter <url> · ${p}mediafire <url>
-│ ${p}gdrive <url> · ${p}gitclone <url> · ${p}apk <app>
-╰────────────────
-
-╭─〔 🌐 *GENERAL* 〕
-│ ${p}menu · ${p}ping · ${p}info · ${p}channel
-│ ${p}suggest <mensaje> · ${p}join <enlace> · ${p}cd
-╰────────────────
-
-╭─〔 👤 *PERFIL Y SOCIAL* 〕
-│ ${p}profile · ${p}setdesc · ${p}setbirth DD/MM
-│ ${p}setgender · ${p}level · ${p}tops · ${p}vr
-│ ${p}marry @user · ${p}divorce
-│ ${p}amante @user · ${p}terminar
-╰────────────────
-
-╭─〔 🪙 *ECONOMÍA Y FINANZAS* 〕
-│ ${p}bal · ${p}daily · ${p}work · ${p}slut · ${p}crime
-│ ${p}deposit · ${p}withdraw · ${p}pay @user <monto>
-│ ${p}rob @user · ${p}invest · ${p}cda
-│ ${p}loan · ${p}paydebt · ${p}lend @user <monto>
-│ ${p}baltop · ${p}balglobal · ${p}shop · ${p}buy
-╰────────────────
-
-╭─〔 📖 *GRIMORIO RPG* 〕
-│ ${p}grimorio · ${p}tienda · ${p}comprar <item>
-│ ${p}usar <item> [@user] · ${p}givegema @user [cant]
-│ Items » tiempo · deseo · fortuna · sombras
-│          escudo · renacer · maldicion
-╰────────────────
-
-╭─〔 🎮 *JUEGOS Y APUESTAS NXC* 〕
-│ ${p}flip · ${p}dados · ${p}bj · ${p}bjvs
-│ ${p}ttt · ${p}lttt · ${p}tpvp
-│ ${p}damas · ${p}damasbot
-╰────────────────
-
-╭─〔 🌸 *GACHA Y COLECCIÓN* 〕
-│ ${p}rw · ${p}claim · ${p}harem
-│ ${p}wsearch · ${p}winfo · ${p}wimage
-│ ${p}ainfo · ${p}alist · ${p}givewaifu
-│ ${p}giveallharem · ${p}trade · ${p}delchar
-│ ${p}setfav · ${p}setclaim · ${p}vote
-│ ${p}topwaifus · ${p}wtop · ${p}add
-╰────────────────
-
-╭─〔 💞 *REACCIONES* 〕
-│ ${p}hug · ${p}kiss · ${p}pat · ${p}nuzzle
-│ ${p}blush · ${p}wink · ${p}wave · ${p}dance
-│ ${p}poke · ${p}bite · ${p}slap · ${p}punch
-│ ${p}patear · ${p}kill · ${p}crazy · ${p}bug
-│ ${p}cry · ${p}spell · ${p}seducir · ${p}saborear
-╰────────────────
-
-╭─〔 🎨 *STICKERS Y HERRAMIENTAS* 〕
-│ ${p}s · ${p}spack <nombre> · ${p}stickereffects
-│ ${p}toimage · ${p}sprite <personaje>
-│ ${p}groupinfo · ${p}safebooru [tags]
-╰────────────────
-
-╭─〔 👥 *ADMINISTRACIÓN DE GRUPOS* 〕
-│ ${p}bot on|off|status · ${p}tag · ${p}hidetag
-│ ${p}kick · ${p}promote · ${p}demote · ${p}del
-│ ${p}open · ${p}close · ${p}link
-│ ${p}antilink on|off · ${p}nsfw on|off
-│ ${p}welcome on|off · ${p}goodbye on|off
-│ ${p}setwelcome <frase> · ${p}setgoodbye <frase>
-╰────────────────
-
-╭─〔 🤖 *SUBBOTS* 〕
-│ ${p}subbot status · ${p}subbot pair <número>
-│ ${p}subbot portal
-╰────────────────
-
-╭─〔 🔞 *DESCARGAS Y CONTENIDO 18+* 〕
-│ ${p}adult18 accept
-│ ${p}xvideos <búsqueda|url>
-│ ${p}xnxx <búsqueda|url>
-│ ${p}pornhub <búsqueda|url>
-│ ${p}erome · ${p}erome search <texto>
-│ ${p}erome profiles <usuario> · ${p}erome profile <usuario|url>
-│ ${p}erome album <id|url> · ${p}erome dl <id|url> <video>
-│ ${p}gelbooru [tags] · ${p}e621 [tags]
-╰────────────────
-${customizationSection}
-${staffSection}
-
-📢 *Canal oficial y accesos rápidos disponibles debajo del menú.*
-*Ghost Developer / Nexora*`.trim()
-
-      await sendMenu(ctx, artwork, menu, brand)
+      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+        title: `👻 ${brand.shortName} · MENÚ`,
+        body: `Hola ${ctx.pushName}. Todo el menú y sus accesos rápidos están dentro de este único mensaje. ↔️ Desliza las tarjetas.`,
+        footer: 'Ghost Developer / Nexora',
+        cards,
+      })
     },
   },
   {
