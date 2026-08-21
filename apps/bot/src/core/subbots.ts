@@ -3,6 +3,7 @@ import { Boom } from '@hapi/boom'
 import { DisconnectReason, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
 import { economy, type SubbotRecord } from '../services/economy.js'
+import { handleParticipantUpdate } from '../services/moderation.js'
 import { recordSubbotMessage } from '../services/subbot-metrics.js'
 import { logger } from '../utils/logger.js'
 import { createSocket } from './session.js'
@@ -78,6 +79,13 @@ class SubbotManager {
         recordSubbotMessage(record.id)
         await this.handler(socket, message, live).catch((error) => logger.error({ error, subbotId: record.id }, 'subbot message failed'))
       }
+    })
+
+    socket.ev.on('group-participants.update', (update) => {
+      const live = economy.getActiveSubbot(record.ownerJid)
+      if (!live || live.id !== record.id || live.expiresAt <= Date.now()) return
+      void handleParticipantUpdate(socket, update as never, record.id)
+        .catch((error) => logger.error({ error, subbotId: record.id }, 'subbot participant update failed'))
     })
 
     socket.ev.on('connection.update', ({ connection, lastDisconnect }) => {
