@@ -65,7 +65,7 @@ async function connect() {
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
     for (const message of messages) {
-      if (!message.message || message.key.fromMe || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
+      if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
       const handled = await router.handle(socket, message)
       if (!handled) await maybeAutoReact(socket, message)
     }
