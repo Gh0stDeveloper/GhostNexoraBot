@@ -1,4 +1,4 @@
-import { jidNormalizedUser, type WAMessage, type WASocket } from 'baileys'
+import { jidNormalizedUser, type GroupParticipant, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
 import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
@@ -12,6 +12,13 @@ function normalizeJid(value?: string | null) {
   } catch {
     return value
   }
+}
+
+function participantMatches(participant: GroupParticipant, candidates: string[]) {
+  const participantIds = [participant.id, participant.phoneNumber, participant.lid]
+    .map(normalizeJid)
+    .filter(Boolean)
+  return participantIds.some((jid) => candidates.includes(jid))
 }
 
 export class CommandRouter {
@@ -38,6 +45,7 @@ export class CommandRouter {
     const chatId = message.key.remoteJid
     if (!chatId) return false
     const sender = getSender(message)
+    const senderCandidates = getSenderCandidates(message).map(normalizeJid).filter(Boolean)
     const senderNumbers = getSenderCandidates(message).map(digitsFromJid).filter(Boolean)
     const isOwner = senderNumbers.some((number) => config.owners.includes(number))
     const isGroup = chatId.endsWith('@g.us')
@@ -67,9 +75,9 @@ export class CommandRouter {
         }
 
         const metadata = await socket.groupMetadata(chatId)
-        const senderParticipant = metadata.participants.find((participant) => normalizeJid(participant.id) === normalizeJid(sender))
-        const botCandidates = [socket.user?.id, (socket.user as { lid?: string } | undefined)?.lid].map(normalizeJid).filter(Boolean)
-        const botParticipant = metadata.participants.find((participant) => botCandidates.includes(normalizeJid(participant.id)))
+        const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
+        const botCandidates = [socket.user?.id, socket.user?.lid].map(normalizeJid).filter(Boolean)
+        const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
         const senderIsAdmin = Boolean(senderParticipant?.admin) || isOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
 
