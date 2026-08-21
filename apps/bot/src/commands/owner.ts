@@ -85,11 +85,14 @@ export const ownerCommands: BotCommand[] = [
   },
   {
     name: 'privatemode', aliases: ['privateaccess'], category: 'owner', ownerOnly: true,
-    description: 'Hace que los módulos privados requieran suscripción.', usage: 'privatemode on|off',
+    description: 'Muestra la política de acceso premium de chats privados.', usage: 'privatemode status',
     async handler(ctx) {
-      const enabled = toggle(ctx.args[0])
-      await ctx.settings.setPrivateCommandsRequireAccess(enabled)
-      await ctx.reply(`🔐 Acceso privado por suscripción: *${enabled ? 'ON' : 'OFF'}*.`)
+      const action = (ctx.args[0] ?? 'status').toLowerCase()
+      if (['off', 'false', '0', 'disable', 'desactivar'].includes(action)) {
+        throw new Error('El acceso premium en chat privado es obligatorio y no puede desactivarse. Los usuarios deben comprar private1d/private7d/private30d en .shop.')
+      }
+      await ctx.settings.setPrivateCommandsRequireAccess(true)
+      await ctx.reply(`🔐 *CHAT PRIVADO PREMIUM*\n━━━━━━━━━━━━━━\nEstado: *OBLIGATORIO*\nSin private_access solo están disponibles *${ctx.prefix}menu*, *${ctx.prefix}shop*, *${ctx.prefix}balance* y *${ctx.prefix}buy*.`)
     },
   },
   {
@@ -114,7 +117,7 @@ export const ownerCommands: BotCommand[] = [
         `┃ Prefijo » ${ctx.settings.prefix}`,
         `┃ Staff » ${ctx.settings.botAdmins.length} admin(s)`,
         `┃ NSFW global » ${ctx.settings.adultEnabled ? 'ON' : 'OFF'}`,
-        `┃ Privado premium » ${ctx.settings.privateCommandsRequireAccess ? 'ON' : 'OFF'}`,
+        '┃ Privado premium » OBLIGATORIO',
         `┃ Uptime » ${Math.floor(process.uptime())} s`,
         `┃ RSS » ${(memory.rss / 1024 / 1024).toFixed(1)} MB`,
         `┃ Descarga máx. » ${config.maxDownloadMb} MB`,
