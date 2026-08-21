@@ -15,6 +15,7 @@ import {
 import { downloadMediaFire } from '../services/mediafire.js'
 import { resolveExternalSocial, type ExternalSocialPlatform } from '../services/social-external.js'
 import { sendCarousel } from '../services/interactive.js'
+import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 function requireUrl(args: string[]) { const url = args[0]; if (!url) throw new Error('Debes indicar una URL.'); return url }
 function requireText(value: string, label = 'Debes indicar una búsqueda.') { const text = value.trim(); if (!text) throw new Error(label); return text }
@@ -75,6 +76,7 @@ const socialCommand = (name: string, aliases: string[], platform: Exclude<Downlo
     try {
       await sendDownloadInfo(ctx, result.info ?? info, result.size)
       await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `${icon} *${name}* · ${formatBytes(result.size)}\n👻 ${ctx.prefix}menu` }, { quoted: ctx.message })
+      recordSubbotDownload(ctx.instanceId, result.size)
     } finally { await result.cleanup() }
   },
 })
@@ -90,7 +92,7 @@ export const downloadCommands: BotCommand[] = [
         await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
           title: '🎵 YOUTUBE MUSIC',
           body: `✦ GHOST NEXORA · INTERACTIVO ✦\n\n🎵 ${query}\n\n↔️ Desliza para ver más resultados.`,
-          footer: 'Audio · Video · Relacionadas',
+          footer: 'Audio · Letra · Relacionadas',
           cards: results.map((item, index) => ({
             title: `🎵 CANCIÓN #${index + 1}`,
             body: [`🎵 ${item.title}`, `◇ Artista » ${item.channel}`, `◇ Duración » ${formatDuration(item.duration)}`, `◇ Vistas » ${compact(item.views)}`, item.likes !== undefined ? `◇ Likes » ${compact(item.likes)}` : ''].filter(Boolean).join('\n'),
@@ -98,14 +100,14 @@ export const downloadCommands: BotCommand[] = [
             footer: 'Ghost Nexora Bot',
             buttons: [
               { type: 'reply', text: '🎧 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
-              { type: 'reply', text: '🎬 Video', id: `${ctx.prefix}ytmp4 ${item.url} 720` },
+              { type: 'reply', text: '📝 Letra', id: `${ctx.prefix}lyrics ${item.title} ${item.channel}` },
               { type: 'reply', text: '🎶 Relacionadas', id: `${ctx.prefix}yts ${item.title}` },
             ],
           })),
         })
       } catch {
         const lines = results.map((item, i) => `${i + 1}. *${item.title}*\n👤 ${item.channel} · ⏱️ ${formatDuration(item.duration)} · 👁️ ${compact(item.views)}\n${item.url}`)
-        await ctx.reply(`🎵 *YOUTUBE MUSIC*\n\n${lines.join('\n\n')}\n\n🎧 ${ctx.prefix}play <búsqueda>`)
+        await ctx.reply(`🎵 *YOUTUBE MUSIC*\n\n${lines.join('\n\n')}\n\n🎧 ${ctx.prefix}play <búsqueda> · 📝 ${ctx.prefix}lyrics <canción>`)
       }
     },
   },
@@ -118,6 +120,7 @@ export const downloadCommands: BotCommand[] = [
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
@@ -129,6 +132,7 @@ export const downloadCommands: BotCommand[] = [
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `🎬 YouTube · hasta 720p · ${formatBytes(result.size)}` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
@@ -149,6 +153,7 @@ export const downloadCommands: BotCommand[] = [
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
@@ -163,6 +168,7 @@ export const downloadCommands: BotCommand[] = [
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption: `🎬 YouTube · hasta ${quality}p · ${formatBytes(result.size)}` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
@@ -173,6 +179,7 @@ export const downloadCommands: BotCommand[] = [
       try {
         await sendDownloadInfo(ctx, result.info, result.size)
         await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
@@ -186,6 +193,7 @@ export const downloadCommands: BotCommand[] = [
       const result = await downloadMediaFire(requireUrl(ctx.args))
       try {
         await ctx.socket.sendMessage(ctx.chatId, { document: { url: result.filePath }, mimetype: result.contentType, fileName: result.fileName, caption: `☁️ *MediaFire*\n📦 ${result.fileName}\n📏 ${formatBytes(result.size)}` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, result.size)
       } finally { await result.cleanup() }
     },
   },
