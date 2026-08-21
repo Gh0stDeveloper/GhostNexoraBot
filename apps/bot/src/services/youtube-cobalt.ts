@@ -8,7 +8,7 @@ const MAX_PARALLEL_INSTANCES = 6
 const REQUEST_TIMEOUT_MS = 15_000
 
 type DirectoryPayload = {
-  data?: Record<string, unknown>
+  data?: unknown
 }
 
 type CobaltResponse = {
@@ -31,6 +31,10 @@ export type CobaltResolved = {
 
 let directoryCache: { expiresAt: number; urls: string[] } | null = null
 let rotation = 0
+
+function errorMessage(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').slice(0, 240)
+}
 
 function privateIpv4(host: string) {
   const parts = host.split('.').map(Number)
@@ -74,6 +78,52 @@ function customInstances() {
     .filter((value): value is string => Boolean(value))
 }
 
+function containsYoutube(value: unknown, seen = new Set<unknown>()): boolean {
+  if (typeof value === 'string') return value.toLowerCase().includes('youtube')
+  if (!value || typeof value !== 'object' || seen.has(value)) return false
+  seen.add(value)
+  if (Array.isArray(value)) return value.some((item) => containsYoutube(item, seen))
+  return Object.entries(value as Record<string, unknown>).some(([key, child]) => key.toLowerCase().includes('youtube') || containsYoutube(child, seen))
+}
+
+function collectNormalizedUrls(value: unknown, output: Set<string>, seen = new Set<unknown>()) {
+  if (typeof value === 'string') {
+    const normalized = normalizeInstance(value)
+    if (normalized) output.add(normalized)
+    return
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) return
+  seen.add(value)
+  if (Array.isArray(value)) {
+    for (const item of value) collectNormalizedUrls(item, output, seen)
+    return
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedKey = normalizeInstance(key)
+    if (normalizedKey && containsYoutube(child)) output.add(normalizedKey)
+    if (key.toLowerCase().includes('youtube')) collectNormalizedUrls(child, output, seen)
+    if (child && typeof child === 'object') {
+      const record = child as Record<string, unknown>
+      if (typeof record.url === 'string' && containsYoutube(child)) {
+        const normalized = normalizeInstance(record.url)
+        if (normalized) output.add(normalized)
+      }
+    }
+    collectNormalizedUrls(child, output, seen)
+  }
+}
+
+function directoryYoutubeInstances(data: unknown) {
+  const urls = new Set<string>()
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const record = data as Record<string, unknown>
+    const direct = record.youtube ?? record.YouTube
+    if (direct !== undefined) collectNormalizedUrls(direct, urls)
+  }
+  collectNormalizedUrls(data, urls)
+  return [...urls]
+}
+
 async function directoryInstances() {
   const now = Date.now()
   if (directoryCache && directoryCache.expiresAt > now) return directoryCache.urls
@@ -84,13 +134,11 @@ async function directoryInstances() {
   })
   if (!response.ok) throw new Error(`cobalt.directory respondió HTTP ${response.status}.`)
   const payload = await response.json() as DirectoryPayload
-  const raw = payload.data?.youtube
-  const urls = Array.isArray(raw)
-    ? raw.map((value) => typeof value === 'string' ? normalizeInstance(value) : null).filter((value): value is string => Boolean(value))
-    : []
-  if (!urls.length) throw new Error('cobalt.directory no publicó instancias activas para YouTube.')
+  const urls = directoryYoutubeInstances(payload.data)
+  if (!urls.length) throw new Error('cobalt.directory respondió, pero no pude identificar instancias con soporte YouTube.')
 
   directoryCache = { urls: [...new Set(urls)], expiresAt: now + DIRECTORY_CACHE_MS }
+  logger.info({ instances: directoryCache.urls.length }, 'youtube cobalt directory loaded')
   return directoryCache.urls
 }
 
@@ -100,7 +148,7 @@ async function candidateInstances(): Promise<CobaltInstance[]> {
   try {
     directory = await directoryInstances()
   } catch (error) {
-    logger.warn({ error }, 'youtube cobalt directory unavailable')
+    logger.warn({ errorMessage: errorMessage(error) }, 'youtube cobalt directory unavailable')
   }
 
   if (directory.length > 1) {
@@ -187,9 +235,9 @@ export async function resolveCobaltYouTube(youtubeUrl: string, kind: 'mp3' | 'mp
       try {
         return await tryInstance(instance, youtubeUrl, kind, requestedQuality)
       } catch (error) {
-        logger.warn({ error, provider: instance.url, kind }, 'youtube cobalt provider failed')
-        const message = error instanceof Error ? error.message : String(error)
-        throw new Error(`${new URL(instance.url).hostname}: ${message.replace(/\s+/g, ' ').slice(0, 120)}`)
+        const detail = errorMessage(error)
+        logger.warn({ errorMessage: detail, provider: instance.url, kind }, 'youtube cobalt provider failed')
+        throw new Error(`${new URL(instance.url).hostname}: ${detail.slice(0, 120)}`)
       }
     }))
     logger.info({ provider: result.provider, kind }, 'youtube cobalt provider resolved')
