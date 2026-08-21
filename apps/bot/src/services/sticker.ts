@@ -1,8 +1,12 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import sharp from 'sharp'
 import { execa } from 'execa'
 import type { DownloadedMedia } from '../utils/message.js'
 
 export type StickerEffect = 'normal' | 'fliph' | 'flipv' | 'rotate90' | 'rotate180' | 'rotate270' | 'zoomin' | 'zoomout' | 'circle' | 'square' | 'grayscale'
+export type StickerMetadata = { packName: string; publisher: string }
 
 async function applyImageEffect(buffer: Buffer, effect: StickerEffect) {
   let image = sharp(buffer, { animated: false }).rotate()
@@ -48,14 +52,51 @@ async function videoSticker(buffer: Buffer) {
   return Buffer.from(stdout)
 }
 
-export async function mediaToSticker(media: DownloadedMedia, effect: StickerEffect = 'normal'): Promise<Buffer> {
+function stickerExif(metadata: StickerMetadata) {
+  const json = Buffer.from(JSON.stringify({
+    'sticker-pack-id': `com.ghostnexora.${metadata.packName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').slice(0, 48) || 'default'}`,
+    'sticker-pack-name': metadata.packName,
+    'sticker-pack-publisher': metadata.publisher,
+    emojis: ['👻'],
+  }), 'utf8')
+  const header = Buffer.from([
+    0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00,
+  ])
+  header.writeUInt32LE(json.length, 14)
+  return Buffer.concat([header, json])
+}
+
+async function embedStickerMetadata(webp: Buffer, metadata?: StickerMetadata) {
+  if (!metadata) return webp
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-sticker-'))
+  const input = path.join(dir, 'input.webp')
+  const exif = path.join(dir, 'metadata.exif')
+  const output = path.join(dir, 'output.webp')
+  try {
+    await writeFile(input, webp)
+    await writeFile(exif, stickerExif(metadata))
+    await execa('webpmux', ['-set', 'exif', exif, input, '-o', output], { timeout: 20_000 })
+    return await readFile(output)
+  } catch {
+    // La creación de stickers no debe fallar si una instalación antigua no tiene webpmux.
+    return webp
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+export async function mediaToSticker(media: DownloadedMedia, effect: StickerEffect = 'normal', metadata?: StickerMetadata): Promise<Buffer> {
+  let webp: Buffer
   if (media.kind === 'video') {
     if (media.buffer.byteLength > 20 * 1024 * 1024) throw new Error('El video es demasiado grande para convertirlo en sticker. Usa un clip corto.')
     if (effect !== 'normal') throw new Error('Los efectos de esta versión se aplican a imágenes; para video usa sticker normal.')
-    return videoSticker(media.buffer)
+    webp = await videoSticker(media.buffer)
+  } else {
+    if (media.kind !== 'image') throw new Error('Envía o responde a una imagen/video.')
+    webp = await imageSticker(media.buffer, effect)
   }
-  if (media.kind !== 'image') throw new Error('Envía o responde a una imagen/video.')
-  return imageSticker(media.buffer, effect)
+  return embedStickerMetadata(webp, metadata)
 }
 
 export async function stickerToPng(media: DownloadedMedia): Promise<Buffer> {

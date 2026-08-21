@@ -1,15 +1,18 @@
-import { Bot, Database, HardDrive, MessageSquare, ShieldCheck } from 'lucide-react'
-import { openBotDb, runtime } from '../../lib/runtime'
+import { Bot, Database, HardDrive, LogOut, MessageSquare, ShieldCheck } from 'lucide-react'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { openBotDb } from '../../lib/runtime'
+import { ADMIN_SESSION_COOKIE, verifySession } from '../../lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 type Subbot = { id: number; ownerJid: string; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
-  const { token } = await searchParams
-  if (!runtime.adminToken || token !== runtime.adminToken) {
-    return <main className="mx-auto max-w-3xl px-5 py-24"><h1 className="text-3xl font-semibold">Acceso denegado</h1><p className="mt-3 text-zinc-400">El panel owner requiere el token administrativo de la instalación.</p></main>
-  }
+export default async function AdminPage() {
+  const cookieStore = await cookies()
+  const session = verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
+  if (!session || session.role !== 'admin') redirect('/login?mode=admin')
+
   const db = openBotDb()
   const subbots = db ? db.prepare('SELECT id, owner_jid as ownerJid, phone, status, expires_at as expiresAt, messages_processed as messagesProcessed, download_bytes as downloadBytes FROM subbots ORDER BY created_at DESC').all() as unknown as Subbot[] : []
   const users = db ? Number((db.prepare('SELECT COUNT(*) as count FROM economy_users').get() as { count: number }).count) : 0
@@ -18,7 +21,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   db?.close()
 
   return <main className="mx-auto w-full max-w-7xl px-5 py-12 md:px-8">
-    <div className="flex items-center gap-3"><ShieldCheck className="size-6 text-[var(--accent)]"/><div><p className="text-sm text-zinc-400">Owner control center</p><h1 className="text-3xl font-semibold">Ghost Nexora Bot</h1></div></div>
+    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-3"><ShieldCheck className="size-6 text-[var(--accent)]"/><div><p className="text-sm text-zinc-400">Owner control center</p><h1 className="text-3xl font-semibold">Ghost Nexora Bot</h1></div></div>
+      <form method="post" action="/api/auth/logout"><button type="submit" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.04] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/[.08] hover:text-white"><LogOut className="size-4"/>Cerrar sesión</button></form>
+    </div>
+    <div className="mt-5 rounded-2xl border border-emerald-300/10 bg-emerald-400/[.04] px-5 py-4 text-sm text-zinc-400">Sesión administrativa firmada activa. El token ya no forma parte de la URL ni del historial del navegador.</div>
     <section className="mt-8 grid gap-4 md:grid-cols-4">
       {[
         [Bot, 'Subbots', subbots.length.toString()], [ShieldCheck, 'Online', subbots.filter((s) => s.status === 'online').length.toString()],

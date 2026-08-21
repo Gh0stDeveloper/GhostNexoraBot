@@ -1,7 +1,20 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { SettingsStore } from './core/settings.js'
 
-export type CommandCategory = 'general' | 'stickers' | 'downloads' | 'groups' | 'economy' | 'collection' | 'subbots' | 'adult' | 'owner'
+export type CommandCategory =
+  | 'general'
+  | 'profile'
+  | 'social'
+  | 'stickers'
+  | 'downloads'
+  | 'groups'
+  | 'economy'
+  | 'games'
+  | 'collection'
+  | 'subbots'
+  | 'adult'
+  | 'tools'
+  | 'owner'
 
 export interface CommandContext {
   socket: WASocket
@@ -14,6 +27,10 @@ export interface CommandContext {
   argText: string
   prefix: string
   settings: SettingsStore
+  isOwner: boolean
+  isBotStaff: boolean
+  isGroup: boolean
+  isSubbotOwner: boolean
   instanceId?: number
   instanceOwnerJid?: string
   reply: (text: string) => Promise<unknown>
@@ -27,6 +44,8 @@ export interface BotCommand {
   description: string
   usage?: string
   ownerOnly?: boolean
+  staffOnly?: boolean
+  subbotOwnerAllowed?: boolean
   groupOnly?: boolean
   adminOnly?: boolean
   botAdminOnly?: boolean

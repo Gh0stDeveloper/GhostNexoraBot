@@ -10,6 +10,7 @@ import { subbotManager } from './core/subbots.js'
 import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
 import { handleParticipantUpdate, moderateIncoming } from './services/moderation.js'
+import { startTempCleanup } from './services/temp-cleanup.js'
 import { getMessageText } from './utils/message.js'
 import { logger } from './utils/logger.js'
 
@@ -67,7 +68,11 @@ async function connect() {
       await routeMessage(socket, message, router)
     }
   })
-  socket.ev.on('group-participants.update', (update) => void handleParticipantUpdate(socket, update as never))
+
+  socket.ev.on('group-participants.update', (update) => {
+    void handleParticipantUpdate(socket, update)
+      .catch((error) => logger.error({ error, groupId: update.id, action: update.action }, 'participant update failed'))
+  })
 
   socket.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     if (qr && !socket.authState.creds.registered) {
@@ -101,6 +106,7 @@ async function connect() {
 }
 
 await settings.init()
+startTempCleanup()
 startHealthServer()
 subbotManager.setMessageHandler(async (socket, message, record) => {
   let router = subbotRouters.get(record.id)

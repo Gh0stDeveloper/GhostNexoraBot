@@ -1,8 +1,13 @@
+import { createWriteStream } from 'node:fs'
 import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import { Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { execa } from 'execa'
+import yts from 'yt-search'
 import { config } from '../config.js'
+import { youtubeSearchMobile, yt1sResolve } from './youtube-unofficial.js'
 
 export type DownloadPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'twitter'
 
@@ -37,6 +42,7 @@ const hosts: Record<DownloadPlatform, string[]> = {
 }
 const soundCloudHosts = ['soundcloud.com', 'www.soundcloud.com', 'm.soundcloud.com', 'on.soundcloud.com']
 const ytDlpRuntimeArgs = ['--js-runtimes', 'node'] as const
+const rubyCoreBase = 'https://ruby-core.vercel.app/api/download/youtube'
 
 function validateUrl(value: string, platform: DownloadPlatform) {
   let url: URL
@@ -53,6 +59,22 @@ function validateSoundCloudUrl(value: string) {
   const host = url.hostname.toLowerCase()
   if (!soundCloudHosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) throw new Error('La URL no pertenece a SoundCloud.')
   return url.toString()
+}
+
+function youtubeId(input: string) {
+  const value = validateUrl(input, 'youtube')
+  const url = new URL(value)
+  if (url.hostname === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0]
+  const fromQuery = url.searchParams.get('v')
+  if (fromQuery) return fromQuery
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (['shorts', 'embed', 'live'].includes(parts[0] ?? '')) return parts[1]
+  return undefined
+}
+
+function safeFileBase(value: string) {
+  const clean = value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-')
+  return clean.slice(0, 80) || 'youtube'
 }
 
 const prepareTempDir = () => mkdtemp(path.join(os.tmpdir(), 'ghostnexora-'))
@@ -76,6 +98,26 @@ function infoFrom(data: Record<string, unknown>): MediaInfo {
     likes: typeof data.like_count === 'number' ? data.like_count : undefined,
     thumbnail: typeof data.thumbnail === 'string' ? data.thumbnail : undefined,
     webpageUrl: typeof data.webpage_url === 'string' ? data.webpage_url : undefined,
+  }
+}
+
+function infoFromYtSearch(video: {
+  title?: string
+  description?: string
+  author?: { name?: string }
+  seconds?: number
+  views?: number
+  thumbnail?: string
+  url?: string
+}): MediaInfo {
+  return {
+    title: video.title?.trim() || 'Sin título',
+    description: video.description?.trim() || undefined,
+    uploader: video.author?.name?.trim() || undefined,
+    duration: Number.isFinite(video.seconds) ? video.seconds : undefined,
+    views: Number.isFinite(video.views) ? video.views : undefined,
+    thumbnail: video.thumbnail || undefined,
+    webpageUrl: video.url || undefined,
   }
 }
 
@@ -106,45 +148,206 @@ function videoArgs(quality: number) {
   return ['-f', `bestvideo[height<=${height}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${height}][ext=mp4]/best[height<=${height}]`, '--merge-output-format', 'mp4']
 }
 
+interface RubyCoreResponse {
+  status?: boolean
+  download?: { url?: string; filename?: string }
+  message?: string
+  error?: string
+}
+
+async function rubyCoreDownloadUrl(youtubeUrl: string, kind: 'mp3' | 'mp4') {
+  const endpoint = new URL(`${rubyCoreBase}/${kind}`)
+  endpoint.searchParams.set('url', youtubeUrl)
+  const response = await fetch(endpoint, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'GhostNexoraBot/1.1',
+    },
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!response.ok) throw new Error(`Ruby-core respondió HTTP ${response.status}.`)
+  const data = await response.json() as RubyCoreResponse
+  const direct = data.download?.url
+  if (!data.status || !direct) throw new Error(data.message || data.error || 'Ruby-core no entregó una URL de descarga.')
+  const parsed = new URL(direct)
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('El proveedor devolvió una URL no válida.')
+  return { url: parsed.toString(), fileName: data.download?.filename }
+}
+
+async function downloadRemoteMedia(directUrl: string, ext: 'mp3' | 'mp4', info: MediaInfo, providerFileName?: string): Promise<DownloadResult> {
+  const dir = await prepareTempDir()
+  const fallbackName = `${safeFileBase(info.title)}.${ext}`
+  const suggested = providerFileName ? path.basename(providerFileName).replace(/[^a-zA-Z0-9._ -]+/g, '_') : fallbackName
+  const fileName = suggested.toLowerCase().endsWith(`.${ext}`) ? suggested : fallbackName
+  const filePath = path.join(dir, fileName)
+  try {
+    const response = await fetch(directUrl, {
+      redirect: 'follow',
+      headers: { 'user-agent': 'Mozilla/5.0 GhostNexoraBot/1.1' },
+      signal: AbortSignal.timeout(15 * 60_000),
+    })
+    if (!response.ok || !response.body) throw new Error(`El servidor de descarga respondió HTTP ${response.status}.`)
+    const declared = Number(response.headers.get('content-length') ?? 0)
+    if (declared > config.maxDownloadBytes) throw new Error(`El archivo supera el límite configurado de ${config.maxDownloadMb} MB.`)
+
+    let size = 0
+    const limiter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        size += chunk.length
+        if (size > config.maxDownloadBytes) callback(new Error(`El archivo supera el límite configurado de ${config.maxDownloadMb} MB.`))
+        else callback(null, chunk)
+      },
+    })
+    await pipeline(response.body, limiter, createWriteStream(filePath))
+    if (size <= 0) throw new Error('El proveedor devolvió un archivo vacío.')
+    return { filePath, fileName, size, info, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true })
+    throw error
+  }
+}
+
+function compactError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/Sign in to confirm you.re not a bot/i.test(message)) return 'YouTube bloqueó la extracción local de esta IP de VPS.'
+  return message.replace(/\s+/g, ' ').slice(0, 220)
+}
+
+async function getYouTubeInfoByUrl(input: string): Promise<MediaInfo> {
+  const url = validateUrl(input, 'youtube')
+  const id = youtubeId(url)
+  if (!id) return { title: 'YouTube', webpageUrl: url }
+  try {
+    const mobile = await youtubeSearchMobile(id, 8)
+    const exact = mobile.find((item) => item.id === id)
+    if (exact) {
+      return {
+        title: exact.title,
+        description: exact.description,
+        uploader: exact.channel,
+        duration: exact.duration,
+        views: exact.views,
+        thumbnail: exact.thumbnail,
+        webpageUrl: exact.url,
+      }
+    }
+  } catch { /* metadata fallback below */ }
+
+  const video = await yts({ videoId: id })
+  const raw = video as unknown as {
+    title?: string
+    description?: string
+    author?: { name?: string }
+    seconds?: number
+    views?: number
+    thumbnail?: string
+    url?: string
+  }
+  const info = infoFromYtSearch(raw)
+  return { ...info, webpageUrl: info.webpageUrl ?? `https://www.youtube.com/watch?v=${id}` }
+}
+
+async function downloadYouTubeViaProviders(input: string, kind: 'mp3' | 'mp4', quality = 720): Promise<DownloadResult> {
+  const url = validateUrl(input, 'youtube')
+  const baseInfo = await getYouTubeInfoByUrl(url).catch((): MediaInfo => ({ title: 'YouTube', webpageUrl: url }))
+  let yt1sError: unknown
+  try {
+    const direct = await yt1sResolve(url, kind, quality)
+    const info: MediaInfo = {
+      ...baseInfo,
+      title: direct.title || baseInfo.title,
+      uploader: direct.author ?? baseInfo.uploader,
+      duration: direct.duration ?? baseInfo.duration,
+      webpageUrl: url,
+    }
+    return await downloadRemoteMedia(direct.url, kind, info, direct.fileName)
+  } catch (error) {
+    yt1sError = error
+  }
+
+  let rubyError: unknown
+  try {
+    const direct = await rubyCoreDownloadUrl(url, kind)
+    return await downloadRemoteMedia(direct.url, kind, baseInfo, direct.fileName)
+  } catch (error) {
+    rubyError = error
+  }
+
+  try {
+    return await runDownload(url, kind === 'mp3' ? audioArgs : videoArgs(quality))
+  } catch (localError) {
+    throw new Error(`No fue posible descargar desde YouTube. yt1s: ${compactError(yt1sError)} · proveedor alterno: ${compactError(rubyError)} · yt-dlp: ${compactError(localError)}`)
+  }
+}
+
 export async function getMediaInfo(input: string, platform: DownloadPlatform): Promise<MediaInfo> {
+  if (platform === 'youtube') return getYouTubeInfoByUrl(input)
   const url = validateUrl(input, platform)
   const { stdout } = await execa('yt-dlp', [...ytDlpRuntimeArgs, '--dump-single-json', '--no-playlist', '--no-warnings', url], { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 })
   return infoFrom(JSON.parse(stdout) as Record<string, unknown>)
 }
 
 export async function getYouTubeFormats(input: string): Promise<YouTubeFormats> {
-  const url = validateUrl(input, 'youtube')
-  const { stdout } = await execa('yt-dlp', [...ytDlpRuntimeArgs, '--dump-single-json', '--no-playlist', '--no-warnings', url], { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 })
-  const data = JSON.parse(stdout) as Record<string, unknown> & { formats?: Array<{ height?: number | null; abr?: number | null; vcodec?: string; acodec?: string }> }
-  const videoHeights = [...new Set((data.formats ?? []).filter((format) => format.vcodec && format.vcodec !== 'none' && format.height).map((format) => Number(format.height)))].filter(Number.isFinite).sort((a, b) => a - b)
-  const audioBitrates = [...new Set((data.formats ?? []).filter((format) => format.acodec && format.acodec !== 'none' && format.abr).map((format) => Math.round(Number(format.abr))))].filter(Number.isFinite).sort((a, b) => a - b)
-  return { ...infoFrom(data), videoHeights, audioBitrates }
+  const info = await getYouTubeInfoByUrl(input)
+  // yt1s elige automáticamente entre sus conversiones y la lista puede variar por video.
+  // No inventamos formatos: el comando de descarga acepta la calidad solicitada y selecciona
+  // la mejor opción <= a esa resolución; Ruby/yt-dlp quedan como fallbacks.
+  return { ...info, videoHeights: [], audioBitrates: [] }
 }
 
 export async function searchYouTube(input: string, limit = 10): Promise<YouTubeSearchResult[]> {
   const query = input.trim()
   if (!query) throw new Error('Debes indicar qué quieres buscar en YouTube.')
   const count = Math.max(1, Math.min(12, limit))
-  const { stdout } = await execa('yt-dlp', [
-    ...ytDlpRuntimeArgs, '--dump-single-json', '--skip-download', '--no-warnings', `ytsearch${count}:${query}`,
-  ], { timeout: 120_000, maxBuffer: 30 * 1024 * 1024 })
-  const data = JSON.parse(stdout) as { entries?: Array<Record<string, unknown> & { id?: string }> }
-  return (data.entries ?? []).flatMap((entry) => {
-    if (!entry.id) return []
-    const info = infoFrom(entry)
-    return [{ ...info, id: entry.id, channel: info.uploader ?? 'Canal desconocido', url: info.webpageUrl ?? `https://www.youtube.com/watch?v=${entry.id}` }]
-  })
+  let mobileError: unknown
+
+  try {
+    const results = await youtubeSearchMobile(query, count)
+    return results.map((video) => ({
+      title: video.title,
+      description: video.description,
+      uploader: video.channel,
+      duration: video.duration,
+      views: video.views,
+      thumbnail: video.thumbnail,
+      webpageUrl: video.url,
+      id: video.id,
+      channel: video.channel,
+      url: video.url,
+    }))
+  } catch (error) {
+    mobileError = error
+  }
+
+  try {
+    const search = await yts.search({ query, hl: 'es', gl: 'MX' })
+    return search.videos.slice(0, count).map((video) => {
+      const info = infoFromYtSearch(video)
+      return {
+        ...info,
+        id: video.videoId,
+        channel: video.author?.name || 'Canal desconocido',
+        url: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
+      }
+    })
+  } catch (fallbackError) {
+    throw new Error(`No pude buscar en YouTube. m.youtube: ${compactError(mobileError)} · fallback: ${compactError(fallbackError)}`)
+  }
 }
 
-export function downloadYouTubeAudio(input: string) { return runDownload(validateUrl(input, 'youtube'), audioArgs) }
-export function downloadYouTubeVideo(input: string, quality = 720) { return runDownload(validateUrl(input, 'youtube'), videoArgs(quality)) }
-export function downloadYouTubeSearchAudio(input: string) {
+export function downloadYouTubeAudio(input: string) { return downloadYouTubeViaProviders(input, 'mp3') }
+export function downloadYouTubeVideo(input: string, quality = 720) { return downloadYouTubeViaProviders(input, 'mp4', quality) }
+export async function downloadYouTubeSearchAudio(input: string) {
   const query = input.trim(); if (!query) throw new Error('Debes indicar una búsqueda.')
-  return runDownload(`ytsearch1:${query}`, audioArgs)
+  const first = (await searchYouTube(query, 1))[0]
+  if (!first) throw new Error('No encontré resultados en YouTube para esa búsqueda.')
+  return downloadYouTubeAudio(first.url)
 }
-export function downloadYouTubeSearchVideo(input: string, quality = 720) {
+export async function downloadYouTubeSearchVideo(input: string, quality = 720) {
   const query = input.trim(); if (!query) throw new Error('Debes indicar una búsqueda.')
-  return runDownload(`ytsearch1:${query}`, videoArgs(quality))
+  const first = (await searchYouTube(query, 1))[0]
+  if (!first) throw new Error('No encontré resultados en YouTube para esa búsqueda.')
+  return downloadYouTubeVideo(first.url, quality)
 }
 export function downloadSoundCloud(input: string) {
   const value = input.trim(); if (!value) throw new Error('Debes indicar una URL o búsqueda de SoundCloud.')

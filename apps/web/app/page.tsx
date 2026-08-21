@@ -5,6 +5,7 @@ import {
   Download,
   Github,
   Link2,
+  LogIn,
   MessageSquareMore,
   Server,
   ShieldCheck,
@@ -46,13 +47,13 @@ const features: Array<{ icon: LucideIcon; title: string; text: string }> = [
 ]
 
 const commandGroups = [
-  ['General', '.menu · .ping · .info · .prefix'],
-  ['Stickers', '.sticker · .s · .toimg'],
-  ['Search & Play', '.yts · .play · .playvideo · .soundcloud'],
-  ['YouTube', '.ytformats · .ytmp3 · .ytmp4'],
+  ['General', '.menu · .ping · .info · .google · .wiki'],
+  ['Stickers', '.sticker · .s · .toimage · .spack'],
+  ['Search & Play', '.yts · .play · .ytmusic · .lyrics'],
+  ['YouTube', '.yt · .ytmp3 · .ytmp4'],
   ['Downloads', '.tiktok · .instagram · .facebook · .twitter · .mediafire'],
-  ['Groups', '.tagall · .hidetag · .link · .group · .kick · .promote · .demote'],
-  ['Owner', '.setprefix · .status · .restart'],
+  ['Groups', '.tag · .hidetag · .link · .groupinfo · .kick · .promote · .demote'],
+  ['Owner / Staff', '.system · .speedtest · .status · .privategrant · .adminpanel'],
 ]
 
 function uptime(seconds = 0) {
@@ -79,12 +80,10 @@ export default async function Home() {
           <a className="transition hover:text-white" href="#commands">Comandos</a>
           <a className="transition hover:text-white" href="#install">Instalación</a>
         </nav>
-        <a
-          href="https://github.com/Gh0stDeveloper/GhostNexoraBot"
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium transition hover:bg-white/[0.08]"
-        >
-          <Github className="size-4" /> GitHub
-        </a>
+        <div className="flex items-center gap-2">
+          <a href="/login" className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[var(--accent-strong)]"><LogIn className="size-4"/>Acceder</a>
+          <a href="https://github.com/Gh0stDeveloper/GhostNexoraBot" className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium transition hover:bg-white/[0.08] sm:inline-flex"><Github className="size-4"/>GitHub</a>
+        </div>
       </header>
 
       <section id="top" className="mx-auto grid min-h-[72vh] w-full max-w-7xl items-center gap-14 px-5 py-16 md:px-8 lg:grid-cols-[1.15fr_.85fr] lg:py-24">
@@ -101,13 +100,10 @@ export default async function Home() {
             Ghost Nexora Bot combina Baileys Multi-Device, comandos modulares, stickers, búsqueda y descargas, controles de grupo y una web operativa en un monorepo preparado para VPS.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <a href="#install" className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[var(--accent-strong)]">
-              <Terminal className="size-4" /> Instalar en VPS
-            </a>
-            <a href="#commands" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold transition hover:bg-white/[0.08]">
-              <Braces className="size-4" /> Ver comandos
-            </a>
+            <a href="/login" className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[var(--accent-strong)]"><LogIn className="size-4"/>Abrir panel</a>
+            <a href="#commands" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold transition hover:bg-white/[0.08]"><Braces className="size-4"/>Ver comandos</a>
           </div>
+          <p className="mt-4 text-sm text-zinc-500">El acceso distingue entre administrador y propietario de subbot. Los tokens se introducen en el login y no permanecen en la URL.</p>
         </div>
 
         <div className="relative">
@@ -115,7 +111,7 @@ export default async function Home() {
           <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#080c10]/90 p-5 shadow-2xl shadow-black/30 backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-white/8 pb-4">
               <div className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4 text-[var(--accent)]" /> Runtime</div>
-              <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-[var(--muted)]">v1.0.0</span>
+              <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-xs text-[var(--muted)]">v1.1</span>
             </div>
             <dl className="mt-5 grid gap-3 text-sm">
               {[
@@ -123,8 +119,8 @@ export default async function Home() {
                 ['Prefix', health.prefix ?? '.'],
                 ['Uptime', online ? uptime(health.uptimeSeconds) : '—'],
                 ['Session', 'Persistent Multi-Device'],
+                ['Web auth', 'Signed HttpOnly sessions'],
                 ['Web', 'Next.js 16'],
-                ['Styling', 'Tailwind CSS 4'],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3">
                   <dt className="text-[var(--muted)]">{label}</dt>
@@ -189,7 +185,7 @@ export default async function Home() {
 
       <footer className="mx-auto flex w-full max-w-7xl flex-col gap-4 border-t border-white/[0.07] px-5 py-8 text-sm text-[var(--muted)] md:flex-row md:items-center md:justify-between md:px-8">
         <p>Ghost Developer / Nexora · Ghost Nexora Bot</p>
-        <a className="inline-flex items-center gap-2 transition hover:text-white" href="https://github.com/Gh0stDeveloper/GhostNexoraBot"><Github className="size-4" /> Source on GitHub</a>
+        <div className="flex items-center gap-4"><a className="inline-flex items-center gap-2 transition hover:text-white" href="/login"><LogIn className="size-4"/>Acceder</a><a className="inline-flex items-center gap-2 transition hover:text-white" href="https://github.com/Gh0stDeveloper/GhostNexoraBot"><Github className="size-4"/>Source on GitHub</a></div>
       </footer>
     </main>
   )

@@ -29,6 +29,7 @@ const schema = z.object({
   PUBLIC_WEB_URL: z.string().default('http://127.0.0.1:3000'),
   ADMIN_WEB_TOKEN: z.string().min(12).default('change-this-admin-token'),
   ADULT_PRIVATE_ENABLED: z.string().default('true'),
+  EROME_COOKIE: z.string().default(''),
   WELCOME_IMAGE_URL: z.string().default(''),
   OFFICIAL_CHANNEL_URL: z.string().url().default('https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i'),
 })
@@ -55,6 +56,7 @@ export const config = {
   publicWebUrl: raw.PUBLIC_WEB_URL,
   adminWebToken: raw.ADMIN_WEB_TOKEN,
   adultPrivateEnabled: truthy(raw.ADULT_PRIVATE_ENABLED),
+  eromeCookie: raw.EROME_COOKIE,
   welcomeImageUrl: raw.WELCOME_IMAGE_URL,
   officialChannelUrl: raw.OFFICIAL_CHANNEL_URL,
   workspaceRoot,

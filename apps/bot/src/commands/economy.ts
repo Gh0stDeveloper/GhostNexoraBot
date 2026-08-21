@@ -1,6 +1,7 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { COIN_NAME, COIN_SYMBOL, economy } from '../services/economy.js'
+import { advancedEconomy } from '../services/economy-advanced.js'
 
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
 const duration = (ms: number) => {
@@ -25,10 +26,6 @@ function targetFromContext(ctx: CommandContext) {
   throw new Error('Menciona al usuario o indica su número.')
 }
 
-// El precio base está equilibrado alrededor del rendimiento medio de .work
-// (45-200 NXC cada 15 min). Los planes largos incluyen descuento por duración.
-// Los subbots cuestan más porque mantienen una sesión independiente y consumen
-// memoria, CPU, red y almacenamiento de la VPS durante toda la suscripción.
 const products = {
   private1d: { price: 2000, kind: 'private_access', durationMs: 86400_000, label: 'Acceso privado · 1 día' },
   private7d: { price: 10000, kind: 'private_access', durationMs: 7 * 86400_000, label: 'Acceso privado · 7 días' },
@@ -41,10 +38,27 @@ const products = {
 export const economyCommands: BotCommand[] = [
   {
     name: 'balance', aliases: ['bal', 'wallet', 'cartera', 'banco'], category: 'economy',
-    description: 'Consulta tu saldo de Nexora Coins.',
+    description: 'Consulta tu saldo, inversiones y deudas.',
     async handler(ctx) {
       const b = economy.balance(ctx.sender)
-      await ctx.reply(`💰 *CENTRO DE ECONOMÍA*\n\n🪙 Moneda: *${COIN_NAME} (${COIN_SYMBOL})*\n👛 Cartera: *${fmt(b.wallet)}*\n🏦 Banco: *${fmt(b.bank)}*\n💎 Patrimonio: *${fmt(b.total)}*\n\nUsa *${ctx.prefix}work* para trabajar y *${ctx.prefix}deposit* para proteger saldo en el banco.`)
+      const extra = advancedEconomy.summary(ctx.sender)
+      const gross = b.total + extra.investments + extra.cda
+      const net = gross - extra.debt
+      await ctx.reply([
+        `╭━━〔 🪙 *${ctx.settings.currencyName.toUpperCase()}* 〕━━╮`,
+        `┃ Cartera » *${fmt(b.wallet)}*`,
+        `┃ Banco » *${fmt(b.bank)}*`,
+        `┃ Inversiones » *${fmt(extra.investments)}*`,
+        `┃ Plazo fijo » *${fmt(extra.cda)}*`,
+        `┃ Deudas » *${fmt(extra.debt)}*`,
+        '┣━━━━━━━━━━━━━━━━',
+        `┃ Activos » *${fmt(gross)}*`,
+        `┃ Patrimonio neto » *${fmt(net)}*`,
+        '╰━━━━━━━━━━━━━━━━╯',
+        '',
+        `✦ Moneda interna: ${COIN_NAME} (${COIN_SYMBOL})`,
+        `✦ ${ctx.prefix}daily · ${ctx.prefix}work · ${ctx.prefix}invest · ${ctx.prefix}loan status`,
+      ].join('\n'))
     },
   },
   {
@@ -55,7 +69,7 @@ export const economyCommands: BotCommand[] = [
       if (!result.ok) throw new Error(`Ya trabajaste recientemente. Vuelve en ${duration(result.remaining)}.`)
       const jobs = ['desarrollo web', 'soporte técnico', 'moderación', 'edición multimedia', 'administración de servidores', 'QA de aplicaciones']
       const job = jobs[Math.floor(Math.random() * jobs.length)]
-      await ctx.reply(`💼 *WORK COMPLETADO*\n\nRealizaste un trabajo de *${job}*.\n🪙 Ganaste: *${fmt(result.reward)}*\n👛 Cartera: *${fmt(result.wallet)}*`)
+      await ctx.reply(`╭─〔 💼 *TRABAJO COMPLETADO* 〕\n│ Actividad » ${job}\n│ Ganancia » *${fmt(result.reward)}*\n│ Cartera » *${fmt(result.wallet)}*\n╰──────────────`)
     },
   },
   {
@@ -66,7 +80,7 @@ export const economyCommands: BotCommand[] = [
         ? economy.balance(ctx.sender).wallet
         : amountArg(ctx.args[0])
       const b = economy.deposit(ctx.sender, amount)
-      await ctx.reply(`🏦 Depositaste *${fmt(amount)}*.\n👛 Cartera: ${fmt(b.wallet)}\n🏦 Banco: ${fmt(b.bank)}`)
+      await ctx.reply(`🏦 *DEPÓSITO COMPLETADO*\n━━━━━━━━━━━━━━\nDepositado: *${fmt(amount)}*\nCartera: ${fmt(b.wallet)}\nBanco: ${fmt(b.bank)}`)
     },
   },
   {
@@ -77,7 +91,7 @@ export const economyCommands: BotCommand[] = [
         ? economy.balance(ctx.sender).bank
         : amountArg(ctx.args[0])
       const b = economy.withdraw(ctx.sender, amount)
-      await ctx.reply(`🏧 Retiraste *${fmt(amount)}*.\n👛 Cartera: ${fmt(b.wallet)}\n🏦 Banco: ${fmt(b.bank)}`)
+      await ctx.reply(`🏧 *RETIRO COMPLETADO*\n━━━━━━━━━━━━━━\nRetirado: *${fmt(amount)}*\nCartera: ${fmt(b.wallet)}\nBanco: ${fmt(b.bank)}`)
     },
   },
   {
@@ -87,7 +101,7 @@ export const economyCommands: BotCommand[] = [
       const target = targetFromContext(ctx)
       const amount = amountArg(ctx.args.find((arg) => /^\d[\d,_]*$/.test(arg)))
       const b = economy.transfer(ctx.sender, target, amount)
-      await ctx.socket.sendMessage(ctx.chatId, { text: `💸 Transferencia realizada.\n\n➡️ @${target.split('@')[0]} recibió *${fmt(amount)}*.\n👛 Tu cartera: *${fmt(b.wallet)}*`, mentions: [target] }, { quoted: ctx.message })
+      await ctx.socket.sendMessage(ctx.chatId, { text: `💸 *TRANSFERENCIA COMPLETADA*\n━━━━━━━━━━━━━━\n@${target.split('@')[0]} recibió *${fmt(amount)}*.\nTu cartera: *${fmt(b.wallet)}*`, mentions: [target] }, { quoted: ctx.message })
     },
   },
   {
@@ -98,11 +112,11 @@ export const economyCommands: BotCommand[] = [
       const result = economy.rob(ctx.sender, target)
       if (!result.ok) throw new Error(`Debes esperar ${duration(result.remaining)} antes de volver a robar.`)
       if (result.reason === 'empty') {
-        await ctx.reply('🕵️ Ese usuario casi no lleva Nexora Coins en la cartera. El dinero del banco no se puede robar.')
+        await ctx.reply('🕵️ *ROBO CANCELADO*\nEse usuario casi no lleva monedas en la cartera. El saldo bancario está protegido.')
       } else if (result.success) {
-        await ctx.socket.sendMessage(ctx.chatId, { text: `🦹 Robo exitoso: obtuviste *${fmt(result.amount)}* de @${target.split('@')[0]}.`, mentions: [target] }, { quoted: ctx.message })
+        await ctx.socket.sendMessage(ctx.chatId, { text: `🦹 *ROBO EXITOSO*\n━━━━━━━━━━━━━━\nObtuviste *${fmt(result.amount)}* de @${target.split('@')[0]}.`, mentions: [target] }, { quoted: ctx.message })
       } else {
-        await ctx.reply(`🚓 Te descubrieron. Perdiste *${fmt(result.amount)}* como penalización.`)
+        await ctx.reply(`🚓 *TE DESCUBRIERON*\n━━━━━━━━━━━━━━\nPerdiste *${fmt(result.amount)}* como penalización.`)
       }
     },
   },
@@ -114,7 +128,7 @@ export const economyCommands: BotCommand[] = [
       if (!rows.length) throw new Error('Todavía no hay usuarios en la economía.')
       const mentions = rows.map((row) => row.userJid)
       const lines = rows.map((row, index) => `${index + 1}. @${row.userJid.split('@')[0]}\n   👛 ${fmt(row.wallet)} · 🏦 ${fmt(row.bank)} · 💎 ${fmt(row.total)}`)
-      await ctx.socket.sendMessage(ctx.chatId, { text: `🏆 *TOP 10 · NEXORA ECONOMY*\n\n${lines.join('\n\n')}`, mentions }, { quoted: ctx.message })
+      await ctx.socket.sendMessage(ctx.chatId, { text: `🏆 *TOP 10 · NEXORA ECONOMY*\n━━━━━━━━━━━━━━\n${lines.join('\n\n')}`, mentions }, { quoted: ctx.message })
     },
   },
   {
@@ -122,7 +136,7 @@ export const economyCommands: BotCommand[] = [
     description: 'Muestra productos que se compran con Nexora Coins.',
     async handler(ctx) {
       const lines = Object.entries(products).map(([id, item]) => `• *${id}* — ${item.label}\n  ${fmt(item.price)}`)
-      await ctx.reply(`🛒 *NEXORA STORE*\n\n${lines.join('\n\n')}\n\n💡 Los planes largos tienen mejor precio por día.\n🤖 Los subbots cuestan más porque mantienen una sesión independiente en la VPS.\n\nCompra con *${ctx.prefix}buy <producto>*.`)
+      await ctx.reply(`🛒 *NEXORA STORE*\n━━━━━━━━━━━━━━\n${lines.join('\n\n')}\n\nCompra con *${ctx.prefix}buy <producto>*.`)
     },
   },
   {
@@ -135,13 +149,10 @@ export const economyCommands: BotCommand[] = [
       const result = economy.purchase(ctx.sender, item.price, item.kind, item.durationMs, { product: id })
       if (item.kind === 'subbot_slot') {
         const active = economy.getActiveSubbot(ctx.sender)
-        if (active) {
-          economy.db.prepare('UPDATE subbots SET expires_at = ? WHERE id = ?').run(result.expiresAt, active.id)
-        } else {
-          economy.createSubbot(ctx.sender, result.expiresAt)
-        }
+        if (active) economy.db.prepare('UPDATE subbots SET expires_at = ? WHERE id = ?').run(result.expiresAt, active.id)
+        else economy.createSubbot(ctx.sender, result.expiresAt)
       }
-      await ctx.reply(`✅ Compra completada.\n\n📦 *${item.label}*\n🪙 Precio: ${fmt(item.price)}\n⏳ Vence: ${new Date(result.expiresAt).toLocaleString('es-MX')}\n\n${item.kind === 'subbot_slot' ? `Continúa con *${ctx.prefix}subbot pair <número>* o consulta *${ctx.prefix}subbot status* si ya estaba vinculado.` : 'Tu acceso privado ya está activo.'}`)
+      await ctx.reply(`✅ *COMPRA COMPLETADA*\n━━━━━━━━━━━━━━\nProducto: *${item.label}*\nPrecio: ${fmt(item.price)}\nVence: ${new Date(result.expiresAt).toLocaleString('es-MX')}\n\n${item.kind === 'subbot_slot' ? `Continúa con *${ctx.prefix}subbot pair <número>* o consulta *${ctx.prefix}subbot status*.` : 'Tu acceso privado ya está activo.'}`)
     },
   },
 ]

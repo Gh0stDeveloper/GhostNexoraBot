@@ -4,6 +4,7 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { economy } from '../services/economy.js'
+import { community } from '../services/community.js'
 import { settings } from './settings.js'
 
 function normalizeJid(value?: string | null) {
@@ -21,6 +22,9 @@ function canonicalUserJid(candidates: string[], fallback: string) {
   return normalizeJid(pn ?? fallback)
 }
 
+const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance'])
+const disabledGroupBootstrapCommands = new Set(['menu', 'bot'])
+
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
@@ -34,17 +38,10 @@ export class CommandRouter {
   }
 
   async handle(socket: WASocket, message: WAMessage): Promise<boolean> {
-    const text = getMessageText(message)
-    const prefix = settings.prefix
-    if (!text.startsWith(prefix)) return false
-    const raw = text.slice(prefix.length).trim()
-    if (!raw) return false
-    const [typedName = '', ...args] = raw.split(/\s+/)
-    const command = this.byName.get(typedName.toLowerCase())
-    if (!command) return false
-
+    const text = getMessageText(message).trim()
     const chatId = message.key.remoteJid
     if (!chatId) return false
+
     const me = socket.authState.creds.me
     const selfCandidates = [me?.id, me?.lid].filter((value): value is string => Boolean(value))
     const incomingCandidates = getSenderCandidates(message)
@@ -54,30 +51,80 @@ export class CommandRouter {
     const sender = canonicalUserJid(rawSenderCandidates, rawSender)
     const senderNumbers = rawSenderCandidates.map(digitsFromJid).filter(Boolean)
     const isOwner = Boolean(message.key.fromMe) || senderNumbers.some((number) => config.owners.includes(number))
+    const isBotStaff = isOwner || senderNumbers.some((number) => settings.isBotAdmin(number))
+    const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && normalizeJid(this.options.instanceOwnerJid) === sender
     const isGroup = chatId.endsWith('@g.us')
+    const prefix = settings.prefix
+    const hasPrivateAccess = isGroup || isBotStaff || isSubbotOwner || Boolean(economy.hasEntitlement(sender, 'private_access'))
 
     const reply = (replyText: string) => socket.sendMessage(chatId, { text: replyText }, { quoted: message })
     const react = (emoji: string) => socket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
 
+    if (!text.startsWith(prefix)) {
+      const response = text.toLowerCase()
+      if (response !== 'aceptar' && response !== 'rechazar') return false
+      if (!hasPrivateAccess) {
+        await reply(`🔐 Esta acción también requiere acceso privado. Consulta *${prefix}shop* y compra *private1d*, *private7d* o *private30d*.`)
+        await react('🔒').catch(() => undefined)
+        return true
+      }
+      try {
+        const result = community.resolvePendingRelationship(sender, response === 'aceptar')
+        if (!result) return false
+        const kind = result.kind === 'marriage' ? 'matrimonio' : 'relación de amantes'
+        const messageText = result.accepted
+          ? `💞 *PROPUESTA ACEPTADA*\n━━━━━━━━━━━━━━\n@${result.proposerJid.split('@')[0]} y @${result.targetJid.split('@')[0]} ahora tienen una ${kind}.`
+          : `💔 *PROPUESTA RECHAZADA*\n━━━━━━━━━━━━━━\n@${result.targetJid.split('@')[0]} rechazó la propuesta de @${result.proposerJid.split('@')[0]}.`
+        await socket.sendMessage(chatId, { text: messageText, mentions: [result.proposerJid, result.targetJid] }, { quoted: message })
+        await react(result.accepted ? '💞' : '💔').catch(() => undefined)
+        return true
+      } catch (error) {
+        await reply(`❌ ${error instanceof Error ? error.message : 'No pude procesar la propuesta.'}`)
+        return true
+      }
+    }
+
+    const raw = text.slice(prefix.length).trim()
+    if (!raw) return false
+    const [typedName = '', ...args] = raw.split(/\s+/)
+    const command = this.byName.get(typedName.toLowerCase())
+    if (!command) return false
+
+    if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && !disabledGroupBootstrapCommands.has(command.name)) return false
+
     try {
       await react('⚡')
 
-      if (!isGroup && settings.privateCommandsRequireAccess && !isOwner) {
-        const freeCategories = new Set(['general', 'economy', 'collection', 'subbots'])
-        if (!freeCategories.has(command.category) && !economy.hasEntitlement(sender, 'private_access')) {
-          await reply(`🔐 El uso privado de este módulo requiere acceso. Consulta *${prefix}shop* para comprar una suscripción con Nexora Coins.`)
-          await react('🔒')
-          return true
-        }
+      if (!hasPrivateAccess && !privateStorefrontCommands.has(command.name)) {
+        await reply([
+          '╭━━〔 🔐 *CHAT PRIVADO PREMIUM* 〕━━╮',
+          '┃ Tu cuenta todavía no tiene acceso privado.',
+          '┃ Los comandos del bot funcionan en grupos,',
+          '┃ pero este chat requiere una suscripción.',
+          '╰━━━━━━━━━━━━━━━━━━━━╯',
+          '',
+          `🛒 Consulta planes: *${prefix}shop*`,
+          `💰 Consulta saldo: *${prefix}balance*`,
+          `✅ Compra acceso: *${prefix}buy private1d|private7d|private30d*`,
+          '',
+          'El acceso se activa inmediatamente después de una compra válida.',
+        ].join('\n'))
+        await react('🔒')
+        return true
       }
 
       if (command.ownerOnly && !isOwner) {
-        await reply('⛔ Este comando está disponible únicamente para el propietario del bot.')
+        await reply('⛔ *ACCESO RESTRINGIDO*\n━━━━━━━━━━━━━━\nEste comando está reservado al propietario principal del bot.')
+        await react('🚫')
+        return true
+      }
+      if (command.staffOnly && !isBotStaff && !(command.subbotOwnerAllowed && isSubbotOwner)) {
+        await reply('🛡️ *STAFF DEL BOT*\n━━━━━━━━━━━━━━\nNecesitas ser Owner/administrador global o el propietario autorizado de esta instancia de subbot.')
         await react('🚫')
         return true
       }
       if (command.groupOnly && !isGroup) {
-        await reply('👥 Este comando solo se puede usar dentro de un grupo.')
+        await reply('👥 *SOLO GRUPOS*\n━━━━━━━━━━━━━━\nEste comando solo se puede usar dentro de un grupo.')
         await react('🚫')
         return true
       }
@@ -92,15 +139,15 @@ export class CommandRouter {
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
         const botCandidates = selfCandidates.map(normalizeJid).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
-        const senderIsAdmin = Boolean(senderParticipant?.admin) || isOwner
+        const senderIsAdmin = Boolean(senderParticipant?.admin) || isBotStaff || isSubbotOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
         if (command.adminOnly && !senderIsAdmin) {
-          await reply('🛡️ Necesitas ser administrador del grupo para usar este comando.')
+          await reply('🛡️ *PERMISO DE ADMIN*\n━━━━━━━━━━━━━━\nNecesitas ser administrador del grupo, staff global o dueño de esta instancia.')
           await react('🚫')
           return true
         }
         if (command.botAdminOnly && !botIsAdmin) {
-          await reply('🤖 Necesito ser administrador del grupo para realizar esta acción.')
+          await reply('🤖 *PERMISO FALTANTE*\n━━━━━━━━━━━━━━\nNecesito ser administrador del grupo para realizar esta acción.')
           await react('🚫')
           return true
         }
@@ -110,16 +157,18 @@ export class CommandRouter {
         socket, message, chatId, sender,
         pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : 'Usuario'),
         commandName: command.name, args, argText: args.join(' '), prefix, settings,
+        isOwner, isBotStaff, isGroup, isSubbotOwner,
         instanceId: this.options.instanceId,
         instanceOwnerJid: this.options.instanceOwnerJid,
         reply, react,
       }
       await command.handler(context)
+      community.awardCommandXp(sender)
       await react('✅')
       return true
     } catch (error) {
       logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')
-      await reply(`❌ No pude completar *${prefix}${command.name}*. ${error instanceof Error ? error.message : 'Error inesperado.'}`).catch(() => undefined)
+      await reply(`❌ *NO PUDE COMPLETAR ${prefix}${command.name}*\n━━━━━━━━━━━━━━\n${error instanceof Error ? error.message : 'Ocurrió un error inesperado.'}`).catch(() => undefined)
       await react('❌').catch(() => undefined)
       return true
     }

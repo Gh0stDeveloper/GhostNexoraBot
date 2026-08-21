@@ -15,6 +15,10 @@ git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
 if command -v yt-dlp >/dev/null 2>&1; then yt-dlp -U >/dev/null 2>&1 || true; fi
+if ! command -v webpmux >/dev/null 2>&1 || ! command -v zip >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y webp zip
+fi
 npm install
 npm run build
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"

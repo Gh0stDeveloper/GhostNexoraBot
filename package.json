@@ -12,6 +12,11 @@
     "pair": "npm run pair --workspace=@ghostnexora/bot",
     "web": "npm run start --workspace=@ghostnexora/web"
   },
+  "overrides": {
+    "redstar": {
+      "minimatch": "3.1.5"
+    }
+  },
   "engines": {
     "node": ">=24.0.0",
     "npm": ">=11.0.0"
