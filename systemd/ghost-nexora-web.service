@@ -10,8 +10,8 @@ Group=__SERVICE_USER__
 WorkingDirectory=__INSTALL_DIR__
 Environment=NODE_ENV=production
 Environment=ENV_FILE=__INSTALL_DIR__/.env
-Environment=PORT=3000
-Environment=BOT_HEALTH_URL=http://127.0.0.1:3001/health
+Environment=PORT=__WEB_PORT__
+Environment=BOT_HEALTH_URL=http://127.0.0.1:__BOT_HEALTH_PORT__/health
 ExecStart=/usr/bin/env npm --prefix __INSTALL_DIR__ run web
 Restart=always
 RestartSec=5
