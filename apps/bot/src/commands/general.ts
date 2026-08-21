@@ -3,6 +3,7 @@ import type { BotCommand } from '../types.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { getBrandingAsset } from '../services/branding.js'
 import { economy } from '../services/economy.js'
+import { subbotCustomization } from '../services/subbot-customization.js'
 
 function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400)
@@ -18,9 +19,17 @@ async function botAvatar(ctx: Parameters<BotCommand['handler']>[0]) {
 }
 
 async function menuArtwork(ctx: Parameters<BotCommand['handler']>[0]) {
-  const banner = await getBrandingAsset('menu').catch(() => null)
+  const banner = await getBrandingAsset('menu', ctx.instanceId).catch(() => null)
   if (banner?.kind === 'image') return banner.path
   return botAvatar(ctx)
+}
+
+function identity(ctx: Parameters<BotCommand['handler']>[0]) {
+  if (ctx.instanceId) {
+    const custom = subbotCustomization.get(ctx.instanceId)
+    return { shortName: custom.shortName, longName: custom.longName, currencyName: custom.currencyName, label: `Subbot #${ctx.instanceId}` }
+  }
+  return { shortName: ctx.settings.botDisplayName, longName: ctx.settings.botDisplayName, currencyName: ctx.settings.currencyName, label: 'MainBot' }
 }
 
 export const generalCommands: BotCommand[] = [
@@ -29,12 +38,13 @@ export const generalCommands: BotCommand[] = [
     async handler(ctx) {
       const p = ctx.prefix
       const artwork = await menuArtwork(ctx)
-      const privateUntil = ctx.isGroup || ctx.isBotStaff ? null : economy.hasEntitlement(ctx.sender, 'private_access')
-      const privateUnlocked = ctx.isGroup || ctx.isBotStaff || Boolean(privateUntil)
+      const brand = identity(ctx)
+      const privateUntil = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner ? null : economy.hasEntitlement(ctx.sender, 'private_access')
+      const privateUnlocked = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner || Boolean(privateUntil)
 
       if (!privateUnlocked) {
         await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-          title: `🔐 ${ctx.settings.botDisplayName} · CHAT PRIVADO PREMIUM`,
+          title: `🔐 ${brand.longName} · CHAT PRIVADO PREMIUM`,
           imageUrl: artwork,
           body: [
             `Hola, *${ctx.pushName}*.`,
@@ -54,7 +64,7 @@ export const generalCommands: BotCommand[] = [
             '',
             'En grupos puedes seguir usando las funciones permitidas por sus administradores.',
           ].join('\n'),
-          footer: 'Ghost Nexora Bot · acceso privado por suscripción',
+          footer: `${brand.longName} · acceso privado por suscripción`,
           buttons: [
             { type: 'reply', text: '🛒 Ver tienda', id: `${p}shop` },
             { type: 'reply', text: '💰 Mi saldo', id: `${p}balance` },
@@ -65,22 +75,27 @@ export const generalCommands: BotCommand[] = [
       }
 
       const accessLine = privateUntil ? `┃ Privado » activo hasta *${new Date(privateUntil).toLocaleDateString('es-MX')}*` : ''
-      const staffSection = ctx.isBotStaff ? `
-╭─〔 🛡️ *STAFF DEL BOT* 〕
-│ ${p}status · ${p}botadmins · ${p}suggestions
-│ ${p}adultmode on|off · ${p}setbotname <nombre>
+      const customizationSection = ctx.isBotStaff || ctx.isSubbotOwner ? `
+╭─〔 🎛️ *PERSONALIZAR ${brand.label.toUpperCase()}* 〕
+│ ${p}setbotname corto / largo
 │ ${p}setbotcurrency <nombre> · ${p}setpfp
 │ ${p}sb · ${p}welbanner · ${p}byebanner
 │ ${p}delbanner · ${p}delwelbanner · ${p}delbyebanner
+╰────────────────` : ''
+      const staffSection = ctx.isBotStaff ? `
+╭─〔 🛡️ *STAFF DEL BOT* 〕
+│ ${p}status · ${p}botadmins · ${p}suggestions
+│ ${p}adultmode on|off
 ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode status · ${p}restart` : ''}
 ╰────────────────` : ''
       const menu = `
-╭━━━〔 👻 *${ctx.settings.botDisplayName.toUpperCase()}* 〕━━━╮
+╭━━━〔 👻 *${brand.longName.toUpperCase()}* 〕━━━╮
+┃ Instancia » *${brand.label}*
 ┃ Hola, *${ctx.pushName}*
 ┃ Prefijo » *${p}*
 ┃ Uptime » *${formatUptime(process.uptime())}*
-┃ Moneda » *${ctx.settings.currencyName} (NXC)*
-┃ Rol » *${ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : 'Usuario'}*
+┃ Moneda » *${brand.currencyName} (NXC)*
+┃ Rol » *${ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : ctx.isSubbotOwner ? 'Owner del subbot' : 'Usuario'}*
 ${accessLine}
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
@@ -177,17 +192,18 @@ ${accessLine}
 │ ${p}xvideos · ${p}xnxx · ${p}pornhub
 │ ${p}gelbooru [tags] · ${p}e621 [tags]
 ╰────────────────
+${customizationSection}
 ${staffSection}
 
 ✦ Usa los comandos con responsabilidad.
-✦ Sin banner personalizado, el menú usa la foto real del bot.
+✦ Cada subbot puede conservar identidad y banners independientes.
 ✦ Noticias y cambios oficiales: botón *Visitar canal*.`.trim()
 
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-        title: `✦ ${ctx.settings.botDisplayName} · COMMAND CENTER ✦`,
+        title: `✦ ${brand.longName} · COMMAND CENTER ✦`,
         body: menu,
         imageUrl: artwork,
-        footer: 'Ghost Developer / Nexora · WhatsApp Multi-Device',
+        footer: `${brand.shortName} · Ghost Developer / Nexora`,
         buttons: [
           { type: 'url', text: '📢 Visitar canal', url: config.officialChannelUrl },
           { type: 'reply', text: '👤 Mi perfil', id: `${p}profile` },
@@ -202,18 +218,21 @@ ${staffSection}
       const start = performance.now()
       await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const latency = Math.max(0, Math.round(performance.now() - start))
-      await ctx.reply(`╭━━〔 🏓 *PONG* 〕━━╮\n┃ Latencia interna » *${latency} ms*\n┃ Uptime » *${formatUptime(process.uptime())}*\n┃ Estado » *ONLINE*\n╰━━━━━━━━━━━━━━╯`)
+      const brand = identity(ctx)
+      await ctx.reply(`╭━━〔 🏓 *${brand.shortName} · PONG* 〕━━╮\n┃ Latencia interna » *${latency} ms*\n┃ Uptime » *${formatUptime(process.uptime())}*\n┃ Estado » *ONLINE*\n╰━━━━━━━━━━━━━━╯`)
     },
   },
   {
     name: 'info', aliases: ['about', 'botinfo'], category: 'general', description: 'Información del bot.',
     async handler(ctx) {
       const artwork = await menuArtwork(ctx)
+      const brand = identity(ctx)
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-        title: `👻 ${ctx.settings.botDisplayName}`,
+        title: `👻 ${brand.longName}`,
         imageUrl: artwork,
         body: [
           '╭─〔 *INFORMACIÓN* 〕',
+          `│ Instancia » ${brand.label}`,
           '│ Plataforma » WhatsApp Multi-Device',
           '│ Core » TypeScript + Baileys',
           '│ Panel » Next.js + Tailwind CSS',
