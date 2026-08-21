@@ -1,20 +1,53 @@
+import QRCode from 'qrcode'
 import { config } from '../config.js'
-import type { BotCommand } from '../types.js'
+import type { BotCommand, CommandContext } from '../types.js'
 import { economy } from '../services/economy.js'
 import { subbotManager } from '../core/subbots.js'
 
 function fmtDate(value: number | null) { return value ? new Date(value).toLocaleString('es-MX') : 'N/D' }
 function webBase() { return config.publicWebUrl.replace(/\/$/, '') }
 
+async function sendQr(ctx: CommandContext, instanceId: number, qr: string, reason?: string) {
+  const image = await QRCode.toBuffer(qr, { type: 'png', width: 720, margin: 2, errorCorrectionLevel: 'M' })
+  await ctx.socket.sendMessage(ctx.chatId, {
+    image,
+    caption: [
+      '📲 *QR DE VINCULACIÓN · SUBBOT*',
+      '━━━━━━━━━━━━━━',
+      `Instancia: *#${instanceId}*`,
+      reason ? 'El código numérico no estuvo disponible, así que activé el método QR automáticamente.' : 'Método QR listo.',
+      '',
+      'En el WhatsApp que quieres convertir en subbot:',
+      '*Dispositivos vinculados → Vincular un dispositivo*',
+      'y escanea este QR.',
+      '',
+      '⚠️ El QR es temporal. Si vence, vuelve a usar *.subbot qr*.',
+    ].filter(Boolean).join('\n'),
+  }, { quoted: ctx.message })
+}
+
 export const subbotCommands: BotCommand[] = [
   {
-    name: 'subbot', aliases: ['jadibot', 'serbot'], category: 'subbots', description: 'Gestiona tu subbot comprado con Nexora Coins.', usage: 'subbot status|pair|portal',
+    name: 'subbot', aliases: ['jadibot', 'serbot'], category: 'subbots', description: 'Gestiona tu subbot comprado con Nexora Coins.', usage: 'subbot status|pair|qr|portal',
     async handler(ctx) {
       const action = (ctx.args[0] ?? 'status').toLowerCase()
       const record = economy.getActiveSubbot(ctx.sender)
       if (action === 'status') {
         if (!record) throw new Error(`No tienes un subbot activo. Consulta ${ctx.prefix}shop.`)
-        await ctx.reply(['🤖 *MI SUBBOT*', '', `🆔 Instancia: #${record.id}`, `📱 Número: ${record.phone ?? 'sin vincular'}`, `🟢 Estado: ${record.status}`, `⏳ Vence: ${fmtDate(record.expiresAt)}`, `💬 Mensajes: ${record.messagesProcessed}`, `📥 Tráfico: ${(record.downloadBytes / 1024 / 1024).toFixed(1)} MB`, '', record.phone ? `Usa *${ctx.prefix}subbot portal* para generar un token de acceso web.` : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*.`].join('\n'))
+        await ctx.reply([
+          '🤖 *MI SUBBOT*',
+          '',
+          `🆔 Instancia: #${record.id}`,
+          `📱 Número: ${record.phone ?? 'sin vincular'}`,
+          `🟢 Estado: ${record.status}`,
+          `⏳ Vence: ${fmtDate(record.expiresAt)}`,
+          `💬 Mensajes: ${record.messagesProcessed}`,
+          `📥 Tráfico: ${(record.downloadBytes / 1024 / 1024).toFixed(1)} MB`,
+          '',
+          record.phone
+            ? `Usa *${ctx.prefix}subbot portal* para generar un token de acceso web.`
+            : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*. Si el código falla, usa *${ctx.prefix}subbot qr*.`
+        ].join('\n'))
         return
       }
       if (action === 'pair') {
@@ -23,9 +56,31 @@ export const subbotCommands: BotCommand[] = [
         if (!phone) throw new Error(`Uso: ${ctx.prefix}subbot pair 52XXXXXXXXXX`)
         const result = await subbotManager.pair(ctx.sender, phone)
         if (result.alreadyLinked) { await ctx.reply('✅ Tu subbot ya estaba vinculado.'); return }
-        if (!result.code) throw new Error('WhatsApp no devolvió un código de vinculación válido.')
+        if (result.qr) {
+          await sendQr(ctx, record.id, result.qr, result.fallbackReason)
+          return
+        }
+        if (!result.code) throw new Error('WhatsApp no devolvió código ni QR de vinculación.')
         const pretty = result.code.match(/.{1,4}/g)?.join('-') ?? result.code
-        await ctx.reply(`🔗 *CÓDIGO DE SUBBOT*\n\n*${pretty}*\n\nEn el WhatsApp que quieres convertir en subbot:\n*Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono.*\n\nEl código es temporal y pertenece únicamente a tu instancia #${record.id}.`)
+        await ctx.reply([
+          '🔗 *CÓDIGO DE SUBBOT*',
+          '',
+          `*${pretty}*`,
+          '',
+          'En el WhatsApp que quieres convertir en subbot:',
+          '*Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono.*',
+          '',
+          `El código es temporal y pertenece únicamente a tu instancia #${record.id}.`,
+          `Si WhatsApp rechaza o no muestra el código, usa *${ctx.prefix}subbot qr* y recibirás un QR para escanear.`,
+        ].join('\n'))
+        return
+      }
+      if (action === 'qr') {
+        if (!record) throw new Error(`Compra una suscripción en ${ctx.prefix}shop antes de vincular un subbot.`)
+        const result = await subbotManager.qr(ctx.sender)
+        if (result.alreadyLinked) { await ctx.reply('✅ Tu subbot ya está vinculado; no necesitas un QR.'); return }
+        if (!result.qr) throw new Error('WhatsApp no devolvió un QR válido.')
+        await sendQr(ctx, record.id, result.qr)
         return
       }
       if (action === 'portal') {
@@ -42,12 +97,12 @@ export const subbotCommands: BotCommand[] = [
           `Instancia: *#${record.id}*`,
           `Vence: *${fmtDate(token.expiresAt)}*`,
           '',
-          'Abre el panel, selecciona Subbot y pega el token. La web creará una sesión segura y el token no quedará en la URL.',
-          'No compartas el token.',
+          'Abre el panel, selecciona Subbot y pega el token. Después del login se usa una sesión segura y el token no quedará en la URL.',
+          'No compartas este token.',
         ].join('\n'))
         return
       }
-      throw new Error(`Acción inválida. Usa ${ctx.prefix}subbot status, pair o portal.`)
+      throw new Error(`Acción inválida. Usa ${ctx.prefix}subbot status, pair, qr o portal.`)
     },
   },
   {
