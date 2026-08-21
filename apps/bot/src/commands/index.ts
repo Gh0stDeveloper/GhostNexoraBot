@@ -7,6 +7,7 @@ import { downloadCommands } from './downloads.js'
 import { youtubeFriendlyCommands } from './youtube-friendly.js'
 import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
+import { booruCommands } from './booru.js'
 import { groupCommands } from './groups.js'
 import { securityCommands } from './security.js'
 import { economyCommands } from './economy.js'
@@ -29,6 +30,7 @@ export const commands: BotCommand[] = [
   ...youtubeFriendlyCommands,
   ...lyricsCommands,
   ...resourceCommands,
+  ...booruCommands,
   ...groupCommands,
   ...securityCommands,
   ...economyCommands,
