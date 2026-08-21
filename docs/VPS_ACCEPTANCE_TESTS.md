@@ -501,7 +501,7 @@ Y:
 .erome status
 ```
 
-Debe indicar una sesión por cookie sin mostrar el valor secreto. Las cookies renovadas por Erome se persisten en `${DATA_DIR}/erome-session.json` con permisos privados.
+Debe indicar una sesión por cookie sin mostrar el valor secreto. Las cookies renovadas por Erome se persisten en el archivo `erome-session.json` dentro del directorio configurado por `DATA_DIR`, con permisos privados.
 
 ## 15. Google y Wikipedia
 
