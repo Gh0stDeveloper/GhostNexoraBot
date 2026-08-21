@@ -38,6 +38,15 @@ export function getSender(message: WAMessage): string {
   return message.key.participant ?? message.key.remoteJid ?? ''
 }
 
+export function getSenderCandidates(message: WAMessage): string[] {
+  return [...new Set([
+    message.key.participantAlt,
+    message.key.remoteJidAlt,
+    message.key.participant,
+    message.key.remoteJid,
+  ].filter((value): value is string => Boolean(value)))]
+}
+
 export function digitsFromJid(jid: string): string {
   return jid.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? ''
 }
