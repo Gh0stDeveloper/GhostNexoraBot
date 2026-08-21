@@ -4,7 +4,8 @@ import { logger } from '../utils/logger.js'
 const DIRECTORY_URL = 'https://cobalt.directory/api/working?type=api'
 const DIRECTORY_CACHE_MS = 10 * 60_000
 const MAX_DIRECTORY_INSTANCES = 8
-const REQUEST_TIMEOUT_MS = 20_000
+const MAX_PARALLEL_INSTANCES = 6
+const REQUEST_TIMEOUT_MS = 15_000
 
 type DirectoryPayload = {
   data?: Record<string, unknown>
@@ -79,7 +80,7 @@ async function directoryInstances() {
 
   const response = await fetch(DIRECTORY_URL, {
     headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(10_000),
   })
   if (!response.ok) throw new Error(`cobalt.directory respondió HTTP ${response.status}.`)
   const payload = await response.json() as DirectoryPayload
@@ -178,21 +179,26 @@ async function tryInstance(instance: CobaltInstance, youtubeUrl: string, kind: '
 }
 
 export async function resolveCobaltYouTube(youtubeUrl: string, kind: 'mp3' | 'mp4', requestedQuality = 720): Promise<CobaltResolved> {
-  const instances = await candidateInstances()
+  const instances = (await candidateInstances()).slice(0, MAX_PARALLEL_INSTANCES)
   if (!instances.length) throw new Error('No hay instancias Cobalt disponibles.')
 
-  const failures: string[] = []
-  for (const instance of instances) {
-    try {
-      const result = await tryInstance(instance, youtubeUrl, kind, requestedQuality)
-      logger.info({ provider: result.provider, kind }, 'youtube cobalt provider resolved')
-      return result
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      failures.push(`${new URL(instance.url).hostname}: ${message.replace(/\s+/g, ' ').slice(0, 100)}`)
-      logger.warn({ error, provider: instance.url, kind }, 'youtube cobalt provider failed')
+  try {
+    const result = await Promise.any(instances.map(async (instance) => {
+      try {
+        return await tryInstance(instance, youtubeUrl, kind, requestedQuality)
+      } catch (error) {
+        logger.warn({ error, provider: instance.url, kind }, 'youtube cobalt provider failed')
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`${new URL(instance.url).hostname}: ${message.replace(/\s+/g, ' ').slice(0, 120)}`)
+      }
+    }))
+    logger.info({ provider: result.provider, kind }, 'youtube cobalt provider resolved')
+    return result
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      const failures = error.errors.map((item) => item instanceof Error ? item.message : String(item)).slice(0, 4)
+      throw new Error(`Todas las instancias Cobalt fallaron: ${failures.join(' · ')}`)
     }
+    throw error
   }
-
-  throw new Error(`Todas las instancias Cobalt fallaron: ${failures.slice(0, 4).join(' · ')}`)
 }
