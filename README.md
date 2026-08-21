@@ -2,110 +2,328 @@
 
 Bot profesional y extensible para **WhatsApp Multi-Device**, desarrollado por **Ghost Developer / Nexora**.
 
-> ⚠️ Proyecto no oficial. Ghost Nexora Bot no está afiliado con WhatsApp ni Meta. Úsalo de forma responsable, evita spam y respeta las condiciones y licencias de los servicios desde los que descargues contenido.
+[![CI](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions/workflows/ci.yml/badge.svg)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
 
-## ✨ Características de la V1
+> ⚠️ Proyecto no oficial. Ghost Nexora Bot no está afiliado con WhatsApp, Meta, YouTube ni las plataformas soportadas. Respeta las reglas de cada servicio y descarga únicamente contenido que tengas derecho a obtener.
 
-- 🔗 Vinculación **Multi-Device por código de emparejamiento**, usando tu número de WhatsApp, con QR como alternativa.
-- 💾 Sesión persistente: no necesitas volver a vincular la cuenta después de cada reinicio.
-- 👑 Los comandos enviados desde la propia cuenta vinculada se reconocen automáticamente como owner; también puedes configurar co-owners por número.
-- ⚙️ Prefijo configurable y persistente. El prefijo por defecto es `.`.
-- 📜 Menú completo con `.menu` y categorías.
-- ❤️ Reacciones automáticas a comandos y, opcionalmente, a conversaciones comunes.
-- 🖼️ Creación de stickers desde imágenes o videos.
-- 🎞️ Conversión de sticker a imagen PNG.
-- 🔎 Búsqueda de YouTube con `.yts` y reproducción/descarga por texto con `.play` y `.playvideo`.
-- 📥 Descargas de YouTube en audio/video sin cookies configuradas por el bot.
-- 🎚️ Consulta de calidades disponibles con `.ytformats` y selección de resolución con `.ytmp4`.
-- 🎧 SoundCloud por URL o búsqueda.
-- 📱 Descargas públicas compatibles con TikTok, Instagram, Facebook y X/Twitter mediante `yt-dlp`.
-- ☁️ Descargas de MediaFire mediante resolución del enlace público.
-- 👥 Herramientas de administración de grupos con comprobación PN/LID compatible con Baileys 7.
-- 🌐 Web moderna en **Next.js 16 + Tailwind CSS 4**, con estado real del bot.
-- ❤️ Endpoint de salud interno para mostrar conexión, uptime y prefijo actual.
-- 🛡️ Límites de tamaño, validación de hosts y limpieza de archivos temporales.
-- 🧪 GitHub Actions para TypeScript y build de producción.
-- 🚀 Instalador para Ubuntu/VPS con Node.js, FFmpeg, pnpm, `yt-dlp` y servicios `systemd` endurecidos.
+## 📢 Canal oficial
 
-## 🚀 Instalación rápida en VPS Ubuntu
+**Ghost Nexora Bot — Noticias, actualizaciones y grupos oficiales**
 
-Con la versión publicada en `main`, ejecuta **un solo comando**:
+https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i
+
+Las noticias de nuevas versiones, mantenimiento, grupos oficiales del desarrollador y cambios importantes del bot se publicarán en ese canal.
+
+---
+
+## ✨ Funciones principales
+
+### 🔗 WhatsApp Multi-Device
+
+- Baileys 7 Multi-Device.
+- Vinculación por **número + código de emparejamiento**.
+- QR como respaldo.
+- Sesión persistente.
+- Reconexión automática después del reinicio que WhatsApp realiza al completar pairing.
+- Compatibilidad con identificadores PN/LID actuales de WhatsApp.
+- La cuenta principal vinculada se reconoce como owner.
+
+### 📜 Sistema de comandos
+
+- Prefijo predeterminado: `.`
+- Cambio persistente con `.setprefix !`
+- Reacciones al procesar comandos.
+- Permisos owner/admin/bot-admin.
+- Respuestas interactivas nativas de WhatsApp.
+- `.yts` utiliza un **carrusel horizontal** con portada, título, duración, vistas, botones de audio, letra y relacionadas.
+
+### 🎨 Stickers
+
+- `.sticker` / `.s`
+- `.toimg`
+- `.stickereffects`
+- Efectos: normal, espejo horizontal/vertical, 90/180/270°, zoom, círculo, cuadrado y escala de grises.
+- Conversión con `sharp` y FFmpeg, evitando una dependencia antigua de stickers.
+
+### 🎵 YouTube y audio
+
+- `.yts <texto>`
+- `.play <texto>`
+- `.playvideo <texto>`
+- `.lyrics <canción>`
+- `.ytformats <url>`
+- `.ytmp3 <url>`
+- `.ytmp4 <url> 1080`
+- `.soundcloud <url|texto>`
+
+Las respuestas intentan mostrar:
+
+- título;
+- autor/canal;
+- duración;
+- vistas;
+- likes cuando la plataforma los entrega;
+- miniatura;
+- tamaño final del archivo;
+- descripción abreviada.
+
+Las letras se consultan mediante **LRCLIB**, sin API de pago.
+
+Ghost Nexora Bot no configura cookies de YouTube por defecto. Usa `yt-dlp`, FFmpeg y Node como runtime JavaScript para los challenges actuales de YouTube.
+
+### 📱 TikTok, Instagram y Facebook
+
+Para estas plataformas existe una cadena de fallback:
+
+1. resolvedor web público sin cookies;
+2. `yt-dlp` local si el proveedor público falla.
+
+En TikTok se prioriza el enlace HD/sin marca de agua cuando el proveedor público lo ofrece.
+
+Esto evita guardar una cuenta personal de Facebook dentro del bot únicamente para descargar videos públicos.
+
+### ☁️ Archivos y recursos
+
+- `.mediafire <url>`
+- `.gdrive <url>` — archivo público de Google Drive.
+- `.gitclone <url>` — repositorio público de GitHub como ZIP.
+- `.apk <texto>` — búsqueda en **F-Droid**.
+- `.apkdl <url-fdroid>` — descarga APK desde F-Droid.
+- `.anime <texto>` — búsqueda mediante Jikan/MyAnimeList.
+- `.manga <texto>` — búsqueda en MangaDex.
+
+Ghost Nexora Bot **no automatiza catálogos de APK crackeadas/modificadas**. Para aplicaciones se priorizan F-Droid y releases/repositorios públicos, reduciendo riesgo de malware, firmas alteradas y paquetes redistribuidos sin autorización.
+
+---
+
+## 🪙 Nexora Economy
+
+La moneda virtual interna se llama **Nexora Coins (`NXC`)**.
+
+No es una criptomoneda blockchain ni representa dinero real; es una unidad virtual de la economía del bot para comprar funciones y suscripciones internas.
+
+### Comandos
+
+| Acción | Comandos |
+|---|---|
+| Saldo | `.balance`, `.bal` |
+| Trabajar | `.work`, `.w`, `.trabajar` |
+| Depositar al banco | `.deposit`, `.dep`, `.guardar` |
+| Retirar | `.withdraw`, `.retirar` |
+| Transferir | `.transfer @usuario 500`, `.pay` |
+| Robar cartera | `.rob @usuario`, `.robar` |
+| Ranking | `.top` |
+| Tienda | `.shop`, `.store` |
+| Comprar | `.buy <producto>` |
+
+El dinero del **banco no puede ser robado**. `.rob` solo afecta saldo que el usuario lleva en cartera y tiene cooldown/penalización.
+
+### Productos iniciales
+
+- `private1d`
+- `private7d`
+- `subbot1d`
+- `subbot7d`
+- `subbot30d`
+
+Comprar de nuevo tiempo de subbot **extiende la instancia existente** en lugar de crear otra innecesariamente.
+
+El owner puede activar `.privatemode on` para exigir una suscripción de acceso privado en módulos que no sean esenciales. Economía, tienda, menú y administración de la propia suscripción siguen accesibles.
+
+---
+
+## 🤖 Subbots
+
+Una suscripción de subbot se compra con Nexora Coins.
+
+```text
+.shop
+.buy subbot7d
+.subbot pair 5215512345678
+```
+
+El bot devuelve un código de vinculación para el número elegido. La sesión de cada subbot se guarda en un directorio independiente.
+
+### Usuario del subbot
+
+```text
+.subbot status
+.subbot pair <numero>
+.subbot portal
+```
+
+`.subbot portal` genera un enlace aleatorio con caducidad. Ese portal **solo puede consultar la instancia asociada al token**.
+
+### Owner
+
+```text
+.subbots
+.adminpanel
+```
+
+`.adminpanel` solo entrega el enlace administrativo en chat privado para evitar filtrar el token owner en un grupo.
+
+El dashboard owner muestra las instancias, estado, owner, número vinculado, vencimiento, mensajes procesados y tráfico de descargas. Las métricas se registran por instancia.
+
+---
+
+## 👥 Administración de grupos
+
+Comandos base:
+
+```text
+.tagall
+.hidetag
+.link
+.group open
+.group close
+.kick
+.promote
+.demote
+```
+
+Protecciones configurables:
+
+```text
+.enable welcome
+.enable antilink
+.enable antispam
+
+.disable welcome
+.disable antilink
+.disable antispam
+```
+
+La bienvenida **no consulta ni envía la foto de perfil del nuevo participante**. Si `WELCOME_IMAGE_URL` está configurado se utiliza una imagen fija del bot; si no, se envía texto.
+
+---
+
+## 🔞 Módulo 18+
+
+El módulo existe como componente **opt-in** y está desactivado globalmente en una instalación nueva.
+
+El owner lo habilita con:
+
+```text
+.adultmode on
+```
+
+En grupos además hace falta una allowlist:
+
+```text
+.adult allow
+.adult deny
+.adult status
+```
+
+Cada usuario debe confirmar acceso voluntario:
+
+```text
+.adult18 accept
+```
+
+Proveedores implementados:
+
+```text
+.xvideos <busqueda|url>
+.xnxx <busqueda|url>
+.pornhub <busqueda|url>
+```
+
+En privado depende de `ADULT_PRIVATE_ENABLED`. El módulo bloquea búsquedas que indiquen contenido relacionado con menores y nunca intenta eludir esa restricción.
+
+---
+
+## 📦 Tamaño máximo de descarga
+
+La configuración inicial usa:
+
+```env
+MAX_DOWNLOAD_MB=1900
+```
+
+Se deja margen por debajo de archivos cercanos a 2 GB. El máximo real que WhatsApp acepte puede depender del tipo de mensaje, cliente y cambios del servicio.
+
+Los archivos grandes se almacenan temporalmente en disco y se envían mediante ruta de archivo; no se cargan completos en RAM. MediaFire y los recursos también usan streaming a disco.
+
+---
+
+## 🚀 Instalación VPS
+
+### Después de que la versión esté en `main`
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo bash
 ```
 
+El instalador hace lo siguiente:
+
+1. instala Node.js 24, npm, FFmpeg, Git, nginx y `yt-dlp`;
+2. clona/actualiza el repositorio;
+3. ejecuta `npm install` y `npm run build`;
+4. crea el usuario Linux `ghostbot`;
+5. crea almacenamiento persistente para sesión, SQLite y subbots;
+6. solicita el número principal;
+7. usa ese número como owner si `OWNER_NUMBERS` todavía está vacío;
+8. genera el pairing code;
+9. instala servicios `systemd`;
+10. genera un token administrativo web aleatorio.
+
+El número puede escribirse con `+`, espacios o guiones. El instalador conserva los dígitos introducidos. Escribe el número en el formato internacional que tu cuenta de WhatsApp utiliza.
+
+### Probar la rama Draft actual
+
+Mientras PR #1 siga en Draft:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/feature/ghost-nexora-bot-v1/scripts/install.sh | sudo env BRANCH=feature/ghost-nexora-bot-v1 bash
+```
+
+---
+
+## 🔒 HTTPS automático
+
+Primero crea un registro DNS `A`/`AAAA` que apunte tu dominio a la VPS. Después instala pasando el dominio:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo env BOT_DOMAIN=bot.tudominio.com LETSENCRYPT_EMAIL=tu-correo@dominio.com bash
+```
+
 El instalador:
 
-1. instala Node.js, FFmpeg, Git, pnpm y `yt-dlp`;
-2. clona/actualiza Ghost Nexora Bot en `/opt/ghost-nexora-bot`;
-3. instala dependencias y compila bot + web;
-4. crea un usuario de servicio dedicado sin privilegios administrativos;
-5. guarda sesión y datos persistentes fuera del repositorio;
-6. solicita tu número de WhatsApp y genera el código de vinculación;
-7. instala y activa `ghost-nexora-bot.service` y `ghost-nexora-web.service`.
+- configura nginx como reverse proxy;
+- redirige al servidor Next.js local;
+- solicita certificado Let's Encrypt mediante Certbot;
+- activa redirección HTTP → HTTPS.
 
-Para actualizar después:
+Si DNS todavía no propagó, la instalación del bot continúa y Certbot puede repetirse después.
 
-```bash
-sudo /opt/ghost-nexora-bot/scripts/update.sh
+---
+
+## ⚙️ `.env`
+
+```env
+BOT_NAME=Ghost Nexora Bot
+PREFIX=.
+OWNER_NUMBERS=5210000000000
+AUTO_REACT=true
+MAX_DOWNLOAD_MB=1900
+SESSION_DIR=./data/session
+DATA_DIR=./data
+BOT_HEALTH_PORT=3001
+BOT_HEALTH_URL=http://127.0.0.1:3001/health
+WEB_PORT=3000
+PUBLIC_WEB_URL=https://bot.example.com
+ADMIN_WEB_TOKEN=token-generado-automaticamente
+ADULT_PRIVATE_ENABLED=true
+WELCOME_IMAGE_URL=
+OFFICIAL_CHANNEL_URL=https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i
+LOG_LEVEL=info
 ```
 
-## 🔗 Vincular WhatsApp manualmente
+Nunca publiques `.env`, `data/session`, la base SQLite ni los tokens de portal.
 
-```bash
-pnpm pair
-```
-
-Escribe el número con código de país, **solo dígitos**. Ejemplo para México: `521XXXXXXXXXX`.
-
-En WhatsApp abre:
-
-**Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono**
-
-e introduce el código mostrado por Ghost Nexora Bot.
-
-Si el código de emparejamiento no se puede usar, el proceso normal del bot mantiene **QR como respaldo**.
-
-## 📜 Comandos principales
-
-El prefijo por defecto es `.`.
-
-| Categoría | Comandos |
-|---|---|
-| General | `.menu`, `.help`, `.ping`, `.info`, `.prefix` |
-| Stickers | `.sticker`, `.s`, `.toimg` |
-| Búsqueda/Play | `.yts`, `.play`, `.playvideo`, `.soundcloud` |
-| YouTube | `.ytformats`, `.ytmp3`, `.yta`, `.ytmp4`, `.ytv` |
-| Descargas | `.tiktok`, `.instagram`, `.facebook`, `.twitter`, `.mediafire` |
-| Grupos | `.tagall`, `.hidetag`, `.link`, `.group`, `.kick`, `.promote`, `.demote` |
-| Owner | `.setprefix`, `.restart`, `.status` |
-
-Ejemplos:
-
-```text
-.menu
-.sticker
-.yts Linkin Park Numb
-.play Linkin Park Numb
-.playvideo trailer oficial
-.soundcloud https://soundcloud.com/...
-.ytformats https://youtu.be/...
-.ytmp4 https://youtu.be/... 720
-.ytmp3 https://youtu.be/...
-.mediafire https://www.mediafire.com/file/...
-.setprefix !
-```
-
-Para `.sticker`, responde a una imagen/video con el comando o envía el comando como caption del archivo.
-
-## 🎬 Descargas y cookies
-
-Ghost Nexora Bot **no configura ni almacena cookies de YouTube**. La V1 usa `yt-dlp` como motor local para contenido público y FFmpeg para combinar/transcodificar cuando sea necesario.
-
-Esto evita depender del HTML, publicidad y redirecciones de páginas convertidoras públicas que cambian constantemente. Los adaptadores están aislados en `apps/bot/src/services/`, por lo que se pueden añadir proveedores HTTP adicionales o fallbacks más adelante sin reescribir el router de comandos.
-
-Descarga únicamente contenido que sea tuyo, de dominio público o para el que tengas permiso/licencia.
+---
 
 ## 🧱 Arquitectura
 
@@ -114,83 +332,109 @@ GhostNexoraBot/
 ├── apps/
 │   ├── bot/
 │   │   └── src/
-│   │       ├── commands/     # Comandos y permisos
-│   │       ├── core/         # Sesión, router, settings
-│   │       ├── services/     # Descargas, MediaFire, stickers
-│   │       └── utils/        # Mensajes, JID/LID, logging
-│   └── web/                  # Next.js + Tailwind CSS
-├── scripts/                  # Instalación y actualización VPS
-├── systemd/                  # Servicios Linux endurecidos
-├── .github/workflows/        # CI
+│   │       ├── commands/
+│   │       │   ├── adult.ts
+│   │       │   ├── downloads.ts
+│   │       │   ├── economy.ts
+│   │       │   ├── groups.ts
+│   │       │   ├── lyrics.ts
+│   │       │   ├── resources.ts
+│   │       │   ├── security.ts
+│   │       │   ├── stickers.ts
+│   │       │   └── subbots.ts
+│   │       ├── core/
+│   │       ├── services/
+│   │       └── utils/
+│   └── web/
+│       ├── app/admin/
+│       └── app/subbot/[code]/
+├── scripts/
+├── systemd/
+├── .github/workflows/
 ├── .env.example
-└── pnpm-workspace.yaml
+└── package.json
 ```
 
-## ⚙️ Configuración
+### Persistencia
 
-Copia `.env.example` a `.env` para desarrollo local.
+La V1 utiliza `node:sqlite` de Node 24 para:
 
-```env
-BOT_NAME=Ghost Nexora Bot
-PREFIX=.
-OWNER_NUMBERS=5210000000000
-AUTO_REACT=true
-MAX_DOWNLOAD_MB=60
-SESSION_DIR=./data/session
-DATA_DIR=./data
-BOT_HEALTH_PORT=3001
-BOT_HEALTH_URL=http://127.0.0.1:3001/health
-WEB_PORT=3000
-LOG_LEVEL=info
-```
+- economía;
+- ledger de movimientos;
+- suscripciones;
+- políticas de grupo;
+- subbots;
+- métricas de subbots;
+- tokens temporales de portal.
 
-`OWNER_NUMBERS` acepta varios números separados por coma y sin `+`. La propia cuenta vinculada se considera owner automáticamente cuando envía comandos; `OWNER_NUMBERS` sirve para autorizar números adicionales.
+No necesitas instalar MySQL/PostgreSQL para comenzar a probar el bot.
 
-## 🛡️ Seguridad
+---
 
-- Nunca subas `data/session`, `.env` ni credenciales a GitHub.
-- El instalador ejecuta bot y web con un usuario dedicado sin shell administrativo.
-- Las credenciales persistentes se guardan en `/var/lib/ghost-nexora-bot` en VPS.
-- Las descargas se limitan a dominios soportados y tienen tamaño máximo configurable.
-- Los archivos temporales se eliminan después de enviarse.
-- Los comandos de grupo comprueban permisos del usuario y del bot.
-- La resolución de permisos contempla identificadores **PN y LID** de WhatsApp/Baileys 7.
-- `.setprefix`, `.restart` y operaciones sensibles están restringidas a owner.
-- `systemd` usa `NoNewPrivileges`, `PrivateTmp` y `ProtectSystem=strict`; la web solo puede escribir su caché de runtime.
+## 💻 Desarrollo local
 
-## 💻 Desarrollo
+Requisitos:
 
-Requisitos: Node.js 22+, pnpm, FFmpeg y `yt-dlp`.
+- Node.js 24+
+- npm 11+
+- FFmpeg
+- `yt-dlp`
 
 ```bash
 cp .env.example .env
-pnpm install
-pnpm build
-pnpm pair
-pnpm dev
+npm install
+npm run build
+npm run pair
+npm run bot
 ```
 
-Web: `http://localhost:3000`  
-Health del bot: `http://localhost:3001/health`
+Web:
 
-## 🗺️ Próximas fases
+```bash
+npm run web
+```
 
-- Panel autenticado para gestionar prefijo, owners, módulos y configuración.
-- Sub-bots/sesiones secundarias estilo Jadibot.
-- Persistencia PostgreSQL/Supabase opcional para datos de usuarios y configuración.
-- Sistema de plugins con carga desacoplada.
-- Antispam, bienvenida, antilink, anti-delete y moderación avanzada.
-- Niveles/economía y módulos recreativos opcionales.
-- Dashboard de métricas y logs.
-- Más adaptadores de descarga: Google Drive, GitHub ZIP y otros proveedores públicos estables.
-- Docker/Compose y despliegue multi-instancia.
+---
+
+## 🧪 CI
+
+GitHub Actions valida:
+
+- instalación npm;
+- TypeScript;
+- build del bot;
+- build de Next.js;
+- sintaxis de scripts Bash.
+
+No se debe considerar una versión lista para producción mientras CI no esté verde y no se haya hecho una prueba real de pairing/descarga en VPS.
+
+---
+
+## 🗺️ Roadmap
+
+Próximas mejoras recomendadas:
+
+- rate limits por comando y por grupo;
+- colas de descargas para evitar saturar CPU/disco;
+- cuotas de recursos específicas por subbot;
+- métricas de CPU/errores por instancia;
+- edición de precios de Nexora Economy desde dashboard;
+- roles administrativos configurables;
+- logs del bot desde panel owner;
+- proveedores de descarga intercambiables con health-check;
+- instancia propia opcional de un backend de descargas como fallback, sin depender de cuentas personales;
+- más efectos de stickers y filtros de video con FFmpeg;
+- notificaciones automáticas al canal oficial para releases;
+- backup cifrado de SQLite y configuración;
+- Docker opcional para despliegues multi-instancia;
+- migración opcional a PostgreSQL/Supabase cuando la cantidad de subbots lo justifique.
+
+---
 
 ## 📄 Licencia
 
 MIT. Consulta `LICENSE`.
 
----
-
 ### 👻 Ghost Developer / Nexora
 
-Hecho para ser fácil de instalar, mantener, extender y desplegar en producción.
+Proyecto diseñado para que una instalación pequeña pueda crecer a un servicio multi-instancia sin reescribir todo el bot.
