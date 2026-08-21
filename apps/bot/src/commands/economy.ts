@@ -128,10 +128,15 @@ export const economyCommands: BotCommand[] = [
       const item = products[id]
       if (!item) throw new Error(`Producto inválido. Consulta ${ctx.prefix}shop.`)
       const result = economy.purchase(ctx.sender, item.price, item.kind, item.durationMs, { product: id })
-      if (item.kind === 'subbot_slot' && !economy.getActiveSubbot(ctx.sender)) {
-        economy.createSubbot(ctx.sender, result.expiresAt)
+      if (item.kind === 'subbot_slot') {
+        const active = economy.getActiveSubbot(ctx.sender)
+        if (active) {
+          economy.db.prepare('UPDATE subbots SET expires_at = ? WHERE id = ?').run(result.expiresAt, active.id)
+        } else {
+          economy.createSubbot(ctx.sender, result.expiresAt)
+        }
       }
-      await ctx.reply(`✅ Compra completada.\n\n📦 *${item.label}*\n🪙 Precio: ${fmt(item.price)}\n⏳ Vence: ${new Date(result.expiresAt).toLocaleString('es-MX')}\n\n${item.kind === 'subbot_slot' ? `Continúa con *${ctx.prefix}subbot pair <número>*.` : 'Tu acceso privado ya está activo.'}`)
+      await ctx.reply(`✅ Compra completada.\n\n📦 *${item.label}*\n🪙 Precio: ${fmt(item.price)}\n⏳ Vence: ${new Date(result.expiresAt).toLocaleString('es-MX')}\n\n${item.kind === 'subbot_slot' ? `Continúa con *${ctx.prefix}subbot pair <número>* o consulta *${ctx.prefix}subbot status* si ya estaba vinculado.` : 'Tu acceso privado ya está activo.'}`)
     },
   },
 ]
