@@ -13,6 +13,7 @@ import { handleParticipantUpdate, moderateIncoming } from './services/moderation
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { getMessageText } from './utils/message.js'
 import { logger } from './utils/logger.js'
+import { withTimeout } from './utils/timeout.js'
 
 const startedAt = new Date()
 let connected = false
@@ -61,11 +62,13 @@ async function connect() {
   const { socket } = await createSocket()
   const router = new CommandRouter(commands)
 
-  socket.ev.on('messages.upsert', async ({ messages, type }) => {
+  socket.ev.on('messages.upsert', ({ messages, type }) => {
     if (type !== 'notify') return
     for (const message of messages) {
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
-      await routeMessage(socket, message, router)
+      const chatId = message.key.remoteJid
+      void withTimeout(routeMessage(socket, message, router), 60_000, `routeMessage ${chatId}`)
+        .catch((error) => logger.error({ error, chatId }, 'mensaje colgado o falló'))
     }
   })
 
