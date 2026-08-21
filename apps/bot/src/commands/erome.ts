@@ -13,6 +13,7 @@ import {
 } from '../services/erome.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+import { withTimeout } from '../utils/timeout.js'
 
 function assertAdultAccess(ctx: CommandContext) {
   if (!settings.adultEnabled) throw new Error(`El módulo 18+ está desactivado globalmente. El owner puede habilitarlo con ${ctx.prefix}adultmode on.`)
@@ -378,7 +379,25 @@ export const eromeCommands: BotCommand[] = [
         const index = Number(ctx.args[2])
         if (!albumInput || !Number.isInteger(index)) throw new Error(`Uso: ${ctx.prefix}erome dl <album-id|url> <video>`)
         const id = albumId(albumInput)
-        await ctx.reply(`⬇️ *EROME*\nPreparando video #${index}...`)
+
+        const previewAlbum = await getEromeAlbum(albumInput)
+        const previewVideo = previewAlbum.videos[index - 1]
+        if (!previewVideo) throw new Error(`Elige un video entre 1 y ${previewAlbum.videos.length}.`)
+        const preparing = `⬇️ *EROME · PREPARANDO*\n${previewAlbum.title}\nVideo #${index}`
+        if (previewVideo.poster) {
+          const sent = await withTimeout(
+            ctx.socket.sendMessage(ctx.chatId, {
+              image: { url: previewVideo.poster },
+              caption: preparing,
+            }, { quoted: ctx.message }),
+            10_000,
+            'erome preview send',
+          ).catch(() => null)
+          if (!sent) await ctx.reply(preparing)
+        } else {
+          await ctx.reply(preparing)
+        }
+
         const result = await downloadEromeVideo(albumInput, index)
         try {
           const caption = `🔞 *EROME · VIDEO ${result.video.index}*\n${result.album.title}\n📦 ${(result.size / 1024 / 1024).toFixed(1)} MB`
