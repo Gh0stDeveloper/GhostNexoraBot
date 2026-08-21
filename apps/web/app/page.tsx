@@ -38,9 +38,9 @@ async function getHealth(): Promise<Health> {
 
 const features: Array<{ icon: LucideIcon; title: string; text: string }> = [
   { icon: Link2, title: 'Multi-Device pairing', text: 'Vinculación por número y código de emparejamiento, con sesión persistente y QR de respaldo.' },
-  { icon: Download, title: 'Media downloads', text: 'YouTube con calidades, MediaFire y plataformas sociales públicas mediante adaptadores aislados.' },
+  { icon: Download, title: 'Media downloads', text: 'YouTube con búsqueda y calidades, SoundCloud, MediaFire y plataformas sociales públicas mediante adaptadores aislados.' },
   { icon: WandSparkles, title: 'Stickers', text: 'Convierte imágenes, GIFs y videos a stickers WebP compatibles con WhatsApp.' },
-  { icon: ShieldCheck, title: 'Group controls', text: 'Moderación, menciones, enlace, apertura/cierre y permisos con validación administrativa.' },
+  { icon: ShieldCheck, title: 'Group controls', text: 'Moderación, menciones, enlace, apertura/cierre y permisos compatibles con identidades PN/LID.' },
   { icon: MessageSquareMore, title: 'Smart reactions', text: 'Feedback visual para comandos y reacciones conversacionales opcionales.' },
   { icon: Server, title: 'VPS ready', text: 'Instalación automatizada, systemd, health endpoint y actualización reproducible.' },
 ]
@@ -48,6 +48,7 @@ const features: Array<{ icon: LucideIcon; title: string; text: string }> = [
 const commandGroups = [
   ['General', '.menu · .ping · .info · .prefix'],
   ['Stickers', '.sticker · .s · .toimg'],
+  ['Search & Play', '.yts · .play · .playvideo · .soundcloud'],
   ['YouTube', '.ytformats · .ytmp3 · .ytmp4'],
   ['Downloads', '.tiktok · .instagram · .facebook · .twitter · .mediafire'],
   ['Groups', '.tagall · .hidetag · .link · .group · .kick · .promote · .demote'],
@@ -97,7 +98,7 @@ export default async function Home() {
             <span className="block bg-gradient-to-r from-emerald-300 via-emerald-400 to-cyan-300 bg-clip-text text-transparent">sin una base improvisada.</span>
           </h1>
           <p className="mt-7 max-w-2xl text-base leading-7 text-[var(--muted)] sm:text-lg">
-            Ghost Nexora Bot combina Baileys Multi-Device, comandos modulares, stickers, descargas, controles de grupo y una web operativa en un monorepo preparado para VPS.
+            Ghost Nexora Bot combina Baileys Multi-Device, comandos modulares, stickers, búsqueda y descargas, controles de grupo y una web operativa en un monorepo preparado para VPS.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
             <a href="#install" className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[var(--accent-strong)]">
