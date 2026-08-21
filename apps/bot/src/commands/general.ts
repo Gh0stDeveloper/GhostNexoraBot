@@ -1,5 +1,6 @@
 import { config } from '../config.js'
 import type { BotCommand } from '../types.js'
+import { sendInteractiveCard } from '../services/interactive.js'
 
 function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400)
@@ -8,98 +9,108 @@ function formatUptime(seconds: number) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', `${minutes}m`].filter(Boolean).join(' ')
 }
 
+async function botAvatar(ctx: Parameters<BotCommand['handler']>[0]) {
+  const jid = ctx.socket.user?.id
+  if (!jid) return undefined
+  return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
+}
+
 export const generalCommands: BotCommand[] = [
   {
     name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo.',
     async handler(ctx) {
       const p = ctx.prefix
+      const avatar = await botAvatar(ctx)
+      const staffSection = ctx.isBotStaff ? `
+╭─〔 🛡️ *STAFF DEL BOT* 〕
+│ ${p}status · ${p}botadmins
+│ ${p}suggestions · ${p}adultmode on|off
+│ ${p}setbotname <nombre>
+│ ${p}setbotcurrency <nombre>
+${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode · ${p}restart` : ''}
+╰────────────────` : ''
       const menu = `
-╭━━━〔 👻 *${config.botName.toUpperCase()}* 〕━━━⬣
-┃ 👤 Hola, *${ctx.pushName}*
-┃ ⚙️ Prefijo: *${p}*
-┃ ⏱️ Uptime: *${formatUptime(process.uptime())}*
-┃ 🪙 Economía: *Nexora Coins (NXC)*
-╰━━━━━━━━━━━━━━━━━━━━⬣
+╭━━━〔 👻 *${ctx.settings.botDisplayName.toUpperCase()}* 〕━━━╮
+┃ Hola, *${ctx.pushName}*
+┃ Prefijo » *${p}*
+┃ Uptime » *${formatUptime(process.uptime())}*
+┃ Moneda » *${ctx.settings.currencyName} (NXC)*
+┃ Rol » *${ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : 'Usuario'}*
+╰━━━━━━━━━━━━━━━━━━━━╯
 
-╭─❖ 🌐 *GENERAL*
-│ ${p}menu · ${p}ping · ${p}info · ${p}prefix
+╭─〔 🌐 *GENERAL* 〕
+│ ${p}menu · ${p}help · ${p}ping · ${p}info
+│ ${p}suggest <mensaje> · ${p}cd
 │ ${p}anime <búsqueda> · ${p}manga <búsqueda>
-╰─────────────⬣
+╰────────────────
 
-╭─❖ 🎨 *STICKERS*
-│ ${p}sticker / ${p}s
-│ ${p}stickereffects · ${p}toimg
-╰─────────────⬣
+╭─〔 👤 *PERFIL Y SOCIAL* 〕
+│ ${p}profile · ${p}setdesc · ${p}setbirth DD/MM
+│ ${p}setgender · ${p}level · ${p}tops
+│ ${p}vr · ${p}marry @user · ${p}divorce
+│ ${p}amante @user · ${p}terminar
+╰────────────────
 
-╭─❖ 🎵 *MÚSICA & VIDEO*
-│ ${p}yts <búsqueda>
-│ ${p}play <búsqueda> · ${p}playvideo <búsqueda>
-│ ${p}lyrics <canción>
-│ ${p}ytformats <url>
+╭─〔 🎵 *MÚSICA Y DESCARGAS* 〕
+│ ${p}yts <búsqueda> · ${p}play <búsqueda>
+│ ${p}playvideo <búsqueda> · ${p}lyrics <canción>
 │ ${p}ytmp3 <url> · ${p}ytmp4 <url> [calidad]
-│ ${p}soundcloud <url|búsqueda>
-╰─────────────⬣
+│ ${p}tiktok · ${p}instagram · ${p}facebook
+│ ${p}twitter · ${p}mediafire · ${p}gdrive
+╰────────────────
 
-╭─❖ 📥 *DESCARGAS*
-│ ${p}tiktok <url> · ${p}instagram <url>
-│ ${p}facebook <url> · ${p}twitter <url>
-│ ${p}mediafire <url> · ${p}gdrive <url>
-│ ${p}gitclone <url> · ${p}apk <búsqueda>
-╰─────────────⬣
-
-╭─❖ 🪙 *ECONOMÍA*
-│ ${p}balance / ${p}bal
-│ ${p}work / ${p}w
-│ ${p}deposit <cantidad> · ${p}withdraw <cantidad>
-│ ${p}transfer @user <cantidad> · ${p}rob @user
+╭─〔 🪙 *ECONOMÍA* 〕
+│ ${p}bal · ${p}work · ${p}deposit · ${p}withdraw
+│ ${p}pay @user <monto> · ${p}rob @user
 │ ${p}top · ${p}shop · ${p}buy <producto>
-╰─────────────⬣
+╰────────────────
 
-╭─❖ 🌸 *WAIFU COLLECTION*
-│ ${p}waifu / ${p}rw
-│ ${p}claim / ${p}cw
-│ ${p}harem [@usuario] [página]
-│ ${p}wsearch <personaje> · ${p}winfo <id>
-│ ${p}wgive @usuario <id> · ${p}wsell <id>
-│ ${p}wtop
-╰─────────────⬣
+╭─〔 🌸 *GACHA / COLECCIÓN* 〕
+│ ${p}rw · ${p}claim · ${p}harem
+│ ${p}wsearch <nombre> · ${p}winfo <id>
+│ ${p}givewaifu @user <id> · ${p}wsell <id>
+│ ${p}wtop · ${p}add <anime/personaje>
+╰────────────────
 
-╭─❖ 🤖 *SUBBOTS*
-│ ${p}subbot status
-│ ${p}subbot pair <número>
+╭─〔 🎨 *STICKERS Y HERRAMIENTAS* 〕
+│ ${p}s · ${p}stickereffects · ${p}toimage
+│ ${p}groupinfo · ${p}gitclone · ${p}apk
+╰────────────────
+
+╭─〔 👥 *ADMINISTRACIÓN DE GRUPOS* 〕
+│ ${p}bot on|off · ${p}tag [mensaje] · ${p}hidetag
+│ ${p}kick · ${p}promote · ${p}demote · ${p}del
+│ ${p}open · ${p}close · ${p}link
+│ ${p}antilink on|off · ${p}nsfw on|off
+│ ${p}welcome on|off · ${p}goodbye on|off
+│ ${p}setwelcome <frase> · ${p}setgoodbye <frase>
+╰────────────────
+
+╭─〔 🤖 *SUBBOTS* 〕
+│ ${p}subbot status · ${p}subbot pair <número>
 │ ${p}subbot portal
-╰─────────────⬣
+╰────────────────
 
-╭─❖ 👥 *GRUPOS*
-│ ${p}tagall · ${p}hidetag
-│ ${p}link · ${p}group open|close
-│ ${p}kick · ${p}promote · ${p}demote
-│ ${p}enable welcome|antilink|antispam
-│ ${p}disable welcome|antilink|antispam
-╰─────────────⬣
-
-╭─❖ 🔞 *18+ · CONTROLADO*
+╭─〔 🔞 *18+ CONTROLADO* 〕
 │ ${p}adult18 accept
-│ ${p}xvideos <búsqueda|url>
-│ ${p}xnxx <búsqueda|url>
-│ ${p}pornhub <búsqueda|url>
-╰─────────────⬣
+│ ${p}xvideos · ${p}xnxx · ${p}pornhub
+╰────────────────
+${staffSection}
 
-╭─❖ 👑 *OWNER*
-│ ${p}setprefix <nuevo>
-│ ${p}adultmode on|off
-│ ${p}privatemode on|off
-│ ${p}subbots · ${p}adminpanel
-│ ${p}status · ${p}restart
-╰─────────────⬣
+✦ Usa los comandos con responsabilidad.
+✦ Las noticias y cambios oficiales están en el canal mediante el botón inferior.`.trim()
 
-📢 *CANAL OFICIAL DE GHOST NEXORA BOT*
-${config.officialChannelUrl}
-
-📰 Actualizaciones, noticias, grupos oficiales y avisos del desarrollador se publicarán en ese canal.
-
-✨ *Ghost Developer / Nexora*`.trim()
-      await ctx.reply(menu)
+      await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+        title: `✦ ${ctx.settings.botDisplayName} · COMMAND CENTER ✦`,
+        body: menu,
+        imageUrl: avatar,
+        footer: 'Ghost Developer / Nexora · WhatsApp Multi-Device',
+        buttons: [
+          { type: 'url', text: '📢 Visitar canal', url: config.officialChannelUrl },
+          { type: 'reply', text: '👤 Mi perfil', id: `${p}profile` },
+          { type: 'reply', text: '🏓 Ping', id: `${p}ping` },
+        ],
+      })
     },
   },
   {
@@ -108,14 +119,37 @@ ${config.officialChannelUrl}
       const start = performance.now()
       await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const latency = Math.max(0, Math.round(performance.now() - start))
-      await ctx.reply(`🏓 *Pong*\n⚡ Latencia interna: ${latency} ms\n⏱️ Uptime: ${formatUptime(process.uptime())}`)
+      await ctx.reply(`╭━━〔 🏓 *PONG* 〕━━╮\n┃ Latencia interna » *${latency} ms*\n┃ Uptime » *${formatUptime(process.uptime())}*\n┃ Estado » *ONLINE*\n╰━━━━━━━━━━━━━━╯`)
     },
   },
   {
-    name: 'info', aliases: ['bot'], category: 'general', description: 'Información del bot.',
+    name: 'info', aliases: ['about', 'botinfo'], category: 'general', description: 'Información del bot.',
     async handler(ctx) {
-      await ctx.reply(`👻 *${config.botName}*\n\n🤖 WhatsApp Multi-Device\n🧩 TypeScript + Baileys\n🌐 Next.js + Tailwind CSS\n🪙 Nexora Economy\n🌸 Waifu Collection\n👨‍💻 Ghost Developer\n⚙️ Prefijo: *${ctx.prefix}*\n📢 ${config.officialChannelUrl}`)
+      const avatar = await botAvatar(ctx)
+      await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+        title: `👻 ${ctx.settings.botDisplayName}`,
+        imageUrl: avatar,
+        body: [
+          '╭─〔 *INFORMACIÓN* 〕',
+          '│ Plataforma » WhatsApp Multi-Device',
+          '│ Core » TypeScript + Baileys',
+          '│ Panel » Next.js + Tailwind CSS',
+          '│ Economía » Nexora Economy',
+          '│ Colección » Nexora Gacha',
+          `│ Prefijo » ${ctx.prefix}`,
+          `│ Uptime » ${formatUptime(process.uptime())}`,
+          '│ Developer » Ghost Developer / Nexora',
+          '╰──────────────',
+        ].join('\n'),
+        buttons: [
+          { type: 'url', text: '📢 Ver canal', url: config.officialChannelUrl },
+          { type: 'reply', text: '📋 Menú', id: `${ctx.prefix}menu` },
+        ],
+      })
     },
   },
-  { name: 'prefix', category: 'general', description: 'Muestra el prefijo actual.', async handler(ctx) { await ctx.reply(`⚙️ El prefijo actual es: *${ctx.prefix}*`) } },
+  {
+    name: 'prefix', category: 'general', description: 'Muestra el prefijo actual.',
+    async handler(ctx) { await ctx.reply(`⚙️ *PREFIJO ACTUAL*\n━━━━━━━━━━━━━━\nUsa: *${ctx.prefix}*`) },
+  },
 ]
