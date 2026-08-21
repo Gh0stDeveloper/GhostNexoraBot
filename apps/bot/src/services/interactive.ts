@@ -34,6 +34,15 @@ async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
   }
 }
 
+async function sendTextFallback(socket: WASocket, chatId: string, quoted: WAMessage, title: string, body: string, footer?: string) {
+  const text = [
+    `*${title}*`,
+    body,
+    footer ? `\n_${footer}_` : '',
+  ].filter(Boolean).join('\n\n')
+  await socket.sendMessage(chatId, { text }, { quoted })
+}
+
 export async function sendInteractiveCard(
   socket: WASocket,
   chatId: string,
@@ -60,7 +69,14 @@ export async function sendInteractiveCard(
       },
     },
   }, { quoted, userJid })
-  await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+  try {
+    await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+  } catch {
+    // El menú y las tarjetas informativas no deben desaparecer si Meta rechaza
+    // temporalmente un native-flow interactivo. El fallback evita exponer URLs
+    // secretas de botones: solo envía el contenido textual de la tarjeta.
+    await sendTextFallback(socket, chatId, quoted, input.title, input.body, input.footer)
+  }
 }
 
 export async function sendCarousel(
@@ -101,5 +117,10 @@ export async function sendCarousel(
     },
   }, { quoted, userJid })
 
-  await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+  try {
+    await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
+  } catch {
+    const summary = input.cards.slice(0, 10).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
+    await sendTextFallback(socket, chatId, quoted, input.title, [input.body, summary].filter(Boolean).join('\n\n'), input.footer)
+  }
 }
