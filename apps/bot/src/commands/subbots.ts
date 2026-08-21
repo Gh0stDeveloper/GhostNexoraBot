@@ -4,6 +4,7 @@ import { economy } from '../services/economy.js'
 import { subbotManager } from '../core/subbots.js'
 
 function fmtDate(value: number | null) { return value ? new Date(value).toLocaleString('es-MX') : 'N/D' }
+function webBase() { return config.publicWebUrl.replace(/\/$/, '') }
 
 export const subbotCommands: BotCommand[] = [
   {
@@ -13,7 +14,7 @@ export const subbotCommands: BotCommand[] = [
       const record = economy.getActiveSubbot(ctx.sender)
       if (action === 'status') {
         if (!record) throw new Error(`No tienes un subbot activo. Consulta ${ctx.prefix}shop.`)
-        await ctx.reply(['🤖 *MI SUBBOT*', '', `🆔 Instancia: #${record.id}`, `📱 Número: ${record.phone ?? 'sin vincular'}`, `🟢 Estado: ${record.status}`, `⏳ Vence: ${fmtDate(record.expiresAt)}`, `💬 Mensajes: ${record.messagesProcessed}`, `📥 Tráfico: ${(record.downloadBytes / 1024 / 1024).toFixed(1)} MB`, '', record.phone ? `Usa *${ctx.prefix}subbot portal* para abrir tu panel.` : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*.`].join('\n'))
+        await ctx.reply(['🤖 *MI SUBBOT*', '', `🆔 Instancia: #${record.id}`, `📱 Número: ${record.phone ?? 'sin vincular'}`, `🟢 Estado: ${record.status}`, `⏳ Vence: ${fmtDate(record.expiresAt)}`, `💬 Mensajes: ${record.messagesProcessed}`, `📥 Tráfico: ${(record.downloadBytes / 1024 / 1024).toFixed(1)} MB`, '', record.phone ? `Usa *${ctx.prefix}subbot portal* para generar un token de acceso web.` : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*.`].join('\n'))
         return
       }
       if (action === 'pair') {
@@ -30,7 +31,20 @@ export const subbotCommands: BotCommand[] = [
       if (action === 'portal') {
         if (!record) throw new Error('No tienes un subbot activo.')
         const token = economy.createPortalToken(ctx.sender, record.id)
-        await ctx.reply(`🌐 *PANEL PRIVADO DEL SUBBOT*\n\n${config.publicWebUrl.replace(/\/$/, '')}/subbot/${token.token}\n\n🔐 Solo muestra la instancia #${record.id} y vence el ${fmtDate(token.expiresAt)}. No lo compartas.`)
+        await ctx.reply([
+          '🌐 *ACCESO WEB DEL SUBBOT*',
+          '',
+          `Panel: ${webBase()}/login?mode=subbot`,
+          '',
+          'Token de acceso:',
+          `*${token.token}*`,
+          '',
+          `Instancia: *#${record.id}*`,
+          `Vence: *${fmtDate(token.expiresAt)}*`,
+          '',
+          'Abre el panel, selecciona Subbot y pega el token. La web creará una sesión segura y el token no quedará en la URL.',
+          'No compartas el token.',
+        ].join('\n'))
         return
       }
       throw new Error(`Acción inválida. Usa ${ctx.prefix}subbot status, pair o portal.`)
@@ -48,10 +62,20 @@ export const subbotCommands: BotCommand[] = [
     },
   },
   {
-    name: 'adminpanel', aliases: ['dashboard'], category: 'owner', ownerOnly: true, description: 'Entrega el enlace privado al panel owner.',
+    name: 'adminpanel', aliases: ['dashboard'], category: 'owner', ownerOnly: true, description: 'Entrega el acceso al panel owner.',
     async handler(ctx) {
       if (ctx.chatId.endsWith('@g.us')) throw new Error('Por seguridad, solicita el panel desde el chat privado del bot.')
-      await ctx.reply(`🔐 *OWNER DASHBOARD*\n\n${config.publicWebUrl.replace(/\/$/, '')}/admin?token=${config.adminWebToken}\n\nNo compartas este enlace. El token también está guardado en .env de la VPS.`)
+      await ctx.reply([
+        '🔐 *OWNER DASHBOARD*',
+        '',
+        `Panel: ${webBase()}/login?mode=admin`,
+        '',
+        'Token administrativo:',
+        `*${config.adminWebToken}*`,
+        '',
+        'Pega el token en la pantalla Administrador. Después del login se usa una cookie HttpOnly firmada y el token ya no aparece en la URL.',
+        'No compartas este token.',
+      ].join('\n'))
     },
   },
 ]
