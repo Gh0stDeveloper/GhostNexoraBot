@@ -1,6 +1,8 @@
 import { config } from '../config.js'
 import type { BotCommand } from '../types.js'
 import { sendInteractiveCard } from '../services/interactive.js'
+import { getBrandingAsset } from '../services/branding.js'
+import { economy } from '../services/economy.js'
 
 function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400)
@@ -15,18 +17,62 @@ async function botAvatar(ctx: Parameters<BotCommand['handler']>[0]) {
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
+async function menuArtwork(ctx: Parameters<BotCommand['handler']>[0]) {
+  const banner = await getBrandingAsset('menu').catch(() => null)
+  if (banner?.kind === 'image') return banner.path
+  return botAvatar(ctx)
+}
+
 export const generalCommands: BotCommand[] = [
   {
     name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo.',
     async handler(ctx) {
       const p = ctx.prefix
-      const avatar = await botAvatar(ctx)
+      const artwork = await menuArtwork(ctx)
+      const privateUntil = ctx.isGroup || ctx.isBotStaff ? null : economy.hasEntitlement(ctx.sender, 'private_access')
+      const privateUnlocked = ctx.isGroup || ctx.isBotStaff || Boolean(privateUntil)
+
+      if (!privateUnlocked) {
+        await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+          title: `🔐 ${ctx.settings.botDisplayName} · CHAT PRIVADO PREMIUM`,
+          imageUrl: artwork,
+          body: [
+            `Hola, *${ctx.pushName}*.`,
+            '',
+            'El uso del bot por mensaje privado requiere una suscripción comprada con NXC.',
+            'En este chat, antes de comprar, solo puedes consultar el menú, saldo y tienda.',
+            '',
+            '╭─〔 PLANES PRIVADOS 〕',
+            '│ 1 día  » 2,000 NXC',
+            '│ 7 días » 10,000 NXC',
+            '│ 30 días » 30,000 NXC',
+            '╰────────────────',
+            '',
+            `Compra: *${p}buy private1d*`,
+            `       *${p}buy private7d*`,
+            `       *${p}buy private30d*`,
+            '',
+            'En grupos puedes seguir usando las funciones permitidas por sus administradores.',
+          ].join('\n'),
+          footer: 'Ghost Nexora Bot · acceso privado por suscripción',
+          buttons: [
+            { type: 'reply', text: '🛒 Ver tienda', id: `${p}shop` },
+            { type: 'reply', text: '💰 Mi saldo', id: `${p}balance` },
+            { type: 'url', text: '📢 Visitar canal', url: config.officialChannelUrl },
+          ],
+        })
+        return
+      }
+
+      const accessLine = privateUntil ? `┃ Privado » activo hasta *${new Date(privateUntil).toLocaleDateString('es-MX')}*` : ''
       const staffSection = ctx.isBotStaff ? `
 ╭─〔 🛡️ *STAFF DEL BOT* 〕
 │ ${p}status · ${p}botadmins · ${p}suggestions
 │ ${p}adultmode on|off · ${p}setbotname <nombre>
 │ ${p}setbotcurrency <nombre> · ${p}setpfp
-${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode · ${p}restart` : ''}
+│ ${p}sb · ${p}welbanner · ${p}byebanner
+│ ${p}delbanner · ${p}delwelbanner · ${p}delbyebanner
+${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode status · ${p}restart` : ''}
 ╰────────────────` : ''
       const menu = `
 ╭━━━〔 👻 *${ctx.settings.botDisplayName.toUpperCase()}* 〕━━━╮
@@ -35,6 +81,7 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ┃ Uptime » *${formatUptime(process.uptime())}*
 ┃ Moneda » *${ctx.settings.currencyName} (NXC)*
 ┃ Rol » *${ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : 'Usuario'}*
+${accessLine}
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
 ╭─〔 🌐 *GENERAL* 〕
@@ -77,9 +124,12 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ╰────────────────
 
 ╭─〔 🎮 *JUEGOS Y APUESTAS NXC* 〕
-│ ${p}flip [cara|cruz] [apuesta]
-│ ${p}dados [apuesta] · ${p}bj [apuesta]
-│ ${p}ttt [apuesta] · ${p}ttt <1-9>
+│ ${p}flip [cara|cruz] [apuesta] · ${p}dados [apuesta]
+│ ${p}bj [apuesta] · ${p}bjvs [apuesta] @user
+│ ${p}ttt [apuesta] · ${p}lttt [apuesta] [@user]
+│ ${p}tpvp @user [apuesta]
+│ ${p}damas [apuesta|gratis] @user
+│ ${p}damasbot [apuesta|gratis]
 ╰────────────────
 
 ╭─〔 🌸 *GACHA / COLECCIÓN* 〕
@@ -102,7 +152,8 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ╰────────────────
 
 ╭─〔 🎨 *STICKERS Y HERRAMIENTAS* 〕
-│ ${p}s · ${p}stickereffects · ${p}toimage
+│ ${p}s · ${p}spack <nombre> · ${p}stickereffects
+│ ${p}toimage · ${p}sprite <personaje>
 │ ${p}groupinfo · ${p}gitclone · ${p}apk
 │ ${p}safebooru [tags]
 ╰────────────────
@@ -129,13 +180,13 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ${staffSection}
 
 ✦ Usa los comandos con responsabilidad.
-✦ El menú usa la foto real de perfil del bot.
+✦ Sin banner personalizado, el menú usa la foto real del bot.
 ✦ Noticias y cambios oficiales: botón *Visitar canal*.`.trim()
 
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
         title: `✦ ${ctx.settings.botDisplayName} · COMMAND CENTER ✦`,
         body: menu,
-        imageUrl: avatar,
+        imageUrl: artwork,
         footer: 'Ghost Developer / Nexora · WhatsApp Multi-Device',
         buttons: [
           { type: 'url', text: '📢 Visitar canal', url: config.officialChannelUrl },
@@ -157,10 +208,10 @@ ${staffSection}
   {
     name: 'info', aliases: ['about', 'botinfo'], category: 'general', description: 'Información del bot.',
     async handler(ctx) {
-      const avatar = await botAvatar(ctx)
+      const artwork = await menuArtwork(ctx)
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
         title: `👻 ${ctx.settings.botDisplayName}`,
-        imageUrl: avatar,
+        imageUrl: artwork,
         body: [
           '╭─〔 *INFORMACIÓN* 〕',
           '│ Plataforma » WhatsApp Multi-Device',
@@ -168,7 +219,8 @@ ${staffSection}
           '│ Panel » Next.js + Tailwind CSS',
           '│ Economía » Nexora Economy + Grimorio RPG',
           '│ Colección » Nexora Gacha',
-          '│ Reacciones » Anime GIF + FFmpeg',
+          '│ Juegos » IA + PvP persistente',
+          '│ YouTube » m.youtube + yt1s + fallbacks',
           `│ Prefijo » ${ctx.prefix}`,
           `│ Uptime » ${formatUptime(process.uptime())}`,
           '│ Developer » Ghost Developer / Nexora',
