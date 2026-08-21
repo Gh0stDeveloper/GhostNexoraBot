@@ -79,9 +79,16 @@ export const resourceCommands: BotCommand[] = [
       const lines = results.map((item, index) => {
         const title = item.attributes?.title?.en ?? item.attributes?.title?.es ?? Object.values(item.attributes?.title ?? {})[0] ?? 'Sin título'
         const desc = item.attributes?.description?.es ?? item.attributes?.description?.en ?? ''
-        return `${index + 1}. *${title}* · ${item.attributes?.status ?? 'N/D'}\n${desc.replace(/\s+/g, ' ').slice(0, 180)}\nhttps://mangadex.org/title/${item.id}`
+        const link = `https://mangadex.org/title/${item.id}`
+        return [
+          `${index + 1}. *${title}* · ${item.attributes?.status ?? 'N/D'}`,
+          desc.replace(/\s+/g, ' ').slice(0, 180),
+          `Abrir: ${link}`,
+          `Capítulos: *${ctx.prefix}mangachapters ${item.id} es*`,
+          `Descargar último: *${ctx.prefix}mangadl ${item.id} latest es*`,
+        ].filter(Boolean).join('\n')
       })
-      await ctx.reply(`📚 *MANGADEX*\n\n${lines.join('\n\n')}\n\nGhost Nexora Bot muestra enlaces del catálogo; respeta la disponibilidad/licencia indicada por cada obra.`)
+      await ctx.reply(`📚 *MANGADEX*\n\n${lines.join('\n\n')}`)
     },
   },
 ]
