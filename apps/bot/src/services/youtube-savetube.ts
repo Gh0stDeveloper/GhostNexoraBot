@@ -14,13 +14,13 @@ export type SaveTubeResolved = {
 
 const SAVE_TUBE_KEY = Buffer.from('C5D58EF67A7584E4A29F6C35BBC4EB12', 'hex')
 const SAVE_TUBE_DISCOVERY = 'https://media.savetube.me/api/random-cdn'
-const SAVE_TUBE_ORIGIN = 'https://ytsave.savetube.me'
+const SAVE_TUBE_ORIGIN = 'https://yt.savetube.me'
 const SAVE_TUBE_HEADERS = {
-  accept: 'application/json, text/plain, */*',
+  accept: '*/*',
   'content-type': 'application/json',
   origin: SAVE_TUBE_ORIGIN,
   referer: `${SAVE_TUBE_ORIGIN}/`,
-  'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36',
+  'user-agent': 'Postify/1.0.0',
 }
 
 function compact(error: unknown) {
@@ -42,6 +42,18 @@ function validHttpUrl(value: unknown) {
   }
 }
 
+function youtubeVideoId(input: string) {
+  try {
+    const url = new URL(input)
+    if (url.hostname === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0]
+    const query = url.searchParams.get('v')
+    if (query) return query
+    const parts = url.pathname.split('/').filter(Boolean)
+    if (['shorts', 'embed', 'live', 'v'].includes(parts[0] ?? '')) return parts[1]
+  } catch { /* caller reports below */ }
+  return undefined
+}
+
 function decryptSaveTube(payload: unknown) {
   if (typeof payload !== 'string' || !payload.trim()) throw new Error('SaveTube no devolvió datos cifrados.')
   const raw = Buffer.from(payload.replace(/\s+/g, ''), 'base64')
@@ -55,7 +67,7 @@ function decryptSaveTube(payload: unknown) {
 async function saveTubeCdn() {
   const response = await fetch(SAVE_TUBE_DISCOVERY, {
     headers: {
-      accept: 'application/json',
+      accept: '*/*',
       origin: SAVE_TUBE_ORIGIN,
       referer: `${SAVE_TUBE_ORIGIN}/`,
       'user-agent': SAVE_TUBE_HEADERS['user-agent'],
@@ -69,20 +81,23 @@ async function saveTubeCdn() {
 }
 
 export async function resolveSaveTubeYouTube(youtubeUrl: string, kind: SaveTubeKind, quality = 720): Promise<SaveTubeResolved> {
+  const id = youtubeVideoId(youtubeUrl)
+  if (!id || !/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new Error('SaveTube no pudo identificar el ID del video.')
+  const canonical = `https://www.youtube.com/watch?v=${id}`
   const cdn = await saveTubeCdn()
+
   const infoResponse = await fetch(`https://${cdn}/v2/info`, {
     method: 'POST',
     headers: SAVE_TUBE_HEADERS,
-    body: JSON.stringify({ url: youtubeUrl }),
+    body: JSON.stringify({ url: canonical }),
     signal: AbortSignal.timeout(15_000),
   })
   if (!infoResponse.ok) throw new Error(`SaveTube info respondió HTTP ${infoResponse.status}.`)
   const infoPayload = await infoResponse.json() as { status?: unknown; data?: unknown; message?: unknown }
   if (infoPayload.status === false) throw new Error(typeof infoPayload.message === 'string' ? infoPayload.message : 'SaveTube rechazó el video.')
   const info = decryptSaveTube(infoPayload.data)
-  const id = typeof info.id === 'string' ? info.id : ''
   const key = typeof info.key === 'string' ? info.key : ''
-  if (!id || !key) throw new Error('SaveTube no devolvió id/key de conversión.')
+  if (!key) throw new Error('SaveTube no devolvió la key de conversión.')
 
   const requestedQuality = kind === 'mp3'
     ? '128'
@@ -109,8 +124,8 @@ export async function resolveSaveTubeYouTube(youtubeUrl: string, kind: SaveTubeK
 
   const title = typeof info.title === 'string' ? info.title.trim() : undefined
   const duration = Number(info.duration)
-  const thumbnail = validHttpUrl(info.thumbnail)
-  logger.info({ provider: 'SaveTube', kind, cdn }, 'youtube savetube provider resolved')
+  const thumbnail = validHttpUrl(info.thumbnail) ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+  logger.info({ provider: 'SaveTube', kind, cdn, id }, 'youtube savetube provider resolved')
   return {
     url: direct,
     title,
