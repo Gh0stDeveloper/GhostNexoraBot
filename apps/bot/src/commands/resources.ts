@@ -1,6 +1,7 @@
 import type { BotCommand } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
 import { downloadFdroidApk, downloadGitHubRepo, downloadGoogleDrive, searchAnime, searchFdroid, searchManga } from '../services/resources.js'
+import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
 
@@ -10,8 +11,10 @@ export const resourceCommands: BotCommand[] = [
     async handler(ctx) {
       const url = ctx.args[0]; if (!url) throw new Error('Indica la URL del repositorio.')
       const file = await downloadGitHubRepo(url)
-      try { await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName, mimetype: 'application/zip', caption: `🐙 GitHub · ${size(file.size)}` }, { quoted: ctx.message }) }
-      finally { await file.cleanup() }
+      try {
+        await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName, mimetype: 'application/zip', caption: `🐙 GitHub · ${size(file.size)}` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, file.size)
+      } finally { await file.cleanup() }
     },
   },
   {
@@ -19,8 +22,10 @@ export const resourceCommands: BotCommand[] = [
     async handler(ctx) {
       const url = ctx.args[0]; if (!url) throw new Error('Indica un enlace público de Google Drive.')
       const file = await downloadGoogleDrive(url)
-      try { await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName, mimetype: file.contentType, caption: `☁️ Google Drive · ${size(file.size)}` }, { quoted: ctx.message }) }
-      finally { await file.cleanup() }
+      try {
+        await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName, mimetype: file.contentType, caption: `☁️ Google Drive · ${size(file.size)}` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, file.size)
+      } finally { await file.cleanup() }
     },
   },
   {
@@ -43,8 +48,10 @@ export const resourceCommands: BotCommand[] = [
     async handler(ctx) {
       const url = ctx.args[0]; if (!url) throw new Error('Indica la ficha de F-Droid.')
       const file = await downloadFdroidApk(url)
-      try { await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName.endsWith('.apk') ? file.fileName : `${file.fileName}.apk`, mimetype: 'application/vnd.android.package-archive', caption: `📦 APK de F-Droid · ${size(file.size)}\nVerifica permisos y firma antes de instalar.` }, { quoted: ctx.message }) }
-      finally { await file.cleanup() }
+      try {
+        await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName.endsWith('.apk') ? file.fileName : `${file.fileName}.apk`, mimetype: 'application/vnd.android.package-archive', caption: `📦 APK de F-Droid · ${size(file.size)}\nVerifica permisos y firma antes de instalar.` }, { quoted: ctx.message })
+        recordSubbotDownload(ctx.instanceId, file.size)
+      } finally { await file.cleanup() }
     },
   },
   {
