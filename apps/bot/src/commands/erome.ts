@@ -34,6 +34,49 @@ function albumId(input: string) {
   throw new Error('Indica un ID o enlace de álbum Erome válido.')
 }
 
+async function bestEffortListingUi(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query: string | undefined, albums: Awaited<ReturnType<typeof exploreErome>>['albums']) {
+  try {
+    await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+      title: `🔞 EROME · ${mode === 'search' ? 'BÚSQUEDA' : mode.toUpperCase()}`,
+      body: mode === 'search'
+        ? `Resultados para: ${query}\nPágina: ${page}`
+        : `Explorar ${mode === 'hot' ? 'HOT' : 'NEW'} · página ${page}`,
+      footer: 'Controles opcionales · el listado de texto siempre funciona',
+      cards: albums.map((album, index) => ({
+        title: `#${index + 1} · ${album.title}`.slice(0, 120),
+        body: album.author ? `Autor: ${album.author}` : `Álbum: ${album.id}`,
+        imageUrl: album.thumbnail,
+        buttons: [
+          { type: 'reply', text: '🎬 Ver videos', id: `${ctx.prefix}erome album ${album.id} 1` },
+          { type: 'url', text: '🌐 Abrir álbum', url: album.url },
+        ],
+      })),
+    })
+
+    const buttons: InteractiveButton[] = []
+    if (page > 1) {
+      buttons.push({
+        type: 'reply', text: '◀️ Anterior',
+        id: mode === 'search' ? `${ctx.prefix}erome search64 ${page - 1} ${encodeQuery(query ?? '')}` : `${ctx.prefix}erome ${mode} ${page - 1}`,
+      })
+    }
+    buttons.push({
+      type: 'reply', text: 'Siguiente ▶️',
+      id: mode === 'search' ? `${ctx.prefix}erome search64 ${page + 1} ${encodeQuery(query ?? '')}` : `${ctx.prefix}erome ${mode} ${page + 1}`,
+    })
+    if (mode !== 'search') buttons.push({ type: 'reply', text: mode === 'hot' ? '🆕 NEW' : '🔥 HOT', id: `${ctx.prefix}erome ${mode === 'hot' ? 'new' : 'hot'} 1` })
+
+    await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+      title: '🔞 EROME · NAVEGACIÓN',
+      body: `Página actual: *${page}*`,
+      footer: 'Si los botones no aparecen, usa los comandos del mensaje anterior.',
+      buttons,
+    })
+  } catch {
+    // La interfaz Native Flow es opcional. El listado textual ya fue enviado.
+  }
+}
+
 async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query?: string) {
   const result = mode === 'search'
     ? await searchErome(query ?? '', page, 10)
@@ -41,42 +84,71 @@ async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', 
   const albums = result.albums
   if (!albums.length) throw new Error('Erome no devolvió álbumes en esta página.')
 
-  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: `🔞 EROME · ${mode === 'search' ? 'BÚSQUEDA' : mode.toUpperCase()}`,
-    body: mode === 'search'
-      ? `Resultados para: ${query}\nPágina: ${page}\nAbre un álbum para ver únicamente sus videos.`
-      : `Explorar ${mode === 'hot' ? 'HOT' : 'NEW'} · página ${page}\nLas imágenes internas se omiten: el bot solo lista videos.`,
-    footer: 'Solo adultos · Ghost Nexora Bot',
-    cards: albums.map((album, index) => ({
-      title: `#${index + 1} · ${album.title}`.slice(0, 120),
-      body: album.author ? `Autor: ${album.author}` : `Álbum: ${album.id}`,
-      imageUrl: album.thumbnail,
-      buttons: [
-        { type: 'reply', text: '🎬 Ver videos', id: `${ctx.prefix}erome album ${album.id} 1` },
-        { type: 'url', text: '🌐 Abrir álbum', url: album.url },
-      ],
-    })),
-  })
+  const lines = albums.map((album, index) => [
+    `*${index + 1}. ${album.title}*`,
+    album.author ? `Autor: ${album.author}` : '',
+    `ID: \`${album.id}\``,
+    `Ver videos: *${ctx.prefix}erome album ${album.id}*`,
+  ].filter(Boolean).join('\n'))
 
-  const buttons: InteractiveButton[] = []
-  if (page > 1) {
-    buttons.push({
-      type: 'reply', text: '◀️ Anterior',
-      id: mode === 'search' ? `${ctx.prefix}erome search64 ${page - 1} ${encodeQuery(query ?? '')}` : `${ctx.prefix}erome ${mode} ${page - 1}`,
+  const previous = page > 1
+    ? mode === 'search'
+      ? `${ctx.prefix}erome search64 ${page - 1} ${encodeQuery(query ?? '')}`
+      : `${ctx.prefix}erome ${mode} ${page - 1}`
+    : null
+  const next = mode === 'search'
+    ? `${ctx.prefix}erome search64 ${page + 1} ${encodeQuery(query ?? '')}`
+    : `${ctx.prefix}erome ${mode} ${page + 1}`
+
+  await ctx.reply([
+    `╭━━〔 🔞 *EROME · ${mode === 'search' ? 'BÚSQUEDA' : mode.toUpperCase()}* 〕━━╮`,
+    mode === 'search' ? `┃ Consulta » *${query}*` : `┃ Sección » *${mode.toUpperCase()}*`,
+    `┃ Página » *${page}*`,
+    `┃ Álbumes » *${albums.length}*`,
+    '╰━━━━━━━━━━━━━━━━━━╯',
+    '',
+    ...lines.flatMap((line) => [line, '']),
+    '━━━━━━━━━━━━━━━━━━',
+    previous ? `Anterior: *${previous}*` : '',
+    `Siguiente: *${next}*`,
+    '',
+    `Buscar: *${ctx.prefix}erome search <texto>*`,
+    'Las imágenes internas se omiten; el bot solo ofrece videos.',
+  ].filter(Boolean).join('\n'))
+
+  await bestEffortListingUi(ctx, mode, page, query, albums)
+}
+
+async function bestEffortAlbumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof getEromeAlbum>>, page: number, totalPages: number, items: Awaited<ReturnType<typeof getEromeAlbum>>['videos']) {
+  try {
+    await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+      title: `🔞 ${album.title}`,
+      body: `Videos: ${album.videos.length} · página ${page}/${totalPages}`,
+      footer: 'Controles opcionales · usa los comandos del listado si no aparecen',
+      cards: items.map((video) => ({
+        title: `Video #${video.index}`,
+        body: video.title,
+        imageUrl: video.poster,
+        buttons: [
+          { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}erome dl ${album.id} ${video.index}` },
+          { type: 'url', text: '🌐 Abrir álbum', url: album.url },
+        ],
+      })),
     })
-  }
-  buttons.push({
-    type: 'reply', text: 'Siguiente ▶️',
-    id: mode === 'search' ? `${ctx.prefix}erome search64 ${page + 1} ${encodeQuery(query ?? '')}` : `${ctx.prefix}erome ${mode} ${page + 1}`,
-  })
-  if (mode !== 'search') buttons.push({ type: 'reply', text: mode === 'hot' ? '🆕 NEW' : '🔥 HOT', id: `${ctx.prefix}erome ${mode === 'hot' ? 'new' : 'hot'} 1` })
 
-  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: '🔞 EROME · NAVEGACIÓN',
-    body: `Página actual: *${page}*\nTambién puedes usar *${ctx.prefix}erome search <texto>* para buscar álbumes.`,
-    footer: 'Contenido público de Erome · solo videos',
-    buttons,
-  })
+    if (totalPages > 1) {
+      const buttons: InteractiveButton[] = []
+      if (page > 1) buttons.push({ type: 'reply', text: '◀️ Anterior', id: `${ctx.prefix}erome album ${album.id} ${page - 1}` })
+      if (page < totalPages) buttons.push({ type: 'reply', text: 'Siguiente ▶️', id: `${ctx.prefix}erome album ${album.id} ${page + 1}` })
+      await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+        title: '🎬 MÁS VIDEOS DEL ÁLBUM',
+        body: `Página ${page}/${totalPages}`,
+        buttons,
+      })
+    }
+  } catch {
+    // El listado textual ya permite descargar y paginar sin Native Flow.
+  }
 }
 
 async function showAlbum(ctx: CommandContext, input: string, page: number) {
@@ -88,31 +160,25 @@ async function showAlbum(ctx: CommandContext, input: string, page: number) {
   const safe = Math.max(1, Math.min(totalPages, page))
   const items = album.videos.slice((safe - 1) * pageSize, safe * pageSize)
 
-  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: `🔞 ${album.title}`,
-    body: `Videos: ${album.videos.length} · página ${safe}/${totalPages}\nSolo se muestran fuentes MP4; las imágenes del álbum no se incluyen.`,
-    footer: album.author ? `Erome · ${album.author}` : 'Erome · Ghost Nexora Bot',
-    cards: items.map((video) => ({
-      title: `Video #${video.index}`,
-      body: video.title,
-      imageUrl: video.poster,
-      buttons: [
-        { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}erome dl ${album.id} ${video.index}` },
-        { type: 'url', text: '🌐 Abrir álbum', url: album.url },
-      ],
-    })),
-  })
+  const videoLines = items.map((video) => [
+    `*Video #${video.index}*${video.title ? ` · ${video.title}` : ''}`,
+    `Descargar: *${ctx.prefix}erome dl ${album.id} ${video.index}*`,
+  ].join('\n'))
 
-  if (totalPages > 1) {
-    const buttons: InteractiveButton[] = []
-    if (safe > 1) buttons.push({ type: 'reply', text: '◀️ Anterior', id: `${ctx.prefix}erome album ${album.id} ${safe - 1}` })
-    if (safe < totalPages) buttons.push({ type: 'reply', text: 'Siguiente ▶️', id: `${ctx.prefix}erome album ${album.id} ${safe + 1}` })
-    await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-      title: '🎬 MÁS VIDEOS DEL ÁLBUM',
-      body: `Página ${safe}/${totalPages}`,
-      buttons,
-    })
-  }
+  await ctx.reply([
+    `╭━━〔 🔞 *EROME · ÁLBUM* 〕━━╮`,
+    `┃ ${album.title}`,
+    album.author ? `┃ Autor » ${album.author}` : '',
+    `┃ Videos » *${album.videos.length}*`,
+    `┃ Página » *${safe}/${totalPages}*`,
+    '╰━━━━━━━━━━━━━━━━━━╯',
+    '',
+    ...videoLines.flatMap((line) => [line, '']),
+    totalPages > 1 && safe > 1 ? `Anterior: *${ctx.prefix}erome album ${album.id} ${safe - 1}*` : '',
+    totalPages > 1 && safe < totalPages ? `Siguiente: *${ctx.prefix}erome album ${album.id} ${safe + 1}*` : '',
+  ].filter(Boolean).join('\n'))
+
+  await bestEffortAlbumUi(ctx, album, safe, totalPages, items)
 }
 
 export const eromeCommands: BotCommand[] = [
@@ -168,6 +234,7 @@ export const eromeCommands: BotCommand[] = [
         const id = ctx.args[1]
         const index = Number(ctx.args[2])
         if (!id || !Number.isInteger(index)) throw new Error(`Uso: ${ctx.prefix}erome dl <album-id> <video>`)
+        await ctx.reply(`⬇️ *EROME · DESCARGANDO*\nÁlbum: \`${id}\` · video #${index}\nEspera mientras preparo el MP4...`)
         const result = await downloadEromeVideo(id, index)
         try {
           await ctx.socket.sendMessage(ctx.chatId, {
@@ -187,7 +254,12 @@ export const eromeCommands: BotCommand[] = [
         return
       }
 
-      await showListing(ctx, 'search', 1, ctx.argText.trim())
+      const implicitQuery = ctx.argText.trim()
+      if (!implicitQuery) {
+        await showListing(ctx, 'hot', 1)
+        return
+      }
+      await showListing(ctx, 'search', 1, implicitQuery)
     },
   },
 ]
