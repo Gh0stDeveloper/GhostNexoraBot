@@ -23,47 +23,45 @@ export const generalCommands: BotCommand[] = [
 
 ╭─❖ 🌐 *GENERAL*
 │ ${p}menu · ${p}ping · ${p}info · ${p}prefix
-│ ${p}anime <título>
-│ ${p}manga <título>
+│ ${p}anime <búsqueda> · ${p}manga <búsqueda>
 ╰─────────────⬣
 
 ╭─❖ 🎨 *STICKERS*
-│ ${p}sticker / ${p}s [efecto]
-│ ${p}stickereffects
-│ ${p}toimg
+│ ${p}sticker / ${p}s
+│ ${p}stickereffects · ${p}toimg
 ╰─────────────⬣
 
 ╭─❖ 🎵 *MÚSICA & VIDEO*
 │ ${p}yts <búsqueda>
-│ ${p}play <búsqueda>
-│ ${p}playvideo <búsqueda>
+│ ${p}play <búsqueda> · ${p}playvideo <búsqueda>
 │ ${p}lyrics <canción>
 │ ${p}ytformats <url>
-│ ${p}ytmp3 <url>
-│ ${p}ytmp4 <url> [calidad]
+│ ${p}ytmp3 <url> · ${p}ytmp4 <url> [calidad]
 │ ${p}soundcloud <url|búsqueda>
 ╰─────────────⬣
 
 ╭─❖ 📥 *DESCARGAS*
-│ ${p}tiktok <url>
-│ ${p}instagram <url>
-│ ${p}facebook <url>
-│ ${p}twitter <url>
-│ ${p}mediafire <url>
-│ ${p}gdrive <url>
-│ ${p}gitclone <repo>
-│ ${p}apk <búsqueda>
+│ ${p}tiktok <url> · ${p}instagram <url>
+│ ${p}facebook <url> · ${p}twitter <url>
+│ ${p}mediafire <url> · ${p}gdrive <url>
+│ ${p}gitclone <url> · ${p}apk <búsqueda>
 ╰─────────────⬣
 
 ╭─❖ 🪙 *ECONOMÍA*
 │ ${p}balance / ${p}bal
 │ ${p}work / ${p}w
-│ ${p}deposit <cantidad>
-│ ${p}withdraw <cantidad>
-│ ${p}transfer @user <cantidad>
-│ ${p}rob @user
-│ ${p}top
-│ ${p}shop · ${p}buy <producto>
+│ ${p}deposit <cantidad> · ${p}withdraw <cantidad>
+│ ${p}transfer @user <cantidad> · ${p}rob @user
+│ ${p}top · ${p}shop · ${p}buy <producto>
+╰─────────────⬣
+
+╭─❖ 🌸 *WAIFU COLLECTION*
+│ ${p}waifu / ${p}rw
+│ ${p}claim / ${p}cw
+│ ${p}harem [@usuario] [página]
+│ ${p}wsearch <personaje> · ${p}winfo <id>
+│ ${p}wgive @usuario <id> · ${p}wsell <id>
+│ ${p}wtop
 ╰─────────────⬣
 
 ╭─❖ 🤖 *SUBBOTS*
@@ -116,7 +114,7 @@ ${config.officialChannelUrl}
   {
     name: 'info', aliases: ['bot'], category: 'general', description: 'Información del bot.',
     async handler(ctx) {
-      await ctx.reply(`👻 *${config.botName}*\n\n🤖 WhatsApp Multi-Device\n🧩 TypeScript + Baileys\n🌐 Next.js + Tailwind CSS\n🪙 Nexora Economy\n👨‍💻 Ghost Developer\n⚙️ Prefijo: *${ctx.prefix}*\n📢 ${config.officialChannelUrl}`)
+      await ctx.reply(`👻 *${config.botName}*\n\n🤖 WhatsApp Multi-Device\n🧩 TypeScript + Baileys\n🌐 Next.js + Tailwind CSS\n🪙 Nexora Economy\n🌸 Waifu Collection\n👨‍💻 Ghost Developer\n⚙️ Prefijo: *${ctx.prefix}*\n📢 ${config.officialChannelUrl}`)
     },
   },
   { name: 'prefix', category: 'general', description: 'Muestra el prefijo actual.', async handler(ctx) { await ctx.reply(`⚙️ El prefijo actual es: *${ctx.prefix}*`) } },
