@@ -41,7 +41,7 @@ async function videoSticker(buffer: Buffer) {
     '-loop', '0', '-f', 'webp', 'pipe:1',
   ], {
     input: buffer,
-    encoding: null,
+    encoding: 'buffer',
     maxBuffer: 30 * 1024 * 1024,
     timeout: 60_000,
   })
