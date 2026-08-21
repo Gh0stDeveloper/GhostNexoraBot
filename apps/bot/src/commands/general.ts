@@ -49,8 +49,8 @@ export const generalCommands: BotCommand[] = [
           body: [
             `Hola, *${ctx.pushName}*.`,
             '',
-            'El uso del bot por mensaje privado requiere una suscripción comprada con NXC.',
-            'En este chat, antes de comprar, solo puedes consultar el menú, saldo y tienda.',
+            'El uso del bot por mensaje privado requiere una suscripción comprada con NXC o un permiso concedido por el staff.',
+            'En este chat, antes de obtener acceso, solo puedes consultar el menú, saldo y tienda.',
             '',
             '╭─〔 PLANES PRIVADOS 〕',
             '│ 1 día  » 2,000 NXC',
@@ -64,7 +64,7 @@ export const generalCommands: BotCommand[] = [
             '',
             'En grupos puedes seguir usando las funciones permitidas por sus administradores.',
           ].join('\n'),
-          footer: `${brand.longName} · acceso privado por suscripción`,
+          footer: `${brand.longName} · acceso privado controlado`,
           buttons: [
             { type: 'reply', text: '🛒 Ver tienda', id: `${p}shop` },
             { type: 'reply', text: '💰 Mi saldo', id: `${p}balance` },
@@ -86,6 +86,9 @@ export const generalCommands: BotCommand[] = [
 ╭─〔 🛡️ *STAFF DEL BOT* 〕
 │ ${p}status · ${p}botadmins · ${p}suggestions
 │ ${p}adultmode on|off
+│ ${p}privategrant @user [30d|permanent]
+│ ${p}privaterevoke @user · ${p}privatestatus @user
+│ ${p}privateusers
 ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode status · ${p}restart` : ''}
 ╰────────────────` : ''
       const menu = `
@@ -99,10 +102,11 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ${accessLine}
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-╭─〔 🌐 *GENERAL* 〕
+╭─〔 🌐 *GENERAL Y BÚSQUEDA* 〕
 │ ${p}menu · ${p}help · ${p}ping · ${p}info
 │ ${p}suggest <mensaje> · ${p}join <enlace>
 │ ${p}cd · ${p}anime <búsqueda> · ${p}manga <búsqueda>
+│ ${p}google <búsqueda> · ${p}wiki <búsqueda>
 ╰────────────────
 
 ╭─〔 👤 *PERFIL Y SOCIAL* 〕
@@ -190,6 +194,8 @@ ${accessLine}
 ╭─〔 🔞 *18+ CONTROLADO* 〕
 │ ${p}adult18 accept
 │ ${p}xvideos · ${p}xnxx · ${p}pornhub
+│ ${p}erome · ${p}erome search <texto>
+│ ${p}erome hot|new [página] · ${p}erome status
 │ ${p}gelbooru [tags] · ${p}e621 [tags]
 ╰────────────────
 ${customizationSection}
@@ -240,6 +246,8 @@ ${staffSection}
           '│ Colección » Nexora Gacha',
           '│ Juegos » IA + PvP persistente',
           '│ YouTube » m.youtube + yt1s + fallbacks',
+          '│ Búsqueda » Google + Wikipedia',
+          '│ Erome » exploración de video con sesión opcional',
           `│ Prefijo » ${ctx.prefix}`,
           `│ Uptime » ${formatUptime(process.uptime())}`,
           '│ Developer » Ghost Developer / Nexora',
