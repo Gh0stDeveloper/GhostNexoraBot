@@ -22,6 +22,7 @@ export const subbotCommands: BotCommand[] = [
         if (!phone) throw new Error(`Uso: ${ctx.prefix}subbot pair 52XXXXXXXXXX`)
         const result = await subbotManager.pair(ctx.sender, phone)
         if (result.alreadyLinked) { await ctx.reply('✅ Tu subbot ya estaba vinculado.'); return }
+        if (!result.code) throw new Error('WhatsApp no devolvió un código de vinculación válido.')
         const pretty = result.code.match(/.{1,4}/g)?.join('-') ?? result.code
         await ctx.reply(`🔗 *CÓDIGO DE SUBBOT*\n\n*${pretty}*\n\nEn el WhatsApp que quieres convertir en subbot:\n*Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono.*\n\nEl código es temporal y pertenece únicamente a tu instancia #${record.id}.`)
         return
