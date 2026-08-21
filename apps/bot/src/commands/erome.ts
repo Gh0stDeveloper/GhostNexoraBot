@@ -34,14 +34,12 @@ function albumId(input: string) {
   throw new Error('Indica un ID o enlace de álbum Erome válido.')
 }
 
-async function bestEffortListingUi(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query: string | undefined, albums: Awaited<ReturnType<typeof exploreErome>>['albums']) {
+async function listingUi(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query: string | undefined, albums: Awaited<ReturnType<typeof exploreErome>>['albums']) {
   try {
     await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
       title: `🔞 EROME · ${mode === 'search' ? 'BÚSQUEDA' : mode.toUpperCase()}`,
-      body: mode === 'search'
-        ? `Resultados para: ${query}\nPágina: ${page}`
-        : `Explorar ${mode === 'hot' ? 'HOT' : 'NEW'} · página ${page}`,
-      footer: 'Controles opcionales · el listado de texto siempre funciona',
+      body: mode === 'search' ? `Resultados para: ${query}\nPágina: ${page}` : `Explorar ${mode === 'hot' ? 'HOT' : 'NEW'} · página ${page}`,
+      footer: 'Erome · Ghost Nexora Bot',
       cards: albums.map((album, index) => ({
         title: `#${index + 1} · ${album.title}`.slice(0, 120),
         body: album.author ? `Autor: ${album.author}` : `Álbum: ${album.id}`,
@@ -69,11 +67,11 @@ async function bestEffortListingUi(ctx: CommandContext, mode: 'hot' | 'new' | 's
     await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
       title: '🔞 EROME · NAVEGACIÓN',
       body: `Página actual: *${page}*`,
-      footer: 'Si los botones no aparecen, usa los comandos del mensaje anterior.',
+      footer: 'Erome',
       buttons,
     })
   } catch {
-    // La interfaz Native Flow es opcional. El listado textual ya fue enviado.
+    // La navegación textual ya fue enviada.
   }
 }
 
@@ -111,20 +109,18 @@ async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', 
     '━━━━━━━━━━━━━━━━━━',
     previous ? `Anterior: *${previous}*` : '',
     `Siguiente: *${next}*`,
-    '',
     `Buscar: *${ctx.prefix}erome search <texto>*`,
-    'Las imágenes internas se omiten; el bot solo ofrece videos.',
   ].filter(Boolean).join('\n'))
 
-  await bestEffortListingUi(ctx, mode, page, query, albums)
+  await listingUi(ctx, mode, page, query, albums)
 }
 
-async function bestEffortAlbumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof getEromeAlbum>>, page: number, totalPages: number, items: Awaited<ReturnType<typeof getEromeAlbum>>['videos']) {
+async function albumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof getEromeAlbum>>, page: number, totalPages: number, items: Awaited<ReturnType<typeof getEromeAlbum>>['videos']) {
   try {
     await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
       title: `🔞 ${album.title}`,
       body: `Videos: ${album.videos.length} · página ${page}/${totalPages}`,
-      footer: 'Controles opcionales · usa los comandos del listado si no aparecen',
+      footer: album.author ? `Erome · ${album.author}` : 'Erome · Ghost Nexora Bot',
       cards: items.map((video) => ({
         title: `Video #${video.index}`,
         body: video.title,
@@ -141,20 +137,21 @@ async function bestEffortAlbumUi(ctx: CommandContext, album: Awaited<ReturnType<
       if (page > 1) buttons.push({ type: 'reply', text: '◀️ Anterior', id: `${ctx.prefix}erome album ${album.id} ${page - 1}` })
       if (page < totalPages) buttons.push({ type: 'reply', text: 'Siguiente ▶️', id: `${ctx.prefix}erome album ${album.id} ${page + 1}` })
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-        title: '🎬 MÁS VIDEOS DEL ÁLBUM',
+        title: '🎬 EROME · VIDEOS',
         body: `Página ${page}/${totalPages}`,
+        footer: 'Erome',
         buttons,
       })
     }
   } catch {
-    // El listado textual ya permite descargar y paginar sin Native Flow.
+    // La navegación textual ya fue enviada.
   }
 }
 
 async function showAlbum(ctx: CommandContext, input: string, page: number) {
   const id = albumId(input)
   const album = await getEromeAlbum(id)
-  if (!album.videos.length) throw new Error('Ese álbum no contiene videos descargables; las imágenes se omitieron.')
+  if (!album.videos.length) throw new Error('Ese álbum no contiene videos descargables.')
   const pageSize = 10
   const totalPages = Math.max(1, Math.ceil(album.videos.length / pageSize))
   const safe = Math.max(1, Math.min(totalPages, page))
@@ -166,7 +163,7 @@ async function showAlbum(ctx: CommandContext, input: string, page: number) {
   ].join('\n'))
 
   await ctx.reply([
-    `╭━━〔 🔞 *EROME · ÁLBUM* 〕━━╮`,
+    '╭━━〔 🔞 *EROME · ÁLBUM* 〕━━╮',
     `┃ ${album.title}`,
     album.author ? `┃ Autor » ${album.author}` : '',
     `┃ Videos » *${album.videos.length}*`,
@@ -178,7 +175,7 @@ async function showAlbum(ctx: CommandContext, input: string, page: number) {
     totalPages > 1 && safe < totalPages ? `Siguiente: *${ctx.prefix}erome album ${album.id} ${safe + 1}*` : '',
   ].filter(Boolean).join('\n'))
 
-  await bestEffortAlbumUi(ctx, album, safe, totalPages, items)
+  await albumUi(ctx, album, safe, totalPages, items)
 }
 
 export const eromeCommands: BotCommand[] = [
@@ -198,8 +195,6 @@ export const eromeCommands: BotCommand[] = [
           `┃ Cookie en .env » *${status.envCookieConfigured ? 'CONFIGURADA' : 'NO'}*`,
           `┃ Cookies persistidas » *${status.storedCookies}*`,
           '╰━━━━━━━━━━━━━━━━╯',
-          '',
-          'Erome permite explorar contenido público sin cuenta. Si se configura EROME_COOKIE, el bot reutiliza esa sesión y persiste las cookies que Erome vaya renovando.',
         ].join('\n'))
         return
       }
@@ -234,14 +229,23 @@ export const eromeCommands: BotCommand[] = [
         const id = ctx.args[1]
         const index = Number(ctx.args[2])
         if (!id || !Number.isInteger(index)) throw new Error(`Uso: ${ctx.prefix}erome dl <album-id> <video>`)
-        await ctx.reply(`⬇️ *EROME · DESCARGANDO*\nÁlbum: \`${id}\` · video #${index}\nEspera mientras preparo el MP4...`)
+        await ctx.reply(`⬇️ *EROME*\nPreparando video #${index}...`)
         const result = await downloadEromeVideo(id, index)
         try {
-          await ctx.socket.sendMessage(ctx.chatId, {
+          const caption = `🔞 *EROME · VIDEO ${result.video.index}*\n${result.album.title}\n📦 ${(result.size / 1024 / 1024).toFixed(1)} MB`
+          const sent = await ctx.socket.sendMessage(ctx.chatId, {
             video: { url: result.filePath },
             mimetype: 'video/mp4',
-            caption: `🔞 *EROME · VIDEO ${result.video.index}*\n${result.album.title}\n📦 ${(result.size / 1024 / 1024).toFixed(1)} MB`,
-          }, { quoted: ctx.message })
+            caption,
+          }, { quoted: ctx.message }).catch(() => null)
+          if (!sent) {
+            await ctx.socket.sendMessage(ctx.chatId, {
+              document: { url: result.filePath },
+              fileName: `erome-${id}-${index}.mp4`,
+              mimetype: 'video/mp4',
+              caption,
+            }, { quoted: ctx.message })
+          }
           recordSubbotDownload(ctx.instanceId, result.size)
         } finally {
           await result.cleanup()
