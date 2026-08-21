@@ -35,6 +35,12 @@ const db = economy.db
 const now = () => Date.now()
 const ROLL_COOLDOWN_MS = 30_000
 const ROLL_TTL_MS = 5 * 60_000
+const JIKAN_BASE = 'https://api.jikan.moe/v4'
+const JIKAN_MIN_GAP_MS = 420
+const JIKAN_MAX_ATTEMPTS = 4
+const transientJikanStatuses = new Set([429, 500, 502, 503, 504])
+let jikanNextRequestAt = 0
+let jikanQueue: Promise<void> = Promise.resolve()
 
 const rarityConfig: Record<WaifuRarity, { value: number; claimPrice: number; emoji: string }> = {
   Common: { value: 120, claimPrice: 60, emoji: '⚪' },
@@ -43,6 +49,22 @@ const rarityConfig: Record<WaifuRarity, { value: number; claimPrice: number; emo
   Epic: { value: 1500, claimPrice: 350, emoji: '🟣' },
   Legendary: { value: 3400, claimPrice: 750, emoji: '🟠' },
   Mythic: { value: 7500, claimPrice: 1500, emoji: '🔴' },
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+async function paceJikan() {
+  let release!: () => void
+  const previous = jikanQueue
+  jikanQueue = new Promise<void>((resolve) => { release = resolve })
+  await previous
+  try {
+    const wait = Math.max(0, jikanNextRequestAt - Date.now())
+    if (wait > 0) await sleep(wait)
+    jikanNextRequestAt = Date.now() + JIKAN_MIN_GAP_MS
+  } finally {
+    release()
+  }
 }
 
 function rarityFromFavorites(favorites: number): WaifuRarity {
@@ -128,12 +150,50 @@ db.exec(`
 `)
 
 async function fetchJikanJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
-    signal: AbortSignal.timeout(12_000),
-  })
-  if (!response.ok) throw new Error(`Jikan respondió HTTP ${response.status}.`)
-  return response.json() as Promise<T>
+  let lastError: unknown
+  for (let attempt = 1; attempt <= JIKAN_MAX_ATTEMPTS; attempt += 1) {
+    await paceJikan()
+    try {
+      const response = await fetch(url, {
+        headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
+        signal: AbortSignal.timeout(20_000),
+      })
+      if (response.ok) return response.json() as Promise<T>
+
+      const error = new Error(`Jikan respondió HTTP ${response.status}.`)
+      lastError = error
+      if (!transientJikanStatuses.has(response.status) || attempt === JIKAN_MAX_ATTEMPTS) throw error
+
+      const retryAfterHeader = response.headers.get('retry-after')
+      const retryAfter = retryAfterHeader ? Math.max(0, Number(retryAfterHeader) * 1000) : 0
+      const backoff = Math.min(6_000, 650 * (2 ** (attempt - 1))) + Math.floor(Math.random() * 250)
+      await sleep(Math.max(retryAfter, backoff))
+    } catch (error) {
+      lastError = error
+      const message = error instanceof Error ? error.message : String(error)
+      const explicitHttp = /Jikan respondió HTTP (\d+)/.exec(message)
+      const status = explicitHttp ? Number(explicitHttp[1]) : undefined
+      if ((status && !transientJikanStatuses.has(status)) || attempt === JIKAN_MAX_ATTEMPTS) throw error
+      const backoff = Math.min(6_000, 650 * (2 ** (attempt - 1))) + Math.floor(Math.random() * 250)
+      await sleep(backoff)
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Jikan no respondió después de varios intentos.')
+}
+
+async function fetchRandomCharacter() {
+  try {
+    const payload = await fetchJikanJson<{ data?: JikanCharacter }>(`${JIKAN_BASE}/random/characters`)
+    if (payload.data) return payload.data
+  } catch {
+    // /random puede sufrir 5xx con más frecuencia. Se usa /top como fallback de la misma API.
+  }
+
+  const page = 1 + Math.floor(Math.random() * 20)
+  const payload = await fetchJikanJson<{ data?: JikanCharacter[] }>(`${JIKAN_BASE}/top/characters?page=${page}&limit=25`)
+  const candidates = payload.data ?? []
+  if (!candidates.length) throw new Error('Jikan no devolvió personajes disponibles.')
+  return candidates[Math.floor(Math.random() * candidates.length)]!
 }
 
 export function rarityEmoji(rarity: WaifuRarity) {
@@ -154,9 +214,7 @@ export async function rollWaifu(userJid: string) {
   const remaining = Math.max(0, Number(meta?.lastRoll ?? 0) + ROLL_COOLDOWN_MS - now())
   if (remaining > 0) return { ok: false as const, remaining }
 
-  const payload = await fetchJikanJson<{ data?: JikanCharacter }>('https://api.jikan.moe/v4/random/characters')
-  if (!payload.data) throw new Error('Jikan no devolvió un personaje.')
-  const character = fromJikan(payload.data)
+  const character = fromJikan(await fetchRandomCharacter())
   const rolledAt = now()
   const expiresAt = rolledAt + ROLL_TTL_MS
 
@@ -201,7 +259,7 @@ export function claimCurrentWaifu(userJid: string) {
   const roll = currentRoll(userJid)
   if (!roll) throw new Error('No tienes un roll activo. Usa .rw y reclama antes de que expire.')
   const occupied = getClaim(roll.characterId)
-  if (occupied) throw new Error(`Ese personaje ya pertenece a otro usuario.`)
+  if (occupied) throw new Error('Ese personaje ya pertenece a otro usuario.')
 
   const balance = economy.balance(userJid)
   if (balance.wallet < roll.claimPrice) {
@@ -289,7 +347,14 @@ export function waifuTop(limit = 10) {
 export async function searchWaifus(query: string, limit = 8) {
   const text = query.trim()
   if (!text) throw new Error('Indica un personaje para buscar.')
-  const payload = await fetchJikanJson<{ data?: JikanCharacter[] }>(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(text)}&limit=${Math.max(1, Math.min(12, limit))}&order_by=favorites&sort=desc`)
+  const safeLimit = Math.max(1, Math.min(12, limit))
+  let payload: { data?: JikanCharacter[] }
+  try {
+    payload = await fetchJikanJson<{ data?: JikanCharacter[] }>(`${JIKAN_BASE}/characters?q=${encodeURIComponent(text)}&limit=${safeLimit}&order_by=favorites&sort=desc`)
+  } catch {
+    // Una consulta simple ejerce menos carga en Jikan y suele sobrevivir mejor durante degradaciones.
+    payload = await fetchJikanJson<{ data?: JikanCharacter[] }>(`${JIKAN_BASE}/characters?q=${encodeURIComponent(text)}&limit=${safeLimit}`)
+  }
   return (payload.data ?? []).flatMap((item) => {
     try {
       const character = fromJikan(item)
@@ -302,7 +367,12 @@ export async function searchWaifus(query: string, limit = 8) {
 
 export async function waifuInfo(characterId: number) {
   const existing = getClaim(characterId)
-  const payload = await fetchJikanJson<{ data?: JikanCharacter }>(`https://api.jikan.moe/v4/characters/${characterId}/full`)
+  let payload: { data?: JikanCharacter }
+  try {
+    payload = await fetchJikanJson<{ data?: JikanCharacter }>(`${JIKAN_BASE}/characters/${characterId}/full`)
+  } catch {
+    payload = await fetchJikanJson<{ data?: JikanCharacter }>(`${JIKAN_BASE}/characters/${characterId}`)
+  }
   if (!payload.data) throw new Error('No encontré ese personaje en Jikan.')
   return { character: fromJikan(payload.data), ownerJid: existing?.ownerJid ?? null }
 }
