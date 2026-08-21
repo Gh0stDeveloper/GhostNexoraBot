@@ -16,6 +16,11 @@ function participantMatches(participant: GroupParticipant, candidates: string[])
   return participantIds.some((jid) => candidates.includes(jid))
 }
 
+function canonicalUserJid(candidates: string[], fallback: string) {
+  const pn = candidates.find((jid) => /@s\.whatsapp\.net$/i.test(jid))
+  return normalizeJid(pn ?? fallback)
+}
+
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
@@ -45,7 +50,8 @@ export class CommandRouter {
     const incomingCandidates = getSenderCandidates(message)
     const rawSenderCandidates = message.key.fromMe ? selfCandidates : incomingCandidates
     const senderCandidates = rawSenderCandidates.map(normalizeJid).filter(Boolean)
-    const sender = message.key.fromMe ? (me?.id ?? getSender(message)) : getSender(message)
+    const rawSender = message.key.fromMe ? (me?.id ?? getSender(message)) : getSender(message)
+    const sender = canonicalUserJid(rawSenderCandidates, rawSender)
     const senderNumbers = rawSenderCandidates.map(digitsFromJid).filter(Boolean)
     const isOwner = Boolean(message.key.fromMe) || senderNumbers.some((number) => config.owners.includes(number))
     const isGroup = chatId.endsWith('@g.us')
