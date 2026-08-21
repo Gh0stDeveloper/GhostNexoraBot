@@ -30,6 +30,7 @@ export interface CommandContext {
   isOwner: boolean
   isBotStaff: boolean
   isGroup: boolean
+  isSubbotOwner: boolean
   instanceId?: number
   instanceOwnerJid?: string
   reply: (text: string) => Promise<unknown>
@@ -44,6 +45,7 @@ export interface BotCommand {
   usage?: string
   ownerOnly?: boolean
   staffOnly?: boolean
+  subbotOwnerAllowed?: boolean
   groupOnly?: boolean
   adminOnly?: boolean
   botAdminOnly?: boolean
