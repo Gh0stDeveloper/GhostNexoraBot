@@ -3,6 +3,7 @@ import { config } from '../config.js'
 import { economy } from './economy.js'
 import { community } from './community.js'
 import { getBrandingAsset } from './branding.js'
+import { subbotCustomization } from './subbot-customization.js'
 import { settings } from '../core/settings.js'
 import { getMessageText, getSender } from '../utils/message.js'
 
@@ -71,6 +72,7 @@ export async function handleParticipantUpdate(
 
   const metadata = await socket.groupMetadata(update.id).catch(() => null)
   const groupName = metadata?.subject ?? 'este grupo'
+  const botName = instanceId ? subbotCustomization.get(instanceId).longName : settings.botDisplayName
   const customAsset = await getBrandingAsset(update.action === 'add' ? 'welcome' : 'goodbye', instanceId).catch(() => null)
 
   for (const jid of update.participants) {
@@ -80,7 +82,7 @@ export async function handleParticipantUpdate(
       `┃ a *$namegroup*`,
       '╰━━━━━━━━━━━━━━━━╯',
       '',
-      `✦ Soy *${settings.botDisplayName}*`,
+      `✦ Soy *${botName}*`,
       `✦ Usa *${settings.prefix}menu* para conocer mis comandos.`,
       '✦ Respeta las reglas y disfruta tu estancia.',
     ].join('\n')
@@ -89,7 +91,7 @@ export async function handleParticipantUpdate(
       `┃ $user dejó *$namegroup*`,
       '╰━━━━━━━━━━━━━━━━╯',
       '',
-      'Que tengas un buen camino. Siempre habrá un lugar si decides volver.',
+      `*${botName}* te desea un buen camino. Siempre habrá un lugar si decides volver.`,
     ].join('\n')
 
     const template = update.action === 'add'
