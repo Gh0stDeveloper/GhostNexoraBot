@@ -20,6 +20,14 @@ export interface YouTubeFormats {
   audioBitrates: number[]
 }
 
+export interface YouTubeSearchResult {
+  id: string
+  title: string
+  channel: string
+  duration?: number
+  url: string
+}
+
 const hosts: Record<DownloadPlatform, string[]> = {
   youtube: ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'music.youtube.com'],
   tiktok: ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com'],
@@ -27,6 +35,8 @@ const hosts: Record<DownloadPlatform, string[]> = {
   facebook: ['facebook.com', 'www.facebook.com', 'fb.watch', 'm.facebook.com'],
   twitter: ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
 }
+
+const soundCloudHosts = ['soundcloud.com', 'www.soundcloud.com', 'm.soundcloud.com', 'on.soundcloud.com']
 
 function validateUrl(value: string, platform: DownloadPlatform) {
   let url: URL
@@ -39,6 +49,21 @@ function validateUrl(value: string, platform: DownloadPlatform) {
   const host = url.hostname.toLowerCase()
   if (!hosts[platform].some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
     throw new Error(`La URL no pertenece a ${platform}.`)
+  }
+  return url.toString()
+}
+
+function validateSoundCloudUrl(value: string) {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('URL de SoundCloud inválida.')
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Solo se permiten URLs HTTP/HTTPS.')
+  const host = url.hostname.toLowerCase()
+  if (!soundCloudHosts.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))) {
+    throw new Error('La URL no pertenece a SoundCloud.')
   }
   return url.toString()
 }
@@ -59,7 +84,7 @@ async function findDownloadedFile(dir: string) {
   return { filePath, fileName: candidate, size: fileStat.size }
 }
 
-async function runDownload(url: string, args: string[]): Promise<DownloadResult> {
+async function runDownload(source: string, args: string[]): Promise<DownloadResult> {
   const dir = await prepareTempDir()
   const output = path.join(dir, '%(title).80s-%(id)s.%(ext)s')
   try {
@@ -70,7 +95,7 @@ async function runDownload(url: string, args: string[]): Promise<DownloadResult>
       '--no-progress',
       '-o', output,
       ...args,
-      url,
+      source,
     ], { timeout: 180_000 })
     const result = await findDownloadedFile(dir)
     return {
@@ -81,6 +106,18 @@ async function runDownload(url: string, args: string[]): Promise<DownloadResult>
     await rm(dir, { recursive: true, force: true })
     throw error
   }
+}
+
+const audioArgs = ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0']
+
+function videoArgs(quality: number) {
+  const height = Math.max(144, Math.min(2160, Number.isFinite(quality) ? quality : 720))
+  return [
+    '-f',
+    `bestvideo[height<=${height}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${height}][ext=mp4]/best[height<=${height}]`,
+    '--merge-output-format',
+    'mp4',
+  ]
 }
 
 export async function getYouTubeFormats(input: string): Promise<YouTubeFormats> {
@@ -105,20 +142,67 @@ export async function getYouTubeFormats(input: string): Promise<YouTubeFormats> 
   return { title: data.title ?? 'YouTube', duration: data.duration, videoHeights, audioBitrates }
 }
 
+export async function searchYouTube(input: string, limit = 5): Promise<YouTubeSearchResult[]> {
+  const query = input.trim()
+  if (!query) throw new Error('Debes indicar qué quieres buscar en YouTube.')
+  const count = Math.max(1, Math.min(10, limit))
+  const { stdout } = await execa('yt-dlp', [
+    '--flat-playlist',
+    '--dump-single-json',
+    '--no-warnings',
+    `ytsearch${count}:${query}`,
+  ], { timeout: 60_000 })
+  const data = JSON.parse(stdout) as {
+    entries?: Array<{
+      id?: string
+      title?: string
+      channel?: string
+      uploader?: string
+      duration?: number
+      webpage_url?: string
+      url?: string
+    }>
+  }
+
+  return (data.entries ?? []).flatMap((entry) => {
+    if (!entry.id) return []
+    return [{
+      id: entry.id,
+      title: entry.title ?? 'Sin título',
+      channel: entry.channel ?? entry.uploader ?? 'Canal desconocido',
+      duration: entry.duration,
+      url: entry.webpage_url?.startsWith('http') ? entry.webpage_url : `https://www.youtube.com/watch?v=${entry.id}`,
+    }]
+  })
+}
+
 export function downloadYouTubeAudio(input: string) {
   const url = validateUrl(input, 'youtube')
-  return runDownload(url, ['-f', 'bestaudio/best', '-x', '--audio-format', 'mp3', '--audio-quality', '0'])
+  return runDownload(url, audioArgs)
 }
 
 export function downloadYouTubeVideo(input: string, quality = 720) {
   const url = validateUrl(input, 'youtube')
-  const height = Math.max(144, Math.min(2160, Number.isFinite(quality) ? quality : 720))
-  return runDownload(url, [
-    '-f',
-    `bestvideo[height<=${height}][ext=mp4]+bestaudio[ext=m4a]/best[height<=${height}][ext=mp4]/best[height<=${height}]`,
-    '--merge-output-format',
-    'mp4',
-  ])
+  return runDownload(url, videoArgs(quality))
+}
+
+export function downloadYouTubeSearchAudio(input: string) {
+  const query = input.trim()
+  if (!query) throw new Error('Debes indicar una búsqueda.')
+  return runDownload(`ytsearch1:${query}`, audioArgs)
+}
+
+export function downloadYouTubeSearchVideo(input: string, quality = 720) {
+  const query = input.trim()
+  if (!query) throw new Error('Debes indicar una búsqueda.')
+  return runDownload(`ytsearch1:${query}`, videoArgs(quality))
+}
+
+export function downloadSoundCloud(input: string) {
+  const value = input.trim()
+  if (!value) throw new Error('Debes indicar una URL o búsqueda de SoundCloud.')
+  const source = /^https?:\/\//i.test(value) ? validateSoundCloudUrl(value) : `scsearch1:${value}`
+  return runDownload(source, audioArgs)
 }
 
 export function downloadSocialVideo(input: string, platform: Exclude<DownloadPlatform, 'youtube'>) {
