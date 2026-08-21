@@ -1,9 +1,13 @@
 import type { BotCommand } from '../types.js'
 import {
   downloadSocialVideo,
+  downloadSoundCloud,
   downloadYouTubeAudio,
+  downloadYouTubeSearchAudio,
+  downloadYouTubeSearchVideo,
   downloadYouTubeVideo,
   getYouTubeFormats,
+  searchYouTube,
   type DownloadPlatform,
 } from '../services/downloader.js'
 import { downloadMediaFire } from '../services/mediafire.js'
@@ -14,8 +18,24 @@ function requireUrl(args: string[]) {
   return url
 }
 
+function requireText(value: string, label = 'Debes indicar una búsqueda.') {
+  const text = value.trim()
+  if (!text) throw new Error(label)
+  return text
+}
+
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatDuration(seconds?: number) {
+  if (!seconds || !Number.isFinite(seconds)) return 'N/D'
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    : `${minutes}:${String(secs).padStart(2, '0')}`
 }
 
 const socialCommand = (
@@ -47,6 +67,66 @@ const socialCommand = (
 
 export const downloadCommands: BotCommand[] = [
   {
+    name: 'yts',
+    aliases: ['ytsearch', 'buscarvideo'],
+    category: 'downloads',
+    description: 'Busca videos públicos en YouTube.',
+    usage: 'yts <búsqueda>',
+    async handler(ctx) {
+      const results = await searchYouTube(requireText(ctx.argText), 5)
+      if (!results.length) throw new Error('No encontré resultados para esa búsqueda.')
+      const lines = results.map((item, index) => [
+        `*${index + 1}. ${item.title}*`,
+        `👤 ${item.channel}`,
+        `⏱️ ${formatDuration(item.duration)}`,
+        `🔗 ${item.url}`,
+      ].join('\n'))
+      await ctx.reply(`🔎 *Resultados de YouTube*\n\n${lines.join('\n\n')}\n\n🎵 Usa *${ctx.prefix}play <búsqueda>* para descargar audio.`)
+    },
+  },
+  {
+    name: 'play',
+    aliases: ['playaudio'],
+    category: 'downloads',
+    description: 'Busca en YouTube y descarga el primer resultado como MP3.',
+    usage: 'play <búsqueda>',
+    async handler(ctx) {
+      const query = requireText(ctx.argText)
+      await ctx.reply(`🔎 Buscando *${query}* y preparando audio...`)
+      const result = await downloadYouTubeSearchAudio(query)
+      try {
+        await ctx.socket.sendMessage(ctx.chatId, {
+          audio: { url: result.filePath },
+          mimetype: 'audio/mpeg',
+          ptt: false,
+        }, { quoted: ctx.message })
+      } finally {
+        await result.cleanup()
+      }
+    },
+  },
+  {
+    name: 'playvideo',
+    aliases: ['playvid'],
+    category: 'downloads',
+    description: 'Busca en YouTube y descarga el primer resultado como video.',
+    usage: 'playvideo <búsqueda>',
+    async handler(ctx) {
+      const query = requireText(ctx.argText)
+      await ctx.reply(`🔎 Buscando *${query}* y preparando video hasta *720p*...`)
+      const result = await downloadYouTubeSearchVideo(query, 720)
+      try {
+        await ctx.socket.sendMessage(ctx.chatId, {
+          video: { url: result.filePath },
+          mimetype: 'video/mp4',
+          caption: `🎬 YouTube · hasta 720p · ${formatBytes(result.size)}`,
+        }, { quoted: ctx.message })
+      } finally {
+        await result.cleanup()
+      }
+    },
+  },
+  {
     name: 'ytformats',
     aliases: ['ytquality', 'ytcalidad'],
     category: 'downloads',
@@ -56,8 +136,7 @@ export const downloadCommands: BotCommand[] = [
       const data = await getYouTubeFormats(requireUrl(ctx.args))
       const video = data.videoHeights.length ? data.videoHeights.map((height) => `${height}p`).join(', ') : 'No detectadas'
       const audio = data.audioBitrates.length ? data.audioBitrates.map((bitrate) => `${bitrate} kbps`).join(', ') : 'Automática'
-      const duration = data.duration ? `${Math.floor(data.duration / 60)}:${String(Math.floor(data.duration % 60)).padStart(2, '0')}` : 'N/D'
-      await ctx.reply(`🎬 *${data.title}*\n\n⏱️ Duración: ${duration}\n📺 Video: ${video}\n🎵 Audio: ${audio}\n\nEjemplo: *${ctx.prefix}ytmp4 <url> 720*`)
+      await ctx.reply(`🎬 *${data.title}*\n\n⏱️ Duración: ${formatDuration(data.duration)}\n📺 Video: ${video}\n🎵 Audio: ${audio}\n\nEjemplo: *${ctx.prefix}ytmp4 <url> 720*`)
     },
   },
   {
@@ -98,6 +177,27 @@ export const downloadCommands: BotCommand[] = [
           video: { url: result.filePath },
           mimetype: 'video/mp4',
           caption: `🎬 YouTube · hasta ${quality}p · ${formatBytes(result.size)}\n👻 ${ctx.prefix}menu`,
+        }, { quoted: ctx.message })
+      } finally {
+        await result.cleanup()
+      }
+    },
+  },
+  {
+    name: 'soundcloud',
+    aliases: ['sc', 'scdl'],
+    category: 'downloads',
+    description: 'Descarga audio público de SoundCloud por URL o búsqueda.',
+    usage: 'soundcloud <url|búsqueda>',
+    async handler(ctx) {
+      const input = requireText(ctx.argText, 'Debes indicar una URL o búsqueda de SoundCloud.')
+      await ctx.reply('🎧 Preparando audio de SoundCloud...')
+      const result = await downloadSoundCloud(input)
+      try {
+        await ctx.socket.sendMessage(ctx.chatId, {
+          audio: { url: result.filePath },
+          mimetype: 'audio/mpeg',
+          ptt: false,
         }, { quoted: ctx.message })
       } finally {
         await result.cleanup()
