@@ -16,6 +16,7 @@ import { waifuCommands } from './waifu.js'
 import { waifuExtendedCommands } from './waifu-extended.js'
 import { subbotCommands } from './subbots.js'
 import { adultCommands } from './adult.js'
+import { personalizationCommands } from './personalization.js'
 import { ownerCommands } from './owner.js'
 
 export const commands: BotCommand[] = [
@@ -36,5 +37,6 @@ export const commands: BotCommand[] = [
   ...waifuExtendedCommands,
   ...subbotCommands,
   ...adultCommands,
+  ...personalizationCommands,
   ...ownerCommands,
 ]
