@@ -54,6 +54,7 @@ export class CommandRouter {
     const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && normalizeJid(this.options.instanceOwnerJid) === sender
     const isGroup = chatId.endsWith('@g.us')
     const prefix = settings.prefix
+    const hasPrivateAccess = isGroup || isBotStaff || isSubbotOwner || Boolean(economy.hasEntitlement(sender, 'private_access'))
 
     const reply = (replyText: string) => socket.sendMessage(chatId, { text: replyText }, { quoted: message })
     const react = (emoji: string) => socket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
@@ -61,6 +62,11 @@ export class CommandRouter {
     if (!text.startsWith(prefix)) {
       const response = text.toLowerCase()
       if (response !== 'aceptar' && response !== 'rechazar') return false
+      if (!hasPrivateAccess) {
+        await reply(`🔐 Esta acción también requiere acceso privado. Consulta *${prefix}shop* y compra *private1d*, *private7d* o *private30d*.`)
+        await react('🔒').catch(() => undefined)
+        return true
+      }
       try {
         const result = community.resolvePendingRelationship(sender, response === 'aceptar')
         if (!result) return false
@@ -88,10 +94,9 @@ export class CommandRouter {
     try {
       await react('⚡')
 
-      // Los chats privados son una función premium del bot. Owner/staff quedan exentos.
-      // Sin una suscripción private_access solo se permite entrar a la tienda, consultar
-      // saldo y comprar el acceso; el resto de módulos queda bloqueado sin excepciones.
-      if (!isGroup && !isBotStaff && !isSubbotOwner && !economy.hasEntitlement(sender, 'private_access') && !privateStorefrontCommands.has(command.name)) {
+      // Los chats privados son premium. Sin private_access únicamente queda abierta
+      // la zona de compra para que el usuario pueda consultar saldo/planes y activar acceso.
+      if (!hasPrivateAccess && !privateStorefrontCommands.has(command.name)) {
         await reply([
           '╭━━〔 🔐 *CHAT PRIVADO PREMIUM* 〕━━╮',
           '┃ Tu cuenta todavía no tiene acceso privado.',
