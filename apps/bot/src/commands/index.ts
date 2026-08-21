@@ -13,6 +13,7 @@ import { securityCommands } from './security.js'
 import { economyCommands } from './economy.js'
 import { advancedEconomyCommands } from './economy-advanced.js'
 import { gameCommands } from './games.js'
+import { pvpGameCommands } from './games-pvp.js'
 import { rpgCommands } from './rpg.js'
 import { waifuCommands } from './waifu.js'
 import { waifuExtendedCommands } from './waifu-extended.js'
@@ -36,6 +37,7 @@ export const commands: BotCommand[] = [
   ...economyCommands,
   ...advancedEconomyCommands,
   ...gameCommands,
+  ...pvpGameCommands,
   ...rpgCommands,
   ...waifuCommands,
   ...waifuExtendedCommands,
