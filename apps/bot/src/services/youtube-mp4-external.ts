@@ -1,4 +1,11 @@
 import { logger } from '../utils/logger.js'
+import {
+  resolveApiCausasYouTube,
+  resolveOgMp3YouTube,
+  resolveSiputzxYouTube,
+  type CommunityYouTubeKind,
+  type CommunityYouTubeResolved,
+} from './youtube-community-providers.js'
 
 const INSTANCES = [
   'https://pipedapi.kavin.rocks',
@@ -52,6 +59,39 @@ export type ExternalAudioResolved = {
   thumbnail?: string
   sourceExtension: 'm4a' | 'webm' | 'bin'
   provider: string
+}
+
+function compactError(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').slice(0, 200)
+}
+
+async function resolveCommunity(youtubeUrl: string, kind: CommunityYouTubeKind, quality = 720): Promise<CommunityYouTubeResolved> {
+  const attempts: Array<{ name: string; run: () => Promise<CommunityYouTubeResolved> }> = [
+    { name: 'OGMP3', run: () => resolveOgMp3YouTube(youtubeUrl, kind, quality) },
+    { name: 'SiputZX', run: () => resolveSiputzxYouTube(youtubeUrl, kind) },
+  ]
+  if (process.env.APICAUSAS_API_KEY?.trim()) {
+    attempts.splice(1, 0, { name: 'ApiCausas', run: () => resolveApiCausasYouTube(youtubeUrl, kind) })
+  }
+
+  try {
+    return await Promise.any(attempts.map(async ({ name, run }) => {
+      try {
+        const result = await run()
+        logger.info({ provider: name, kind }, 'youtube community provider resolved')
+        return result
+      } catch (error) {
+        logger.warn({ provider: name, kind, errorMessage: compactError(error) }, 'youtube community provider failed')
+        throw new Error(`${name}: ${compactError(error)}`)
+      }
+    }))
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      const details = error.errors.map((item) => item instanceof Error ? item.message : String(item)).slice(0, 4)
+      throw new Error(`proveedores comunitarios agotados: ${details.join(' · ')}`)
+    }
+    throw error
+  }
 }
 
 function youtubeVideoId(input: string) {
@@ -168,10 +208,26 @@ async function requestAudioInstance(instance: string, videoId: string): Promise<
 }
 
 export async function resolveExternalYouTubeMp4(youtubeUrl: string, quality = 720): Promise<ExternalMp4Resolved> {
+  let communityError: unknown
+  try {
+    const direct = await resolveCommunity(youtubeUrl, 'mp4', quality)
+    return {
+      url: direct.url,
+      title: direct.title,
+      duration: direct.duration,
+      thumbnail: direct.thumbnail,
+      fileName: direct.fileName,
+      provider: direct.provider,
+    }
+  } catch (error) {
+    communityError = error
+    logger.warn({ errorMessage: compactError(error), quality }, 'youtube community mp4 providers exhausted; trying piped')
+  }
+
   const id = youtubeVideoId(youtubeUrl)
   if (!id) throw new Error('No pude identificar el ID del video.')
   const providers = instances()
-  if (!providers.length) throw new Error('No hay instancias Piped disponibles.')
+  if (!providers.length) throw new Error(`No hay instancias Piped disponibles. ${compactError(communityError)}`)
   try {
     const result = await Promise.any(providers.map(async (provider) => {
       try {
@@ -187,17 +243,33 @@ export async function resolveExternalYouTubeMp4(youtubeUrl: string, quality = 72
   } catch (error) {
     if (error instanceof AggregateError) {
       const details = error.errors.map((item) => item instanceof Error ? item.message : String(item)).slice(0, 4)
-      throw new Error(`Piped no pudo resolver MP4: ${details.join(' · ')}`)
+      throw new Error(`Comunidad: ${compactError(communityError)} · Piped: ${details.join(' · ')}`)
     }
     throw error
   }
 }
 
 export async function resolveExternalYouTubeAudio(youtubeUrl: string): Promise<ExternalAudioResolved> {
+  let communityError: unknown
+  try {
+    const direct = await resolveCommunity(youtubeUrl, 'mp3', 320)
+    return {
+      url: direct.url,
+      title: direct.title,
+      duration: direct.duration,
+      thumbnail: direct.thumbnail,
+      sourceExtension: 'bin',
+      provider: direct.provider,
+    }
+  } catch (error) {
+    communityError = error
+    logger.warn({ errorMessage: compactError(error) }, 'youtube community audio providers exhausted; trying piped')
+  }
+
   const id = youtubeVideoId(youtubeUrl)
   if (!id) throw new Error('No pude identificar el ID del video.')
   const providers = instances()
-  if (!providers.length) throw new Error('No hay instancias Piped disponibles.')
+  if (!providers.length) throw new Error(`No hay instancias Piped disponibles. ${compactError(communityError)}`)
   try {
     const result = await Promise.any(providers.map(async (provider) => {
       try {
@@ -213,7 +285,7 @@ export async function resolveExternalYouTubeAudio(youtubeUrl: string): Promise<E
   } catch (error) {
     if (error instanceof AggregateError) {
       const details = error.errors.map((item) => item instanceof Error ? item.message : String(item)).slice(0, 4)
-      throw new Error(`Piped no pudo resolver audio: ${details.join(' · ')}`)
+      throw new Error(`Comunidad: ${compactError(communityError)} · Piped: ${details.join(' · ')}`)
     }
     throw error
   }
