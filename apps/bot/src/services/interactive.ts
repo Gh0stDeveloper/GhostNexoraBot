@@ -30,6 +30,9 @@ export async function sendCarousel(
   quoted: WAMessage,
   input: { title: string; body?: string; footer?: string; cards: CarouselCard[] },
 ) {
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
+
   const cards = []
   for (const card of input.cards.slice(0, 12)) {
     let imageMessage: proto.Message.IImageMessage | undefined
@@ -65,7 +68,7 @@ export async function sendCarousel(
         }),
       },
     },
-  }, { quoted })
+  }, { quoted, userJid })
 
   await socket.relayMessage(chatId, message.message!, { messageId: message.key.id! })
 }
