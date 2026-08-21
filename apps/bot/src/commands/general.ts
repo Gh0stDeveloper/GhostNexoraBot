@@ -68,6 +68,14 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 │ ${p}baltop · ${p}balglobal · ${p}shop · ${p}buy
 ╰────────────────
 
+╭─〔 📖 *GRIMORIO RPG* 〕
+│ ${p}grimorio · ${p}tienda
+│ ${p}comprar <item> [cantidad]
+│ ${p}usar <item> [@user] · ${p}givegema @user [cant]
+│ Items » tiempo · deseo · fortuna · sombras
+│          escudo · renacer · maldicion
+╰────────────────
+
 ╭─〔 🎮 *JUEGOS Y APUESTAS NXC* 〕
 │ ${p}flip [cara|cruz] [apuesta]
 │ ${p}dados [apuesta] · ${p}bj [apuesta]
@@ -96,6 +104,7 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ╭─〔 🎨 *STICKERS Y HERRAMIENTAS* 〕
 │ ${p}s · ${p}stickereffects · ${p}toimage
 │ ${p}groupinfo · ${p}gitclone · ${p}apk
+│ ${p}safebooru [tags]
 ╰────────────────
 
 ╭─〔 👥 *ADMINISTRACIÓN DE GRUPOS* 〕
@@ -115,6 +124,7 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ╭─〔 🔞 *18+ CONTROLADO* 〕
 │ ${p}adult18 accept
 │ ${p}xvideos · ${p}xnxx · ${p}pornhub
+│ ${p}gelbooru [tags] · ${p}e621 [tags]
 ╰────────────────
 ${staffSection}
 
@@ -156,7 +166,7 @@ ${staffSection}
           '│ Plataforma » WhatsApp Multi-Device',
           '│ Core » TypeScript + Baileys',
           '│ Panel » Next.js + Tailwind CSS',
-          '│ Economía » Nexora Economy',
+          '│ Economía » Nexora Economy + Grimorio RPG',
           '│ Colección » Nexora Gacha',
           '│ Reacciones » Anime GIF + FFmpeg',
           `│ Prefijo » ${ctx.prefix}`,
