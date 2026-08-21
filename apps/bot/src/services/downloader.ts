@@ -7,6 +7,7 @@ import path from 'node:path'
 import { execa } from 'execa'
 import yts from 'yt-search'
 import { config } from '../config.js'
+import { youtubeSearchMobile, yt1sResolve } from './youtube-unofficial.js'
 
 export type DownloadPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'twitter'
 
@@ -209,18 +210,29 @@ async function downloadRemoteMedia(directUrl: string, ext: 'mp3' | 'mp4', info: 
 function compactError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   if (/Sign in to confirm you.re not a bot/i.test(message)) return 'YouTube bloqueó la extracción local de esta IP de VPS.'
-  return message.replace(/\s+/g, ' ').slice(0, 280)
+  return message.replace(/\s+/g, ' ').slice(0, 220)
 }
 
 async function getYouTubeInfoByUrl(input: string): Promise<MediaInfo> {
   const url = validateUrl(input, 'youtube')
   const id = youtubeId(url)
-  if (!id) {
-    const results = await searchYouTube(url, 1)
-    const first = results[0]
-    if (!first) throw new Error('No pude identificar ese video de YouTube.')
-    return first
-  }
+  if (!id) return { title: 'YouTube', webpageUrl: url }
+  try {
+    const mobile = await youtubeSearchMobile(id, 8)
+    const exact = mobile.find((item) => item.id === id)
+    if (exact) {
+      return {
+        title: exact.title,
+        description: exact.description,
+        uploader: exact.channel,
+        duration: exact.duration,
+        views: exact.views,
+        thumbnail: exact.thumbnail,
+        webpageUrl: exact.url,
+      }
+    }
+  } catch { /* metadata fallback below */ }
+
   const video = await yts({ videoId: id })
   const raw = video as unknown as {
     title?: string
@@ -237,19 +249,34 @@ async function getYouTubeInfoByUrl(input: string): Promise<MediaInfo> {
 
 async function downloadYouTubeViaProviders(input: string, kind: 'mp3' | 'mp4', quality = 720): Promise<DownloadResult> {
   const url = validateUrl(input, 'youtube')
-  const info = await getYouTubeInfoByUrl(url).catch((): MediaInfo => ({ title: 'YouTube', webpageUrl: url }))
-  let providerError: unknown
+  const baseInfo = await getYouTubeInfoByUrl(url).catch((): MediaInfo => ({ title: 'YouTube', webpageUrl: url }))
+  let yt1sError: unknown
   try {
-    const direct = await rubyCoreDownloadUrl(url, kind)
+    const direct = await yt1sResolve(url, kind, quality)
+    const info: MediaInfo = {
+      ...baseInfo,
+      title: direct.title || baseInfo.title,
+      uploader: direct.author ?? baseInfo.uploader,
+      duration: direct.duration ?? baseInfo.duration,
+      webpageUrl: url,
+    }
     return await downloadRemoteMedia(direct.url, kind, info, direct.fileName)
   } catch (error) {
-    providerError = error
+    yt1sError = error
+  }
+
+  let rubyError: unknown
+  try {
+    const direct = await rubyCoreDownloadUrl(url, kind)
+    return await downloadRemoteMedia(direct.url, kind, baseInfo, direct.fileName)
+  } catch (error) {
+    rubyError = error
   }
 
   try {
     return await runDownload(url, kind === 'mp3' ? audioArgs : videoArgs(quality))
   } catch (localError) {
-    throw new Error(`No fue posible descargar desde YouTube. Proveedor web: ${compactError(providerError)} Fallback local: ${compactError(localError)}`)
+    throw new Error(`No fue posible descargar desde YouTube. yt1s: ${compactError(yt1sError)} · proveedor alterno: ${compactError(rubyError)} · yt-dlp: ${compactError(localError)}`)
   }
 }
 
@@ -262,9 +289,9 @@ export async function getMediaInfo(input: string, platform: DownloadPlatform): P
 
 export async function getYouTubeFormats(input: string): Promise<YouTubeFormats> {
   const info = await getYouTubeInfoByUrl(input)
-  // El proveedor HTTP usado como ruta primaria entrega una conversión automática y no expone
-  // de forma fiable el manifiesto completo de formatos. Dejamos los arrays vacíos en vez de
-  // inventar calidades; yt-dlp sigue siendo únicamente el fallback local de descarga.
+  // yt1s elige automáticamente entre sus conversiones y la lista puede variar por video.
+  // No inventamos formatos: el comando de descarga acepta la calidad solicitada y selecciona
+  // la mejor opción <= a esa resolución; Ruby/yt-dlp quedan como fallbacks.
   return { ...info, videoHeights: [], audioBitrates: [] }
 }
 
@@ -272,16 +299,40 @@ export async function searchYouTube(input: string, limit = 10): Promise<YouTubeS
   const query = input.trim()
   if (!query) throw new Error('Debes indicar qué quieres buscar en YouTube.')
   const count = Math.max(1, Math.min(12, limit))
-  const search = await yts.search({ query, hl: 'es', gl: 'MX' })
-  return search.videos.slice(0, count).map((video) => {
-    const info = infoFromYtSearch(video)
-    return {
-      ...info,
-      id: video.videoId,
-      channel: video.author?.name || 'Canal desconocido',
-      url: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
-    }
-  })
+  let mobileError: unknown
+
+  try {
+    const results = await youtubeSearchMobile(query, count)
+    return results.map((video) => ({
+      title: video.title,
+      description: video.description,
+      uploader: video.channel,
+      duration: video.duration,
+      views: video.views,
+      thumbnail: video.thumbnail,
+      webpageUrl: video.url,
+      id: video.id,
+      channel: video.channel,
+      url: video.url,
+    }))
+  } catch (error) {
+    mobileError = error
+  }
+
+  try {
+    const search = await yts.search({ query, hl: 'es', gl: 'MX' })
+    return search.videos.slice(0, count).map((video) => {
+      const info = infoFromYtSearch(video)
+      return {
+        ...info,
+        id: video.videoId,
+        channel: video.author?.name || 'Canal desconocido',
+        url: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
+      }
+    })
+  } catch (fallbackError) {
+    throw new Error(`No pude buscar en YouTube. m.youtube: ${compactError(mobileError)} · fallback: ${compactError(fallbackError)}`)
+  }
 }
 
 export function downloadYouTubeAudio(input: string) { return downloadYouTubeViaProviders(input, 'mp3') }
