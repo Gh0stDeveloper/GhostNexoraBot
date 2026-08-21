@@ -30,7 +30,7 @@ done
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl git ffmpeg webp build-essential util-linux nginx
+apt-get install -y ca-certificates curl git ffmpeg webp zip build-essential util-linux nginx
 
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 24 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
