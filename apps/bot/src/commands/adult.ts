@@ -56,28 +56,20 @@ async function searchOrDownload(ctx: CommandContext, provider: AdultProvider) {
   const results = await searchAdult(provider, input, 10)
   if (!results.length) throw new Error('No encontré resultados públicos para esa búsqueda.')
 
-  const text = results.map((item, index) => [
-    `${index + 1}. *${item.title}*`,
-    `Descargar: *${ctx.prefix}adultdl ${safeUrlForCommand(item.url)}*`,
-    `Abrir: ${item.url}`,
-  ].join('\n')).join('\n\n')
-
-  await ctx.reply(`🔞 *${provider.toUpperCase()}*\nBúsqueda: *${input}*\n\n${text}`)
-
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: `🔞 ${provider.toUpperCase()}`,
     body: `Resultados para: ${input}`,
     footer: 'Ghost Nexora Bot',
     cards: results.map((item, index) => ({
-      title: `Resultado #${index + 1}`,
-      body: item.title,
+      title: `#${index + 1} · ${item.title}`.slice(0, 120),
+      body: `${item.title}\nDescargar: ${ctx.prefix}adultdl ${safeUrlForCommand(item.url)}`,
       imageUrl: item.thumbnail,
       buttons: [
-        { type: 'reply', text: 'Descargar', id: `${ctx.prefix}adultdl ${item.url}` },
-        { type: 'url', text: 'Abrir', url: item.url },
+        { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}adultdl ${safeUrlForCommand(item.url)}` },
+        { type: 'url', text: '🌐 Abrir', url: item.url },
       ],
     })),
-  }).catch(() => undefined)
+  })
 }
 
 export const adultCommands: BotCommand[] = [
