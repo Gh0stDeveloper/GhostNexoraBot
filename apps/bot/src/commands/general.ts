@@ -3,6 +3,7 @@ import type { BotCommand } from '../types.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { getBrandingAsset } from '../services/branding.js'
 import { economy } from '../services/economy.js'
+import { community } from '../services/community.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
 
 function formatUptime(seconds: number) {
@@ -41,40 +42,15 @@ export const generalCommands: BotCommand[] = [
       const brand = identity(ctx)
       const privateUntil = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner ? null : economy.hasEntitlement(ctx.sender, 'private_access')
       const privateUnlocked = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner || Boolean(privateUntil)
+      const groupEnabled = !ctx.isGroup || community.getGroupSettings(ctx.chatId).botEnabled
 
-      if (!privateUnlocked) {
-        await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-          title: `🔐 ${brand.longName} · CHAT PRIVADO PREMIUM`,
-          imageUrl: artwork,
-          body: [
-            `Hola, *${ctx.pushName}*.`,
-            '',
-            'El uso del bot por mensaje privado requiere una suscripción comprada con NXC o un permiso concedido por el staff.',
-            'En este chat, antes de obtener acceso, solo puedes consultar el menú, saldo y tienda.',
-            '',
-            '╭─〔 PLANES PRIVADOS 〕',
-            '│ 1 día  » 2,000 NXC',
-            '│ 7 días » 10,000 NXC',
-            '│ 30 días » 30,000 NXC',
-            '╰────────────────',
-            '',
-            `Compra: *${p}buy private1d*`,
-            `       *${p}buy private7d*`,
-            `       *${p}buy private30d*`,
-            '',
-            'En grupos puedes seguir usando las funciones permitidas por sus administradores.',
-          ].join('\n'),
-          footer: `${brand.longName} · acceso privado controlado`,
-          buttons: [
-            { type: 'reply', text: '🛒 Ver tienda', id: `${p}shop` },
-            { type: 'reply', text: '💰 Mi saldo', id: `${p}balance` },
-            { type: 'url', text: '📢 Visitar canal', url: config.officialChannelUrl },
-          ],
-        })
-        return
-      }
+      const accessLines = [
+        ctx.isGroup ? `┃ Grupo » *${groupEnabled ? 'ON' : 'OFF'}*` : `┃ Privado » *${privateUnlocked ? 'HABILITADO' : 'BLOQUEADO'}*`,
+        privateUntil ? `┃ Acceso hasta » *${new Date(privateUntil).toLocaleString('es-MX')}*` : '',
+        ctx.isGroup && !groupEnabled ? `┃ Activar » un admin debe usar *${p}bot on*` : '',
+        !ctx.isGroup && !privateUnlocked ? `┃ Sin acceso » solo *${p}menu · ${p}shop · ${p}balance · ${p}buy*` : '',
+      ].filter(Boolean).join('\n')
 
-      const accessLine = privateUntil ? `┃ Privado » activo hasta *${new Date(privateUntil).toLocaleDateString('es-MX')}*` : ''
       const customizationSection = ctx.isBotStaff || ctx.isSubbotOwner ? `
 ╭─〔 🎛️ *PERSONALIZAR ${brand.label.toUpperCase()}* 〕
 │ ${p}setbotname corto / largo
@@ -82,6 +58,7 @@ export const generalCommands: BotCommand[] = [
 │ ${p}sb · ${p}welbanner · ${p}byebanner
 │ ${p}delbanner · ${p}delwelbanner · ${p}delbyebanner
 ╰────────────────` : ''
+
       const staffSection = ctx.isBotStaff ? `
 ╭─〔 🛡️ *STAFF DEL BOT* 〕
 │ ${p}system · ${p}speedtest
@@ -92,6 +69,22 @@ export const generalCommands: BotCommand[] = [
 │ ${p}privateusers
 ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}privatemode status · ${p}restart` : ''}
 ╰────────────────` : ''
+
+      const lockedNotice = !ctx.isGroup && !privateUnlocked ? `
+╭─〔 🔐 *ACCESO PRIVADO* 〕
+│ Puedes consultar este menú aunque no tengas acceso.
+│ Para usar los demás comandos compra en *${p}shop*.
+│ Planes: private1d · private7d · private30d
+╰────────────────
+` : ''
+
+      const groupNotice = ctx.isGroup && !groupEnabled ? `
+╭─〔 ⏸️ *BOT APAGADO EN ESTE GRUPO* 〕
+│ El menú permanece visible para todos.
+│ Un administrador puede habilitarlo con *${p}bot on*.
+╰────────────────
+` : ''
+
       const menu = `
 ╭━━━〔 👻 *${brand.longName.toUpperCase()}* 〕━━━╮
 ┃ Instancia » *${brand.label}*
@@ -100,9 +93,9 @@ ${ctx.isOwner ? `│ ${p}botadmin add|remove @user\n│ ${p}setprefix · ${p}pri
 ┃ Uptime » *${formatUptime(process.uptime())}*
 ┃ Moneda » *${brand.currencyName} (NXC)*
 ┃ Rol » *${ctx.isOwner ? 'Owner' : ctx.isBotStaff ? 'Staff global' : ctx.isSubbotOwner ? 'Owner del subbot' : 'Usuario'}*
-${accessLine}
+${accessLines}
 ╰━━━━━━━━━━━━━━━━━━━━╯
-
+${lockedNotice}${groupNotice}
 ╭─〔 🌐 *GENERAL Y BÚSQUEDA* 〕
 │ ${p}menu · ${p}help · ${p}ping · ${p}info
 │ ${p}suggest <mensaje> · ${p}join <enlace>
@@ -179,7 +172,8 @@ ${accessLine}
 ╰────────────────
 
 ╭─〔 👥 *ADMINISTRACIÓN DE GRUPOS* 〕
-│ ${p}bot on|off · ${p}tag [mensaje] · ${p}hidetag
+│ ${p}bot on|off|status
+│ ${p}tag [mensaje] · ${p}hidetag
 │ ${p}kick · ${p}promote · ${p}demote · ${p}del
 │ ${p}open · ${p}close · ${p}link
 │ ${p}antilink on|off · ${p}nsfw on|off
@@ -202,20 +196,27 @@ ${accessLine}
 ${customizationSection}
 ${staffSection}
 
-✦ Usa los comandos con responsabilidad.
-✦ Cada subbot puede conservar identidad y banners independientes.
+✦ El menú siempre es visible; los permisos se aplican al ejecutar funciones.
 ✦ Noticias y cambios oficiales: botón *Visitar canal*.`.trim()
+
+      const buttons = !ctx.isGroup && !privateUnlocked
+        ? [
+            { type: 'reply' as const, text: '🛒 Ver tienda', id: `${p}shop` },
+            { type: 'reply' as const, text: '💰 Mi saldo', id: `${p}balance` },
+            { type: 'url' as const, text: '📢 Visitar canal', url: config.officialChannelUrl },
+          ]
+        : [
+            { type: 'url' as const, text: '📢 Visitar canal', url: config.officialChannelUrl },
+            { type: 'reply' as const, text: '👤 Mi perfil', id: `${p}profile` },
+            { type: 'reply' as const, text: '🏓 Ping', id: `${p}ping` },
+          ]
 
       await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
         title: `✦ ${brand.longName} · COMMAND CENTER ✦`,
         body: menu,
         imageUrl: artwork,
         footer: `${brand.shortName} · Ghost Developer / Nexora`,
-        buttons: [
-          { type: 'url', text: '📢 Visitar canal', url: config.officialChannelUrl },
-          { type: 'reply', text: '👤 Mi perfil', id: `${p}profile` },
-          { type: 'reply', text: '🏓 Ping', id: `${p}ping` },
-        ],
+        buttons,
       })
     },
   },
