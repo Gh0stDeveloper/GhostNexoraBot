@@ -19,10 +19,14 @@ type PipedStream = {
   mimeType?: string
   url?: string
   videoOnly?: boolean
+  bitrate?: number
+  format?: string
+  quality?: string
 }
 
 type PipedResponse = {
   videoStreams?: PipedStream[]
+  audioStreams?: PipedStream[]
   title?: string
   uploader?: string
   duration?: number
@@ -37,6 +41,16 @@ export type ExternalMp4Resolved = {
   duration?: number
   thumbnail?: string
   fileName?: string
+  provider: string
+}
+
+export type ExternalAudioResolved = {
+  url: string
+  title?: string
+  author?: string
+  duration?: number
+  thumbnail?: string
+  sourceExtension: 'm4a' | 'webm' | 'bin'
   provider: string
 }
 
@@ -81,7 +95,31 @@ function chooseVideo(streams: PipedStream[], requestedQuality: number) {
   return (within.length ? within : compatible).sort((a, b) => Number(b.height ?? 0) - Number(a.height ?? 0))[0]
 }
 
-async function requestInstance(instance: string, videoId: string, quality: number): Promise<ExternalMp4Resolved> {
+function chooseAudio(streams: PipedStream[]) {
+  const compatible = streams.filter((item) =>
+    typeof item.url === 'string'
+    && /^https:\/\//i.test(item.url)
+    && (
+      /^audio\//i.test(item.mimeType ?? '')
+      || /^(?:m4a|webm|mp4)$/i.test(item.format ?? '')
+    ),
+  )
+  return compatible.sort((a, b) => {
+    const aMp4 = /audio\/mp4|m4a|mp4/i.test(`${a.mimeType ?? ''} ${a.format ?? ''}`) ? 1 : 0
+    const bMp4 = /audio\/mp4|m4a|mp4/i.test(`${b.mimeType ?? ''} ${b.format ?? ''}`) ? 1 : 0
+    if (aMp4 !== bMp4) return bMp4 - aMp4
+    return Number(b.bitrate ?? 0) - Number(a.bitrate ?? 0)
+  })[0]
+}
+
+function audioExtension(stream: PipedStream): ExternalAudioResolved['sourceExtension'] {
+  const descriptor = `${stream.mimeType ?? ''} ${stream.format ?? ''}`.toLowerCase()
+  if (descriptor.includes('mp4') || descriptor.includes('m4a')) return 'm4a'
+  if (descriptor.includes('webm')) return 'webm'
+  return 'bin'
+}
+
+async function fetchStreams(instance: string, videoId: string) {
   const response = await fetch(`${instance}/streams/${encodeURIComponent(videoId)}`, {
     headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
     signal: AbortSignal.timeout(12_000),
@@ -91,6 +129,11 @@ async function requestInstance(instance: string, videoId: string, quality: numbe
   if (!type.includes('json')) throw new Error('respuesta no JSON')
   const data = await response.json() as PipedResponse
   if (data.livestream) throw new Error('directo no soportado')
+  return data
+}
+
+async function requestVideoInstance(instance: string, videoId: string, quality: number): Promise<ExternalMp4Resolved> {
+  const data = await fetchStreams(instance, videoId)
   const stream = chooseVideo(data.videoStreams ?? [], quality)
   if (!stream?.url) throw new Error('sin MP4 combinado H.264')
   const direct = new URL(stream.url)
@@ -107,6 +150,23 @@ async function requestInstance(instance: string, videoId: string, quality: numbe
   }
 }
 
+async function requestAudioInstance(instance: string, videoId: string): Promise<ExternalAudioResolved> {
+  const data = await fetchStreams(instance, videoId)
+  const stream = chooseAudio(data.audioStreams ?? [])
+  if (!stream?.url) throw new Error('sin stream de audio proxy')
+  const direct = new URL(stream.url)
+  if (direct.protocol !== 'https:') throw new Error('stream de audio no HTTPS')
+  return {
+    url: direct.toString(),
+    title: data.title?.trim() || undefined,
+    author: data.uploader?.trim() || undefined,
+    duration: Number.isFinite(data.duration) ? data.duration : undefined,
+    thumbnail: data.thumbnailUrl,
+    sourceExtension: audioExtension(stream),
+    provider: instance,
+  }
+}
+
 export async function resolveExternalYouTubeMp4(youtubeUrl: string, quality = 720): Promise<ExternalMp4Resolved> {
   const id = youtubeVideoId(youtubeUrl)
   if (!id) throw new Error('No pude identificar el ID del video.')
@@ -115,7 +175,7 @@ export async function resolveExternalYouTubeMp4(youtubeUrl: string, quality = 72
   try {
     const result = await Promise.any(providers.map(async (provider) => {
       try {
-        return await requestInstance(provider, id, quality)
+        return await requestVideoInstance(provider, id, quality)
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error)
         logger.warn({ provider, errorMessage: detail }, 'youtube piped mp4 provider failed')
@@ -128,6 +188,32 @@ export async function resolveExternalYouTubeMp4(youtubeUrl: string, quality = 72
     if (error instanceof AggregateError) {
       const details = error.errors.map((item) => item instanceof Error ? item.message : String(item)).slice(0, 4)
       throw new Error(`Piped no pudo resolver MP4: ${details.join(' · ')}`)
+    }
+    throw error
+  }
+}
+
+export async function resolveExternalYouTubeAudio(youtubeUrl: string): Promise<ExternalAudioResolved> {
+  const id = youtubeVideoId(youtubeUrl)
+  if (!id) throw new Error('No pude identificar el ID del video.')
+  const providers = instances()
+  if (!providers.length) throw new Error('No hay instancias Piped disponibles.')
+  try {
+    const result = await Promise.any(providers.map(async (provider) => {
+      try {
+        return await requestAudioInstance(provider, id)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        logger.warn({ provider, errorMessage: detail }, 'youtube piped audio provider failed')
+        throw new Error(`${new URL(provider).hostname}: ${detail}`)
+      }
+    }))
+    logger.info({ provider: result.provider }, 'youtube external audio stream resolved')
+    return result
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      const details = error.errors.map((item) => item instanceof Error ? item.message : String(item)).slice(0, 4)
+      throw new Error(`Piped no pudo resolver audio: ${details.join(' · ')}`)
     }
     throw error
   }
