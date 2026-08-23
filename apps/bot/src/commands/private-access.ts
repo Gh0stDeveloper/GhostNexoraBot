@@ -22,12 +22,12 @@ async function resolveTarget(ctx: CommandContext) {
 }
 
 function parseDuration(args: string[]) {
-  const token = args.find((arg) => /^(?:permanent|permanente|\d+[hd])$/i.test(arg))?.toLowerCase() ?? 'permanent'
-  if (token === 'permanent' || token === 'permanente') return { label: 'permanente', durationMs: null as number | null }
+  const token = args.find((arg) => /^(?:permanent|permanente|forever|\d+[hd])$/i.test(arg))?.toLowerCase() ?? '7d'
+  if (['permanent', 'permanente', 'forever'].includes(token)) return { label: 'permanente', durationMs: null as number | null }
   const match = /^(\d+)([hd])$/.exec(token)
   if (!match) throw new Error('Duración inválida. Usa 12h, 1d, 7d, 30d, 90d, 365d o permanent.')
   const amount = Number(match[1])
-  if (!Number.isFinite(amount) || amount < 1 || amount > 3650) throw new Error('La duración debe estar entre 1 y 3650 días equivalentes.')
+  if (!Number.isFinite(amount) || amount < 1 || amount > 3650) throw new Error('La duración debe estar entre 1 hora y 3650 días.')
   const durationMs = amount * (match[2] === 'h' ? 3600_000 : 86400_000)
   return { label: token, durationMs }
 }
@@ -38,23 +38,23 @@ function fmtExpiry(expiresAt: number, permanent: boolean) {
 
 export const privateAccessCommands: BotCommand[] = [
   {
-    name: 'privategrant', aliases: ['allowprivate', 'privateallow'], category: 'owner', staffOnly: true,
-    description: 'Concede manualmente acceso al bot por chat privado sin cobrar NXC.',
-    usage: 'privategrant @usuario [30d|permanent]',
+    name: 'privategift', aliases: ['privategrant', 'giveprivate', 'regalaprivado', 'allowprivate', 'privateallow'], category: 'owner', staffOnly: true,
+    description: 'Regala acceso al MainBot por chat privado sin cobrar NXC.',
+    usage: 'privategift @usuario [7d|30d|90d|permanent]',
     async handler(ctx) {
       const target = await resolveTarget(ctx)
       const duration = parseDuration(ctx.args)
       const grant = grantPrivateAccess(target, duration.durationMs, ctx.sender)
       await ctx.socket.sendMessage(ctx.chatId, {
         text: [
-          '╭━━〔 🔐 *ACCESO PRIVADO CONCEDIDO* 〕━━╮',
+          '╭━━〔 🎁 *ACCESO PRIVADO REGALADO* 〕━━╮',
           `┃ Usuario » @${target.split('@')[0]}`,
           `┃ Duración » *${duration.label.toUpperCase()}*`,
           `┃ Vence » *${fmtExpiry(grant.expiresAt, grant.permanent)}*`,
-          `┃ Concedido por » @${ctx.sender.split('@')[0]}`,
+          `┃ Staff » @${ctx.sender.split('@')[0]}`,
           '╰━━━━━━━━━━━━━━━━━━━━╯',
           '',
-          'El permiso es administrativo y no descontó Nexora Coins.',
+          'El usuario ya puede usar Ghost Nexora Bot por chat privado durante esa vigencia. No se descontaron Nexora Coins.',
         ].join('\n'),
         mentions: [target, ctx.sender],
       }, { quoted: ctx.message })
