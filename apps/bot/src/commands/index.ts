@@ -1,3 +1,4 @@
+import '../services/work-compat-v4.js'
 import type { BotCommand } from '../types.js'
 import { generalCommands } from './general.js'
 import { aiCommands } from './ai.js'
