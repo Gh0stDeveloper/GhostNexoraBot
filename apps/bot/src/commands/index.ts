@@ -39,6 +39,7 @@ import { youtubeV3Commands } from './youtube-v3.js'
 import { carouselCompatV3Commands } from './carousel-compat-v3.js'
 import { menuV3Commands } from './menu-v3.js'
 import { expansionV4Commands } from './expansion-v4.js'
+import { casinoGuardV4Commands } from './casino-guard-v4.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -79,6 +80,8 @@ export const commands: BotCommand[] = [
   ...youtubeV3Commands,
   ...carouselCompatV3Commands,
   ...menuV3Commands,
-  // V4 siempre va al final para que .menu y .job usen las variantes compatibles nuevas.
+  // V4 va al final para que .menu/.job usen las variantes nuevas.
   ...expansionV4Commands,
+  // Guardas económicas finales: no pueden ser sobrescritas por capas anteriores.
+  ...casinoGuardV4Commands,
 ]
