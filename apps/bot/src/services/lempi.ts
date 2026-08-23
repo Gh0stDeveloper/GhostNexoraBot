@@ -5,56 +5,89 @@ import path from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { config } from '../config.js'
+import { logger } from '../utils/logger.js'
 
 const BASE = (process.env.LEMPI_BASE_URL?.trim() || 'https://api.lempi.lat').replace(/\/$/, '')
 const key = () => process.env.LEMPI_API_KEY?.trim() ?? ''
 
 type Kind = 'audio' | 'video' | 'facebook'
+type EndpointHit = { direct?: string; response?: Response; payload: unknown }
+
+function normalizeMediaUrl(value: string) {
+  try {
+    if (/^https?:\/\//i.test(value)) return new URL(value).toString()
+    if (value.startsWith('/')) return new URL(value, `${BASE}/`).toString()
+  } catch { /* ignore malformed URLs */ }
+  return null
+}
 
 function urlsFrom(value: unknown, out: string[] = [], depth = 0): string[] {
   if (depth > 8 || value === null || value === undefined) return out
   if (typeof value === 'string') {
-    if (/^https?:\/\//i.test(value)) out.push(value)
+    const normalized = normalizeMediaUrl(value.trim())
+    if (normalized) out.push(normalized)
     return out
   }
   if (Array.isArray(value)) {
     for (const item of value) urlsFrom(item, out, depth + 1)
     return out
   }
-  if (typeof value === 'object') for (const child of Object.values(value as Record<string, unknown>)) urlsFrom(child, out, depth + 1)
+  if (typeof value === 'object') {
+    for (const child of Object.values(value as Record<string, unknown>)) urlsFrom(child, out, depth + 1)
+  }
   return out
+}
+
+function payloadMessage(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined
+  const item = value as Record<string, unknown>
+  const raw = item.message ?? item.error ?? item.msg ?? item.detail
+  return typeof raw === 'string' ? raw.slice(0, 240) : undefined
 }
 
 function scoreUrl(url: string, kind: Kind) {
   const lower = url.toLowerCase()
   let score = 0
   if (kind === 'audio') {
-    if (/\.mp3(?:$|[?#])/.test(lower)) score += 100
-    if (/\.(?:m4a|aac)(?:$|[?#])/.test(lower)) score += 70
-    if (/audio|mp3|m4a/.test(lower)) score += 20
+    if (/\.mp3(?:$|[?#])/.test(lower)) score += 120
+    if (/\.(?:m4a|aac)(?:$|[?#])/.test(lower)) score += 90
+    if (/audio|mp3|m4a/.test(lower)) score += 25
   } else {
-    if (/\.mp4(?:$|[?#])/.test(lower)) score += 100
-    if (/\.m3u8(?:$|[?#])/.test(lower)) score += 60
-    if (/video|mp4|720|1080/.test(lower)) score += 20
+    if (/\.mp4(?:$|[?#])/.test(lower)) score += 120
+    if (/\.m3u8(?:$|[?#])/.test(lower)) score += 70
+    if (/video|mp4|720|1080|download|cdn|media/.test(lower)) score += 25
   }
-  if (/thumbnail|image|jpg|jpeg|webp|avatar/.test(lower)) score -= 100
+  if (/thumbnail|image|jpg|jpeg|webp|avatar/.test(lower)) score -= 150
+  if (/youtube\.com|youtu\.be|facebook\.com|fb\.watch/.test(lower)) score -= 80
   return score
 }
 
 function endpointCandidates(kind: Kind) {
-  const custom = kind === 'audio' ? process.env.LEMPI_YOUTUBE_AUDIO_ENDPOINT : kind === 'video' ? process.env.LEMPI_YOUTUBE_VIDEO_ENDPOINT : process.env.LEMPI_FACEBOOK_ENDPOINT
-  const defaults = kind === 'audio'
-    ? ['/d/youtube', '/d/ytmp3', '/d/ytaudio']
+  const custom = kind === 'audio'
+    ? process.env.LEMPI_YOUTUBE_AUDIO_ENDPOINT
     : kind === 'video'
-      ? ['/d/youtube', '/d/ytmp4', '/d/ytvideo']
-      : ['/d/facebook', '/d/fbdl']
+      ? process.env.LEMPI_YOUTUBE_VIDEO_ENDPOINT
+      : process.env.LEMPI_FACEBOOK_ENDPOINT
+
+  const defaults = kind === 'audio'
+    ? [
+        '/d/youtube', '/d/ytmp3', '/d/ytaudio', '/d/youtube-mp3', '/d/youtube/audio',
+        '/download/youtube', '/download/youtube/audio', '/api/d/youtube', '/api/download/youtube',
+      ]
+    : kind === 'video'
+      ? [
+          '/d/youtube', '/d/ytmp4', '/d/ytvideo', '/d/youtube-mp4', '/d/youtube/video',
+          '/download/youtube', '/download/youtube/video', '/api/d/youtube', '/api/download/youtube',
+        ]
+      : [
+          '/d/facebook', '/d/fbdl', '/d/fb', '/download/facebook', '/api/d/facebook', '/api/download/facebook',
+        ]
+
   return [...new Set([custom?.trim(), ...defaults].filter((value): value is string => Boolean(value)))]
 }
 
-async function callEndpoint(endpoint: string, sourceUrl: string, kind: Kind, quality?: number) {
+function addParams(target: URL, sourceUrl: string, kind: Kind, quality?: number) {
   const apiKey = key()
-  if (!apiKey) throw new Error('LEMPI_API_KEY no está configurada en el servidor.')
-  const target = new URL(endpoint, `${BASE}/`)
   target.searchParams.set('url', sourceUrl)
   target.searchParams.set('apikey', apiKey)
   if (kind === 'audio') {
@@ -64,26 +97,84 @@ async function callEndpoint(endpoint: string, sourceUrl: string, kind: Kind, qua
     target.searchParams.set('type', 'video')
     target.searchParams.set('format', 'mp4')
     if (quality) target.searchParams.set('quality', String(quality))
+  } else {
+    target.searchParams.set('format', 'mp4')
   }
-  const response = await fetch(target, {
-    headers: { accept: 'application/json,*/*;q=0.8', 'user-agent': 'GhostNexoraBot/2.0' },
+}
+
+async function parseResponse(response: Response, endpoint: string, target: URL, kind: Kind): Promise<EndpointHit | null> {
+  logger.info({ endpoint, status: response.status, contentType: response.headers.get('content-type') ?? '' }, 'Lempi endpoint response')
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`API Lempi respondió HTTP ${response.status} en ${endpoint}.`)
+
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (contentType.includes('audio/') || contentType.includes('video/') || contentType.includes('application/octet-stream')) {
+    if (!response.body) throw new Error('API Lempi respondió un archivo vacío.')
+    return { response, payload: null }
+  }
+
+  if (contentType.includes('json')) {
+    const payload = await response.json() as unknown
+    if (payload && typeof payload === 'object') {
+      const record = payload as Record<string, unknown>
+      if (record.status === false || record.success === false || record.ok === false) {
+        throw new Error(`API Lempi rechazó la solicitud${payloadMessage(payload) ? `: ${payloadMessage(payload)}` : '.'}`)
+      }
+    }
+    const candidates = [...new Set(urlsFrom(payload))]
+      .map((url) => ({ url, score: scoreUrl(url, kind) }))
+      .filter((item) => item.score > -60)
+      .sort((a, b) => b.score - a.score)
+    if (!candidates.length) throw new Error(`API Lempi no devolvió una URL multimedia utilizable en ${endpoint}.`)
+    return { direct: candidates[0]!.url, payload }
+  }
+
+  if (response.url && response.url !== target.toString()) return { direct: response.url, payload: null }
+
+  const text = await response.text().catch(() => '')
+  const candidates = [...new Set(urlsFrom(text))]
+  if (candidates.length) return { direct: candidates.sort((a, b) => scoreUrl(b, kind) - scoreUrl(a, kind))[0], payload: text }
+  throw new Error(`API Lempi respondió un formato inesperado en ${endpoint}.`)
+}
+
+async function callEndpoint(endpoint: string, sourceUrl: string, kind: Kind, quality?: number) {
+  const apiKey = key()
+  if (!apiKey) throw new Error('LEMPI_API_KEY no está configurada en el servidor.')
+
+  const headers = {
+    accept: 'application/json,audio/*,video/*,application/octet-stream,*/*;q=0.6',
+    'user-agent': 'GhostNexoraBot/2.1',
+    'x-api-key': apiKey,
+  }
+
+  const target = new URL(endpoint, `${BASE}/`)
+  addParams(target, sourceUrl, kind, quality)
+  let response = await fetch(target, {
+    method: 'GET',
+    headers,
+    redirect: 'follow',
     signal: AbortSignal.timeout(60_000),
   })
-  if (response.status === 404 || response.status === 405) return null
-  if (!response.ok) throw new Error(`API Lempi respondió HTTP ${response.status}.`)
-  const type = response.headers.get('content-type') ?? ''
-  if (!type.includes('json')) {
-    const direct = response.url
-    if (direct && direct !== target.toString()) return { direct, payload: null as unknown }
-    throw new Error('API Lempi respondió un formato inesperado.')
+
+  if (response.status === 405) {
+    const postTarget = new URL(endpoint, `${BASE}/`)
+    postTarget.searchParams.set('apikey', apiKey)
+    response = await fetch(postTarget, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        url: sourceUrl,
+        type: kind === 'facebook' ? 'video' : kind,
+        format: kind === 'audio' ? 'mp3' : 'mp4',
+        ...(quality ? { quality } : {}),
+      }),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(60_000),
+    })
+    return parseResponse(response, `${endpoint} [POST]`, postTarget, kind)
   }
-  const payload = await response.json() as unknown
-  const candidates = [...new Set(urlsFrom(payload))]
-    .map((url) => ({ url, score: scoreUrl(url, kind) }))
-    .filter((item) => item.score > -50)
-    .sort((a, b) => b.score - a.score)
-  if (!candidates.length) throw new Error('API Lempi no devolvió una URL multimedia utilizable.')
-  return { direct: candidates[0]!.url, payload }
+
+  return parseResponse(response, endpoint, target, kind)
 }
 
 export async function resolveLempi(sourceUrl: string, kind: Kind, quality?: number) {
@@ -92,7 +183,10 @@ export async function resolveLempi(sourceUrl: string, kind: Kind, quality?: numb
     try {
       const result = await callEndpoint(endpoint, sourceUrl, kind, quality)
       if (result) return result
-    } catch (error) { lastError = error }
+    } catch (error) {
+      lastError = error
+      logger.warn({ error, endpoint, kind }, 'Lempi endpoint attempt failed')
+    }
   }
   throw lastError instanceof Error ? lastError : new Error('No hay un endpoint Lempi disponible para esta descarga.')
 }
@@ -102,32 +196,42 @@ function safeName(kind: Kind) {
   return `ghostnexora-${kind}-${Date.now()}.${ext}`
 }
 
+async function streamToFile(response: Response, filePath: string) {
+  if (!response.ok || !response.body) throw new Error(`El servidor multimedia respondió HTTP ${response.status}.`)
+  const declared = Number(response.headers.get('content-length') ?? 0)
+  if (declared > config.maxDownloadBytes) throw new Error(`El archivo supera el límite de ${config.maxDownloadMb} MB.`)
+  let size = 0
+  const limiter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      size += chunk.length
+      if (size > config.maxDownloadBytes) callback(new Error(`El archivo supera el límite de ${config.maxDownloadMb} MB.`))
+      else callback(null, chunk)
+    },
+  })
+  await pipeline(response.body, limiter, createWriteStream(filePath, { mode: 0o600 }))
+}
+
 export async function downloadLempi(sourceUrl: string, kind: Kind, quality?: number) {
-  const { direct, payload } = await resolveLempi(sourceUrl, kind, quality)
+  const resolved = await resolveLempi(sourceUrl, kind, quality)
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-lempi-'))
   const fileName = safeName(kind)
   const filePath = path.join(dir, fileName)
   try {
-    const response = await fetch(direct, {
+    const response = resolved.response ?? await fetch(resolved.direct!, {
       redirect: 'follow',
-      headers: { 'user-agent': 'Mozilla/5.0 GhostNexoraBot/2.0', accept: '*/*' },
+      headers: { 'user-agent': 'Mozilla/5.0 GhostNexoraBot/2.1', accept: '*/*' },
       signal: AbortSignal.timeout(30 * 60_000),
     })
-    if (!response.ok || !response.body) throw new Error(`El CDN de Lempi respondió HTTP ${response.status}.`)
-    const declared = Number(response.headers.get('content-length') ?? 0)
-    if (declared > config.maxDownloadBytes) throw new Error(`El archivo supera el límite de ${config.maxDownloadMb} MB.`)
-    let size = 0
-    const limiter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        size += chunk.length
-        if (size > config.maxDownloadBytes) callback(new Error(`El archivo supera el límite de ${config.maxDownloadMb} MB.`))
-        else callback(null, chunk)
-      },
-    })
-    await pipeline(response.body, limiter, createWriteStream(filePath, { mode: 0o600 }))
+    await streamToFile(response, filePath)
     const finalSize = (await stat(filePath)).size
     if (finalSize <= 0) throw new Error('La descarga de Lempi quedó vacía.')
-    return { filePath, fileName, size: finalSize, payload, cleanup: () => rm(dir, { recursive: true, force: true }) }
+    return {
+      filePath,
+      fileName,
+      size: finalSize,
+      payload: resolved.payload,
+      cleanup: () => rm(dir, { recursive: true, force: true }),
+    }
   } catch (error) {
     await rm(dir, { recursive: true, force: true })
     throw error
