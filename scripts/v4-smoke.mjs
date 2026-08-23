@@ -9,6 +9,7 @@ process.env.ADMIN_WEB_TOKEN = 'ci-smoke-admin-token-123456'
 
 try {
   const { economy } = await import('../apps/bot/dist/services/economy.js')
+  await import('../apps/bot/dist/services/identity.js')
   await import('../apps/bot/dist/services/work-compat-v4.js')
   const progression = await import('../apps/bot/dist/services/progression-v4.js')
   const world = await import('../apps/bot/dist/services/world-v4.js')
