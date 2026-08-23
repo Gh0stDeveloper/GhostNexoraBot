@@ -5,7 +5,7 @@ import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from './economy.js'
-import { digitsFromJid, getContextInfo, getMessageText, getSender, unwrapMessage } from '../utils/message.js'
+import { digitsFromJid, downloadMessageMedia, getContextInfo, getMessageText, getSender, unwrapMessage } from '../utils/message.js'
 
 const db = economy.db
 const root = path.join(config.dataDir, 'global-stickers')
@@ -24,18 +24,40 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS global_sticker_actions (
     action TEXT PRIMARY KEY,
-    wa_sha256 TEXT NOT NULL,
+    wa_sha256 TEXT,
+    content_sha256 TEXT,
     file_path TEXT,
     updated_by TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
 `)
 
+const actionColumns = db.prepare('PRAGMA table_info(global_sticker_actions)').all() as Array<{ name: string }>
+if (!actionColumns.some((column) => column.name === 'content_sha256')) db.exec('ALTER TABLE global_sticker_actions ADD COLUMN content_sha256 TEXT')
+
 function sha(buffer: Buffer) { return createHash('sha256').update(buffer).digest('hex') }
+
+function bytesHash(value: unknown) {
+  if (Buffer.isBuffer(value)) return value.toString('base64')
+  if (value instanceof Uint8Array) return Buffer.from(value).toString('base64')
+  return undefined
+}
+
 function waHash(message: WAMessage) {
   const own = unwrapMessage(message.message)?.stickerMessage?.fileSha256
   const quoted = getContextInfo(message)?.quotedMessage?.stickerMessage?.fileSha256
-  return Buffer.isBuffer(own) ? own.toString('base64') : Buffer.isBuffer(quoted) ? quoted.toString('base64') : undefined
+  return bytesHash(own) ?? bytesHash(quoted)
+}
+
+function normalizeTrigger(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ')
+}
+
+function triggerMatches(text: string, trigger: string) {
+  const cleanText = normalizeTrigger(text)
+  const cleanTrigger = normalizeTrigger(trigger)
+  if (!cleanText || !cleanTrigger) return false
+  return ` ${cleanText} `.includes(` ${cleanTrigger} `)
 }
 
 export const globalStickers = {
@@ -44,12 +66,13 @@ export const globalStickers = {
     await mkdir(root, { recursive: true })
     const digest = sha(buffer)
     const filePath = path.join(root, `${digest}.webp`)
+    const cleanTriggers = [...new Set((triggers ?? []).map(normalizeTrigger).filter(Boolean))]
     await writeFile(filePath, buffer, { mode: 0o600 })
     db.prepare(`INSERT INTO global_stickers(content_sha256, wa_sha256, file_path, label, triggers, created_by, created_at)
       VALUES(?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(content_sha256) DO UPDATE SET wa_sha256 = COALESCE(excluded.wa_sha256, wa_sha256), label = excluded.label,
       triggers = excluded.triggers, file_path = excluded.file_path`)
-      .run(digest, waSha ?? null, filePath, label?.slice(0, 80) ?? null, triggers?.map((item) => item.trim().toLowerCase()).filter(Boolean).join('|') ?? null, createdBy, now())
+      .run(digest, waSha ?? null, filePath, label?.slice(0, 80) ?? null, cleanTriggers.join('|') || null, createdBy, now())
     return db.prepare('SELECT id, label, triggers FROM global_stickers WHERE content_sha256 = ?').get(digest) as { id: number; label?: string; triggers?: string }
   },
 
@@ -65,17 +88,22 @@ export const globalStickers = {
   },
 
   async setAction(action: 'kick', buffer: Buffer, createdBy: string, waSha?: string) {
-    if (!waSha) throw new Error('No pude obtener la huella de WhatsApp del sticker. Responde directamente al sticker original.')
+    if (!buffer.length) throw new Error('El sticker está vacío.')
     await mkdir(root, { recursive: true })
-    const filePath = path.join(root, `action-${action}-${sha(buffer)}.webp`)
+    const contentSha = sha(buffer)
+    const storedWaSha = waSha ?? `content:${contentSha}`
+    const filePath = path.join(root, `action-${action}-${contentSha}.webp`)
     await writeFile(filePath, buffer, { mode: 0o600 })
-    db.prepare(`INSERT INTO global_sticker_actions(action, wa_sha256, file_path, updated_by, updated_at) VALUES(?, ?, ?, ?, ?)
-      ON CONFLICT(action) DO UPDATE SET wa_sha256 = excluded.wa_sha256, file_path = excluded.file_path, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
-      .run(action, waSha, filePath, createdBy, now())
+    db.prepare(`INSERT INTO global_sticker_actions(action, wa_sha256, content_sha256, file_path, updated_by, updated_at) VALUES(?, ?, ?, ?, ?, ?)
+      ON CONFLICT(action) DO UPDATE SET wa_sha256 = excluded.wa_sha256, content_sha256 = excluded.content_sha256,
+      file_path = excluded.file_path, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
+      .run(action, storedWaSha, contentSha, filePath, createdBy, now())
+    return { waSha: waSha ?? null, contentSha }
   },
 
   clearAction(action: 'kick') { db.prepare('DELETE FROM global_sticker_actions WHERE action = ?').run(action) },
   hashFromMessage: waHash,
+  normalizeTrigger,
 }
 
 function isBotStaff(sender: string) {
@@ -88,10 +116,20 @@ export async function handleKickSticker(socket: WASocket, message: WAMessage) {
   if (!chatId?.endsWith('@g.us') || message.key.fromMe) return false
   const content = unwrapMessage(message.message)
   const sticker = content?.stickerMessage
-  const rawHash = sticker?.fileSha256
-  if (!rawHash || !Buffer.isBuffer(rawHash)) return false
-  const configured = db.prepare("SELECT wa_sha256 as waSha FROM global_sticker_actions WHERE action = 'kick'").get() as { waSha?: string } | undefined
-  if (!configured?.waSha || configured.waSha !== rawHash.toString('base64')) return false
+  if (!sticker) return false
+
+  const configured = db.prepare("SELECT wa_sha256 as waSha, content_sha256 as contentSha FROM global_sticker_actions WHERE action = 'kick'")
+    .get() as { waSha?: string | null; contentSha?: string | null } | undefined
+  if (!configured?.waSha && !configured?.contentSha) return false
+
+  const incomingWa = bytesHash(sticker.fileSha256)
+  let matches = Boolean(configured.waSha && incomingWa && configured.waSha === incomingWa)
+  if (!matches && configured.contentSha) {
+    const media = await downloadMessageMedia(message).catch(() => null)
+    matches = Boolean(media?.kind === 'sticker' && sha(media.buffer) === configured.contentSha)
+  }
+  if (!matches) return false
+
   const targetCandidate = sticker.contextInfo?.participant
   if (!targetCandidate) return false
 
@@ -121,9 +159,9 @@ export async function maybeSendHumanSticker(socket: WASocket, message: WAMessage
   if (!chatId?.endsWith('@g.us') || message.key.fromMe) return false
   const rows = db.prepare('SELECT id, file_path as filePath, triggers FROM global_stickers ORDER BY id DESC LIMIT 100').all() as Array<{ id: number; filePath: string; triggers?: string }>
   if (!rows.length) return false
-  const text = getMessageText(message).toLowerCase()
-  const triggered = rows.filter((row) => (row.triggers ?? '').split('|').filter(Boolean).some((trigger) => text.includes(trigger)))
-  const chance = triggered.length ? 0.35 : 0.025
+  const text = getMessageText(message)
+  const triggered = rows.filter((row) => (row.triggers ?? '').split('|').filter(Boolean).some((trigger) => triggerMatches(text, trigger)))
+  const chance = triggered.length ? 0.65 : 0.015
   if (Math.random() > chance) return false
   const pool = triggered.length ? triggered : rows
   const picked = pool[Math.floor(Math.random() * pool.length)]!

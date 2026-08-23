@@ -3,16 +3,16 @@ import os from 'node:os'
 import path from 'node:path'
 import { execa } from 'execa'
 import sharp from 'sharp'
-import { searchWaifus } from './waifu.js'
+import { searchAniListCharacters } from './anilist-waifu-v5.js'
 
 export async function createCharacterSprite(query: string) {
   const text = query.trim()
   if (!text) throw new Error('Indica el nombre de un personaje.')
-  const character = (await searchWaifus(text, 1))[0]
+  const character = (await searchAniListCharacters(text, 1))[0]
   if (!character) throw new Error('No encontré ese personaje.')
 
   const response = await fetch(character.imageUrl, {
-    headers: { 'user-agent': 'GhostNexoraBot/1.1', accept: 'image/*' },
+    headers: { 'user-agent': 'GhostNexoraBot/2.3', accept: 'image/*' },
     signal: AbortSignal.timeout(25_000),
   })
   if (!response.ok) throw new Error(`No pude descargar la imagen del personaje (HTTP ${response.status}).`)

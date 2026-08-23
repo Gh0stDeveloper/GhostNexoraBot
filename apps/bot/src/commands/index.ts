@@ -1,5 +1,6 @@
 import '../services/work-compat-v4.js'
 import type { BotCommand } from '../types.js'
+import { setMenuCommandProvider } from '../services/menu-registry.js'
 import { generalCommands } from './general.js'
 import { aiCommands } from './ai.js'
 import { profileCommands } from './profile.js'
@@ -40,6 +41,11 @@ import { carouselCompatV3Commands } from './carousel-compat-v3.js'
 import { menuV3Commands } from './menu-v3.js'
 import { expansionV4Commands } from './expansion-v4.js'
 import { casinoGuardV4Commands } from './casino-guard-v4.js'
+import { downloadUiV5Commands } from './download-ui-v5.js'
+import { stickerAdminV5Commands } from './sticker-admin-v5.js'
+import { waifuV5Commands } from './waifu-v5.js'
+import { economyCareersV5Commands } from './economy-careers-v5.js'
+import { menuV5Commands } from './menu-v5.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -80,8 +86,15 @@ export const commands: BotCommand[] = [
   ...youtubeV3Commands,
   ...carouselCompatV3Commands,
   ...menuV3Commands,
-  // V4 va al final para que .menu/.job usen las variantes nuevas.
   ...expansionV4Commands,
-  // Guardas económicas finales: no pueden ser sobrescritas por capas anteriores.
   ...casinoGuardV4Commands,
+  // V5: correcciones finales de interfaz, descargas, stickers, colección y economía.
+  ...downloadUiV5Commands,
+  ...stickerAdminV5Commands,
+  ...waifuV5Commands,
+  ...economyCareersV5Commands,
+  // El menú debe ser la última definición para reflejar el catálogo final completo.
+  ...menuV5Commands,
 ]
+
+setMenuCommandProvider(() => commands)
