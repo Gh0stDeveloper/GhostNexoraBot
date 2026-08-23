@@ -34,6 +34,8 @@ import { adultV2Commands } from './adult-v2.js'
 import { downloadProgressV2Commands } from './downloads-progress-v2.js'
 import { economyFixV2Commands } from './economy-fixes-v2.js'
 import { eromeProgressV2Commands } from './erome-progress-v2.js'
+import { youtubeV3Commands } from './youtube-v3.js'
+import { carouselCompatV3Commands } from './carousel-compat-v3.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -70,6 +72,8 @@ export const commands: BotCommand[] = [
   ...adultV2Commands,
   ...downloadProgressV2Commands,
   ...eromeProgressV2Commands,
-  // Última capa: correcciones de identidad/argumentos para operaciones de valor.
   ...economyFixV2Commands,
+  // Capa final: conserva carruseles previos y hace YouTube resiliente con Lempi + fallback.
+  ...youtubeV3Commands,
+  ...carouselCompatV3Commands,
 ]
