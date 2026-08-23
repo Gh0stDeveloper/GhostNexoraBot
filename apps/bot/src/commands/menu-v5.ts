@@ -97,18 +97,18 @@ async function menu(ctx: CommandContext) {
   })
 
   const body = [
-    '👻 *Ghost Nexora Bot · MENÚ*',
     '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮',
     `┃ ⚙️ Instancia » *${instance}*`, `┃ 👤 Usuario » *${ctx.pushName}*`, `┃ ⌨️ Prefijo » *${ctx.prefix}*`,
     `┃ ⏱️ Uptime » *${formatUptime()}*`, `┃ 🪙 Moneda » *${COIN_NAME} (${COIN_SYMBOL})*`,
     `┃ 💼 Profesión » *${profession.emoji} ${profession.label}*`, `┃ 🏷️ Rol » *${role}*`,
     `┃ 🔐 Privado » *${privateAccess ? 'HABILITADO' : 'NO HABILITADO'}*`, '╰━━━━━━━━━━━━━━━━━━━━╯', '',
-    ...sections, '📢 *Accesos rápidos disponibles debajo.*', '*Ghost Developer / Nexora*',
+    ...sections, '📢 *Accesos rápidos incluidos en este mensaje.*', '*Ghost Developer / Nexora*',
   ].join('\n')
 
-  await ctx.socket.sendMessage(ctx.chatId, { text: body }, { quoted: ctx.message })
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: '👻 Ghost Nexora Bot · Accesos rápidos', body: 'Elige una opción. El menú completo está en el mensaje anterior.', footer: 'Ghost Developer / Nexora',
+    title: '👻 Ghost Nexora Bot · MENÚ',
+    body,
+    footer: 'Ghost Developer / Nexora',
     buttons: [
       { type: 'url', text: 'Ver canal', url: config.officialChannelUrl },
       { type: 'reply', text: 'Perfil', id: `${ctx.prefix}profile` },
