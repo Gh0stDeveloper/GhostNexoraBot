@@ -44,6 +44,7 @@ import { casinoGuardV4Commands } from './casino-guard-v4.js'
 import { downloadUiV5Commands } from './download-ui-v5.js'
 import { stickerAdminV5Commands } from './sticker-admin-v5.js'
 import { waifuV5Commands } from './waifu-v5.js'
+import { economyCareersV5Commands } from './economy-careers-v5.js'
 import { menuV5Commands } from './menu-v5.js'
 
 export const commands: BotCommand[] = [
@@ -87,10 +88,11 @@ export const commands: BotCommand[] = [
   ...menuV3Commands,
   ...expansionV4Commands,
   ...casinoGuardV4Commands,
-  // V5: correcciones finales de interfaz, descargas, stickers y colección anime.
+  // V5: correcciones finales de interfaz, descargas, stickers, colección y economía.
   ...downloadUiV5Commands,
   ...stickerAdminV5Commands,
   ...waifuV5Commands,
+  ...economyCareersV5Commands,
   // El menú debe ser la última definición para reflejar el catálogo final completo.
   ...menuV5Commands,
 ]
