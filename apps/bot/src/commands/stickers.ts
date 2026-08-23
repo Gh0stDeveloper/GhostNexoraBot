@@ -62,7 +62,7 @@ export const stickerCommands: BotCommand[] = [
   },
   {
     name: 'sprite', aliases: ['charsprite'], category: 'stickers',
-    description: 'Genera una animación corta de un personaje usando Jikan/MyAnimeList.', usage: 'sprite <personaje>',
+    description: 'Genera una animación corta de un personaje usando AniList.', usage: 'sprite <personaje>',
     async handler(ctx) {
       const query = ctx.argText.trim()
       if (!query) throw new Error(`Uso: ${ctx.prefix}sprite <nombre del personaje>`)
@@ -72,7 +72,7 @@ export const stickerCommands: BotCommand[] = [
         await ctx.socket.sendMessage(ctx.chatId, {
           video: { url: result.filePath },
           gifPlayback: true,
-          caption: `🎞️ *SPRITE ANIMADO*\n━━━━━━━━━━━━━━\n🌸 ${result.character.name}\n🆔 MAL: ${result.character.characterId}`,
+          caption: `🎞️ *SPRITE ANIMADO*\n━━━━━━━━━━━━━━\n🌸 ${result.character.name}\n🆔 AniList: AL-${result.character.aniListId}`,
         }, { quoted: ctx.message })
       } finally {
         await result.cleanup()
