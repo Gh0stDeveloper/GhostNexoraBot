@@ -133,11 +133,13 @@ const sections: Record<string, MenuSection> = {
       `${ctx.prefix}adultmode on|off — Módulo 18+ del grupo.`,
       ctx.isBotStaff || ctx.isOwner ? `${ctx.prefix}addnxc / subbotgrant / subbotreset / botsticker / kicksticker / broadcast — Herramientas de staff.` : '',
     ].filter(Boolean).join('\n'),
-    buttons: (ctx) => [
-      ...(ctx.isGroup ? [{ type: 'reply' as const, text: '📜 Reglas', id: `${ctx.prefix}rules` }] : []),
-      { type: 'reply', text: '🏠 Menú', id: `${ctx.prefix}menu` },
-      { type: 'url', text: '📢 Canal', url: config.officialChannelUrl },
-    ].slice(0, 3),
+    buttons: (ctx): InteractiveButton[] => {
+      const buttons: InteractiveButton[] = []
+      if (ctx.isGroup) buttons.push({ type: 'reply', text: '📜 Reglas', id: `${ctx.prefix}rules` })
+      buttons.push({ type: 'reply', text: '🏠 Menú', id: `${ctx.prefix}menu` })
+      buttons.push({ type: 'url', text: '📢 Canal', url: config.officialChannelUrl })
+      return buttons.slice(0, 3)
+    },
   },
 }
 
