@@ -91,12 +91,13 @@ export const globalStickers = {
     if (!buffer.length) throw new Error('El sticker está vacío.')
     await mkdir(root, { recursive: true })
     const contentSha = sha(buffer)
+    const storedWaSha = waSha ?? `content:${contentSha}`
     const filePath = path.join(root, `action-${action}-${contentSha}.webp`)
     await writeFile(filePath, buffer, { mode: 0o600 })
     db.prepare(`INSERT INTO global_sticker_actions(action, wa_sha256, content_sha256, file_path, updated_by, updated_at) VALUES(?, ?, ?, ?, ?, ?)
       ON CONFLICT(action) DO UPDATE SET wa_sha256 = excluded.wa_sha256, content_sha256 = excluded.content_sha256,
       file_path = excluded.file_path, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
-      .run(action, waSha ?? null, contentSha, filePath, createdBy, now())
+      .run(action, storedWaSha, contentSha, filePath, createdBy, now())
     return { waSha: waSha ?? null, contentSha }
   },
 
