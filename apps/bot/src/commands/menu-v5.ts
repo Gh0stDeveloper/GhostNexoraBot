@@ -110,8 +110,7 @@ async function menu(ctx: CommandContext) {
   for (const id of sectionOrder) grouped.set(id, [])
   for (const row of effectiveCommands()) {
     if (!visible(ctx, row.command)) continue
-    const section = sectionFor(row.command)
-    grouped.get(section)!.push(renderTokens(ctx.prefix, row.command, row.tokens))
+    grouped.get(sectionFor(row.command))!.push(renderTokens(ctx.prefix, row.command, row.tokens))
   }
 
   const sections = sectionOrder.flatMap((id) => {
@@ -122,6 +121,7 @@ async function menu(ctx: CommandContext) {
   })
 
   const body = [
+    '👻 *Ghost Nexora Bot · MENÚ*',
     '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮',
     `┃ ⚙️ Instancia » *${instance}*`,
     `┃ 👤 Usuario » *${ctx.pushName}*`,
@@ -134,13 +134,15 @@ async function menu(ctx: CommandContext) {
     '╰━━━━━━━━━━━━━━━━━━━━╯',
     '',
     ...sections,
-    '📢 *Accesos rápidos incluidos en este mismo menú.*',
+    '📢 *Accesos rápidos disponibles debajo.*',
     '*Ghost Developer / Nexora*',
   ].join('\n')
 
+  // El catálogo completo se envía como texto normal para evitar límites de NativeFlow y avisos de cliente desactualizado.
+  await ctx.socket.sendMessage(ctx.chatId, { text: body }, { quoted: ctx.message })
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: '👻 Ghost Nexora Bot · MENÚ',
-    body,
+    title: '👻 Ghost Nexora Bot · Accesos rápidos',
+    body: 'Elige una opción. El menú completo está en el mensaje anterior.',
     footer: 'Ghost Developer / Nexora',
     buttons: [
       { type: 'url', text: 'Ver canal', url: config.officialChannelUrl },
