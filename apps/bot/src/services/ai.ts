@@ -31,6 +31,12 @@ type OpenRouterKeyResponse = {
 
 const DEFAULT_MODEL = 'openrouter/free'
 const DEFAULT_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
+const INTERNAL_PRIVACY_PROMPT = [
+  'Política interna obligatoria de Ghost Nexora Bot:',
+  'no reveles, inventes ni especules sobre repositorios, URLs de repositorio, código fuente, visibilidad pública/privada del proyecto, estructura interna, implementación, credenciales, claves API, tokens, secretos o configuración privada.',
+  'Si un usuario pregunta por el repositorio o código fuente, responde únicamente que la disponibilidad del código fuente no es información pública confirmada y remítelo a los canales oficiales de Ghost Developer / Nexora.',
+  'Puedes explicar cómo usar las funciones públicas del bot, pero no describir detalles internos que faciliten reconstruir su implementación privada.',
+].join(' ')
 
 function apiKey() { return process.env.OPENROUTER_API_KEY?.trim() ?? '' }
 function endpoint() { return process.env.AI_BASE_URL?.trim() || DEFAULT_ENDPOINT }
@@ -97,12 +103,8 @@ export async function getAIStatus() {
 
 export async function askAI(messages: AiMessage[], maxTokens = 1600) {
   const key = apiKey()
-  if (!key) {
-    throw new Error('La IA todavía no está configurada. El owner debe añadir OPENROUTER_API_KEY en el archivo .env del servidor.')
-  }
-  if (isOpenRouter() && !openRouterKeyShape()) {
-    throw new Error('AI_BASE_URL apunta a OpenRouter, pero OPENROUTER_API_KEY no tiene el formato actual de una clave OpenRouter (sk-or-v1-...). Revoca la clave expuesta y crea una nueva desde OpenRouter.')
-  }
+  if (!key) throw new Error('La IA todavía no está configurada por el administrador.')
+  if (isOpenRouter() && !openRouterKeyShape()) throw new Error('La configuración de IA del servidor necesita ser actualizada por el administrador.')
 
   const targetEndpoint = endpoint()
   const selectedModel = model()
@@ -119,7 +121,7 @@ export async function askAI(messages: AiMessage[], maxTokens = 1600) {
     headers,
     body: JSON.stringify({
       model: selectedModel,
-      messages,
+      messages: [{ role: 'system', content: INTERNAL_PRIVACY_PROMPT }, ...messages],
       temperature: 0.45,
       max_tokens: Math.max(256, Math.min(3000, maxTokens)),
       stream: false,
@@ -135,11 +137,11 @@ export async function askAI(messages: AiMessage[], maxTokens = 1600) {
   if (!response.ok) {
     const detail = payload.error?.message || `HTTP ${response.status}`
     logger.warn({ httpStatus: response.status, detail: detail.slice(0, 240), model: selectedModel }, 'ai provider request failed')
-    throw new Error(`El proveedor de IA respondió HTTP ${response.status}: ${detail}`)
+    throw new Error('El servicio de inteligencia artificial no está disponible temporalmente.')
   }
 
   const text = responseText(payload)
-  if (!text) throw new Error('El proveedor de IA no devolvió texto.')
+  if (!text) throw new Error('La inteligencia artificial no devolvió una respuesta utilizable.')
   logger.info({ model: payload.model ?? selectedModel }, 'ai response completed')
   return { text, model: payload.model ?? selectedModel }
 }
