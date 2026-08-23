@@ -69,43 +69,33 @@ function endpointCandidates(kind: Kind) {
       ? process.env.LEMPI_YOUTUBE_VIDEO_ENDPOINT
       : process.env.LEMPI_FACEBOOK_ENDPOINT
 
+  // Rutas actuales documentadas por API Lempi. Los alias antiguos quedan al final
+  // solo como compatibilidad por si una instalación usa un proxy/versión previa.
   const defaults = kind === 'audio'
-    ? [
-        '/d/youtube', '/d/ytmp3', '/d/ytaudio', '/d/youtube-mp3', '/d/youtube/audio',
-        '/download/youtube', '/download/youtube/audio', '/api/d/youtube', '/api/download/youtube',
-      ]
+    ? ['/dl/yta', '/d/youtube', '/d/ytmp3', '/d/ytaudio']
     : kind === 'video'
-      ? [
-          '/d/youtube', '/d/ytmp4', '/d/ytvideo', '/d/youtube-mp4', '/d/youtube/video',
-          '/download/youtube', '/download/youtube/video', '/api/d/youtube', '/api/download/youtube',
-        ]
-      : [
-          '/d/facebook', '/d/fbdl', '/d/fb', '/download/facebook', '/api/d/facebook', '/api/download/facebook',
-        ]
+      ? ['/dl/ytv', '/d/youtube', '/d/ytmp4', '/d/ytvideo']
+      : ['/dl/facebook', '/d/facebook', '/d/fbdl']
 
   return [...new Set([custom?.trim(), ...defaults].filter((value): value is string => Boolean(value)))]
 }
 
 function addParams(target: URL, sourceUrl: string, kind: Kind, quality?: number) {
-  const apiKey = key()
+  target.searchParams.set('apikey', key())
   target.searchParams.set('url', sourceUrl)
-  target.searchParams.set('apikey', apiKey)
-  if (kind === 'audio') {
-    target.searchParams.set('type', 'audio')
-    target.searchParams.set('format', 'mp3')
-  } else if (kind === 'video') {
-    target.searchParams.set('type', 'video')
-    target.searchParams.set('format', 'mp4')
-    if (quality) target.searchParams.set('quality', String(quality))
-  } else {
-    target.searchParams.set('format', 'mp4')
-  }
+  // /dl/yta y /dl/ytv ya definen el formato en el propio endpoint.
+  // No enviamos type/format para no depender de parámetros no documentados.
+  if (kind === 'video' && quality) target.searchParams.set('quality', String(quality))
 }
 
 async function parseResponse(response: Response, endpoint: string, target: URL, kind: Kind): Promise<EndpointHit | null> {
   logger.info({ endpoint, status: response.status, contentType: response.headers.get('content-type') ?? '' }, 'Lempi endpoint response')
   if (response.status === 404) return null
-  if (!response.ok) throw new Error(`API Lempi respondió HTTP ${response.status} en ${endpoint}.`)
+  if (!response.ok) {
+    const detail = await response.clone().json().catch(() => null) as unknown
+    const message = payloadMessage(detail)
+    throw new Error(`API Lempi respondió HTTP ${response.status} en ${endpoint}${message ? `: ${message}` : '.'}`)
+  }
 
   const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
   if (contentType.includes('audio/') || contentType.includes('video/') || contentType.includes('application/octet-stream')) {
@@ -143,7 +133,8 @@ async function callEndpoint(endpoint: string, sourceUrl: string, kind: Kind, qua
 
   const headers = {
     accept: 'application/json,audio/*,video/*,application/octet-stream,*/*;q=0.6',
-    'user-agent': 'GhostNexoraBot/2.1',
+    'content-type': 'application/json',
+    'user-agent': 'GhostNexoraBot/2.2',
     'x-api-key': apiKey,
   }
 
@@ -156,17 +147,17 @@ async function callEndpoint(endpoint: string, sourceUrl: string, kind: Kind, qua
     signal: AbortSignal.timeout(60_000),
   })
 
+  // El playground actual de Lempi muestra GET. Conservamos POST únicamente
+  // como compatibilidad si un endpoint personalizado responde Method Not Allowed.
   if (response.status === 405) {
     const postTarget = new URL(endpoint, `${BASE}/`)
     postTarget.searchParams.set('apikey', apiKey)
     response = await fetch(postTarget, {
       method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({
         url: sourceUrl,
-        type: kind === 'facebook' ? 'video' : kind,
-        format: kind === 'audio' ? 'mp3' : 'mp4',
-        ...(quality ? { quality } : {}),
+        ...(kind === 'video' && quality ? { quality } : {}),
       }),
       redirect: 'follow',
       signal: AbortSignal.timeout(60_000),
@@ -219,7 +210,7 @@ export async function downloadLempi(sourceUrl: string, kind: Kind, quality?: num
   try {
     const response = resolved.response ?? await fetch(resolved.direct!, {
       redirect: 'follow',
-      headers: { 'user-agent': 'Mozilla/5.0 GhostNexoraBot/2.1', accept: '*/*' },
+      headers: { 'user-agent': 'Mozilla/5.0 GhostNexoraBot/2.2', accept: '*/*' },
       signal: AbortSignal.timeout(30 * 60_000),
     })
     await streamToFile(response, filePath)

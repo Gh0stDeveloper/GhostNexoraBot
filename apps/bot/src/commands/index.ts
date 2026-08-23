@@ -36,6 +36,7 @@ import { economyFixV2Commands } from './economy-fixes-v2.js'
 import { eromeProgressV2Commands } from './erome-progress-v2.js'
 import { youtubeV3Commands } from './youtube-v3.js'
 import { carouselCompatV3Commands } from './carousel-compat-v3.js'
+import { menuV3Commands } from './menu-v3.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -76,4 +77,6 @@ export const commands: BotCommand[] = [
   // Capa final: conserva carruseles previos y hace YouTube resiliente con Lempi + fallback.
   ...youtubeV3Commands,
   ...carouselCompatV3Commands,
+  // Última capa: menú principal y submenús interactivos con botones.
+  ...menuV3Commands,
 ]
