@@ -36,18 +36,6 @@ function duration(seconds?: number) {
 
 type MediaFile = Pick<DownloadResult, 'filePath' | 'fileName' | 'size' | 'cleanup'>
 
-async function obtainYoutube(ctx: CommandContext, kind: 'audio' | 'video', url: string, quality = 720): Promise<MediaFile> {
-  const progress = await createDownloadProgress(ctx, kind === 'audio' ? 'YouTube · audio' : `YouTube · video ${quality}p`)
-  await progress.update('downloading', 'Proveedor principal: API Lempi')
-  try {
-    return await downloadLempi(url, kind, quality)
-  } catch (error) {
-    logger.warn({ error, kind }, 'Lempi failed; using legacy YouTube fallback')
-    await progress.update('downloading', 'API Lempi no disponible · usando proveedor de respaldo')
-    return kind === 'audio' ? downloadYouTubeAudio(url) : downloadYouTubeVideo(url, quality)
-  }
-}
-
 async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
   const url = youtubeUrl(ctx.args[0] ?? '')
   const allowed = [144, 240, 360, 480, 720, 1080, 1440, 2160]
@@ -56,7 +44,7 @@ async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
   const progress = await createDownloadProgress(ctx, kind === 'audio' ? 'YouTube · audio' : `YouTube · video ${quality}p`)
   await progress.update('downloading', 'Proveedor principal: API Lempi')
 
-  let result: MediaFile
+  let result: MediaFile | null = null
   try {
     try {
       result = await downloadLempi(url, kind, quality)
@@ -83,7 +71,7 @@ async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
     recordSubbotDownload(ctx.instanceId, result.size)
     await progress.update('done', `${bytes(result.size)} enviados.`)
   } finally {
-    if (result!) await result.cleanup().catch(() => undefined)
+    if (result) await result.cleanup().catch(() => undefined)
   }
 }
 
