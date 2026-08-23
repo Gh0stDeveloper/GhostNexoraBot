@@ -7,8 +7,9 @@ import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { eromeCommands } from './erome.js'
 
-const baseErome = eromeCommands.find((command) => command.name === 'erome')
-if (!baseErome) throw new Error('No se encontró el comando base de Erome.')
+const baseErome = eromeCommands.find((command) => command.name === 'erome') ?? (() => {
+  throw new Error('No se encontró el comando base de Erome.')
+})()
 
 function assertAdultAccess(ctx: CommandContext) {
   if (ctx.isGroup) {
