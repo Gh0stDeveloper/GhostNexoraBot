@@ -31,6 +31,9 @@ import { apkMultisourceCommands } from './apk-multisource.js'
 import { groupAdultModeCommands } from './group-adult-mode.js'
 import { v2Commands } from './v2.js'
 import { adultV2Commands } from './adult-v2.js'
+import { downloadProgressV2Commands } from './downloads-progress-v2.js'
+import { economyFixV2Commands } from './economy-fixes-v2.js'
+import { eromeProgressV2Commands } from './erome-progress-v2.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -64,6 +67,9 @@ export const commands: BotCommand[] = [
   ...apkMultisourceCommands,
   ...groupAdultModeCommands,
   ...v2Commands,
-  // Guardia 18+ al final: conserva consentimiento/política de grupo y usa UX compatible.
   ...adultV2Commands,
+  ...downloadProgressV2Commands,
+  ...eromeProgressV2Commands,
+  // Última capa: correcciones de identidad/argumentos para operaciones de valor.
+  ...economyFixV2Commands,
 ]

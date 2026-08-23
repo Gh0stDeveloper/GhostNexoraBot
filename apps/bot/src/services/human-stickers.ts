@@ -75,7 +75,6 @@ export const globalStickers = {
   },
 
   clearAction(action: 'kick') { db.prepare('DELETE FROM global_sticker_actions WHERE action = ?').run(action) },
-
   hashFromMessage: waHash,
 }
 
@@ -93,20 +92,27 @@ export async function handleKickSticker(socket: WASocket, message: WAMessage) {
   if (!rawHash || !Buffer.isBuffer(rawHash)) return false
   const configured = db.prepare("SELECT wa_sha256 as waSha FROM global_sticker_actions WHERE action = 'kick'").get() as { waSha?: string } | undefined
   if (!configured?.waSha || configured.waSha !== rawHash.toString('base64')) return false
-  const context = sticker.contextInfo
-  const targetCandidate = context?.participant
+  const targetCandidate = sticker.contextInfo?.participant
   if (!targetCandidate) return false
 
   const metadata = await socket.groupMetadata(chatId).catch(() => null)
   if (!metadata) return false
   const sender = getSender(message)
   const senderParticipant = metadata.participants.find((item) => [item.id, item.phoneNumber, item.lid].filter(Boolean).includes(sender))
-  if (!senderParticipant?.admin && !isBotStaff(sender)) return false
+  const staffIdentity = senderParticipant?.phoneNumber ?? senderParticipant?.id ?? sender
+  if (!senderParticipant?.admin && !isBotStaff(staffIdentity)) return false
+
   const target = metadata.participants.find((item) => [item.id, item.phoneNumber, item.lid].filter(Boolean).includes(targetCandidate))
   const targetJid = target?.phoneNumber ?? target?.id ?? targetCandidate
   if (!targetJid) return false
+  const botIds = [socket.user?.id, socket.user?.lid].filter(Boolean)
+  if (botIds.includes(targetJid)) return false
+
   await socket.groupParticipantsUpdate(chatId, [targetJid], 'remove')
-  await socket.sendMessage(chatId, { text: `🚫 *EXPULSIÓN POR STICKER*\n━━━━━━━━━━━━━━\n@${targetJid.split('@')[0]} fue expulsado por una acción de moderación.`, mentions: [targetJid] }).catch(() => undefined)
+  await socket.sendMessage(chatId, {
+    text: `🚫 *EXPULSIÓN POR STICKER*\n━━━━━━━━━━━━━━\n@${targetJid.split('@')[0]} fue expulsado por una acción de moderación.`,
+    mentions: [targetJid],
+  }).catch(() => undefined)
   return true
 }
 

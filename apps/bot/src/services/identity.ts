@@ -4,6 +4,7 @@ import { getSenderCandidates } from '../utils/message.js'
 
 const db = economy.db
 const now = () => Date.now()
+const STARTING_WALLET = 250
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS identity_aliases (
@@ -37,7 +38,7 @@ export function preferredJid(values: Array<string | null | undefined>) {
 
 function mergeSimpleUserTable(table: string, column: string, alias: string, canonical: string) {
   if (!tableExists(table)) return
-  try { db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`).run(canonical, alias) } catch { /* tables with unique keys are handled separately or left intact */ }
+  try { db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`).run(canonical, alias) } catch { /* unique-key tables are handled separately or retained safely */ }
 }
 
 function mergeEconomyUser(alias: string, canonical: string) {
@@ -51,10 +52,14 @@ function mergeEconomyUser(alias: string, canonical: string) {
   if (!canonicalRow) {
     db.prepare('UPDATE economy_users SET user_jid = ? WHERE user_jid = ?').run(canonical, alias)
   } else {
+    // Cada fila economy_users nació con 250 NXC. Al descubrir que alias LID y PN
+    // pertenecen a la misma persona debemos conservar una sola bonificación inicial,
+    // pero sí preservar todo movimiento real realizado desde ambas identidades.
+    const aliasWalletContribution = Number(aliasRow.wallet) - STARTING_WALLET
     db.prepare(`UPDATE economy_users SET
       wallet = wallet + ?, bank = bank + ?, last_work = MAX(last_work, ?), last_rob = MAX(last_rob, ?),
       created_at = MIN(created_at, ?)
-      WHERE user_jid = ?`).run(aliasRow.wallet, aliasRow.bank, aliasRow.lastWork, aliasRow.lastRob, aliasRow.createdAt, canonical)
+      WHERE user_jid = ?`).run(aliasWalletContribution, aliasRow.bank, aliasRow.lastWork, aliasRow.lastRob, aliasRow.createdAt, canonical)
     db.prepare('DELETE FROM economy_users WHERE user_jid = ?').run(alias)
   }
 
@@ -69,6 +74,20 @@ function mergeEconomyUser(alias: string, canonical: string) {
   mergeSimpleUserTable('waifu_claims', 'owner_jid', alias, canonical)
   mergeSimpleUserTable('subbots', 'owner_jid', alias, canonical)
   mergeSimpleUserTable('portal_tokens', 'user_jid', alias, canonical)
+  mergeSimpleUserTable('economy_miners', 'user_jid', alias, canonical)
+  mergeSimpleUserTable('economy_professions_v2', 'user_jid', alias, canonical)
+  mergeSimpleUserTable('economy_action_cooldowns', 'user_jid', alias, canonical)
+  mergeSimpleUserTable('economy_cooldowns_v2', 'user_jid', alias, canonical)
+
+  if (tableExists('group_members')) {
+    const rows = db.prepare('SELECT group_jid as groupJid, first_seen as firstSeen, last_seen as lastSeen FROM group_members WHERE user_jid = ?').all(alias) as Array<{ groupJid: string; firstSeen: number; lastSeen: number }>
+    for (const row of rows) {
+      db.prepare(`INSERT INTO group_members(group_jid, user_jid, first_seen, last_seen) VALUES(?, ?, ?, ?)
+        ON CONFLICT(group_jid, user_jid) DO UPDATE SET first_seen = MIN(first_seen, excluded.first_seen), last_seen = MAX(last_seen, excluded.last_seen)`)
+        .run(row.groupJid, canonical, row.firstSeen, row.lastSeen)
+    }
+    db.prepare('DELETE FROM group_members WHERE user_jid = ?').run(alias)
+  }
 
   if (tableExists('economy_advanced_users')) {
     const old = db.prepare('SELECT last_daily as lastDaily, last_crime as lastCrime, last_slut as lastSlut FROM economy_advanced_users WHERE user_jid = ?').get(alias) as
