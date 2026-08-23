@@ -9,7 +9,6 @@ import {
   equipTitle,
   equippedTitle,
   groupStats,
-  listAchievements,
   listTitles,
   progressionProfile,
   reputation,
@@ -183,6 +182,15 @@ async function repTopCommand(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `⭐ *TOP REPUTACIÓN*\n${rows.map((row, i) => `${i + 1}. @${row.userJid.split('@')[0]} — *${row.score}*`).join('\n') || 'Sin datos.'}`, mentions }, { quoted: ctx.message })
 }
 
+type ClanDetailsView = {
+  name: string
+  level: number
+  xp: number
+  treasury: number
+  code: string
+  members: Array<{ userJid: string; role: string; contributed: number }>
+}
+
 async function clanCommand(ctx: CommandContext) {
   const action = (ctx.args[0] ?? 'info').toLowerCase()
   if (action === 'create' || action === 'crear') {
@@ -215,9 +223,10 @@ async function clanCommand(ctx: CommandContext) {
     await ctx.reply(`🛡️ *CLANES / GREMIOS*\nCrear: *${ctx.prefix}clan create <nombre>* — 5,000 NXC\nUnirse: *${ctx.prefix}clan join <código>*\nRanking: *${ctx.prefix}clantop*`)
     return
   }
-  const details = clanDetails(clan.id)!
-  const members = details.members as Array<{ userJid: string; role: string; contributed: number }>
-  await ctx.socket.sendMessage(ctx.chatId, { text: `🛡️ *${String(details.name).toUpperCase()}*\nNivel: *${details.level}* · XP: ${nxc(Number(details.xp))}\nTesorería: *${nxc(Number(details.treasury))}*\nCódigo: *${details.code}*\nMiembros: ${members.length}/${Math.min(50, 15 + (Number(details.level) - 1) * 5)}\n\n${members.slice(0, 15).map((m) => `• @${m.userJid.split('@')[0]} · ${m.role} · ${nxc(m.contributed)}`).join('\n')}\n\n${ctx.prefix}clan donate <NXC> · ${ctx.prefix}clan upgrade · ${ctx.prefix}clan leave`, mentions: members.map((m) => m.userJid) }, { quoted: ctx.message })
+  const details = clanDetails(clan.id) as ClanDetailsView | null
+  if (!details) throw new Error('No pude cargar el clan.')
+  const members = details.members
+  await ctx.socket.sendMessage(ctx.chatId, { text: `🛡️ *${details.name.toUpperCase()}*\nNivel: *${details.level}* · XP: ${nxc(details.xp)}\nTesorería: *${nxc(details.treasury)}*\nCódigo: *${details.code}*\nMiembros: ${members.length}/${Math.min(50, 15 + (details.level - 1) * 5)}\n\n${members.slice(0, 15).map((m) => `• @${m.userJid.split('@')[0]} · ${m.role} · ${nxc(m.contributed)}`).join('\n')}\n\n${ctx.prefix}clan donate <NXC> · ${ctx.prefix}clan upgrade · ${ctx.prefix}clan leave`, mentions: members.map((m) => m.userJid) }, { quoted: ctx.message })
 }
 
 async function clanTopCommand(ctx: CommandContext) {
