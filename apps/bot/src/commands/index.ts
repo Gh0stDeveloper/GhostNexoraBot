@@ -1,3 +1,4 @@
+import '../services/work-compat-v4.js'
 import type { BotCommand } from '../types.js'
 import { generalCommands } from './general.js'
 import { aiCommands } from './ai.js'
@@ -37,6 +38,8 @@ import { eromeProgressV2Commands } from './erome-progress-v2.js'
 import { youtubeV3Commands } from './youtube-v3.js'
 import { carouselCompatV3Commands } from './carousel-compat-v3.js'
 import { menuV3Commands } from './menu-v3.js'
+import { expansionV4Commands } from './expansion-v4.js'
+import { casinoGuardV4Commands } from './casino-guard-v4.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -74,9 +77,11 @@ export const commands: BotCommand[] = [
   ...downloadProgressV2Commands,
   ...eromeProgressV2Commands,
   ...economyFixV2Commands,
-  // Capa final: conserva carruseles previos y hace YouTube resiliente con Lempi + fallback.
   ...youtubeV3Commands,
   ...carouselCompatV3Commands,
-  // Última capa: menú principal y submenús interactivos con botones.
   ...menuV3Commands,
+  // V4 va al final para que .menu/.job usen las variantes nuevas.
+  ...expansionV4Commands,
+  // Guardas económicas finales: no pueden ser sobrescritas por capas anteriores.
+  ...casinoGuardV4Commands,
 ]

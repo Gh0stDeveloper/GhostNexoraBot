@@ -33,5 +33,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: V4 persistence smoke
+        run: node scripts/v4-smoke.mjs
+
       - name: Validate shell scripts
         run: bash -n scripts/install.sh scripts/update.sh
