@@ -22,6 +22,7 @@ export const runtime = {
   adminToken: process.env.ADMIN_WEB_TOKEN ?? fileEnv.ADMIN_WEB_TOKEN ?? '',
   dataDir: process.env.DATA_DIR ?? fileEnv.DATA_DIR ?? path.resolve(process.cwd(), '../../data'),
   publicWebUrl: process.env.PUBLIC_WEB_URL ?? fileEnv.PUBLIC_WEB_URL ?? 'http://127.0.0.1:3000',
+  botHealthUrl: process.env.BOT_HEALTH_URL ?? fileEnv.BOT_HEALTH_URL ?? 'http://127.0.0.1:3001/health',
 }
 
 export function openBotDb() {

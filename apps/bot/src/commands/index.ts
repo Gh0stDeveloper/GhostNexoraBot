@@ -5,7 +5,6 @@ import { profileCommands } from './profile.js'
 import { reactionCommands } from './reactions.js'
 import { stickerCommands } from './stickers.js'
 import { downloadCommands } from './downloads.js'
-import { youtubeFriendlyCommands } from './youtube-friendly.js'
 import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
 import { mangaDownloadCommands } from './manga-download.js'
@@ -30,6 +29,8 @@ import { systemCommands } from './system.js'
 import { ownerCommands } from './owner.js'
 import { apkMultisourceCommands } from './apk-multisource.js'
 import { groupAdultModeCommands } from './group-adult-mode.js'
+import { v2Commands } from './v2.js'
+import { adultV2Commands } from './adult-v2.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -38,7 +39,6 @@ export const commands: BotCommand[] = [
   ...reactionCommands,
   ...stickerCommands,
   ...downloadCommands,
-  ...youtubeFriendlyCommands,
   ...lyricsCommands,
   ...resourceCommands,
   ...mangaDownloadCommands,
@@ -61,8 +61,9 @@ export const commands: BotCommand[] = [
   ...privateAccessCommands,
   ...systemCommands,
   ...ownerCommands,
-  // Se registran al final a propósito: sustituyen las implementaciones legacy
-  // de .apk y .adultmode sin romper sus otros comandos/aliases.
   ...apkMultisourceCommands,
   ...groupAdultModeCommands,
+  ...v2Commands,
+  // Guardia 18+ al final: conserva consentimiento/política de grupo y usa UX compatible.
+  ...adultV2Commands,
 ]

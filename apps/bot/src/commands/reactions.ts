@@ -1,29 +1,12 @@
 import type { BotCommand, CommandContext } from '../types.js'
-import { getContextInfo } from '../utils/message.js'
+import { resolveTarget } from '../utils/target.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 
-async function target(ctx: CommandContext) {
-  const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
-  if (!mention) return null
-  if (!ctx.isGroup) return mention
-  const metadata = await ctx.socket.groupMetadata(ctx.chatId).catch(() => null)
-  const participant = metadata?.participants.find((item) => [item.id, item.phoneNumber, item.lid].filter(Boolean).includes(mention))
-  return participant?.phoneNumber ?? participant?.id ?? mention
-}
-
-type ReactionDefinition = {
-  name: string
-  aliases?: string[]
-  category: ReactionCategory
-  emoji: string
-  solo: string
-  directed: string
-}
-
+type ReactionDefinition = { name: string; aliases?: string[]; category: ReactionCategory; emoji: string; solo: string; directed: string }
 const definitions: ReactionDefinition[] = [
-  { name: 'hug', aliases: ['abrazo', 'abrazar'], category: 'hug', emoji: '🫂', solo: 'necesita un abrazo', directed: 'abrazó con cariño a' },
-  { name: 'kiss', aliases: ['besar', 'beso'], category: 'kiss', emoji: '💋', solo: 'manda un beso al aire', directed: 'besó a' },
-  { name: 'pat', aliases: ['palmadita'], category: 'pat', emoji: '🫳', solo: 'quiere recibir una palmadita', directed: 'le dio una palmadita cariñosa a' },
+  { name: 'hug', aliases: ['abrazo','abrazar'], category: 'hug', emoji: '🫂', solo: 'necesita un abrazo', directed: 'abrazó con cariño a' },
+  { name: 'kiss', aliases: ['besar','beso'], category: 'kiss', emoji: '💋', solo: 'manda un beso al aire', directed: 'besó a' },
+  { name: 'pat', aliases: ['palmadita'], category: 'pat', emoji: '🫳', solo: 'quiere una palmadita', directed: 'le dio una palmadita a' },
   { name: 'nuzzle', aliases: ['acurrucar'], category: 'cuddle', emoji: '🌸', solo: 'se acurrucó cómodamente', directed: 'se acurrucó junto a' },
   { name: 'blush', aliases: ['sonrojar'], category: 'blush', emoji: '☺️', solo: 'se sonrojó', directed: 'se sonrojó por' },
   { name: 'wink', aliases: ['guiño'], category: 'wink', emoji: '😉', solo: 'guiñó un ojo', directed: 'le guiñó el ojo a' },
@@ -42,45 +25,24 @@ const definitions: ReactionDefinition[] = [
   { name: 'seducir', aliases: ['seduce'], category: 'wink', emoji: '💘', solo: 'practicó su mejor mirada encantadora', directed: 'intentó conquistar con encanto a' },
   { name: 'saborear', aliases: ['nom'], category: 'kiss', emoji: '😋', solo: 'está disfrutando el momento', directed: 'se acercó juguetonamente a' },
   { name: 'bochigood', aliases: ['bochi'], category: 'pat', emoji: '🌟', solo: 'activó el modo bochigood', directed: 'le dio un bochigood a' },
-  { name: 'happy', aliases: ['feliz', 'celebrar'], category: 'happy', emoji: '🥳', solo: 'está celebrando a lo grande', directed: 'celebra junto a' },
-  { name: 'cuddle', aliases: ['mimos', 'mimar'], category: 'cuddle', emoji: '🤗', solo: 'quiere mimos', directed: 'llenó de mimos a' },
-  { name: 'confused', aliases: ['confundido', 'duda'], category: 'confused', emoji: '🤔', solo: 'se quedó pensando demasiado', directed: 'quedó confundido por' },
-  { name: 'spin', aliases: ['girar', 'vueltas'], category: 'spin', emoji: '💫', solo: 'empezó a dar vueltas', directed: 'dio vueltas alrededor de' },
-  { name: 'shoot', aliases: ['disparar', 'bang'], category: 'shoot', emoji: '🎯', solo: 'apuntó a un objetivo imaginario', directed: 'apuntó de caricatura a' },
-  { name: 'cheer', aliases: ['animar', 'aplaudir'], category: 'happy', emoji: '👏', solo: 'empezó a animar a todos', directed: 'aplaudió y animó a' },
-  { name: 'shy', aliases: ['timido', 'tímido'], category: 'blush', emoji: '🙈', solo: 'se puso tímido', directed: 'se puso tímido frente a' },
+  { name: 'happy', aliases: ['feliz','celebrar'], category: 'happy', emoji: '🥳', solo: 'está celebrando a lo grande', directed: 'celebra junto a' },
+  { name: 'cuddle', aliases: ['mimos','mimar'], category: 'cuddle', emoji: '🤗', solo: 'quiere mimos', directed: 'llenó de mimos a' },
+  { name: 'confused', aliases: ['confundido','duda'], category: 'confused', emoji: '🤔', solo: 'se quedó pensando demasiado', directed: 'quedó confundido por' },
+  { name: 'spin', aliases: ['girar','vueltas'], category: 'spin', emoji: '💫', solo: 'empezó a dar vueltas', directed: 'dio vueltas alrededor de' },
+  { name: 'shoot', aliases: ['disparar','bang'], category: 'shoot', emoji: '🎯', solo: 'apuntó a un objetivo imaginario', directed: 'apuntó de caricatura a' },
+  { name: 'cheer', aliases: ['animar','aplaudir'], category: 'happy', emoji: '👏', solo: 'empezó a animar a todos', directed: 'aplaudió y animó a' },
+  { name: 'shy', aliases: ['timido','tímido'], category: 'blush', emoji: '🙈', solo: 'se puso tímido', directed: 'se puso tímido frente a' },
 ]
 
 function reactionCommand(def: ReactionDefinition): BotCommand {
-  return {
-    name: def.name,
-    aliases: def.aliases,
-    category: 'social',
-    description: `Reacción anime: ${def.name}.`,
-    async handler(ctx) {
-      const other = await target(ctx)
-      const senderTag = `@${ctx.sender.split('@')[0]}`
-      const targetTag = other ? `@${other.split('@')[0]}` : ''
-      const caption = other
-        ? `${def.emoji} *REACCIÓN · ${def.name.toUpperCase()}*\n━━━━━━━━━━━━━━\n${senderTag} ${def.directed} ${targetTag}`
-        : `${def.emoji} *REACCIÓN · ${def.name.toUpperCase()}*\n━━━━━━━━━━━━━━\n${senderTag} ${def.solo}`
-      const mentions = other ? [ctx.sender, other] : [ctx.sender]
-
-      try {
-        const reaction = await getReactionGif(def.category)
-        const video = await reactionGifToMp4(reaction.url)
-        await ctx.socket.sendMessage(ctx.chatId, {
-          video,
-          gifPlayback: true,
-          mimetype: 'video/mp4',
-          caption: `${caption}${reaction.animeName ? `\n\n🎞️ ${reaction.animeName}` : ''}`,
-          mentions,
-        }, { quoted: ctx.message })
-      } catch {
-        await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions }, { quoted: ctx.message })
-      }
-    },
-  }
+  return { name: def.name, aliases: def.aliases, category: 'social', description: `Reacción anime ${def.name}; admite mención o respuesta.`, async handler(ctx: CommandContext) {
+    const other = await resolveTarget(ctx)
+    const senderTag = `@${ctx.sender.split('@')[0]}`; const targetTag = other ? `@${other.split('@')[0]}` : ''
+    const caption = other ? `${def.emoji} *REACCIÓN · ${def.name.toUpperCase()}*\n━━━━━━━━━━━━━━\n${senderTag} ${def.directed} ${targetTag}` : `${def.emoji} *REACCIÓN · ${def.name.toUpperCase()}*\n━━━━━━━━━━━━━━\n${senderTag} ${def.solo}`
+    const mentions = other ? [ctx.sender, other] : [ctx.sender]
+    try { const reaction = await getReactionGif(def.category); const video = await reactionGifToMp4(reaction.url); await ctx.socket.sendMessage(ctx.chatId, { video, gifPlayback: true, mimetype: 'video/mp4', caption: `${caption}${reaction.animeName ? `\n\n🎞️ ${reaction.animeName}` : ''}`, mentions }, { quoted: ctx.message }) }
+    catch { await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions }, { quoted: ctx.message }) }
+  } }
 }
 
 export const reactionCommands: BotCommand[] = definitions.map(reactionCommand)
