@@ -14,7 +14,10 @@ import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/modera
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
 import { handleKickSticker, maybeSendHumanSticker } from './services/human-stickers.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
-import { getMessageText, unwrapMessage } from './utils/message.js'
+import { observeGroupActivity } from './services/progression-v4.js'
+import { startAutomationScheduler } from './services/automation-v4.js'
+import { handleV4Api } from './services/api-v4.js'
+import { getMessageText, getSender, unwrapMessage } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 
@@ -105,9 +108,14 @@ async function executeControl(payload: Record<string, unknown>) {
 
 function startHealthServer() {
   const server = http.createServer(async (req, res) => {
+    if (req.url?.startsWith('/api/v1/')) {
+      const auth = req.headers.authorization ?? ''
+      if (!config.adminWebToken || auth !== `Bearer ${config.adminWebToken}`) { json(res, 401, { ok: false, error: 'unauthorized' }); return }
+      if (await handleV4Api(req, res)) return
+    }
     if (req.method === 'POST' && req.url === '/control') {
       const auth = req.headers.authorization ?? ''
-      if (auth !== `Bearer ${config.adminWebToken}`) { json(res, 401, { ok: false, error: 'unauthorized' }); return }
+      if (!config.adminWebToken || auth !== `Bearer ${config.adminWebToken}`) { json(res, 401, { ok: false, error: 'unauthorized' }); return }
       try { json(res, 200, await executeControl(await readJson(req))) }
       catch (error) {
         logger.warn({ error }, 'admin control request failed')
@@ -124,7 +132,7 @@ function startHealthServer() {
       subbots: { total: subbots.length, online: subbots.filter((item) => item.status === 'online').length },
     })
   })
-  server.listen(config.healthPort, '127.0.0.1', () => logger.info({ port: config.healthPort }, 'health/control server listening'))
+  server.listen(config.healthPort, '127.0.0.1', () => logger.info({ port: config.healthPort }, 'health/control/api server listening'))
 }
 
 function pick<T>(values: readonly T[]) { return values[Math.floor(Math.random() * values.length)]! }
@@ -165,6 +173,12 @@ async function maybeAutoReact(socket: Awaited<ReturnType<typeof createSocket>>['
 
 async function routeMessage(socket: Awaited<ReturnType<typeof createSocket>>['socket'], message: Parameters<CommandRouter['handle']>[1], router: CommandRouter) {
   await observeMessageIdentity(socket, message).catch((error) => logger.debug({ error }, 'identity observation skipped'))
+  const chatId = message.key.remoteJid
+  if (chatId && !message.key.fromMe) {
+    const text = getMessageText(message).trim()
+    const sender = resolveStoredIdentity(getSender(message))
+    observeGroupActivity(chatId, sender, chatId.endsWith('@g.us'), text.startsWith(settings.prefix))
+  }
   if (await handleKickSticker(socket, message).catch(() => false)) return
   if (await moderateIncomingV2(socket, message)) return
   const handled = await router.handle(socket, message)
@@ -214,6 +228,7 @@ async function connect() {
 await settings.init()
 startTempCleanup()
 startHealthServer()
+startAutomationScheduler(() => mainSocket)
 subbotManager.setMessageHandler(async (socket, message, record) => {
   let router = subbotRouters.get(record.id)
   if (!router) { router = new CommandRouter(commands, { instanceId: record.id, instanceOwnerJid: record.ownerJid }); subbotRouters.set(record.id, router) }
