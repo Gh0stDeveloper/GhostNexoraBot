@@ -78,7 +78,7 @@ function payloadMessage(payload: unknown) {
 }
 
 function shouldRotate(status: number, payload: unknown) {
-  if (status === 402 || status === 403 || status === 429) return true
+  if (status === 401 || status === 402 || status === 403 || status === 429) return true
   return isQuotaMessage(payloadMessage(payload))
 }
 
@@ -143,8 +143,11 @@ async function requestOnce<T>(pathname: string, params: Record<string, string | 
   const record = payload as Record<string, unknown>
   if (record.status === false || record.success === false || record.ok === false) {
     const detail = payloadMessage(payload)
-    if (isQuotaMessage(detail)) state.exhausted = true
-    throw new LempiRequestError(isQuotaMessage(detail))
+    if (isQuotaMessage(detail)) {
+      state.exhausted = true
+      throw new LempiRequestError(true)
+    }
+    throw new LempiRequestError(false)
   }
 
   return payload as T
@@ -160,9 +163,7 @@ export async function requestLempiJson<T>(
   if (!candidates.length) throw new LempiUnavailableError()
 
   let lastError: LempiRequestError | null = null
-  const maxKeyRounds = states.length
-
-  for (let keyRound = 0; keyRound < maxKeyRounds; keyRound += 1) {
+  for (let keyRound = 0; keyRound < states.length; keyRound += 1) {
     const keyIndex = nextAvailableIndex()
     if (keyIndex < 0) break
     cursor = keyIndex
