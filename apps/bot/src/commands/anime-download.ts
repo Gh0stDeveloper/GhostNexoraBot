@@ -1,4 +1,4 @@
-import type { BotCommand } from '../types.js'
+import type { BotCommand, CommandContext } from '../types.js'
 import {
   downloadAnimeEpisode,
   getAnimeEpisodes,
@@ -19,10 +19,9 @@ const formatBytes = (bytes: number) => {
 }
 
 const sourceQuality = (quality: string) => quality && quality !== 'unknown' ? quality : 'calidad disponible'
-
 const clampPage = (page: number, total: number) => Math.max(1, Math.min(total, Number.isInteger(page) ? page : 1))
 
-async function animeSearchCarousel(ctx: Parameters<NonNullable<BotCommand['handler']>>[0], query: string, page: number) {
+async function animeSearchCarousel(ctx: CommandContext, query: string, page: number) {
   const allResults = await searchAnime(query, 20)
   if (!allResults.length) throw new Error('No encontré ese anime en las fuentes disponibles.')
 
@@ -45,7 +44,7 @@ async function animeSearchCarousel(ctx: Parameters<NonNullable<BotCommand['handl
     const nextPage = currentPage < totalPages ? currentPage + 1 : 1
     cards.push({
       title: currentPage < totalPages ? 'Siguiente tanda' : 'Volver al inicio',
-      body: `Página ${currentPage}/${totalPages}. Mantén el catálogo en tandas pequeñas para evitar saturar WhatsApp.`,
+      body: `Página ${currentPage}/${totalPages}. Catálogo dividido en tandas pequeñas para evitar saturar WhatsApp.`,
       imageUrl: undefined,
       buttons: [{ type: 'reply' as const, text: currentPage < totalPages ? 'Siguiente' : 'Primera', id: `${ctx.prefix}anime ${query} ${nextPage}` }],
     })
@@ -59,7 +58,7 @@ async function animeSearchCarousel(ctx: Parameters<NonNullable<BotCommand['handl
   })
 }
 
-async function animeEpisodesCarousel(ctx: Parameters<NonNullable<BotCommand['handler']>>[0], animeId: string, seasonNumber?: number, page = 1) {
+async function animeEpisodesCarousel(ctx: CommandContext, animeId: string, seasonNumber?: number, page = 1) {
   const seasons = await getAnimeSeasons(animeId)
   if (!seasons.length) throw new Error('No pude obtener las temporadas disponibles.')
 
@@ -88,11 +87,10 @@ async function animeEpisodesCarousel(ctx: Parameters<NonNullable<BotCommand['han
     }],
   }))
 
-  const seasonIndex = seasons.indexOf(selectedSeason)
   if (currentPage > 1) {
     cards.push({
       title: 'Página anterior',
-      body: `Episodios ${((currentPage - 2) * EPISODE_PAGE_SIZE) + 1}-${(currentPage - 1) * EPISODE_PAGE_SIZE}.`,
+      body: `Regresar a la tanda ${currentPage - 1}.`,
       imageUrl: undefined,
       buttons: [{ type: 'reply' as const, text: 'Anterior', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage - 1}` }],
     })
@@ -120,12 +118,9 @@ async function animeEpisodesCarousel(ctx: Parameters<NonNullable<BotCommand['han
     footer: `Ghost Nexora Bot · ${seasons.length} ${seasons.length === 1 ? 'temporada' : 'temporadas'}`,
     cards: cards.slice(0, 12),
   })
-
-  // Evita una variable sin uso cuando solo existe una temporada y conserva el cálculo útil para futuras vistas.
-  void seasonIndex
 }
 
-async function sendSeasonCarousel(ctx: Parameters<NonNullable<BotCommand['handler']>>[0], animeId: string, seasons: number[]) {
+async function sendSeasonCarousel(ctx: CommandContext, animeId: string, seasons: number[]) {
   const cards = seasons.slice(0, 12).map((season) => ({
     title: `Temporada ${season}`,
     body: `Explora los episodios disponibles de la temporada ${season}.`,
