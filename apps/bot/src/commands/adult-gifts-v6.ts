@@ -1,7 +1,5 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { randomAdultGift, type AdultGiftKey } from '../services/adult-gifts.js'
-import { effectiveCommands } from '../services/menu-registry.js'
-import { economy } from '../services/economy.js'
 
 const giftKeys: readonly AdultGiftKey[] = ['tease', 'flirt', 'seduce', 'kiss', 'cuddle', 'blush', 'love', 'bite']
 
@@ -14,7 +12,7 @@ function targetFromContext(ctx: CommandContext) {
 
 function adultEnabled(ctx: CommandContext) {
   const text = ctx.argText.toLowerCase()
-  return text.includes('adult18') || text.includes('18+')
+  return text.includes('18+') || text.includes('adult18')
 }
 
 function giftHandler(key: AdultGiftKey) {
@@ -40,7 +38,7 @@ export const adultGiftV6Commands: BotCommand[] = [
   {
     name: 'adultgifts',
     aliases: ['gift18', 'gifts18'],
-    category: 'adult',
+    category: 'adult' as const,
     description: 'Muestra los regalos adultos no explícitos disponibles.',
     usage: 'adultgifts',
     handler: async (ctx) => {
