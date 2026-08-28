@@ -10,6 +10,7 @@ import { downloadCommands } from './downloads.js'
 import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
 import { mangaDownloadCommands } from './manga-download.js'
+import { animeDownloadCommands } from './anime-download.js'
 import { webSearchCommands } from './web-search.js'
 import { booruCommands } from './booru.js'
 import { groupCommands } from './groups.js'
@@ -73,6 +74,7 @@ export const commands: BotCommand[] = [
   ...lyricsCommands,
   ...resourceCommands,
   ...mangaDownloadCommands,
+  ...animeDownloadCommands,
   ...webSearchCommands,
   ...booruCommands,
   ...groupCommands,
