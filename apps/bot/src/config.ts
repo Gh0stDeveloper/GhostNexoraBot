@@ -40,6 +40,7 @@ const schema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().default(''),
   TELEGRAM_CHANNEL_ID: z.string().default(''),
   TELEGRAM_CHANNEL_URL: z.string().default(''),
+  YTDLP_COOKIES_FILE: z.string().default(''),
 })
 
 const raw = schema.parse(process.env)
@@ -47,7 +48,7 @@ const workspaceRoot = process.cwd().endsWith(`${path.sep}apps${path.sep}bot`)
   ? path.resolve(process.cwd(), '../..')
   : process.cwd()
 
-const resolveFromRoot = (value: string) => path.isAbsolute(value) ? value : path.resolve(workspaceRoot, value)
+const resolveFromRoot = (value: string) => (path.isAbsolute(value) ? value : path.resolve(workspaceRoot, value))
 const truthy = (value: string) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())
 
 export const config = {
@@ -75,5 +76,8 @@ export const config = {
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,
   telegramChannelId: raw.TELEGRAM_CHANNEL_ID,
   telegramChannelUrl: raw.TELEGRAM_CHANNEL_URL,
+  ytdlpCookiesFile: raw.YTDLP_COOKIES_FILE
+    ? resolveFromRoot(raw.YTDLP_COOKIES_FILE)
+    : '',
   workspaceRoot,
 } as const
