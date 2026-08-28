@@ -74,7 +74,6 @@ export const commands: BotCommand[] = [
   ...lyricsCommands,
   ...resourceCommands,
   ...mangaDownloadCommands,
-  ...animeDownloadCommands,
   ...webSearchCommands,
   ...booruCommands,
   ...groupCommands,
@@ -127,6 +126,8 @@ export const commands: BotCommand[] = [
   ...groupControlsV9Commands,
   ...lempiApiCommands,
   ...mediaDownloadFixCommands,
+  // Keep the dedicated anime command last so it wins over any legacy collision.
+  ...animeDownloadCommands,
 ]
 
 setMenuCommandProvider(() => commands)
