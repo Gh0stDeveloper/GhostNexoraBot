@@ -17,8 +17,8 @@ function validateUrl(input: string) {
   let url: URL
   try { url = new URL(input) } catch { throw new Error('URL de Instagram inválida.') }
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Solo se permiten URLs HTTP/HTTPS.')
-  if (!/(^|\\.)instagram\\.com$/i.test(url.hostname)) throw new Error('La URL no pertenece a Instagram.')
-  if (!/^\\/(?:p|reel|tv)\\//i.test(url.pathname)) throw new Error('Debes proporcionar la URL de una publicación de Instagram.')
+  if (!/(^|\.)instagram\.com$/i.test(url.hostname)) throw new Error('La URL no pertenece a Instagram.')
+  if (!/^\/(?:p|reel|tv)\//i.test(url.pathname)) throw new Error('Debes proporcionar la URL de una publicación de Instagram.')
   return url
 }
 
@@ -27,7 +27,7 @@ function decodeEscaped(value: string) {
     .replace(/\\u0026/g, '&')
     .replace(/\\u003D/g, '=')
     .replace(/\\u002F/g, '/')
-    .replace(/\\\\\//g, '/')
+    .replace(/\\\//g, '/')
     .replace(/&amp;/g, '&')
 }
 
@@ -38,8 +38,8 @@ function isInstagramImageUrl(value: string) {
     const instagramCdn = host.endsWith('.cdninstagram.com') || host.endsWith('.fbcdn.net') || host.endsWith('.instagram.com')
     if (!instagramCdn) return false
     const target = `${url.pathname}${url.search}`.toLowerCase()
-    if (/\\.(?:mp4|m3u8)(?:$|[?&])/i.test(target) || /\\/(?:video|videos)(?:\\/|$)/i.test(url.pathname)) return false
-    return /\\.(?:jpe?g|png|webp)(?:$|[?&])/i.test(target) || /\\bscontent[-_]/i.test(host)
+    if (/\.(?:mp4|m3u8)(?:$|[?&])/i.test(target) || /\/(?:video|videos)(?:\/|$)/i.test(url.pathname)) return false
+    return /\.(?:jpe?g|png|webp)(?:$|[?&])/i.test(target) || /\bscontent[-_]/i.test(host)
   } catch {
     return false
   }
@@ -48,24 +48,25 @@ function isInstagramImageUrl(value: string) {
 function extractFromPostData(html: string) {
   const text = decodeEscaped(html)
   const values = new Set<string>()
-  const marker = Math.min(...[
+  const markerIndexes = [
     text.indexOf('xdt_shortcode_media'),
     text.indexOf('edge_sidecar_to_children'),
     text.indexOf('carousel_media'),
     text.indexOf('image_versions2'),
-  ].filter((index) => index >= 0))
-  const context = Number.isFinite(marker) ? text.slice(marker, marker + 500_000) : ''
+  ].filter((index) => index >= 0)
+  const marker = markerIndexes.length ? Math.min(...markerIndexes) : -1
+  const context = marker >= 0 ? text.slice(marker, marker + 500_000) : ''
 
   const add = (raw: string) => {
     try {
       const url = decodeEscaped(raw)
       if (isInstagramImageUrl(url)) values.add(new URL(url).toString())
-    } catch { /* ignore */ }
+    } catch { /* ignore malformed candidates */ }
   }
 
-  for (const match of context.matchAll(/"display_url"\\s*:\\s*"([^"]+)"/gi)) add(match[1] ?? '')
-  for (const match of context.matchAll(/"src"\\s*:\\s*"([^"]+)"/gi)) add(match[1] ?? '')
-  for (const match of context.matchAll(/"url"\\s*:\\s*"([^"]+)"/gi)) add(match[1] ?? '')
+  for (const match of context.matchAll(/"display_url"\s*:\s*"([^"]+)"/gi)) add(match[1] ?? '')
+  for (const match of context.matchAll(/"src"\s*:\s*"([^"]+)"/gi)) add(match[1] ?? '')
+  for (const match of context.matchAll(/"url"\s*:\s*"([^"]+)"/gi)) add(match[1] ?? '')
 
   return [...values]
 }
@@ -116,7 +117,7 @@ async function downloadOne(url: string, index: number, dir: string): Promise<Ins
   })
   if (!response.ok || !response.body) throw new Error(`No se pudo descargar la imagen ${index}: HTTP ${response.status}.`)
   const contentType = response.headers.get('content-type') ?? 'image/jpeg'
-  if (!/^image\\//i.test(contentType)) throw new Error(`El recurso ${index} no es una imagen.`)
+  if (!/^image\//i.test(contentType)) throw new Error(`El recurso ${index} no es una imagen.`)
   const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
   const fileName = `instagram-${String(index).padStart(2, '0')}.${ext}`
   const filePath = path.join(dir, fileName)
