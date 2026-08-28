@@ -50,6 +50,7 @@ import { pvz2Commands } from './pvz2.js'
 import { officialApkV7Commands } from './official-apk-v7.js'
 import { developerV7Commands } from './developer-v7.js'
 import { telegramBridgeV7Commands } from './telegram-bridge-v7.js'
+import { sourceOverrideV7Commands } from './source-overrides-v7.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -101,6 +102,7 @@ export const commands: BotCommand[] = [
   ...officialApkV7Commands,
   ...developerV7Commands,
   ...telegramBridgeV7Commands,
+  ...sourceOverrideV7Commands,
 ]
 
 setMenuCommandProvider(() => commands)
