@@ -113,7 +113,7 @@ function pinterestSearchImageCandidates(html: string, query: string) {
         $(img).attr('data-src'),
         $(img).attr('data-lazy-src'),
         $(img).attr('src'),
-        ...String($(img).attr('srcset') ?? '').split(',').map((entry) => entry.trim().split(/\s+/)[0]).filter(Boolean),
+        ...String($(img).attr('srcset') ?? '').split(',').map((entry) => entry.trim().split(/\s+/)[0]).filter((value): value is string => Boolean(value)),
       ]
       for (const raw of rawCandidates) {
         try {
@@ -128,7 +128,6 @@ function pinterestSearchImageCandidates(html: string, query: string) {
 
   ranked.sort((a, b) => b.score - a.score || a.order - b.order)
   const urls = ranked.map((item) => item.url)
-  // Prefer query-relevant pins when Pinterest exposes descriptive metadata.
   const relevant = ranked.filter((item) => item.score > 0).map((item) => item.url)
   return [...new Set(relevant.length ? relevant : urls)].slice(0, 10)
 }
