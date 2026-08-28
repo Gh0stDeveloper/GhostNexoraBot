@@ -1,0 +1,14 @@
+{
+  "bot": "Ghost Nexora Bot",
+  "version": "0.0.7c",
+  "status": "BETA",
+  "description": "Catálogo base. El comando .channelcatalog genera el catálogo completo desde el registro real de comandos en runtime.",
+  "author": "Ghost Developer / Nexora",
+  "generatedBy": "Ghost Nexora runtime command registry",
+  "commandSource": "apps/bot/src/commands/index.ts",
+  "notes": [
+    "No contiene credenciales ni API keys.",
+    "Los permisos se derivan de las propiedades ownerOnly, staffOnly, adminOnly y groupOnly.",
+    "El catálogo publicado por .channelcatalog siempre refleja los comandos efectivos después de los overrides."
+  ]
+}
