@@ -32,11 +32,20 @@ const schema = z.object({
   EROME_COOKIE: z.string().default(''),
   WELCOME_IMAGE_URL: z.string().default(''),
   OFFICIAL_CHANNEL_URL: z.string().url().default('https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i'),
+
+  // Lempi: LEMPI_API_KEY remains supported for backwards compatibility.
+  // Prefer LEMPI_API_KEYS with comma- or newline-separated keys.
   LEMPI_API_KEY: z.string().default(''),
+  LEMPI_API_KEYS: z.string().default(''),
   LEMPI_BASE_URL: z.string().url().default('https://api.lempi.lat'),
   LEMPI_YOUTUBE_AUDIO_ENDPOINT: z.string().default('/dl/yta'),
   LEMPI_YOUTUBE_VIDEO_ENDPOINT: z.string().default('/dl/ytv'),
   LEMPI_FACEBOOK_ENDPOINT: z.string().default('/dl/facebook'),
+  LEMPI_INSTAGRAM_ENDPOINTS: z.string().default('/d/instagram,/d/ig,/d/igdl,/d/igimg,/download/instagram,/download/ig'),
+  LEMPI_PINTEREST_SEARCH_ENDPOINTS: z.string().default('/s/pin,/s/pinterest,/search/pinterest'),
+  LEMPI_HAPPYMOD_SEARCH_ENDPOINTS: z.string().default('/s/happymod,/s/hm,/search/happymod,/search/hm'),
+  LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS: z.string().default('/d/happymod,/d/hm,/d/happymoddl,/download/happymod,/download/hm'),
+
   TELEGRAM_BOT_TOKEN: z.string().default(''),
   TELEGRAM_CHANNEL_ID: z.string().default(''),
   TELEGRAM_CHANNEL_URL: z.string().default(''),
@@ -50,6 +59,10 @@ const workspaceRoot = process.cwd().endsWith(`${path.sep}apps${path.sep}bot`)
 
 const resolveFromRoot = (value: string) => (path.isAbsolute(value) ? value : path.resolve(workspaceRoot, value))
 const truthy = (value: string) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())
+const splitList = (value: string) => value
+  .split(/[\n,]+/)
+  .map((item) => item.trim())
+  .filter(Boolean)
 
 export const config = {
   botName: raw.BOT_NAME,
@@ -69,10 +82,15 @@ export const config = {
   welcomeImageUrl: raw.WELCOME_IMAGE_URL,
   officialChannelUrl: raw.OFFICIAL_CHANNEL_URL,
   lempiApiKey: raw.LEMPI_API_KEY,
+  lempiApiKeys: splitList(raw.LEMPI_API_KEYS),
   lempiBaseUrl: raw.LEMPI_BASE_URL,
   lempiYoutubeAudioEndpoint: raw.LEMPI_YOUTUBE_AUDIO_ENDPOINT,
   lempiYoutubeVideoEndpoint: raw.LEMPI_YOUTUBE_VIDEO_ENDPOINT,
   lempiFacebookEndpoint: raw.LEMPI_FACEBOOK_ENDPOINT,
+  lempiInstagramEndpoints: splitList(raw.LEMPI_INSTAGRAM_ENDPOINTS),
+  lempiPinterestSearchEndpoints: splitList(raw.LEMPI_PINTEREST_SEARCH_ENDPOINTS),
+  lempiHappyModSearchEndpoints: splitList(raw.LEMPI_HAPPYMOD_SEARCH_ENDPOINTS),
+  lempiHappyModDownloadEndpoints: splitList(raw.LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS),
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,
   telegramChannelId: raw.TELEGRAM_CHANNEL_ID,
   telegramChannelUrl: raw.TELEGRAM_CHANNEL_URL,
