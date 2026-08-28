@@ -79,6 +79,7 @@ async function sendPinterestAlbum(ctx: CommandContext, files: LempiDownloadedMed
   const parent = await ctx.socket.sendMessage(ctx.chatId, {
     album: { expectedImageCount: files.length },
   })
+  if (!parent?.key) throw new Error('No se pudo crear el álbum de Pinterest.')
 
   await Promise.all(files.map((file, index) => ctx.socket.sendMessage(ctx.chatId, {
     image: { url: file.filePath },
@@ -140,8 +141,7 @@ function happyModBody(item: Awaited<ReturnType<typeof searchHappyModDirect>>[num
 async function runHappyModSearch(ctx: CommandContext) {
   const query = requireText(ctx, `Uso: ${ctx.prefix}happymod <nombre de aplicación>`)
   const results = await searchHappyModDirect(query, 20)
-
-  await ctx.reply(`🧩 *HAPPYMOD*\n━━━━━━━━━━━━━━\n🔎 ${query}\n📦 ${results.length} resultados encontrados.\n⬇️ Selecciona una aplicación para descargar.`)
+  if (!results.length) throw new Error('No encontré APKs para esa búsqueda.')
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '🧩 HAPPYMOD · RESULTADOS',
