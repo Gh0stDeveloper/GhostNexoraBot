@@ -1,6 +1,5 @@
 import { createWriteStream } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { readFile, mkdtemp, rm, stat } from 'node:fs/promises'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
@@ -243,7 +242,7 @@ export async function searchLempiHappyMod(query: string, limit = 10): Promise<Le
   const rows = Array.isArray(payload.data?.resultados) ? payload.data.resultados : []
   return rows
     .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-    .map((item) => {
+    .map((item): LempiHappyModResult | null => {
       const name = firstString(item.nombre, item.name)
       const url = firstString(item.url, item.link)
       if (!name || !url) return null
@@ -253,9 +252,9 @@ export async function searchLempiHappyMod(query: string, limit = 10): Promise<Le
         version: firstString(item.version),
         imagen: firstString(item.imagen, item.image, item.icon),
         url,
-      } satisfies LempiHappyModResult
+      }
     })
-    .filter((item): item is LempiHappyModResult => Boolean(item))
+    .filter((item): item is LempiHappyModResult => item !== null)
     .slice(0, Math.max(1, Math.min(20, limit)))
 }
 
