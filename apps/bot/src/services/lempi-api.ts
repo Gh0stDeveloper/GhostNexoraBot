@@ -7,7 +7,6 @@ import path from 'node:path'
 import { config } from '../config.js'
 import { requestLempiJson } from './lempi-client.js'
 
-const DEFAULT_TIMEOUT_MS = 45_000
 const MEDIA_TIMEOUT_MS = 15 * 60_000
 
 export type LempiMediaKind = 'image' | 'video' | 'audio' | 'document' | 'unknown'
@@ -252,8 +251,7 @@ export async function searchLempiPinterest(query: string, limit = 20): Promise<L
   for (const endpoint of config.lempiPinterestSearchEndpoints) {
     try {
       const payload = await requestLempiJson<unknown>(endpoint, { q: query, limit })
-      const records = collectRecords(payload)
-      const normalized = records
+      const normalized = collectRecords(payload)
         .map(normalizePinterest)
         .filter((item): item is LempiPinterestResult => Boolean(item))
         .slice(0, Math.max(1, Math.min(20, limit)))
@@ -292,13 +290,13 @@ export async function downloadLempiInstagram(sourceUrl: string, imagesOnly = fal
       const payload = await requestLempiJson<unknown>(endpoint, { url: sourceUrl }, { timeoutMs: 90_000 })
       const records = collectRecords(payload)
       const normalized = records.map(normalizeInstagram).filter((item): item is LempiInstagramResult => Boolean(item))
-      const urls = mediaUrls(normalized.length ? normalized : payload, imagesOnly)
-      if (!urls.length) {
-        const direct = normalized.flatMap((item) => [item.image, item.video, item.download].filter(Boolean) as string[])
-        if (direct.length) return downloadLempiMediaList(direct, imagesOnly ? 'image' : undefined, 'instagram')
-        continue
-      }
-      return downloadLempiMediaList(urls, imagesOnly ? 'image' : undefined, 'instagram')
+      const direct = normalized.flatMap((item) => [
+        ...(imagesOnly ? [item.image, item.download] : [item.video, item.image, item.download]),
+      ].filter(Boolean) as string[])
+      if (direct.length) return downloadLempiMediaList(direct, imagesOnly ? 'image' : undefined, 'instagram')
+
+      const urls = mediaUrls(payload, imagesOnly)
+      if (urls.length) return downloadLempiMediaList(urls, imagesOnly ? 'image' : undefined, 'instagram')
     } catch (error) {
       lastError = error
     }
@@ -376,11 +374,14 @@ function isZipLikeApk(buffer: Buffer) {
 async function downloadLempiMediaList(urls: string[], forcedKind?: LempiMediaKind, baseName = 'media') {
   const results: LempiDownloadedMedia[] = []
   for (const [index, url] of [...new Set(urls)].slice(0, 12).entries()) {
-    const result = await downloadLempiMedia(url, {
-      kind: forcedKind,
-      baseName: `${baseName}-${index + 1}`,
-    })
-    results.push(result)
+    try {
+      results.push(await downloadLempiMedia(url, {
+        kind: forcedKind,
+        baseName: `${baseName}-${index + 1}`,
+      }))
+    } catch {
+      // A broken candidate should not cancel the rest of a carousel/media post.
+    }
   }
   if (!results.length) throw new Error('No se pudo descargar ningún archivo.')
   return results
