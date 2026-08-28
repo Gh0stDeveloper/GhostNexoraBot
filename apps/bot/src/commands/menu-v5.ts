@@ -6,6 +6,7 @@ import { privateAccessStatus } from '../services/private-access.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
+import { mediaDevV6Commands } from './media-dev-v6.js'
 
 const sectionOrder = [
   'knowledge', 'youtube', 'downloads', 'general', 'profile', 'progress', 'economy', 'rpg', 'games', 'collection',
@@ -117,4 +118,7 @@ async function menu(ctx: CommandContext) {
   })
 }
 
-export const menuV5Commands: BotCommand[] = [{ name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos.', handler: menu }]
+export const menuV5Commands: BotCommand[] = [
+  ...mediaDevV6Commands,
+  { name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos.', handler: menu },
+]
