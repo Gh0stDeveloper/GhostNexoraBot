@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
