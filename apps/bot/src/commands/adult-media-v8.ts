@@ -9,9 +9,10 @@ async function add(ctx: CommandContext) {
   const command = ctx.args[0]
   if (!command || !adultMediaCommandAllowed(command)) throw new Error(`Uso: ${ctx.prefix}adultgif add <comando> · responde al GIF/video no explícito. Máximo 10 medios por comando.`)
   const media = await downloadMessageMedia(ctx.message)
-  if (!media || !['document', 'unknown', 'video', 'image'].includes(media.kind)) throw new Error('Responde al GIF/video/archivo de reacción que deseas guardar.')
-  if (!/^video\//i.test(media.mimeType ?? '') && !/gif/i.test(media.mimeType ?? '') && !/^image\//i.test(media.mimeType ?? '') && media.kind !== 'document' && media.kind !== 'unknown') throw new Error('Formato no reconocido.')
-  const saved = await addAdultReactionMedia(command, media.buffer, media.mimeType ?? 'video/mp4', ctx.sender, media.fileName)
+  if (!media || (media.kind !== 'video' && media.kind !== 'image')) throw new Error('Responde al GIF/video/archivo de reacción que deseas guardar.')
+  const mimetype = media.mimetype ?? 'video/mp4'
+  if (!/^video\//i.test(mimetype) && !/gif/i.test(mimetype) && !/^image\//i.test(mimetype)) throw new Error('Formato no reconocido.')
+  const saved = await addAdultReactionMedia(command, media.buffer, mimetype, ctx.sender, media.fileName ?? undefined)
   await ctx.reply(`✅ *MEDIO GUARDADO*\n━━━━━━━━━━━━━━\nComando: *${saved.command}*\nID: *${saved.id}*\nGuardados: *${saved.count}/10*`)
 }
 async function list(ctx: CommandContext) { requireStaff(ctx); const rows = listAdultReactionMedia(ctx.args[0]); if (!rows.length) throw new Error('No hay medios guardados para esa reacción.'); await ctx.reply(`🎞️ *MEDIOS DE REACCIÓN*\n━━━━━━━━━━━━━━\n${(rows as any[]).map((r) => `#${r.id} · ${r.command} · ${r.label || r.mimeType}`).join('\n')}`) }
@@ -20,5 +21,5 @@ async function clear(ctx: CommandContext) { requireStaff(ctx); const command = c
 async function help(ctx: CommandContext) { requireStaff(ctx); await ctx.reply(`🎞️ *ADULT REACTION MEDIA*\n━━━━━━━━━━━━━━\n${ctx.prefix}adultgif add <comando> → responde al archivo no explícito\n${ctx.prefix}adultgif list [comando]\n${ctx.prefix}adultgif remove <id>\n${ctx.prefix}adultgif clear <comando>\n\nMáximo: *10* medios por comando.`) }
 
 export const adultMediaV8Commands: BotCommand[] = [
-  { name: 'adultgif', aliases: ['reactiongif', 'adultmedia'], category: 'adult', staffOnly: true, description: 'Administra medios de reacción 18+ no explícitos por comando.', usage: 'adultgif add|list|remove|clear', handler: async (ctx) => { const action = (ctx.args[0] || 'help').toLowerCase(); if (action === 'add') return add(ctx); if (action === 'list') return list(ctx); if (action === 'remove') return remove(ctx); if (action === 'clear') return clear(ctx); return help(ctx) } },
+  { name: 'adultgif', aliases: ['reactiongif', 'adultmedia'], category: 'adult', staffOnly: true, description: 'Administra medios de reacción 18+ no explícitos por comando.', usage: 'adultgif add|list|remove|clear', handler: async (ctx) => { const action = (ctx.args[0] || 'help').toLowerCase(); if (action === 'add') { await add(ctx); return }; if (action === 'list') { await list(ctx); return }; if (action === 'remove') { await remove(ctx); return }; if (action === 'clear') { await clear(ctx); return }; await help(ctx) } },
 ]
