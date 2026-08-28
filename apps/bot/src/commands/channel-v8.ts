@@ -13,7 +13,7 @@ async function channelInfo(ctx: CommandContext) {
     '━━━━━━━━━━━━━━',
     `Nombre: *${metadata.name ?? 'N/D'}*`,
     `JID: *${jid}*`,
-    `Suscriptores: *${metadata.subscribers ?? metadata.subscriberCount ?? 'N/D'}*`,
+    `Suscriptores: *${metadata.subscribers ?? 'N/D'}*`,
     `Verificado: *${metadata.verification ? 'Sí' : 'N/D'}*`,
     `URL: ${config.officialChannelUrl}`,
   ].join('\n'))
@@ -58,40 +58,14 @@ async function channelReact(ctx: CommandContext) {
   await ctx.reply(`✅ Reacción *${emoji}* aplicada.`)
 }
 
-async function channelName(ctx: CommandContext) {
-  requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channelname <nombre>`)
-  const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'name', value); await ctx.reply('✅ Nombre del canal actualizado.')
-}
-
-async function channelDescription(ctx: CommandContext) {
-  requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channeldescription <descripción>`)
-  const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'description', value); await ctx.reply('✅ Descripción del canal actualizada.')
-}
+async function channelName(ctx: CommandContext) { requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channelname <nombre>`); const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'name', value); await ctx.reply('✅ Nombre del canal actualizado.') }
+async function channelDescription(ctx: CommandContext) { requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channeldescription <descripción>`); const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'description', value); await ctx.reply('✅ Descripción del canal actualizada.') }
 
 async function channelCatalog(ctx: CommandContext) {
   requireChannelStaff(ctx)
   const { jid } = await resolveOfficialChannel(ctx.socket)
-  const catalog = effectiveCommands().map(({ command, tokens }) => ({
-    command: command.name,
-    aliases: command.aliases ?? [],
-    tokens,
-    category: command.category,
-    description: command.description,
-    usage: command.usage ?? null,
-    permissions: {
-      ownerOnly: Boolean(command.ownerOnly), staffOnly: Boolean(command.staffOnly),
-      adminOnly: Boolean(command.adminOnly), groupOnly: Boolean(command.groupOnly),
-    },
-  }))
-  const payload = JSON.stringify({
-    bot: 'Ghost Nexora Bot',
-    version: '0.0.7c',
-    status: 'BETA · EN CONSTRUCCIÓN',
-    generatedAt: new Date().toISOString(),
-    officialChannelUrl: config.officialChannelUrl,
-    commandCount: catalog.length,
-    commands: catalog,
-  }, null, 2)
+  const catalog = effectiveCommands().map(({ command, tokens }) => ({ command: command.name, aliases: command.aliases ?? [], tokens, category: command.category, description: command.description, usage: command.usage ?? null, permissions: { ownerOnly: Boolean(command.ownerOnly), staffOnly: Boolean(command.staffOnly), adminOnly: Boolean(command.adminOnly), groupOnly: Boolean(command.groupOnly) } }))
+  const payload = JSON.stringify({ bot: 'Ghost Nexora Bot', version: '0.0.7c', status: 'BETA · EN CONSTRUCCIÓN', generatedAt: new Date().toISOString(), officialChannelUrl: config.officialChannelUrl, commandCount: catalog.length, commands: catalog }, null, 2)
   await publishChannelText(ctx.socket, jid, `📚 *CATÁLOGO COMPLETO DE GHOST NEXORA BOT*\n\n${payload}`)
   await ctx.reply(`✅ Catálogo JSON enviado al canal. Comandos incluidos: *${catalog.length}*.`)
 }
