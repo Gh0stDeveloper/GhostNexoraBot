@@ -1,6 +1,17 @@
 import type { BotCommand } from '../types.js'
-import { downloadAnimeEpisode, getAnimeEpisodes, getAnimeSources, searchAnime } from '../services/anime.js'
+import {
+  downloadAnimeEpisode,
+  getAnimeEpisodes,
+  getAnimeEpisodesBySeason,
+  getAnimeSeasons,
+  getAnimeSources,
+  searchAnime,
+} from '../services/anime.js'
+import { sendCarousel } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+
+const SEARCH_PAGE_SIZE = 5
+const EPISODE_PAGE_SIZE = 8
 
 const formatBytes = (bytes: number) => {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
@@ -9,47 +20,186 @@ const formatBytes = (bytes: number) => {
 
 const sourceQuality = (quality: string) => quality && quality !== 'unknown' ? quality : 'calidad disponible'
 
+const clampPage = (page: number, total: number) => Math.max(1, Math.min(total, Number.isInteger(page) ? page : 1))
+
+async function animeSearchCarousel(ctx: Parameters<NonNullable<BotCommand['handler']>>[0], query: string, page: number) {
+  const allResults = await searchAnime(query, 20)
+  if (!allResults.length) throw new Error('No encontré ese anime en las fuentes disponibles.')
+
+  const totalPages = Math.max(1, Math.ceil(allResults.length / SEARCH_PAGE_SIZE))
+  const currentPage = clampPage(page, totalPages)
+  const visible = allResults.slice((currentPage - 1) * SEARCH_PAGE_SIZE, currentPage * SEARCH_PAGE_SIZE)
+
+  const cards = visible.map((item, index) => ({
+    title: `${(currentPage - 1) * SEARCH_PAGE_SIZE + index + 1}. ${item.title}`.slice(0, 120),
+    body: `ID: ${item.id}\n\nUsa los botones para explorar temporadas, episodios o la ficha del anime.`,
+    imageUrl: item.image,
+    buttons: [
+      { type: 'reply' as const, text: 'Temporadas', id: `${ctx.prefix}animeseasons ${item.id}` },
+      { type: 'reply' as const, text: 'Episodios', id: `${ctx.prefix}animeeps ${item.id}` },
+      { type: 'reply' as const, text: 'Ficha', id: `${ctx.prefix}animeinfo ${item.id}` },
+    ],
+  }))
+
+  if (totalPages > 1) {
+    const nextPage = currentPage < totalPages ? currentPage + 1 : 1
+    cards.push({
+      title: currentPage < totalPages ? 'Siguiente tanda' : 'Volver al inicio',
+      body: `Página ${currentPage}/${totalPages}. Mantén el catálogo en tandas pequeñas para evitar saturar WhatsApp.`,
+      imageUrl: undefined,
+      buttons: [{ type: 'reply' as const, text: currentPage < totalPages ? 'Siguiente' : 'Primera', id: `${ctx.prefix}anime ${query} ${nextPage}` }],
+    })
+  }
+
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: 'ANIME · RESULTADOS',
+    body: `Búsqueda: *${query}*\nPágina ${currentPage}/${totalPages} · ${allResults.length} resultados`,
+    footer: 'Ghost Nexora Bot · Selecciona una acción',
+    cards,
+  })
+}
+
+async function animeEpisodesCarousel(ctx: Parameters<NonNullable<BotCommand['handler']>>[0], animeId: string, seasonNumber?: number, page = 1) {
+  const seasons = await getAnimeSeasons(animeId)
+  if (!seasons.length) throw new Error('No pude obtener las temporadas disponibles.')
+
+  if (seasonNumber === undefined && seasons.length > 1) {
+    await sendSeasonCarousel(ctx, animeId, seasons)
+    return
+  }
+
+  const selectedSeason = seasonNumber ?? seasons[0]!
+  if (!seasons.includes(selectedSeason)) throw new Error(`La temporada ${selectedSeason} no está disponible.`)
+
+  const episodes = await getAnimeEpisodesBySeason(animeId, selectedSeason)
+  if (!episodes.length) throw new Error(`No encontré episodios para la temporada ${selectedSeason}.`)
+
+  const totalPages = Math.max(1, Math.ceil(episodes.length / EPISODE_PAGE_SIZE))
+  const currentPage = clampPage(page, totalPages)
+  const visible = episodes.slice((currentPage - 1) * EPISODE_PAGE_SIZE, currentPage * EPISODE_PAGE_SIZE)
+
+  const cards = visible.map((episode) => ({
+    title: `Episodio ${episode.number}`,
+    body: `Temporada: *${selectedSeason}*\nEpisodio: *${episode.number}*\n\nPulsa descargar para obtenerlo.`,
+    buttons: [{
+      type: 'reply' as const,
+      text: 'Descargar',
+      id: `${ctx.prefix}animedl ${animeId} ${episode.number} ${selectedSeason}`,
+    }],
+  }))
+
+  const seasonIndex = seasons.indexOf(selectedSeason)
+  if (currentPage > 1) {
+    cards.push({
+      title: 'Página anterior',
+      body: `Episodios ${((currentPage - 2) * EPISODE_PAGE_SIZE) + 1}-${(currentPage - 1) * EPISODE_PAGE_SIZE}.`,
+      imageUrl: undefined,
+      buttons: [{ type: 'reply' as const, text: 'Anterior', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage - 1}` }],
+    })
+  }
+  if (currentPage < totalPages) {
+    cards.push({
+      title: 'Siguiente tanda',
+      body: `Episodios ${currentPage * EPISODE_PAGE_SIZE + 1}-${Math.min(episodes.length, (currentPage + 1) * EPISODE_PAGE_SIZE)}.`,
+      imageUrl: undefined,
+      buttons: [{ type: 'reply' as const, text: 'Siguiente', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage + 1}` }],
+    })
+  }
+  if (seasons.length > 1) {
+    cards.push({
+      title: 'Temporadas',
+      body: `Temporada actual: ${selectedSeason}\nTemporadas disponibles: ${seasons.join(', ')}`,
+      imageUrl: undefined,
+      buttons: [{ type: 'reply' as const, text: 'Cambiar temporada', id: `${ctx.prefix}animeseasons ${animeId}` }],
+    })
+  }
+
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: 'ANIME · EPISODIOS',
+    body: `Temporada *${selectedSeason}* · Página ${currentPage}/${totalPages}\n${episodes.length} episodios disponibles`,
+    footer: `Ghost Nexora Bot · ${seasons.length} ${seasons.length === 1 ? 'temporada' : 'temporadas'}`,
+    cards: cards.slice(0, 12),
+  })
+
+  // Evita una variable sin uso cuando solo existe una temporada y conserva el cálculo útil para futuras vistas.
+  void seasonIndex
+}
+
+async function sendSeasonCarousel(ctx: Parameters<NonNullable<BotCommand['handler']>>[0], animeId: string, seasons: number[]) {
+  const cards = seasons.slice(0, 12).map((season) => ({
+    title: `Temporada ${season}`,
+    body: `Explora los episodios disponibles de la temporada ${season}.`,
+    buttons: [{ type: 'reply' as const, text: 'Ver episodios', id: `${ctx.prefix}animeeps ${animeId} ${season} 1` }],
+  }))
+
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: 'ANIME · TEMPORADAS',
+    body: `Temporadas disponibles: *${seasons.join(', ')}*\nSelecciona una para abrir sus episodios.`,
+    footer: 'Ghost Nexora Bot · Navegación por temporadas',
+    cards,
+  })
+}
+
 export const animeDownloadCommands: BotCommand[] = [
   {
     name: 'anime',
     aliases: ['animes', 'buscaranime'],
     category: 'downloads',
-    description: 'Busca un anime en varias fuentes y muestra sus identificadores.',
-    usage: 'anime <nombre>',
+    description: 'Busca anime en varias fuentes y muestra resultados en carrusel paginado.',
+    usage: 'anime <nombre> [página]',
     async handler(ctx) {
-      const query = ctx.argText.trim()
-      if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}anime <nombre>`)
-
-      await ctx.reply(`🔎 *ANIME*\n━━━━━━━━━━━━━━\nBuscando: *${query}*...`)
-      const results = await searchAnime(query, 8)
-      if (!results.length) throw new Error('No encontré ese anime en las fuentes disponibles.')
-
-      const lines = results.map((item, index) => `${index + 1}. *${item.title}*\nID: \`${item.id}\``)
-      await ctx.reply(
-        `📺 *RESULTADOS*\n━━━━━━━━━━━━━━\n${lines.join('\n\n')}\n\n` +
-        `Para ver episodios:\n\`${ctx.prefix}animeeps <ID>\``,
-      )
+      const pageArg = ctx.args.at(-1)
+      const hasPage = Boolean(pageArg && /^\d+$/.test(pageArg))
+      const page = hasPage ? Number(pageArg) : 1
+      const query = hasPage ? ctx.args.slice(0, -1).join(' ').trim() : ctx.argText.trim()
+      if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}anime <nombre> [página]`)
+      await ctx.reply(`🔎 *ANIME*\n━━━━━━━━━━━━━━\nBuscando *${query}*...`)
+      await animeSearchCarousel(ctx, query, page)
+    },
+  },
+  {
+    name: 'animeseasons',
+    aliases: ['temporadasanime', 'animeseason'],
+    category: 'downloads',
+    description: 'Muestra las temporadas disponibles de un anime.',
+    usage: 'animeseasons <id>',
+    async handler(ctx) {
+      const animeId = ctx.args[0]?.trim()
+      if (!animeId) throw new Error(`Uso: ${ctx.prefix}animeseasons <id>`)
+      await animeEpisodesCarousel(ctx, animeId)
     },
   },
   {
     name: 'animeeps',
     aliases: ['episodiosanime', 'animeepisodes'],
     category: 'downloads',
-    description: 'Lista los episodios disponibles de un anime.',
-    usage: 'animeeps <id>',
+    description: 'Muestra episodios paginados; si hay varias temporadas, muestra primero sus temporadas.',
+    usage: 'animeeps <id> [temporada] [página]',
+    async handler(ctx) {
+      const animeId = ctx.args[0]?.trim()
+      if (!animeId) throw new Error(`Uso: ${ctx.prefix}animeeps <id> [temporada] [página]`)
+      const seasonArg = ctx.args[1]
+      const pageArg = ctx.args[2]
+      const selectedSeason = seasonArg && /^\d+$/.test(seasonArg) ? Number(seasonArg) : undefined
+      const page = pageArg && /^\d+$/.test(pageArg) ? Number(pageArg) : 1
+      await animeEpisodesCarousel(ctx, animeId, selectedSeason, page)
+    },
+  },
+  {
+    name: 'animeinfo',
+    aliases: ['fichaanime', 'animeid'],
+    category: 'downloads',
+    description: 'Muestra la ficha mínima de un anime seleccionado.',
+    usage: 'animeinfo <id>',
     async handler(ctx) {
       const animeId = ctx.argText.trim()
-      if (!animeId) throw new Error(`Uso: ${ctx.prefix}animeeps <id>`)
-
-      await ctx.reply(`📺 *ANIME*\n━━━━━━━━━━━━━━\nCargando episodios...`)
+      if (!animeId) throw new Error(`Uso: ${ctx.prefix}animeinfo <id>`)
+      const seasons = await getAnimeSeasons(animeId)
       const episodes = await getAnimeEpisodes(animeId)
-      if (!episodes.length) throw new Error('No pude obtener episodios para ese anime.')
-
-      const compact = episodes.slice(0, 60).map((episode) =>
-        `• Episodio *${episode.number}* → \`${ctx.prefix}animedl ${animeId} ${episode.number}\``,
+      await ctx.reply(
+        `📺 *ANIME*\n━━━━━━━━━━━━━━\nID: \`${animeId}\`\nTemporadas: *${seasons.length}*\nEpisodios: *${episodes.length}*\n\n` +
+        `Usa *Temporadas* o *Episodios* para continuar.`,
       )
-      const extra = episodes.length > 60 ? `\n\n... y ${episodes.length - 60} episodios más.` : ''
-      await ctx.reply(`🎬 *EPISODIOS*\n━━━━━━━━━━━━━━\n${compact.join('\n')}${extra}`)
     },
   },
   {
@@ -57,15 +207,18 @@ export const animeDownloadCommands: BotCommand[] = [
     aliases: ['animedownload', 'anime-descargar'],
     category: 'downloads',
     description: 'Descarga un episodio de anime desde una fuente disponible.',
-    usage: 'animedl <id> <episodio>',
+    usage: 'animedl <id> <episodio> [temporada]',
     async handler(ctx) {
       const animeId = ctx.args[0]?.trim()
       const episodeNumber = Number(ctx.args[1])
+      const selectedSeason = ctx.args[2] && /^\d+$/.test(ctx.args[2]) ? Number(ctx.args[2]) : undefined
       if (!animeId || !Number.isInteger(episodeNumber) || episodeNumber < 1) {
-        throw new Error(`Uso: ${ctx.prefix}animedl <id> <episodio>`)
+        throw new Error(`Uso: ${ctx.prefix}animedl <id> <episodio> [temporada]`)
       }
 
-      const episodes = await getAnimeEpisodes(animeId)
+      const episodes = selectedSeason === undefined
+        ? await getAnimeEpisodes(animeId)
+        : await getAnimeEpisodesBySeason(animeId, selectedSeason)
       const episode = episodes.find((item) => item.number === episodeNumber)
       if (!episode) throw new Error(`No encontré el episodio ${episodeNumber}.`)
 
@@ -73,7 +226,7 @@ export const animeDownloadCommands: BotCommand[] = [
       if (!sources.length) throw new Error('No encontré una fuente de vídeo disponible para ese episodio.')
 
       const source = sources[0]!
-      await ctx.reply(`⬇️ *ANIME*\n━━━━━━━━━━━━━━\nEpisodio: *${episodeNumber}*\nCalidad: *${sourceQuality(source.quality)}*\nDescargando...`)
+      await ctx.reply(`⬇️ *ANIME*\n━━━━━━━━━━━━━━\nTemporada: *${episode.season}*\nEpisodio: *${episodeNumber}*\nCalidad: *${sourceQuality(source.quality)}*\nDescargando...`)
 
       const result = await downloadAnimeEpisode(source, animeId, episodeNumber)
       try {
@@ -81,7 +234,7 @@ export const animeDownloadCommands: BotCommand[] = [
           document: { url: result.filePath },
           fileName: result.fileName,
           mimetype: 'video/mp4',
-          caption: `🎬 *ANIME*\nEpisodio: *${episodeNumber}*\nCalidad: *${sourceQuality(source.quality)}*\nTamaño: *${formatBytes(result.size)}*`,
+          caption: `🎬 *ANIME*\nTemporada: *${episode.season}*\nEpisodio: *${episodeNumber}*\nCalidad: *${sourceQuality(source.quality)}*\nTamaño: *${formatBytes(result.size)}*`,
         }, { quoted: ctx.message })
         recordSubbotDownload(ctx.instanceId, result.size)
       } finally {
