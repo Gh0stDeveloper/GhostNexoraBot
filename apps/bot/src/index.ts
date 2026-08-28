@@ -12,12 +12,14 @@ import { economy } from './services/economy.js'
 import { economyV2 } from './services/economy-v2.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
-import { handleKickSticker, maybeSendHumanSticker } from './services/human-stickers.js'
+import { handleKickSticker } from './services/human-stickers.js'
+import { maybeHumanInteraction } from './services/human-behavior-v7.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { observeGroupActivity } from './services/progression-v4.js'
 import { startAutomationScheduler } from './services/automation-v4.js'
 import { handleV4Api } from './services/api-v4.js'
-import { getMessageText, getSender, unwrapMessage } from './utils/message.js'
+import { startTelegramBridge } from './services/telegram-bridge-v7.js'
+import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 
@@ -135,42 +137,6 @@ function startHealthServer() {
   server.listen(config.healthPort, '127.0.0.1', () => logger.info({ port: config.healthPort }, 'health/control/api server listening'))
 }
 
-function pick<T>(values: readonly T[]) { return values[Math.floor(Math.random() * values.length)]! }
-
-async function maybeAutoReact(socket: Awaited<ReturnType<typeof createSocket>>['socket'], message: Parameters<CommandRouter['handle']>[1]) {
-  if (!config.autoReact || message.key.fromMe || !message.key.remoteJid) return
-  const text = getMessageText(message).toLowerCase().trim()
-  let emoji: string | null = null
-  const rules: Array<[RegExp, readonly string[]]> = [
-    [/(?:^|\s):v(?:\s|$)/i, ['🗿', '😂', '😏', '👻']],
-    [/\b(feliz cumple|felicidades|happy birthday)\b/, ['🎂', '🎉', '🥳', '🎈']],
-    [/\b(buenos dias|buen día|buen dia)\b/, ['☀️', '🌤️', '👋', '✨']],
-    [/\b(buenas noches|dulces sueños)\b/, ['🌙', '🌌', '😴', '✨']],
-    [/^(hola|holi|holaa+|hey|buenas|qué tal|que tal)\b/, ['👋', '😊', '✨', '🤝', '👻']],
-    [/\b(gracias|muchas gracias|thank you|thanks|ty)\b/, ['❤️', '🫶', '💙', '💜', '✨']],
-    [/\b(jaja+|jeje+|jiji+|xd+|lol|lmao|ksks+)\b/, ['😂', '🤣', '😹', '💀', '😆']],
-    [/\b(te amo|te quiero|love you|ily|amor)\b/, ['❤️', '💞', '🥰', '💕', '❤️‍🔥']],
-    [/\b(triste|ando mal|estoy mal|llorar|lloro|sad)\b/, ['🥺', '😢', '💙', '🫂']],
-    [/\b(increíble|increible|genial|brutal|épico|epico|wow|woow+)\b/, ['🤯', '🔥', '✨', '👏', '💯']],
-    [/\b(gol|ganamos|victoria|winner|campeón|campeon)\b/, ['🏆', '🔥', '🎉', '👏']],
-    [/\b(música|musica|canción|cancion|rolita|song)\b/, ['🎵', '🎧', '🎶', '🔥']],
-    [/\b(programar|programación|programacion|código|codigo|python|javascript|typescript|api)\b/, ['💻', '🧠', '⚙️', '🚀']],
-    [/\b(nexora|bot|ghost developer|ghostnexora)\b/, ['👻', '🤖', '⚡', '✨']],
-    [/\b(hambre|comida|pizza|tacos|cenar|desayuno)\b/, ['😋', '🍕', '🌮', '🍽️']],
-    [/\b(hermos[oa]|bonit[oa]|lind[oa]|cute|precioso)\b/, ['🥰', '💖', '✨', '😍']],
-    [/\b(buen trabajo|bien hecho|good job|excelente)\b/, ['👏', '✅', '🔥', '💯']],
-    [/\b(ya quedó|funciona|funcionó|funciono|resuelto|solucionado)\b/, ['✅', '🎉', '🔥', '🚀']],
-  ]
-  for (const [pattern, emojis] of rules) if (pattern.test(text)) { emoji = pick(emojis); break }
-  if (!emoji && !text) {
-    const content = unwrapMessage(message.message)
-    if (content?.imageMessage) emoji = pick(['📸', '✨', '🔥', '💫'])
-    else if (content?.videoMessage) emoji = pick(['🎬', '🔥', '👏', '✨'])
-    else if (content?.stickerMessage) emoji = pick(['😄', '✨', '👻', '😂'])
-  }
-  if (emoji) await socket.sendMessage(message.key.remoteJid, { react: { text: emoji, key: message.key } }).catch(() => undefined)
-}
-
 async function routeMessage(socket: Awaited<ReturnType<typeof createSocket>>['socket'], message: Parameters<CommandRouter['handle']>[1], router: CommandRouter) {
   await observeMessageIdentity(socket, message).catch((error) => logger.debug({ error }, 'identity observation skipped'))
   const chatId = message.key.remoteJid
@@ -182,10 +148,7 @@ async function routeMessage(socket: Awaited<ReturnType<typeof createSocket>>['so
   if (await handleKickSticker(socket, message).catch(() => false)) return
   if (await moderateIncomingV2(socket, message)) return
   const handled = await router.handle(socket, message)
-  if (!handled) {
-    await maybeAutoReact(socket, message)
-    await maybeSendHumanSticker(socket, message).catch(() => false)
-  }
+  if (!handled) await maybeHumanInteraction(socket, message).catch(() => false)
 }
 
 async function connect() {
@@ -229,6 +192,7 @@ await settings.init()
 startTempCleanup()
 startHealthServer()
 startAutomationScheduler(() => mainSocket)
+void startTelegramBridge().then((enabled) => { if (enabled) logger.info('Telegram bridge started') }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
 subbotManager.setMessageHandler(async (socket, message, record) => {
   let router = subbotRouters.get(record.id)
   if (!router) { router = new CommandRouter(commands, { instanceId: record.id, instanceOwnerJid: record.ownerJid }); subbotRouters.set(record.id, router) }
