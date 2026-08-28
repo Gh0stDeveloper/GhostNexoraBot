@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js'
 import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
 import { settings } from './settings.js'
+import { groupControlsV9 } from '../services/group-controls-v9.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -75,6 +76,18 @@ export class CommandRouter {
 
     const reply = (replyText: string) => socket.sendMessage(chatId, { text: replyText }, { quoted: message })
     const react = (emoji: string) => socket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
+
+    let senderIsGroupAdmin = false
+    if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner) {
+      const metadata = await socket.groupMetadata(chatId).catch(() => null)
+      const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
+      senderIsGroupAdmin = Boolean(senderParticipant?.admin)
+    }
+
+    if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner && !senderIsGroupAdmin) {
+      // Deliberately consume the message so the human-response layer is not invoked.
+      return true
+    }
 
     if (!text.startsWith(prefix)) {
       const response = text.toLowerCase()
@@ -155,7 +168,8 @@ export class CommandRouter {
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
         const botCandidates = selfCandidates.map(normalizeJid).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
-        const senderIsAdmin = Boolean(senderParticipant?.admin) || isBotStaff || isSubbotOwner
+        senderIsGroupAdmin = senderIsGroupAdmin || Boolean(senderParticipant?.admin)
+        const senderIsAdmin = senderIsGroupAdmin || isBotStaff || isSubbotOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
         if (command.adminOnly && !senderIsAdmin) {
           await reply('🛡️ *PERMISO DE ADMIN*\n━━━━━━━━━━━━━━\nNecesitas ser administrador del grupo, staff global o dueño de esta instancia.')
