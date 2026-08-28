@@ -15,21 +15,42 @@ export const groupControlsV9Commands: BotCommand[] = [
     category: 'groups',
     groupOnly: true,
     adminOnly: true,
-    description: 'Detecta mensajes de ver una vez y avisa que el modo está activo; no copia ni republica el contenido efímero.',
+    description: 'Cuando está activo, el bot descarga fotos/videos “ver una vez” y los reenvía al grupo como media normal.',
     usage: 'antiviewonce on|off|status',
     async handler(ctx) {
       requireGroupAdmin(ctx)
       const action = (ctx.args[0] ?? 'status').toLowerCase()
-      if (!['on', 'off', 'status', 'activar', 'desactivar'].includes(action)) throw new Error(`Uso: ${ctx.prefix}antiviewonce on|off|status`)
+      if (!['on', 'off', 'status', 'activar', 'desactivar'].includes(action)) {
+        throw new Error(`Uso: ${ctx.prefix}antiviewonce on|off|status`)
+      }
+
       if (action === 'status') {
-        await ctx.reply(`👁️ *ANTI VER UNA VEZ*\n━━━━━━━━━━━━━━\nEstado: *${groupControlsV9.get(ctx.chatId).antiViewOnce ? 'ACTIVO' : 'INACTIVO'}*`)
+        const on = groupControlsV9.get(ctx.chatId).antiViewOnce
+        await ctx.reply([
+          '👁️ *ANTI VER UNA VEZ*',
+          '━━━━━━━━━━━━━━',
+          `Estado: *${on ? 'ACTIVO' : 'INACTIVO'}*`,
+          on
+            ? 'Las fotos y videos “ver una vez” se reenvían al chat como media normal.'
+            : 'El bot no procesa mensajes “ver una vez”.',
+        ].join('\n'))
         return
       }
+
       const enabled = action === 'on' || action === 'activar'
       groupControlsV9.setAntiViewOnce(ctx.chatId, enabled)
       await ctx.reply(enabled
-        ? '👁️ *ANTI VER UNA VEZ ACTIVADO*\n━━━━━━━━━━━━━━\nEl bot detectará mensajes de “ver una vez” en este grupo y mostrará un aviso.\n\nPor privacidad, el contenido efímero no se copia ni se republica automáticamente.'
-        : '👁️ *ANTI VER UNA VEZ DESACTIVADO*\n━━━━━━━━━━━━━━\nEl bot dejará de procesar avisos relacionados con “ver una vez”.')
+        ? [
+            '👁️ *ANTI VER UNA VEZ ACTIVADO*',
+            '━━━━━━━━━━━━━━',
+            'Cuando alguien envíe una foto o video “ver una vez”, el bot lo descargará',
+            'y lo publicará de nuevo en el grupo como imagen o video normal.',
+          ].join('\n')
+        : [
+            '👁️ *ANTI VER UNA VEZ DESACTIVADO*',
+            '━━━━━━━━━━━━━━',
+            'El bot dejará de republicar mensajes “ver una vez”.',
+          ].join('\n'))
     },
   },
   {
@@ -43,7 +64,9 @@ export const groupControlsV9Commands: BotCommand[] = [
     async handler(ctx) {
       requireGroupAdmin(ctx)
       const action = (ctx.args[0] ?? 'status').toLowerCase()
-      if (!['on', 'off', 'status', 'activar', 'desactivar'].includes(action)) throw new Error(`Uso: ${ctx.prefix}botrestricted on|off|status`)
+      if (!['on', 'off', 'status', 'activar', 'desactivar'].includes(action)) {
+        throw new Error(`Uso: ${ctx.prefix}botrestricted on|off|status`)
+      }
       if (action === 'status') {
         await ctx.reply(`🔇 *MODO RESTRINGIDO*\n━━━━━━━━━━━━━━\nEstado: *${groupControlsV9.get(ctx.chatId).restrictedMode ? 'ACTIVO' : 'INACTIVO'}*\n\n${groupControlsV9.get(ctx.chatId).restrictedMode ? 'Los comandos de usuarios normales son ignorados sin respuesta.' : 'Todos los usuarios pueden usar los comandos permitidos.'}`)
         return
