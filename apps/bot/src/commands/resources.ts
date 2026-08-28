@@ -1,6 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
-import { downloadFdroidApk, downloadGitHubRepo, downloadGoogleDrive, searchAnime, searchFdroid, searchManga } from '../services/resources.js'
+import { downloadFdroidApk, downloadGitHubRepo, downloadGoogleDrive, searchFdroid, searchManga } from '../services/resources.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
@@ -52,22 +52,6 @@ export const resourceCommands: BotCommand[] = [
         await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName.endsWith('.apk') ? file.fileName : `${file.fileName}.apk`, mimetype: 'application/vnd.android.package-archive', caption: `📦 APK de F-Droid · ${size(file.size)}\nVerifica permisos y firma antes de instalar.` }, { quoted: ctx.message })
         recordSubbotDownload(ctx.instanceId, file.size)
       } finally { await file.cleanup() }
-    },
-  },
-  {
-    name: 'anime', aliases: ['animesearch'], category: 'general', description: 'Busca información de anime mediante Jikan/MyAnimeList.', usage: 'anime <título>',
-    async handler(ctx) {
-      const query = ctx.argText.trim(); if (!query) throw new Error('Indica el anime a buscar.')
-      const results = await searchAnime(query)
-      if (!results.length) throw new Error('No encontré anime.')
-      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-        title: '🎌 ANIME SEARCH', body: `Resultados para: ${query}`, footer: 'Datos: Jikan / MyAnimeList',
-        cards: results.map((item, index) => ({
-          title: `ANIME #${index + 1}`, imageUrl: item.images?.jpg?.large_image_url,
-          body: [`🎬 ${item.title_english ?? item.title ?? 'Sin título'}`, `⭐ ${item.score ?? 'N/D'} · 📺 ${item.episodes ?? '?'} episodios`, item.synopsis?.replace(/\s+/g, ' ').slice(0, 260) ?? ''].filter(Boolean).join('\n'),
-          buttons: item.url ? [{ type: 'url' as const, text: 'Ver ficha', url: item.url }] : [],
-        })),
-      })
     },
   },
   {
