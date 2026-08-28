@@ -1,4 +1,5 @@
 import { createWriteStream } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -284,6 +285,10 @@ function safeFileName(value: string) {
   return value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 90) || 'lemppi-media'
 }
 
+function isZipLikeApk(buffer: Buffer) {
+  return buffer[0] === 0x50 && buffer[1] === 0x4b && [0x03, 0x05, 0x07].includes(buffer[2] ?? -1)
+}
+
 export async function downloadLempiMedia(
   sourceUrl: string,
   options: { kind?: LempiMediaKind; baseName?: string } = {},
@@ -291,7 +296,7 @@ export async function downloadLempiMedia(
   const url = new URL(sourceUrl)
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('La URL de media no usa HTTP/HTTPS.')
 
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-lemppi-'))
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-lempi-'))
   try {
     const response = await fetch(url, {
       redirect: 'follow',
@@ -327,6 +332,12 @@ export async function downloadLempiMedia(
     await pipeline(response.body as any, limiter, createWriteStream(filePath))
     const file = await stat(filePath)
     if (file.size <= 0) throw new Error('El proveedor devolvió un archivo vacío.')
+
+    if (kind === 'document') {
+      if (file.size < 1024) throw new Error('La descarga no parece ser una APK válida.')
+      const header = await readFile(filePath).then((buffer) => buffer.subarray(0, 4))
+      if (!isZipLikeApk(header)) throw new Error('HappyMod no devolvió un APK/ZIP válido; se recibió otro tipo de archivo.')
+    }
 
     return {
       filePath,
