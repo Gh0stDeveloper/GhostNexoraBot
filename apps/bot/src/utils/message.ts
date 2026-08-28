@@ -53,14 +53,22 @@ export function getSenderCandidates(message: WAMessage): string[] {
 }
 export function digitsFromJid(jid: string): string { return jid.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? '' }
 
-export interface DownloadedMedia { buffer: Buffer; kind: 'image' | 'video' | 'sticker'; mimetype?: string | null }
+export interface DownloadedMedia {
+  buffer: Buffer
+  kind: 'image' | 'video' | 'sticker' | 'document'
+  mimetype?: string | null
+  fileName?: string | null
+}
+
 function selectMedia(content: proto.IMessage | undefined) {
   if (!content) return null
-  if (content.imageMessage) return { node: content.imageMessage, kind: 'image' as const, mimetype: content.imageMessage.mimetype }
-  if (content.videoMessage) return { node: content.videoMessage, kind: 'video' as const, mimetype: content.videoMessage.mimetype }
-  if (content.stickerMessage) return { node: content.stickerMessage, kind: 'sticker' as const, mimetype: content.stickerMessage.mimetype }
+  if (content.imageMessage) return { node: content.imageMessage, kind: 'image' as const, mimetype: content.imageMessage.mimetype, fileName: null }
+  if (content.videoMessage) return { node: content.videoMessage, kind: 'video' as const, mimetype: content.videoMessage.mimetype, fileName: null }
+  if (content.stickerMessage) return { node: content.stickerMessage, kind: 'sticker' as const, mimetype: content.stickerMessage.mimetype, fileName: null }
+  if (content.documentMessage) return { node: content.documentMessage, kind: 'document' as const, mimetype: content.documentMessage.mimetype, fileName: content.documentMessage.fileName ?? null }
   return null
 }
+
 export async function downloadMessageMedia(message: WAMessage): Promise<DownloadedMedia | null> {
   const own = selectMedia(unwrapMessage(message.message))
   const quoted = selectMedia(unwrapMessage(getContextInfo(message)?.quotedMessage))
@@ -69,6 +77,7 @@ export async function downloadMessageMedia(message: WAMessage): Promise<Download
   const stream = await downloadContentFromMessage(target.node as never, target.kind)
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(Buffer.from(chunk))
-  return { buffer: Buffer.concat(chunks), kind: target.kind, mimetype: target.mimetype }
+  return { buffer: Buffer.concat(chunks), kind: target.kind, mimetype: target.mimetype, fileName: target.fileName }
 }
+
 export function textContent(text: string): AnyMessageContent { return { text } }
