@@ -7,7 +7,7 @@ import {
   getAnimeSources,
   searchAnime,
 } from '../services/anime.js'
-import { sendCarousel } from '../services/interactive.js'
+import { sendCarousel, type CarouselCard } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const SEARCH_PAGE_SIZE = 5
@@ -29,14 +29,14 @@ async function animeSearchCarousel(ctx: CommandContext, query: string, page: num
   const currentPage = clampPage(page, totalPages)
   const visible = allResults.slice((currentPage - 1) * SEARCH_PAGE_SIZE, currentPage * SEARCH_PAGE_SIZE)
 
-  const cards = visible.map((item, index) => ({
+  const cards: CarouselCard[] = visible.map((item, index) => ({
     title: `${(currentPage - 1) * SEARCH_PAGE_SIZE + index + 1}. ${item.title}`.slice(0, 120),
     body: `ID: ${item.id}\n\nUsa los botones para explorar temporadas, episodios o la ficha del anime.`,
     imageUrl: item.image,
     buttons: [
-      { type: 'reply' as const, text: 'Temporadas', id: `${ctx.prefix}animeseasons ${item.id}` },
-      { type: 'reply' as const, text: 'Episodios', id: `${ctx.prefix}animeeps ${item.id}` },
-      { type: 'reply' as const, text: 'Ficha', id: `${ctx.prefix}animeinfo ${item.id}` },
+      { type: 'reply', text: 'Temporadas', id: `${ctx.prefix}animeseasons ${item.id}` },
+      { type: 'reply', text: 'Episodios', id: `${ctx.prefix}animeeps ${item.id}` },
+      { type: 'reply', text: 'Ficha', id: `${ctx.prefix}animeinfo ${item.id}` },
     ],
   }))
 
@@ -45,8 +45,7 @@ async function animeSearchCarousel(ctx: CommandContext, query: string, page: num
     cards.push({
       title: currentPage < totalPages ? 'Siguiente tanda' : 'Volver al inicio',
       body: `Página ${currentPage}/${totalPages}. Catálogo dividido en tandas pequeñas para evitar saturar WhatsApp.`,
-      imageUrl: undefined,
-      buttons: [{ type: 'reply' as const, text: currentPage < totalPages ? 'Siguiente' : 'Primera', id: `${ctx.prefix}anime ${query} ${nextPage}` }],
+      buttons: [{ type: 'reply', text: currentPage < totalPages ? 'Siguiente' : 'Primera', id: `${ctx.prefix}anime ${query} ${nextPage}` }],
     })
   }
 
@@ -77,11 +76,11 @@ async function animeEpisodesCarousel(ctx: CommandContext, animeId: string, seaso
   const currentPage = clampPage(page, totalPages)
   const visible = episodes.slice((currentPage - 1) * EPISODE_PAGE_SIZE, currentPage * EPISODE_PAGE_SIZE)
 
-  const cards = visible.map((episode) => ({
+  const cards: CarouselCard[] = visible.map((episode) => ({
     title: `Episodio ${episode.number}`,
     body: `Temporada: *${selectedSeason}*\nEpisodio: *${episode.number}*\n\nPulsa descargar para obtenerlo.`,
     buttons: [{
-      type: 'reply' as const,
+      type: 'reply',
       text: 'Descargar',
       id: `${ctx.prefix}animedl ${animeId} ${episode.number} ${selectedSeason}`,
     }],
@@ -91,24 +90,21 @@ async function animeEpisodesCarousel(ctx: CommandContext, animeId: string, seaso
     cards.push({
       title: 'Página anterior',
       body: `Regresar a la tanda ${currentPage - 1}.`,
-      imageUrl: undefined,
-      buttons: [{ type: 'reply' as const, text: 'Anterior', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage - 1}` }],
+      buttons: [{ type: 'reply', text: 'Anterior', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage - 1}` }],
     })
   }
   if (currentPage < totalPages) {
     cards.push({
       title: 'Siguiente tanda',
       body: `Episodios ${currentPage * EPISODE_PAGE_SIZE + 1}-${Math.min(episodes.length, (currentPage + 1) * EPISODE_PAGE_SIZE)}.`,
-      imageUrl: undefined,
-      buttons: [{ type: 'reply' as const, text: 'Siguiente', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage + 1}` }],
+      buttons: [{ type: 'reply', text: 'Siguiente', id: `${ctx.prefix}animeeps ${animeId} ${selectedSeason} ${currentPage + 1}` }],
     })
   }
   if (seasons.length > 1) {
     cards.push({
       title: 'Temporadas',
       body: `Temporada actual: ${selectedSeason}\nTemporadas disponibles: ${seasons.join(', ')}`,
-      imageUrl: undefined,
-      buttons: [{ type: 'reply' as const, text: 'Cambiar temporada', id: `${ctx.prefix}animeseasons ${animeId}` }],
+      buttons: [{ type: 'reply', text: 'Cambiar temporada', id: `${ctx.prefix}animeseasons ${animeId}` }],
     })
   }
 
@@ -121,10 +117,10 @@ async function animeEpisodesCarousel(ctx: CommandContext, animeId: string, seaso
 }
 
 async function sendSeasonCarousel(ctx: CommandContext, animeId: string, seasons: number[]) {
-  const cards = seasons.slice(0, 12).map((season) => ({
+  const cards: CarouselCard[] = seasons.slice(0, 12).map((season) => ({
     title: `Temporada ${season}`,
     body: `Explora los episodios disponibles de la temporada ${season}.`,
-    buttons: [{ type: 'reply' as const, text: 'Ver episodios', id: `${ctx.prefix}animeeps ${animeId} ${season} 1` }],
+    buttons: [{ type: 'reply', text: 'Ver episodios', id: `${ctx.prefix}animeeps ${animeId} ${season} 1` }],
   }))
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
