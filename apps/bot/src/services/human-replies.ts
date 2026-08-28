@@ -1,5 +1,4 @@
-import type { CommandRouter } from '../core/router.js'
-import type { WAMessage } from 'baileys'
+import type { WAMessage, WASocket } from 'baileys'
 import { getMessageText } from '../utils/message.js'
 
 const cooldown = new Map<string, number>()
@@ -21,7 +20,7 @@ const rules: readonly ReplyRule[] = [
 
 function random<T>(values: readonly T[]) { return values[Math.floor(Math.random() * values.length)]! }
 
-export async function maybeHumanReply(socket: any, message: WAMessage, router: CommandRouter): Promise<boolean> {
+export async function maybeHumanReply(socket: WASocket, message: WAMessage): Promise<boolean> {
   if (message.key.fromMe || !message.key.remoteJid) return false
   const text = getMessageText(message).trim()
   if (!text || text.startsWith('.')) return false
