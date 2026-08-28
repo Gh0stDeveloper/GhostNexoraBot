@@ -61,6 +61,7 @@ import { officialApkV8Commands } from './official-apk-v8.js'
 import { developerV8Commands } from './developer-v8.js'
 import { groupControlsV9Commands } from './group-controls-v9.js'
 import { lempiApiCommands } from './lempi-api.js'
+import { mediaDownloadFixCommands } from './media-download-fixes-v2.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -123,6 +124,7 @@ export const commands: BotCommand[] = [
   ...developerV8Commands,
   ...groupControlsV9Commands,
   ...lempiApiCommands,
+  ...mediaDownloadFixCommands,
 ]
 
 setMenuCommandProvider(() => commands)
