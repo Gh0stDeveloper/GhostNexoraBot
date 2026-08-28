@@ -55,7 +55,7 @@ function extensionFor(kind: SocialMediaKind, contentType?: string, url?: string)
   if (type.includes('jpeg') || type.includes('jpg') || kind === 'image') return 'jpg'
   if (type.includes('mpeg') || type.includes('mp3') || kind === 'audio') return 'mp3'
   if (type.includes('webm')) return 'webm'
-  return kind === 'audio' ? 'mp3' : kind === 'image' || kind === 'gif' ? 'jpg' : 'mp4'
+  return 'mp4'
 }
 
 async function downloadRemoteFile(
