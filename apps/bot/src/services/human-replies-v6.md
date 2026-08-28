@@ -1,0 +1,1 @@
+Natural low-frequency reply layer is implemented in human-replies.ts and integrated through human-stickers.ts. It replies only to selected conversational phrases, with a per-chat cooldown and low probability.
