@@ -1,0 +1,45 @@
+import * as cheerio from 'cheerio'
+import { createHash } from 'node:crypto'
+import type { BotCommand, CommandContext } from '../types.js'
+import { sendCarousel } from '../services/interactive.js'
+
+type Source = 'Uptodown' | 'LiteAPKS' | 'HappyMod'
+type Item = { token: string; source: Source; name: string; url: string; icon?: string; version?: string; summary?: string }
+const cfg: Record<Source, { host: RegExp; queries: (q: string) => string[] }> = {
+  Uptodown: { host: /(^|\.)uptodown\.com$/i, queries: (q) => [`https://en.uptodown.com/android/search?query=${encodeURIComponent(q)}`, `https://en.uptodown.com/android/search/${encodeURIComponent(q)}`] },
+  LiteAPKS: { host: /(^|\.)liteapks\.com$/i, queries: (q) => [`https://liteapks.com/?s=${encodeURIComponent(q)}`, `https://liteapks.com/search/${encodeURIComponent(q)}`] },
+  HappyMod: { host: /(^|\.)happymod\.com$/i, queries: (q) => [`https://www.happymod.com/search.html?q=${encodeURIComponent(q)}`] },
+}
+const selected = new Map<string, Item>()
+function absolute(base: string, value?: string) { if (!value) return undefined; try { const u = new URL(value, base); return /^https?:$/i.test(u.protocol) ? u.toString() : undefined } catch { return undefined } }
+function official(url: string, source: Source) { try { return cfg[source].host.test(new URL(url).hostname) ? url : undefined } catch { return undefined } }
+function token(source: Source, url: string) { return createHash('sha256').update(`${source}:${url}`).digest('hex').slice(0, 18) }
+async function getHtml(url: string) { const r = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 'GhostNexoraBot/0.0.7c', accept: 'text/html,application/xhtml+xml,*/*' }, signal: AbortSignal.timeout(15_000) }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return { html: await r.text(), finalUrl: r.url } }
+function parse($: cheerio.CheerioAPI, source: Source, base: string, query: string) {
+  const result: Item[] = []; const seen = new Set<string>()
+  $('a[href]').each((_i, el) => {
+    if (result.length >= 10) return false
+    const href = official(absolute(base, $(el).attr('href')) || '', source); if (!href || seen.has(href)) return
+    const text = ($(el).attr('title') || $(el).text() || '').replace(/\s+/g, ' ').trim(); if (text.length < 2) return
+    const path = new URL(href).pathname.toLowerCase()
+    const appLike = source === 'Uptodown' ? /\/android\//.test(path) && !/search/.test(path) : source === 'LiteAPKS' ? /\/(?:app|games|apps?)\b|\.html?$/.test(path) : /(?:-mod\/|\/app-mod\/|\.html$)/.test(path)
+    if (!appLike || (source === 'HappyMod' && !text.toLowerCase().includes(query.toLowerCase().split(/\s+/)[0] || query.toLowerCase()))) return
+    seen.add(href); const root = $(el).closest('article,li,.card,.item,.app,.post,div').first(); const summary = root.text().replace(/\s+/g, ' ').trim().slice(0, 220)
+    const icon = absolute(base, root.find('img').first().attr('data-src') || root.find('img').first().attr('src')); const version = /\bv(?:ersion|ersión)?\s*[:.]?\s*([0-9][\w.+-]*)/i.exec(summary)?.[1]
+    const item = { token: token(source, href), source, name: text.replace(/\s+(APK|Mod APK|download)$/i, '').slice(0, 100), url: href, icon, version, summary }; selected.set(item.token, item); result.push(item)
+  })
+  return result
+}
+async function search(source: Source, q: string) { for (const endpoint of cfg[source].queries(q)) { try { const page = await getHtml(endpoint); const items = parse(cheerio.load(page.html), source, page.finalUrl, q); if (items.length) return items } catch {} } return [] }
+async function searchSource(ctx: CommandContext, source: Source, query: string) { const items = await search(source, query); if (!items.length) throw new Error('No encontré resultados en la página oficial.'); await sendCarousel(ctx.socket, ctx.chatId, ctx.message, { title: `📦 ${source.toUpperCase()} · APK`, body: `Resultados oficiales para *${query}*`, footer: `${source} · Ghost Nexora Bot`, cards: items.map((item) => ({ title: item.name, body: [item.version ? `🔄 Versión: ${item.version}` : '', item.summary || '', '✅ Obtenido desde la página oficial.'].filter(Boolean).join('\n'), imageUrl: item.icon, buttons: [{ type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}apkdl ${item.token}` }, { type: 'url' as const, text: '🌐 Abrir', url: item.url }] })) }) }
+async function apk(ctx: CommandContext) { const query = ctx.argText.trim(); if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}apk <aplicación>`); const groups = await Promise.all(([['Uptodown','LiteAPKS','HappyMod'] as Source[]]).map(async (source) => ({ source, items: await search(source, query) }))); const all = groups.flatMap((g) => g.items).slice(0, 12); if (!all.length) throw new Error('No encontré resultados en las fuentes oficiales.'); await sendCarousel(ctx.socket, ctx.chatId, ctx.message, { title: '📦 ANDROID · FUENTES OFICIALES', body: `Resultados para *${query}*`, footer: 'Uptodown · LiteAPKS · HappyMod', cards: all.map((item) => ({ title: `${item.source} · ${item.name}`, body: [item.version ? `🔄 ${item.version}` : '', item.summary || ''].filter(Boolean).join('\n'), imageUrl: item.icon, buttons: [{ type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}apkdl ${item.token}` }, { type: 'url' as const, text: '🌐 Fuente', url: item.url }] })) }) }
+async function info(ctx: CommandContext) { const item = selected.get(ctx.args[0] || ''); if (!item) throw new Error(`Primero usa ${ctx.prefix}apk, ${ctx.prefix}uptodown, ${ctx.prefix}liteapks o ${ctx.prefix}happymod.`); await ctx.reply(`📦 *${item.name}*\n━━━━━━━━━━━━━━\nFuente: *${item.source}*\n${item.version ? `Versión: ${item.version}\n` : ''}${item.summary || ''}\n\n${item.url}`) }
+async function download(ctx: CommandContext) { const item = selected.get(ctx.args[0] || ''); if (!item) throw new Error(`Primero selecciona una APK desde una fuente oficial.`); const page = await getHtml(item.url); const $ = cheerio.load(page.html); let candidate: string | undefined; $('a[href]').each((_i, el) => { if (candidate) return false; const href = official(absolute(page.finalUrl, $(el).attr('href')) || '', item.source); if (href && /\.apk(?:$|[?#])/i.test(href)) candidate = href }); if (!candidate) throw new Error('La página oficial no proporcionó un enlace APK directo recuperable.'); const response = await fetch(candidate, { redirect: 'follow', headers: { 'user-agent': 'GhostNexoraBot/0.0.7c' }, signal: AbortSignal.timeout(60_000) }); if (!response.ok) throw new Error('La página oficial no pudo entregar la APK.'); const data = Buffer.from(await response.arrayBuffer()); if (!data.length) throw new Error('La APK recibida está vacía.'); const fileName = `${item.name.replace(/[^\w.-]+/g, '-').slice(0, 60)}.apk`; await ctx.socket.sendMessage(ctx.chatId, { document: data, mimetype: 'application/vnd.android.package-archive', fileName, caption: `📦 *${item.name}*\n🌐 Fuente oficial: *${item.source}*\n${item.version ? `🔄 Versión: ${item.version}\n` : ''}📏 Peso: ${(data.length / 1024 / 1024).toFixed(1)} MB\n\n${item.url}` }, { quoted: ctx.message }) }
+export const officialApkV8Commands: BotCommand[] = [
+  { name: 'apk', aliases: ['apks'], category: 'downloads', description: 'Busca APKs exclusivamente en Uptodown, LiteAPKS y HappyMod.', usage: 'apk <aplicación>', handler: apk },
+  { name: 'uptodown', aliases: ['uptodownapk'], category: 'downloads', description: 'Busca directamente en Uptodown.', usage: 'uptodown <aplicación>', handler: (ctx) => searchSource(ctx, 'Uptodown', ctx.argText.trim()) },
+  { name: 'liteapks', aliases: ['liteapk'], category: 'downloads', description: 'Busca directamente en LiteAPKS.', usage: 'liteapks <aplicación>', handler: (ctx) => searchSource(ctx, 'LiteAPKS', ctx.argText.trim()) },
+  { name: 'happymod', aliases: ['happymods'], category: 'downloads', description: 'Busca directamente en HappyMod.', usage: 'happymod <aplicación>', handler: (ctx) => searchSource(ctx, 'HappyMod', ctx.argText.trim()) },
+  { name: 'apkdl', aliases: ['officialapkdl'], category: 'downloads', description: 'Descarga una APK seleccionada desde su fuente oficial.', usage: 'apkdl <token>', handler: download },
+  { name: 'apkinfo', aliases: ['appinfo'], category: 'downloads', description: 'Muestra la información de una APK seleccionada.', usage: 'apkinfo <token>', handler: info },
+]
