@@ -1,5 +1,6 @@
 import type { BotCommand, CommandContext } from '../types.js'
-import { downloadInstagramImages, downloadPinterestImages, searchPinterestImages } from '../services/image-download-v9.js'
+import { downloadInstagramImagesFromPost } from '../services/instagram-image-download-v10.js'
+import { downloadPinterestImages, searchPinterestImages } from '../services/image-download-v9.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
@@ -8,7 +9,7 @@ const bytes = (value: number) => value >= 1024 ** 2 ? `${(value / 1024 / 1024).t
 async function sendImages(ctx: CommandContext, source: 'Instagram' | 'Pinterest', input: string) {
   const progress = await createDownloadProgress(ctx, `${source} · imágenes`)
   await progress.update('downloading', 'Obteniendo imágenes de la publicación')
-  const result = source === 'Instagram' ? await downloadInstagramImages(input) : await downloadPinterestImages(input)
+  const result = source === 'Instagram' ? await downloadInstagramImagesFromPost(input) : await downloadPinterestImages(input)
   try {
     await progress.update('sending', `${result.images.length} imágenes · enviando directamente`)
     let total = 0
