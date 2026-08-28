@@ -57,6 +57,8 @@ import { versionV8Commands } from './version-v8.js'
 import { adultMediaV8Commands } from './adult-media-v8.js'
 import { adultRoleplayV8Commands } from './adult-roleplay-v8.js'
 import { reactionV8Commands } from './reactions-v8.js'
+import { officialApkV8Commands } from './official-apk-v8.js'
+import { developerV8Commands } from './developer-v8.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -115,6 +117,8 @@ export const commands: BotCommand[] = [
   ...adultMediaV8Commands,
   ...adultRoleplayV8Commands,
   ...reactionV8Commands,
+  ...officialApkV8Commands,
+  ...developerV8Commands,
 ]
 
 setMenuCommandProvider(() => commands)
