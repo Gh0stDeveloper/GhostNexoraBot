@@ -47,54 +47,20 @@ import { waifuV5Commands } from './waifu-v5.js'
 import { economyCareersV5Commands } from './economy-careers-v5.js'
 import { menuV5Commands } from './menu-v5.js'
 import { pvz2Commands } from './pvz2.js'
+import { officialApkV7Commands } from './official-apk-v7.js'
+import { developerV7Commands } from './developer-v7.js'
+import { telegramBridgeV7Commands } from './telegram-bridge-v7.js'
+import { sourceOverrideV7Commands } from './source-overrides-v7.js'
+import { channelV8Commands } from './channel-v8.js'
+import { economyCareersV8Commands } from './economy-careers-v8.js'
+import { versionV8Commands } from './version-v8.js'
+import { adultMediaV8Commands } from './adult-media-v8.js'
+import { adultRoleplayV8Commands } from './adult-roleplay-v8.js'
+import { reactionV8Commands } from './reactions-v8.js'
+import { officialApkV8Commands } from './official-apk-v8.js'
+import { developerV8Commands } from './developer-v8.js'
 
 export const commands: BotCommand[] = [
-  ...generalCommands,
-  ...aiCommands,
-  ...profileCommands,
-  ...reactionCommands,
-  ...stickerCommands,
-  ...downloadCommands,
-  ...lyricsCommands,
-  ...resourceCommands,
-  ...mangaDownloadCommands,
-  ...webSearchCommands,
-  ...booruCommands,
-  ...groupCommands,
-  ...securityCommands,
-  ...economyCommands,
-  ...advancedEconomyCommands,
-  ...gameCommands,
-  ...pvpGameCommands,
-  ...rpgCommands,
-  ...waifuCommands,
-  ...waifuExtendedCommands,
-  ...subbotCommands,
-  ...adultCommands,
-  ...eromeCommands,
-  ...adultRoleplayCommands,
-  ...personalizationCommands,
-  ...privateAccessCommands,
-  ...systemCommands,
-  ...ownerCommands,
-  ...apkMultisourceCommands,
-  ...groupAdultModeCommands,
-  ...v2Commands,
-  ...adultV2Commands,
-  ...downloadProgressV2Commands,
-  ...eromeProgressV2Commands,
-  ...economyFixV2Commands,
-  ...youtubeV3Commands,
-  ...carouselCompatV3Commands,
-  ...menuV3Commands,
-  ...expansionV4Commands,
-  ...casinoGuardV4Commands,
-  ...downloadUiV5Commands,
-  ...stickerAdminV5Commands,
-  ...waifuV5Commands,
-  ...economyCareersV5Commands,
-  ...pvz2Commands,
-  ...menuV5Commands,
+  ...generalCommands, ...aiCommands, ...profileCommands, ...reactionCommands, ...stickerCommands, ...downloadCommands, ...lyricsCommands, ...resourceCommands, ...mangaDownloadCommands, ...webSearchCommands, ...booruCommands, ...groupCommands, ...securityCommands, ...economyCommands, ...advancedEconomyCommands, ...gameCommands, ...pvpGameCommands, ...rpgCommands, ...waifuCommands, ...waifuExtendedCommands, ...subbotCommands, ...adultCommands, ...eromeCommands, ...adultRoleplayCommands, ...personalizationCommands, ...privateAccessCommands, ...systemCommands, ...ownerCommands, ...apkMultisourceCommands, ...groupAdultModeCommands, ...v2Commands, ...adultV2Commands, ...downloadProgressV2Commands, ...eromeProgressV2Commands, ...economyFixV2Commands, ...youtubeV3Commands, ...carouselCompatV3Commands, ...menuV3Commands, ...expansionV4Commands, ...casinoGuardV4Commands, ...downloadUiV5Commands, ...stickerAdminV5Commands, ...waifuV5Commands, ...economyCareersV5Commands, ...pvz2Commands, ...menuV5Commands, ...officialApkV7Commands, ...developerV7Commands, ...telegramBridgeV7Commands, ...sourceOverrideV7Commands, ...channelV8Commands, ...economyCareersV8Commands, ...versionV8Commands, ...adultMediaV8Commands, ...adultRoleplayV8Commands, ...reactionV8Commands, ...officialApkV8Commands, ...developerV8Commands,
 ]
-
 setMenuCommandProvider(() => commands)

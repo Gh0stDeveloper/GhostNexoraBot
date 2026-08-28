@@ -49,5 +49,5 @@ export interface BotCommand {
   groupOnly?: boolean
   adminOnly?: boolean
   botAdminOnly?: boolean
-  handler: (ctx: CommandContext) => Promise<void>
+  handler: (ctx: CommandContext) => Promise<unknown>
 }
