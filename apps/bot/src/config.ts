@@ -32,6 +32,14 @@ const schema = z.object({
   EROME_COOKIE: z.string().default(''),
   WELCOME_IMAGE_URL: z.string().default(''),
   OFFICIAL_CHANNEL_URL: z.string().url().default('https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i'),
+  LEMPI_API_KEY: z.string().default(''),
+  LEMPI_BASE_URL: z.string().url().default('https://api.lempi.lat'),
+  LEMPI_YOUTUBE_AUDIO_ENDPOINT: z.string().default('/dl/yta'),
+  LEMPI_YOUTUBE_VIDEO_ENDPOINT: z.string().default('/dl/ytv'),
+  LEMPI_FACEBOOK_ENDPOINT: z.string().default('/dl/facebook'),
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  TELEGRAM_CHANNEL_ID: z.string().default(''),
+  TELEGRAM_CHANNEL_URL: z.string().default(''),
 })
 
 const raw = schema.parse(process.env)
@@ -59,5 +67,13 @@ export const config = {
   eromeCookie: raw.EROME_COOKIE,
   welcomeImageUrl: raw.WELCOME_IMAGE_URL,
   officialChannelUrl: raw.OFFICIAL_CHANNEL_URL,
+  lempiApiKey: raw.LEMPI_API_KEY,
+  lempiBaseUrl: raw.LEMPI_BASE_URL,
+  lempiYoutubeAudioEndpoint: raw.LEMPI_YOUTUBE_AUDIO_ENDPOINT,
+  lempiYoutubeVideoEndpoint: raw.LEMPI_YOUTUBE_VIDEO_ENDPOINT,
+  lempiFacebookEndpoint: raw.LEMPI_FACEBOOK_ENDPOINT,
+  telegramBotToken: raw.TELEGRAM_BOT_TOKEN,
+  telegramChannelId: raw.TELEGRAM_CHANNEL_ID,
+  telegramChannelUrl: raw.TELEGRAM_CHANNEL_URL,
   workspaceRoot,
 } as const
