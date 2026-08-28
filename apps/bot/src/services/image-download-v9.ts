@@ -114,7 +114,7 @@ function pinterestSearchImageCandidates(html: string, query: string) {
         $(img).attr('data-lazy-src'),
         $(img).attr('src'),
         ...String($(img).attr('srcset') ?? '').split(',').map((entry) => entry.trim().split(/\s+/)[0]).filter((value): value is string => Boolean(value)),
-      ]
+      ].filter((value): value is string => Boolean(value))
       for (const raw of rawCandidates) {
         try {
           const imageUrl = new URL(decodeEscaped(raw), href.origin).toString()
