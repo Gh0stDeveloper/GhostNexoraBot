@@ -1,0 +1,99 @@
+import { createHash } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { sendCarousel } from '../services/interactive.js'
+import { downloadMessageMedia } from '../utils/message.js'
+import { config } from '../config.js'
+import { isDeveloperAccessEnabled, setDeveloperAccess } from '../services/developer-access-v7.js'
+import type { BotCommand, CommandContext } from '../types.js'
+
+const execFileAsync = promisify(execFile)
+
+function canControl(ctx: CommandContext) { return ctx.isOwner || ctx.isSubbotOwner }
+function requireAccess(ctx: CommandContext) {
+  if (!isDeveloperAccessEnabled(ctx.instanceId)) throw new Error(`El modo Developer está desactivado. El propietario debe usar *${ctx.prefix}devaccess on* primero.`)
+}
+
+async function devAccess(ctx: CommandContext) {
+  if (!canControl(ctx)) throw new Error('Solo el dueño del bot o de este subbot puede cambiar el acceso Developer.')
+  const value = ctx.args[0]?.toLowerCase()
+  if (!value || !['on', 'off', 'status'].includes(value)) throw new Error(`Uso: ${ctx.prefix}devaccess on|off|status`)
+  if (value === 'status') { await ctx.reply(`🛠️ *DEVELOPER ACCESS*\n━━━━━━━━━━━━━━\nEstado: *${isDeveloperAccessEnabled(ctx.instanceId) ? 'ACTIVO' : 'INACTIVO'}*`); return }
+  const enabled = value === 'on'
+  setDeveloperAccess(ctx.instanceId, enabled, ctx.sender)
+  await ctx.reply(`🛠️ *DEVELOPER ACCESS*\n━━━━━━━━━━━━━━\nModo Developer: *${enabled ? 'ACTIVADO' : 'DESACTIVADO'}*\n\n${enabled ? 'Los usuarios autorizados de esta instancia ya pueden usar las herramientas Developer.' : 'Las herramientas Developer vuelven a quedar restringidas.'}`)
+}
+
+async function devMenu(ctx: CommandContext) {
+  requireAccess(ctx)
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🛠️ GHOST NEXORA · DEVELOPER',
+    body: 'Herramientas seguras para proyectos Android y archivos.',
+    footer: 'El owner puede activar/desactivar este menú.',
+    cards: [
+      { title: '📦 Proyecto Android', body: 'Valida un ZIP sin ejecutar su código.', buttons: [{ type: 'reply', text: '📦 apkbuild', id: `${ctx.prefix}apkbuild` }, { type: 'reply', text: '🔍 zipcheck', id: `${ctx.prefix}zipcheck` }] },
+      { title: '🔐 SHA-256', body: 'Calcula la huella de un APK/ZIP adjunto.', buttons: [{ type: 'reply', text: '🔐 apksha', id: `${ctx.prefix}apksha` }] },
+      { title: '🧰 Herramientas', body: 'Consulta estado de Node, FFmpeg, yt-dlp, unzip y webpmux.', buttons: [{ type: 'reply', text: '📊 devstatus', id: `${ctx.prefix}devstatus` }] },
+    ],
+  })
+}
+
+async function apkBuild(ctx: CommandContext) {
+  requireAccess(ctx)
+  const media = await downloadMessageMedia(ctx.message)
+  if (!media || (media.kind !== 'document' && media.kind !== 'unknown')) throw new Error(`Responde a un ZIP con *${ctx.prefix}apkbuild*.`)
+  if (!media.buffer.length || media.buffer.length > 100 * 1024 * 1024) throw new Error('El ZIP debe pesar entre 1 byte y 100 MB.')
+  const temp = `/tmp/ghost-nexora-dev-${Date.now()}.zip`
+  await writeFile(temp, media.buffer)
+  try {
+    const { stdout } = await execFileAsync('unzip', ['-Z1', temp], { timeout: 10_000, maxBuffer: 4 * 1024 * 1024 })
+    const entries = stdout.split(/\r?\n/).map((x) => x.trim()).filter(Boolean)
+    if (entries.some((x) => x.startsWith('/') || x.includes('../') || x.includes('..\\'))) throw new Error('El ZIP contiene rutas inseguras.')
+    const gradle = entries.some((x) => /(^|\/)build\.gradle(?:\.kts)?$/.test(x))
+    const settings = entries.some((x) => /(^|\/)settings\.gradle(?:\.kts)?$/.test(x))
+    const manifest = entries.some((x) => /(^|\/)AndroidManifest\.xml$/.test(x))
+    await ctx.reply(['✅ *PROYECTO VALIDADO*', '━━━━━━━━━━━━━━', `📦 ${media.fileName ?? 'proyecto.zip'}`, `📏 ${(media.buffer.length / 1024 / 1024).toFixed(1)} MB`, gradle ? '✅ Gradle detectado' : '❌ Falta build.gradle', settings ? '✅ settings.gradle detectado' : '❌ Falta settings.gradle', manifest ? '✅ AndroidManifest.xml detectado' : '❌ Falta AndroidManifest.xml', '', 'La VPS no ejecuta el contenido del ZIP directamente.'].join('\n'))
+  } finally { await rm(temp, { force: true }).catch(() => undefined) }
+}
+
+async function zipCheck(ctx: CommandContext) {
+  requireAccess(ctx)
+  const media = await downloadMessageMedia(ctx.message)
+  if (!media) throw new Error('Responde a un ZIP.')
+  if (media.buffer.length > 100 * 1024 * 1024) throw new Error('Archivo superior a 100 MB.')
+  const temp = `/tmp/ghost-nexora-zip-${Date.now()}.zip`
+  await writeFile(temp, media.buffer)
+  try {
+    const { stdout } = await execFileAsync('unzip', ['-Z1', temp], { timeout: 10_000, maxBuffer: 2 * 1024 * 1024 })
+    const entries = stdout.split(/\r?\n/).filter(Boolean)
+    const unsafe = entries.filter((x) => x.startsWith('/') || x.includes('../') || x.includes('..\\'))
+    await ctx.reply(`🔍 *ZIP CHECK*\n━━━━━━━━━━━━━━\nEntradas: *${entries.length}*\nRutas inseguras: *${unsafe.length}*\nEstado: *${unsafe.length ? 'RECHAZADO' : 'OK'}*`)
+  } finally { await rm(temp, { force: true }).catch(() => undefined) }
+}
+
+async function apkSha(ctx: CommandContext) {
+  requireAccess(ctx)
+  const media = await downloadMessageMedia(ctx.message)
+  if (!media) throw new Error(`Responde a un archivo con *${ctx.prefix}apksha*.`)
+  const digest = createHash('sha256').update(media.buffer).digest('hex')
+  await ctx.reply(`🔐 *SHA-256*\n━━━━━━━━━━━━━━\n📦 ${media.fileName ?? 'archivo'}\n\n\`${digest}\``)
+}
+
+async function devStatus(ctx: CommandContext) {
+  requireAccess(ctx)
+  const checks = await Promise.all(['node', 'npm', 'ffmpeg', 'yt-dlp', 'unzip', 'webpmux'].map(async (bin) => {
+    try { await execFileAsync('sh', ['-lc', `command -v ${bin}`]); return `✅ ${bin}` } catch { return `❌ ${bin}` }
+  }))
+  await ctx.reply(['🛠️ *DEVELOPER STATUS*', '━━━━━━━━━━━━━━', ...checks, '', `📁 Data: ${path.basename(config.dataDir)}`].join('\n'))
+}
+
+export const developerV7Commands: BotCommand[] = [
+  { name: 'devaccess', aliases: ['developeraccess'], category: 'owner', description: 'Activa/desactiva el modo Developer de esta instancia. Solo owner/subbot owner.', usage: 'devaccess on|off|status', handler: devAccess },
+  { name: 'devmenu', aliases: ['developer', 'developermenu'], category: 'tools', description: 'Abre herramientas Developer cuando el owner las habilita.', handler: devMenu },
+  { name: 'apkbuild', aliases: ['buildapk', 'compilarapk'], category: 'tools', description: 'Valida un ZIP Android de forma segura.', usage: 'apkbuild <respondiendo al ZIP>', handler: apkBuild },
+  { name: 'zipcheck', aliases: ['checkzip'], category: 'tools', description: 'Comprueba la estructura y rutas de un ZIP.', usage: 'zipcheck <respondiendo al ZIP>', handler: zipCheck },
+  { name: 'apksha', aliases: ['shaapk', 'sha256'], category: 'tools', description: 'Calcula SHA-256 del archivo respondido.', usage: 'apksha <respondiendo al archivo>', handler: apkSha },
+  { name: 'devstatus', aliases: ['toolstatus'], category: 'tools', description: 'Comprueba herramientas disponibles en la VPS.', usage: 'devstatus', handler: devStatus },
+]
