@@ -51,6 +51,12 @@ import { officialApkV7Commands } from './official-apk-v7.js'
 import { developerV7Commands } from './developer-v7.js'
 import { telegramBridgeV7Commands } from './telegram-bridge-v7.js'
 import { sourceOverrideV7Commands } from './source-overrides-v7.js'
+import { channelV8Commands } from './channel-v8.js'
+import { economyCareersV8Commands } from './economy-careers-v8.js'
+import { versionV8Commands } from './version-v8.js'
+import { adultMediaV8Commands } from './adult-media-v8.js'
+import { adultRoleplayV8Commands } from './adult-roleplay-v8.js'
+import { reactionV8Commands } from './reactions-v8.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -103,6 +109,12 @@ export const commands: BotCommand[] = [
   ...developerV7Commands,
   ...telegramBridgeV7Commands,
   ...sourceOverrideV7Commands,
+  ...channelV8Commands,
+  ...economyCareersV8Commands,
+  ...versionV8Commands,
+  ...adultMediaV8Commands,
+  ...adultRoleplayV8Commands,
+  ...reactionV8Commands,
 ]
 
 setMenuCommandProvider(() => commands)
