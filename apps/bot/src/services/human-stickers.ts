@@ -10,8 +10,6 @@ import { digitsFromJid, downloadMessageMedia, getContextInfo, getMessageText, ge
 const db = economy.db
 const root = path.join(config.dataDir, 'global-stickers')
 const now = () => Date.now()
-const lastSticker = new Map<string, number>()
-const STICKER_COOLDOWN_MS = 10_000
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS global_stickers (
@@ -51,8 +49,7 @@ export const globalStickers = {
     const cleanTriggers = [...new Set((triggers ?? []).map(normalizeTrigger).filter(Boolean))]
     await writeFile(filePath, buffer, { mode: 0o600 })
     db.prepare(`INSERT INTO global_stickers(content_sha256, wa_sha256, file_path, label, triggers, created_by, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(content_sha256) DO UPDATE SET wa_sha256 = COALESCE(excluded.wa_sha256, wa_sha256), label = excluded.label, triggers = excluded.triggers, file_path = excluded.file_path`)
-      .run(digest, waSha ?? null, filePath, label?.slice(0, 80) ?? null, cleanTriggers.join('|') || null, createdBy, now())
+      ON CONFLICT(content_sha256) DO UPDATE SET wa_sha256 = COALESCE(excluded.wa_sha256, wa_sha256), label = excluded.label, triggers = excluded.triggers, file_path = excluded.file_path`).run(digest, waSha ?? null, filePath, label?.slice(0, 80) ?? null, cleanTriggers.join('|') || null, createdBy, now())
     return db.prepare('SELECT id, label, triggers FROM global_stickers WHERE content_sha256 = ?').get(digest) as { id: number; label?: string; triggers?: string }
   },
   list() { return db.prepare('SELECT id, label, triggers, created_by as createdBy, created_at as createdAt FROM global_stickers ORDER BY id DESC LIMIT 100').all() },
@@ -63,11 +60,10 @@ export const globalStickers = {
     const contentSha = sha(buffer); const storedWaSha = waSha ?? `content:${contentSha}`; const filePath = path.join(root, `action-${action}-${contentSha}.webp`)
     await writeFile(filePath, buffer, { mode: 0o600 })
     db.prepare(`INSERT INTO global_sticker_actions(action, wa_sha256, content_sha256, file_path, updated_by, updated_at) VALUES(?, ?, ?, ?, ?, ?)
-      ON CONFLICT(action) DO UPDATE SET wa_sha256 = excluded.wa_sha256, content_sha256 = excluded.content_sha256, file_path = excluded.file_path, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
-      .run(action, storedWaSha, contentSha, filePath, createdBy, now())
+      ON CONFLICT(action) DO UPDATE SET wa_sha256 = excluded.wa_sha256, content_sha256 = excluded.content_sha256, file_path = excluded.file_path, updated_by = excluded.updated_by, updated_at = excluded.updated_at`).run(action, storedWaSha, contentSha, filePath, createdBy, now())
     return { waSha: waSha ?? null, contentSha }
   },
-  clearAction(action: 'kick') { db.prepare('DELETE FROM global_sticker_actions WHERE action = ?').run(action) },
+  clearAction(action: 'kick' | 'ban' | 'warn') { db.prepare('DELETE FROM global_sticker_actions WHERE action = ?').run(action) },
   hashFromMessage: waHash,
   normalizeTrigger,
 }
@@ -102,8 +98,6 @@ export async function handleKickSticker(socket: WASocket, message: WAMessage) {
 export async function maybeSendHumanSticker(socket: WASocket, message: WAMessage) {
   const chatId = message.key.remoteJid
   if (!chatId?.endsWith('@g.us') || message.key.fromMe) return false
-  const nowTs = now(); const last = lastSticker.get(chatId) ?? 0
-  if (nowTs - last < STICKER_COOLDOWN_MS) return false
   const rows = db.prepare('SELECT id, file_path as filePath, triggers FROM global_stickers ORDER BY id DESC LIMIT 100').all() as Array<{ id: number; filePath: string; triggers?: string }>
   if (!rows.length) return false
   const text = getMessageText(message)
@@ -112,5 +106,5 @@ export async function maybeSendHumanSticker(socket: WASocket, message: WAMessage
   if (Math.random() > chance) return false
   const pool = triggered.length ? triggered : rows
   const picked = pool[Math.floor(Math.random() * pool.length)]!
-  try { await readFile(picked.filePath); lastSticker.set(chatId, nowTs); await socket.sendMessage(chatId, { sticker: { url: picked.filePath } }, { quoted: message }); return true } catch { return false }
+  try { await readFile(picked.filePath); await socket.sendMessage(chatId, { sticker: { url: picked.filePath } }, { quoted: message }); return true } catch { return false }
 }
