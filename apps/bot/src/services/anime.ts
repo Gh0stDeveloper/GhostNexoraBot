@@ -4,8 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { config } from '../config.js'
 
-export type AnimeSearchResult = { id: string; title: string }
-export type AnimeEpisode = { id: string; number: number }
+export type AnimeSearchResult = { id: string; title: string; image?: string }
+export type AnimeEpisode = { id: string; number: number; season: number }
 export type AnimeSource = { url: string; quality: string; type: string }
 
 export type AnimeDownload = {
@@ -44,6 +44,9 @@ const number = (value: unknown, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+const image = (row: Record<string, unknown> | null) => text(row?.image ?? row?.image_url ?? row?.imageUrl ?? row?.thumbnail ?? row?.cover)
+const season = (row: Record<string, unknown> | null) => Math.max(1, Math.trunc(number(row?.season ?? row?.seasonNumber ?? row?.season_number ?? row?.temporada, 1)))
+
 class ConsumetProvider implements AnimeProvider {
   name = 'Consumet'
   baseUrl = 'https://api.consumet.org/anime/gogoanime'
@@ -55,7 +58,7 @@ class ConsumetProvider implements AnimeProvider {
       const row = record(item)
       const id = text(row?.id)
       const title = text(row?.title)
-      return id && title ? [{ id, title }] : []
+      return id && title ? [{ id, title, image: image(row) }] : []
     })
   }
 
@@ -65,7 +68,7 @@ class ConsumetProvider implements AnimeProvider {
     return rows.flatMap((item, index) => {
       const row = record(item)
       const id = text(row?.id)
-      return id ? [{ id, number: number(row?.number, index + 1) }] : []
+      return id ? [{ id, number: number(row?.number, index + 1), season: season(row) }] : []
     })
   }
 
@@ -93,7 +96,7 @@ class WeebApiProvider implements AnimeProvider {
       const row = record(item)
       const id = text(row?.id)
       const title = text(row?.title)
-      return id && title ? [{ id, title }] : []
+      return id && title ? [{ id, title, image: image(row) }] : []
     })
   }
 
@@ -103,7 +106,7 @@ class WeebApiProvider implements AnimeProvider {
     return rows.flatMap((item, index) => {
       const row = record(item)
       const id = text(row?.id)
-      return id ? [{ id, number: number(row?.number, index + 1) }] : []
+      return id ? [{ id, number: number(row?.number, index + 1), season: season(row) }] : []
     })
   }
 
@@ -129,7 +132,7 @@ class AnimeApiProvider implements AnimeProvider {
       const row = record(item)
       const id = text(row?.id)
       const title = text(row?.title)
-      return id && title ? [{ id, title }] : []
+      return id && title ? [{ id, title, image: image(row) }] : []
     })
   }
 
@@ -139,7 +142,7 @@ class AnimeApiProvider implements AnimeProvider {
     return rows.flatMap((item, index) => {
       const row = record(item)
       const id = text(row?.id)
-      return id ? [{ id, number: number(row?.number, index + 1) }] : []
+      return id ? [{ id, number: number(row?.number, index + 1), season: season(row) }] : []
     })
   }
 
@@ -155,7 +158,6 @@ class AnimeApiProvider implements AnimeProvider {
 }
 
 const providers: AnimeProvider[] = [new ConsumetProvider(), new WeebApiProvider(), new AnimeApiProvider()]
-
 const QUALITY_RANK: Record<string, number> = { '1080p': 4, '720p': 3, '480p': 2, '360p': 1, unknown: 0 }
 
 export async function searchAnime(query: string, maxResults = 8) {
@@ -183,12 +185,22 @@ export async function getAnimeEpisodes(animeId: string) {
   for (const provider of providers) {
     try {
       const rows = await provider.episodes(animeId)
-      if (rows.length) return rows
+      if (rows.length) return rows.sort((a, b) => a.season - b.season || a.number - b.number)
     } catch {
       // fallback silencioso
     }
   }
   return []
+}
+
+export async function getAnimeSeasons(animeId: string) {
+  const episodes = await getAnimeEpisodes(animeId)
+  return [...new Set(episodes.map((episode) => episode.season))].sort((a, b) => a - b)
+}
+
+export async function getAnimeEpisodesBySeason(animeId: string, seasonNumber: number) {
+  const episodes = await getAnimeEpisodes(animeId)
+  return episodes.filter((episode) => episode.season === seasonNumber)
 }
 
 export async function getAnimeSources(episodeId: string) {
