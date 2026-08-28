@@ -47,6 +47,9 @@ import { waifuV5Commands } from './waifu-v5.js'
 import { economyCareersV5Commands } from './economy-careers-v5.js'
 import { menuV5Commands } from './menu-v5.js'
 import { pvz2Commands } from './pvz2.js'
+import { officialApkV7Commands } from './official-apk-v7.js'
+import { developerV7Commands } from './developer-v7.js'
+import { telegramBridgeV7Commands } from './telegram-bridge-v7.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -95,6 +98,9 @@ export const commands: BotCommand[] = [
   ...economyCareersV5Commands,
   ...pvz2Commands,
   ...menuV5Commands,
+  ...officialApkV7Commands,
+  ...developerV7Commands,
+  ...telegramBridgeV7Commands,
 ]
 
 setMenuCommandProvider(() => commands)
