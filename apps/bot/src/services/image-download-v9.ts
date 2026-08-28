@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { Transform } from 'node:stream'
+import * as cheerio from 'cheerio'
 import { config } from '../config.js'
 
 export type ImageSource = 'instagram' | 'pinterest'
@@ -58,6 +59,78 @@ function imageCandidatesFromHtml(html: string) {
     }
   }
   return [...values]
+}
+
+function normalizeSearchTerm(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((term) => term.length >= 2)
+}
+
+function isPinterestContentImage(value: string) {
+  try {
+    const url = new URL(value)
+    const host = url.hostname.toLowerCase()
+    if (!(host === 'i.pinimg.com' || host.endsWith('.pinimg.com'))) return false
+    const pathName = url.pathname.toLowerCase()
+    if (/\/(?:avatars?|profile|profiles|logos?|favicon|favicons|static|pinclips?)\//i.test(pathName)) return false
+    if (!/\.(?:jpe?g|png|webp|gif)$/i.test(pathName)) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+function pinterestSearchImageCandidates(html: string, query: string) {
+  const $ = cheerio.load(html)
+  const terms = normalizeSearchTerm(query)
+  const ranked: Array<{ url: string; score: number; order: number }> = []
+  const seen = new Set<string>()
+  let order = 0
+
+  $('a[href]').each((_index, element) => {
+    const hrefRaw = $(element).attr('href') ?? ''
+    let href: URL
+    try { href = new URL(hrefRaw, 'https://www.pinterest.com/') } catch { return }
+    if (!/(^|\.)pinterest\.com$/i.test(href.hostname) || !/^\/pin(?:\/|$)/i.test(href.pathname)) return
+
+    const metadata = [
+      $(element).attr('aria-label'),
+      $(element).attr('title'),
+      $(element).text(),
+      $(element).find('img').map((_i, img) => $(img).attr('alt')).get().join(' '),
+    ].filter(Boolean).join(' ')
+    const normalizedMetadata = normalizeSearchTerm(metadata)
+    const score = terms.reduce((total, term) => total + (normalizedMetadata.includes(term) ? 1 : 0), 0)
+
+    $(element).find('img').each((_imgIndex, img) => {
+      const rawCandidates = [
+        $(img).attr('data-src'),
+        $(img).attr('data-lazy-src'),
+        $(img).attr('src'),
+        ...String($(img).attr('srcset') ?? '').split(',').map((entry) => entry.trim().split(/\s+/)[0]).filter(Boolean),
+      ]
+      for (const raw of rawCandidates) {
+        try {
+          const imageUrl = new URL(decodeEscaped(raw), href.origin).toString()
+          if (!isPinterestContentImage(imageUrl) || seen.has(imageUrl)) continue
+          seen.add(imageUrl)
+          ranked.push({ url: imageUrl, score, order: order++ })
+        } catch { /* skip malformed image */ }
+      }
+    })
+  })
+
+  ranked.sort((a, b) => b.score - a.score || a.order - b.order)
+  const urls = ranked.map((item) => item.url)
+  // Prefer query-relevant pins when Pinterest exposes descriptive metadata.
+  const relevant = ranked.filter((item) => item.score > 0).map((item) => item.url)
+  return [...new Set(relevant.length ? relevant : urls)].slice(0, 10)
 }
 
 async function fetchHtml(url: string) {
@@ -126,7 +199,7 @@ export async function downloadInstagramImages(input: string) {
 export async function downloadPinterestImages(input: string) {
   const url = assertSourceUrl(input, 'pinterest')
   const html = await fetchHtml(url)
-  const urls = imageCandidatesFromHtml(html).slice(0, 10)
+  const urls = imageCandidatesFromHtml(html).filter(isPinterestContentImage).slice(0, 10)
   return downloadImageSet('pinterest', urls)
 }
 
@@ -135,5 +208,5 @@ export async function searchPinterestImages(query: string) {
   if (!normalized) throw new Error('Debes indicar qué quieres buscar en Pinterest.')
   const searchUrl = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(normalized)}`
   const html = await fetchHtml(searchUrl)
-  return imageCandidatesFromHtml(html).slice(0, 10)
+  return pinterestSearchImageCandidates(html, normalized)
 }
