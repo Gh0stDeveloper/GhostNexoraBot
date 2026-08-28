@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs'
-import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -50,7 +50,7 @@ function imageCandidatesFromHtml(html: string) {
   ]
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
-      const raw = decodeEscaped(match[1] ?? match[0] ?? '').replace(/\\u0026/g, '&')
+      const raw = decodeEscaped(match[1] ?? match[0] ?? '')
       try {
         const url = new URL(raw)
         if (url.protocol === 'http:' || url.protocol === 'https:') values.add(url.toString())
@@ -136,8 +136,4 @@ export async function searchPinterestImages(query: string) {
   const searchUrl = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(normalized)}`
   const html = await fetchHtml(searchUrl)
   return imageCandidatesFromHtml(html).slice(0, 10)
-}
-
-export async function directoryImageCount(dir: string) {
-  return (await readdir(dir)).filter((name) => /\.(?:jpe?g|png|webp|gif)$/i.test(name)).length
 }
