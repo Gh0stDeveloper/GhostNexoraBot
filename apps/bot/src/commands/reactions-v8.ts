@@ -2,36 +2,36 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { resolveTarget } from '../utils/target.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 
-type Extra = { name: string; aliases: string[]; category: ReactionCategory; emoji: string; solo: string; directed: string }
-const variants: Extra[] = [
-  ['highfive',['chocar5'],'wave','🙌','busca un choque de manos','chocó las manos con'],
-  ['clap',['aplaudir2'],'happy','👏','aplaude','aplaudió a'],
-  ['laugh',['reir'],'happy','😂','se está riendo','se rió con'],
-  ['headpat',['headpats','pathead'],'pat','🫳','quiere una caricia en la cabeza','acarició la cabeza de'],
-  ['boop',['nariz'],'poke','👉','hizo boop','hizo boop a'],
-  ['bonk',['golpecito'],'kick','🔨','recibió un bonk imaginario','le dio un bonk a'],
-  ['facepalm',['facepalm2'],'confused','🤦','se llevó la mano a la cara','hizo facepalm frente a'],
-  ['shrug',['encogerse'],'confused','🤷','se encogió de hombros','se encogió de hombros frente a'],
-  ['salute',['saludar2'],'wave','🫡','hizo un saludo','saludó a'],
-  ['handhold',['tomarmano'],'cuddle','🤝','tomó una mano','tomó de la mano a'],
-  ['comfort',['consolar'],'cuddle','🫂','buscó consuelo','consoló a'],
-  ['cheerup',['animar2'],'happy','🎉','está animando','animó a'],
-  ['stare',['mirar2'],'confused','👀','se quedó mirando','se quedó mirando a'],
-  ['panic',['panico'],'confused','😰','entró en pánico','entró en pánico junto a'],
-  ['dizzy',['mareado'],'spin','😵','se mareó','mareó a'],
-  ['sleep',['dormir2'],'happy','😴','se quedó dormido','se quedó dormido junto a'],
-  ['yawn',['bostezo'],'happy','🥱','bostezó','hizo bostezar a'],
-  ['angry',['enojo'],'kick','😠','se enojó','se enojó con'],
-  ['rage',['furia'],'punch','💢','entró en modo furia','se enfureció con'],
-  ['cryhug',['llorarabrazo'],'hug','😭','lloró pidiendo un abrazo','abrazó llorando a'],
-  ['wave2',['saludo3'],'wave','👋','saludó con energía','saludó con energía a'],
-  ['dance2',['bailar2'],'dance','💃','se puso a bailar','invitó a bailar a'],
-  ['spin2',['girar2'],'spin','💫','dio vueltas','dio vueltas alrededor de'],
-  ['poke2',['toque2'],'poke','👉','dio otro toque','dio otro toque a'],
-  ['cuddle2',['mimos2'],'cuddle','🤗','quiere mimos','llenó de mimos a'],
+type ReactionDef = { name: string; aliases: string[]; category: ReactionCategory; emoji: string; solo: string; directed: string }
+const variants: ReactionDef[] = [
+  { name: 'highfive', aliases: ['chocar5'], category: 'wave', emoji: '🙌', solo: 'busca un choque de manos', directed: 'chocó las manos con' },
+  { name: 'clap', aliases: ['aplaudir2'], category: 'happy', emoji: '👏', solo: 'aplaude', directed: 'aplaudió a' },
+  { name: 'laugh', aliases: ['reir'], category: 'happy', emoji: '😂', solo: 'se está riendo', directed: 'se rió con' },
+  { name: 'headpat', aliases: ['headpats', 'pathead'], category: 'pat', emoji: '🫳', solo: 'quiere una caricia en la cabeza', directed: 'acarició la cabeza de' },
+  { name: 'boop', aliases: ['nariz'], category: 'poke', emoji: '👉', solo: 'hizo boop', directed: 'hizo boop a' },
+  { name: 'bonk', aliases: ['golpecito'], category: 'kick', emoji: '🔨', solo: 'recibió un bonk imaginario', directed: 'le dio un bonk a' },
+  { name: 'facepalm', aliases: ['facepalm2'], category: 'confused', emoji: '🤦', solo: 'se llevó la mano a la cara', directed: 'hizo facepalm frente a' },
+  { name: 'shrug', aliases: ['encogerse'], category: 'confused', emoji: '🤷', solo: 'se encogió de hombros', directed: 'se encogió de hombros frente a' },
+  { name: 'salute', aliases: ['saludar2'], category: 'wave', emoji: '🫡', solo: 'hizo un saludo', directed: 'saludó a' },
+  { name: 'handhold', aliases: ['tomarmano'], category: 'cuddle', emoji: '🤝', solo: 'tomó una mano', directed: 'tomó de la mano a' },
+  { name: 'comfort', aliases: ['consolar'], category: 'cuddle', emoji: '🫂', solo: 'buscó consuelo', directed: 'consoló a' },
+  { name: 'cheerup', aliases: ['animar2'], category: 'happy', emoji: '🎉', solo: 'está animando', directed: 'animó a' },
+  { name: 'stare', aliases: ['mirar2'], category: 'confused', emoji: '👀', solo: 'se quedó mirando', directed: 'se quedó mirando a' },
+  { name: 'panic', aliases: ['panico'], category: 'confused', emoji: '😰', solo: 'entró en pánico', directed: 'entró en pánico junto a' },
+  { name: 'dizzy', aliases: ['mareado'], category: 'spin', emoji: '😵', solo: 'se mareó', directed: 'mareó a' },
+  { name: 'sleep', aliases: ['dormir2'], category: 'happy', emoji: '😴', solo: 'se quedó dormido', directed: 'se quedó dormido junto a' },
+  { name: 'yawn', aliases: ['bostezo'], category: 'happy', emoji: '🥱', solo: 'bostezó', directed: 'hizo bostezar a' },
+  { name: 'angry', aliases: ['enojo'], category: 'kick', emoji: '😠', solo: 'se enojó', directed: 'se enojó con' },
+  { name: 'rage', aliases: ['furia'], category: 'punch', emoji: '💢', solo: 'entró en modo furia', directed: 'se enfureció con' },
+  { name: 'cryhug', aliases: ['llorarabrazo'], category: 'hug', emoji: '😭', solo: 'lloró pidiendo un abrazo', directed: 'abrazó llorando a' },
+  { name: 'wave2', aliases: ['saludo3'], category: 'wave', emoji: '👋', solo: 'saludó con energía', directed: 'saludó con energía a' },
+  { name: 'dance2', aliases: ['bailar2'], category: 'dance', emoji: '💃', solo: 'se puso a bailar', directed: 'invitó a bailar a' },
+  { name: 'spin2', aliases: ['girar2'], category: 'spin', emoji: '💫', solo: 'dio vueltas', directed: 'dio vueltas alrededor de' },
+  { name: 'poke2', aliases: ['toque2'], category: 'poke', emoji: '👉', solo: 'dio otro toque', directed: 'dio otro toque a' },
+  { name: 'cuddle2', aliases: ['mimos2'], category: 'cuddle', emoji: '🤗', solo: 'quiere mimos', directed: 'llenó de mimos a' },
 ]
 
-async function execute(ctx: CommandContext, def: Extra) {
+async function execute(ctx: CommandContext, def: ReactionDef): Promise<void> {
   const other = await resolveTarget(ctx)
   const sender = `@${ctx.sender.split('@')[0]}`; const target = other ? `@${other.split('@')[0]}` : ''
   const text = other ? `${sender} ${def.directed} ${target}` : `${sender} ${def.solo}`
@@ -41,4 +41,4 @@ async function execute(ctx: CommandContext, def: Extra) {
   catch { await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions }, { quoted: ctx.message }) }
 }
 
-export const reactionV8Commands: BotCommand[] = variants.map(([name, aliases, category, emoji, solo, directed]) => ({ name, aliases, category: 'social', description: `Reacción ${name}; admite respuesta o mención.`, usage: `${name} [@usuario]`, handler: (ctx) => execute(ctx, { name, aliases, category, emoji, solo, directed }) }))
+export const reactionV8Commands: BotCommand[] = variants.map((def) => ({ name: def.name, aliases: def.aliases, category: 'social', description: `Reacción ${def.name}; admite respuesta o mención.`, usage: `${def.name} [@usuario]`, handler: (ctx: CommandContext) => execute(ctx, def) }))
