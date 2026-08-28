@@ -46,6 +46,7 @@ import { stickerAdminV5Commands } from './sticker-admin-v5.js'
 import { waifuV5Commands } from './waifu-v5.js'
 import { economyCareersV5Commands } from './economy-careers-v5.js'
 import { menuV5Commands } from './menu-v5.js'
+import { pvz2Commands } from './pvz2.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -88,12 +89,11 @@ export const commands: BotCommand[] = [
   ...menuV3Commands,
   ...expansionV4Commands,
   ...casinoGuardV4Commands,
-  // V5: correcciones finales de interfaz, descargas, stickers, colección y economía.
   ...downloadUiV5Commands,
   ...stickerAdminV5Commands,
   ...waifuV5Commands,
   ...economyCareersV5Commands,
-  // El menú debe ser la última definición para reflejar el catálogo final completo.
+  ...pvz2Commands,
   ...menuV5Commands,
 ]
 
