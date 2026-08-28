@@ -66,6 +66,23 @@ function duration(value?: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+function inferFenceLanguage(lines: string[]) {
+  const sample = lines.slice(0, 10).join('\n')
+  if (/^\s*(?:from\s+\S+\s+import|import\s+\S+|def\s+\w+\(|class\s+\w+[:(]|print\s*\()/m.test(sample)) return 'python'
+  if (/\b(?:const|let|var|function|interface|type)\s+\w+|=>|console\.log\(/.test(sample)) {
+    return /interface\s+\w+|type\s+\w+\s*=|:\s*(?:string|number|boolean)\b/.test(sample) ? 'typescript' : 'javascript'
+  }
+  if (/^\s*(?:sudo\s+|apt\s+|npm\s+|pnpm\s+|yarn\s+|git\s+|curl\s+|systemctl\s+|journalctl\s+|#!\/bin\/(?:ba)?sh)/m.test(sample)) return 'bash'
+  if (/^\s*[\[{]/.test(sample.trim()) && /[}\]]\s*$/.test(sample.trim())) return 'json'
+  if (/<(?:html|div|span|script|body|head|section)\b/i.test(sample)) return 'html'
+  if (/\bSELECT\b[\s\S]+\bFROM\b|\bCREATE\s+TABLE\b/i.test(sample)) return 'sql'
+  if (/^[.#]?[\w-]+\s*\{[^}]*:[^}]*\}/m.test(sample)) return 'css'
+  if (/\b(?:package|import)\s+\w+|func\s+\w+\s*\(/.test(sample)) return 'go'
+  if (/\b(?:fn|let mut|struct|impl)\s+\w+/.test(sample)) return 'rust'
+  if (/^\s*(?:public\s+class|private\s+class|System\.out\.println)\b/m.test(sample)) return 'java'
+  return 'text'
+}
+
 function normalizeCodeFences(input: string) {
   const lines = input.replace(/\r\n/g, '\n').split('\n')
   let inside = false
@@ -82,7 +99,7 @@ function normalizeCodeFences(input: string) {
     }
 
     inside = true
-    if (!match[1]) lines[index] = `\`\`\`text`
+    if (!match[1]) lines[index] = `\`\`\`${inferFenceLanguage(lines.slice(index + 1, index + 11))}`
   }
 
   if (inside) lines.push('```')
@@ -142,16 +159,15 @@ async function showTikTok(ctx: CommandContext, query: string) {
     footer: 'API Lempi · Ghost Nexora Bot',
     cards: results.slice(0, 10).map((item, index) => {
       const token = rememberDownload({ url: item.video!, kind: 'video', baseName: `tiktok-${index + 1}` })
-      const buttons: InteractiveButton[] = [
-        { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}tiktokdl ${token}` },
-        { type: 'url', text: '🌐 Abrir', url: item.url },
-      ]
       return {
         title: `#${index + 1} · ${(item.author?.username ? `@${item.author.username}` : 'TikTok')}`,
         body: tiktokBody(item),
         imageUrl: item.author?.avatar,
         footer: `Lemppi · ${item.quality ?? 'Media'}`,
-        buttons,
+        buttons: [
+          { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}tiktokdl ${token}` },
+          { type: 'url', text: '🌐 Abrir', url: item.url },
+        ],
       }
     }),
   })
@@ -271,10 +287,7 @@ async function showHappyMod(ctx: CommandContext, query: string) {
 
 async function sendPendingDownload(ctx: CommandContext, token: string, label: string) {
   const item = takeDownload(token)
-  const result = await downloadLempiMedia(item.url, {
-    kind: item.kind,
-    baseName: item.baseName,
-  })
+  const result = await downloadLempiMedia(item.url, { kind: item.kind, baseName: item.baseName })
 
   try {
     if (result.kind === 'image') {
@@ -340,6 +353,16 @@ export const lempiApiCommands: BotCommand[] = [
     usage: 'instagram <búsqueda>',
     async handler(ctx) {
       await showInstagram(ctx, requireQuery(ctx, `Uso: ${ctx.prefix}instagram <búsqueda>`))
+    },
+  },
+  {
+    name: 'igimg',
+    aliases: ['instagramimg', 'instagramimages', 'igimages'],
+    category: 'downloads',
+    description: 'Busca imágenes públicas de Instagram mediante API Lempi.',
+    usage: 'igimg <búsqueda>',
+    async handler(ctx) {
+      await showInstagram(ctx, requireQuery(ctx, `Uso: ${ctx.prefix}igimg <búsqueda>`))
     },
   },
   {
