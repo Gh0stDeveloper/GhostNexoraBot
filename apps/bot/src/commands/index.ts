@@ -46,7 +46,6 @@ import { stickerAdminV5Commands } from './sticker-admin-v5.js'
 import { waifuV5Commands } from './waifu-v5.js'
 import { economyCareersV5Commands } from './economy-careers-v5.js'
 import { menuV5Commands } from './menu-v5.js'
-import { mediaDevV6Commands } from './media-dev-v6.js'
 import { pvz2Commands } from './pvz2.js'
 
 export const commands: BotCommand[] = [
@@ -94,7 +93,6 @@ export const commands: BotCommand[] = [
   ...stickerAdminV5Commands,
   ...waifuV5Commands,
   ...economyCareersV5Commands,
-  ...mediaDevV6Commands,
   ...pvz2Commands,
   ...menuV5Commands,
 ]
