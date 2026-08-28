@@ -8,8 +8,9 @@ async function botSticker(ctx: CommandContext) {
     const rows = globalStickers.list()
     const text = rows.length
       ? rows.map((row) => {
-          const triggers = (row.triggers ?? '').split('|').filter(Boolean)
-          return `#${row.id} · *${row.label ?? 'sin etiqueta'}*${triggers.length ? `\n   Palabras/frases: ${triggers.map((x) => `“${x}”`).join(', ')}` : '\n   Sin palabras: aparición aleatoria ocasional'} `
+          const triggerText = typeof row.triggers === 'string' ? row.triggers : ''
+          const triggers: string[] = triggerText.split('|').filter(Boolean)
+          return `#${row.id} · *${row.label ?? 'sin etiqueta'}*${triggers.length ? `\n   Palabras/frases: ${triggers.map((x: string) => `“${x}”`).join(', ')}` : '\n   Sin palabras: aparición aleatoria ocasional'} `
         }).join('\n\n')
       : 'No hay stickers globales configurados.'
     await ctx.reply(`🎭 *BIBLIOTECA GLOBAL DE STICKERS*\n━━━━━━━━━━━━━━\n${text}\n\nTodos los stickers de esta biblioteca son globales para el bot.\nAñadir: *${ctx.prefix}botsticker add etiqueta | palabra,frase completa*\nEliminar: *${ctx.prefix}botsticker remove <id>*`)
@@ -26,14 +27,16 @@ async function botSticker(ctx: CommandContext) {
     const media = await downloadMessageMedia(ctx.message)
     if (!media || media.kind !== 'sticker') throw new Error('Responde directamente al sticker que deseas añadir a la biblioteca global.')
     const raw = ctx.args.slice(1).join(' ')
-    const [labelRaw = '', triggerRaw = ''] = raw.split('|')
+    const parts = raw.split('|')
+    const labelRaw = parts.shift() ?? ''
+    const triggerRaw = parts.join('|')
     const label = labelRaw.trim() || undefined
-    const triggers = triggerRaw.split(',').map((item) => item.trim()).filter(Boolean)
+    const triggers: string[] = triggerRaw.split(',').map((item: string) => item.trim()).filter(Boolean)
     const row = await globalStickers.add(media.buffer, ctx.sender, globalStickers.hashFromMessage(ctx.message), label, triggers)
     await ctx.reply([
       `✅ *STICKER GLOBAL #${row.id} AÑADIDO*`,
       label ? `🏷️ Etiqueta: *${label}*` : '',
-      triggers.length ? `💬 Puede reaccionar a: ${triggers.map((x) => `“${globalStickers.normalizeTrigger(x)}”`).join(', ')}` : '🎲 Sin palabras asociadas: puede aparecer ocasionalmente de forma aleatoria.',
+      triggers.length ? `💬 Puede reaccionar a: ${triggers.map((x: string) => `“${globalStickers.normalizeTrigger(x)}”`).join(', ')}` : '🎲 Sin palabras asociadas: puede aparecer ocasionalmente de forma aleatoria.',
       '',
       'Las coincidencias ignoran mayúsculas, acentos y signos; las palabras cortas ya no coinciden dentro de otras palabras.',
     ].filter(Boolean).join('\n'))
