@@ -154,12 +154,13 @@ async function requestOnce<T>(pathname: string, params: Record<string, string | 
 }
 
 export async function requestLempiJson<T>(
-  endpoints: string[],
+  endpoints: string | string[],
   params: Record<string, string | number | undefined>,
   options: RequestOptions = {},
 ): Promise<T> {
   ensureState()
-  const candidates = [...new Set(endpoints.map((item) => item.trim()).filter(Boolean))]
+  const endpointList = Array.isArray(endpoints) ? endpoints : [endpoints]
+  const candidates = [...new Set(endpointList.map((item) => item.trim()).filter(Boolean))]
   if (!candidates.length) throw new LempiUnavailableError()
 
   let lastError: LempiRequestError | null = null
