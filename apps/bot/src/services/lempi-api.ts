@@ -122,7 +122,7 @@ function firstString(...values: unknown[]) {
 function mediaKindFrom(value?: string, url?: string): LempiMediaKind {
   const input = `${value ?? ''} ${url ?? ''}`.toLowerCase()
   if (/gif|jpe?g|png|webp|avif/.test(input)) return 'image'
-  if /mp4|webm|mov|m4v/.test(input)) return 'video'
+  if (/mp4|webm|mov|m4v/.test(input)) return 'video'
   if (/mp3|m4a|ogg|opus|wav/.test(input)) return 'audio'
   if (/\.apk(?:$|[?#])/.test(input)) return 'document'
   return 'unknown'
@@ -192,7 +192,7 @@ function normalizeInstagram(raw: Record<string, unknown>): LempiInstagramResult 
     image,
     download,
     thumbnail: firstString(raw.thumbnail, raw.thumb, raw.portada),
-    duration: numberValue(raw.duracion, ),
+    duration: numberValue(raw.duracion),
   }
 }
 
@@ -281,7 +281,7 @@ function extensionFromContentType(contentType: string, kind: LempiMediaKind, sou
 }
 
 function safeFileName(value: string) {
-  return value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 90) || 'lempli-media'
+  return value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 90) || 'lemppi-media'
 }
 
 export async function downloadLempiMedia(
