@@ -85,7 +85,8 @@ export class CommandRouter {
     }
 
     if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner && !senderIsGroupAdmin) {
-      return false
+      // Deliberately consume the message so the human-response layer is not invoked.
+      return true
     }
 
     if (!text.startsWith(prefix)) {
