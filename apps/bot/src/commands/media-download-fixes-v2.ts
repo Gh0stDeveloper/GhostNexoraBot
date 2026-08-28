@@ -1,4 +1,5 @@
 import type { BotCommand, CommandContext } from '../types.js'
+import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import {
   downloadHappyModDirect,
   downloadInstagramDirect,
@@ -129,32 +130,37 @@ async function runInstagram(ctx: CommandContext, imagesOnly: boolean) {
   }
 }
 
+function happyModBody(item: Awaited<ReturnType<typeof searchHappyModDirect>>[number]) {
+  return [
+    item.version ? `Versión: ${item.version}` : '',
+    'APK modificada: revisa permisos antes de instalar.',
+  ].filter(Boolean).join('\n')
+}
+
 async function runHappyModSearch(ctx: CommandContext) {
   const query = requireText(ctx, `Uso: ${ctx.prefix}happymod <nombre de aplicación>`)
   const results = await searchHappyModDirect(query, 20)
 
   await ctx.reply(`🧩 *HAPPYMOD*\n━━━━━━━━━━━━━━\n🔎 ${query}\n📦 ${results.length} resultados encontrados.\n⬇️ Selecciona una aplicación para descargar.`)
 
-  await ctx.socket.sendMessage(ctx.chatId, {
-    image: { url: results[0]!.imagen! },
-    caption: [
-      `🧩 *${results[0]!.nombre}*`,
-      results[0]!.version ? `🔄 Versión: ${results[0]!.version}` : '',
-      `📦 Resultado 1 de ${results.length}`,
-      '',
-      `Usa *${ctx.prefix}happymoddl ${results[0]!.tokenKey}* para descargar esta APK.`,
-      '',
-      '⚠️ APK modificada · verifica permisos antes de instalar.',
-    ].filter(Boolean).join('\n'),
-  }, { quoted: ctx.message }).catch(() => undefined)
-
-  for (const item of results.slice(1)) {
-    await ctx.socket.sendMessage(ctx.chatId, {
-      image: item.imagen ? { url: item.imagen } : undefined,
-      text: item.imagen ? undefined : `🧩 *${item.nombre}*\n${item.version ? `🔄 ${item.version}\n` : ''}📦 ${item.tokenKey}`,
-    } as any).catch(() => undefined)
-    await ctx.reply(`🧩 *#${item.numero ?? '?'} ${item.nombre}*\n${item.version ? `🔄 Versión: ${item.version}\n` : ''}⬇️ *${ctx.prefix}happymoddl ${item.tokenKey}*`)
-  }
+  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+    title: '🧩 HAPPYMOD · RESULTADOS',
+    body: `Resultados para: ${query}`,
+    footer: 'Ghost Nexora Bot',
+    cards: results.map((item, index) => {
+      const buttons: InteractiveButton[] = [
+        { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}happymoddl ${item.tokenKey}` },
+      ]
+      if (item.url) buttons.push({ type: 'url', text: '🌐 Abrir', url: item.url })
+      return {
+        title: `#${item.numero ?? index + 1} · ${item.nombre}`.slice(0, 120),
+        body: happyModBody(item),
+        imageUrl: item.imagen,
+        footer: 'Ghost Nexora Bot',
+        buttons,
+      }
+    }),
+  })
 }
 
 async function runHappyModDownload(ctx: CommandContext) {
