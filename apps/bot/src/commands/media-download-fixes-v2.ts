@@ -32,28 +32,15 @@ async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedM
   const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\n👻 Ghost Nexora Bot`
 
   if (result.kind === 'image') {
-    await ctx.socket.sendMessage(ctx.chatId, {
-      image: { url: result.filePath },
-      caption,
-    }, { quoted: ctx.message })
+    await ctx.socket.sendMessage(ctx.chatId, { image: { url: result.filePath }, caption }, { quoted: ctx.message })
     return
   }
-
   if (result.kind === 'video') {
-    await ctx.socket.sendMessage(ctx.chatId, {
-      video: { url: result.filePath },
-      mimetype: 'video/mp4',
-      caption,
-    }, { quoted: ctx.message })
+    await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption }, { quoted: ctx.message })
     return
   }
-
   if (result.kind === 'audio') {
-    await ctx.socket.sendMessage(ctx.chatId, {
-      audio: { url: result.filePath },
-      mimetype: 'audio/mpeg',
-      ptt: false,
-    }, { quoted: ctx.message })
+    await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
     return
   }
 
@@ -186,9 +173,7 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     category: 'downloads',
     description: 'Descarga contenido de Instagram desde una URL.',
     usage: 'ig <url>',
-    async handler(ctx) {
-      await runInstagram(ctx, false)
-    },
+    async handler(ctx) { await runInstagram(ctx, false) },
   },
   {
     name: 'igimg',
@@ -196,9 +181,7 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     category: 'downloads',
     description: 'Descarga imágenes de una publicación de Instagram.',
     usage: 'igimg <url>',
-    async handler(ctx) {
-      await runInstagram(ctx, true)
-    },
+    async handler(ctx) { await runInstagram(ctx, true) },
   },
   {
     name: 'pinterest',
@@ -206,9 +189,7 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     category: 'downloads',
     description: 'Busca imágenes de Pinterest y las entrega como álbum.',
     usage: 'pinterest <búsqueda>',
-    async handler(ctx) {
-      await runPinterest(ctx)
-    },
+    async handler(ctx) { await runPinterest(ctx) },
   },
   {
     name: 'happymod',
@@ -216,9 +197,7 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     category: 'downloads',
     description: 'Busca APKs modificadas.',
     usage: 'happymod <aplicación>',
-    async handler(ctx) {
-      await runHappyModSearch(ctx)
-    },
+    async handler(ctx) { await runHappyModSearch(ctx) },
   },
   {
     name: 'happymoddl',
@@ -226,8 +205,6 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     category: 'downloads',
     description: 'Descarga una APK seleccionada.',
     usage: 'happymoddl <token>',
-    async handler(ctx) {
-      await runHappyModDownload(ctx)
-    },
+    async handler(ctx) { await runHappyModDownload(ctx) },
   },
 ]
