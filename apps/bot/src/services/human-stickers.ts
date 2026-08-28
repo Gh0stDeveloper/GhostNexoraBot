@@ -5,6 +5,7 @@ import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from './economy.js'
+import { maybeHumanReply } from './human-replies.js'
 import { digitsFromJid, downloadMessageMedia, getContextInfo, getMessageText, getSender, unwrapMessage } from '../utils/message.js'
 
 const db = economy.db
@@ -158,16 +159,16 @@ export async function maybeSendHumanSticker(socket: WASocket, message: WAMessage
   const chatId = message.key.remoteJid
   if (!chatId?.endsWith('@g.us') || message.key.fromMe) return false
   const rows = db.prepare('SELECT id, file_path as filePath, triggers FROM global_stickers ORDER BY id DESC LIMIT 100').all() as Array<{ id: number; filePath: string; triggers?: string }>
-  if (!rows.length) return false
+  if (!rows.length) return maybeHumanReply(socket, message)
   const text = getMessageText(message)
   const triggered = rows.filter((row) => (row.triggers ?? '').split('|').filter(Boolean).some((trigger) => triggerMatches(text, trigger)))
   const chance = triggered.length ? 0.65 : 0.015
-  if (Math.random() > chance) return false
+  if (Math.random() > chance) return maybeHumanReply(socket, message)
   const pool = triggered.length ? triggered : rows
   const picked = pool[Math.floor(Math.random() * pool.length)]!
   try {
     await readFile(picked.filePath)
     await socket.sendMessage(chatId, { sticker: { url: picked.filePath } }, { quoted: message })
     return true
-  } catch { return false }
+  } catch { return maybeHumanReply(socket, message) }
 }
