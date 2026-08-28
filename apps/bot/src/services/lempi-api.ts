@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { config } from '../config.js'
+import { requestLempiJson } from './lempi-client.js'
 
 const DEFAULT_TIMEOUT_MS = 45_000
 const MEDIA_TIMEOUT_MS = 15 * 60_000
@@ -60,47 +61,7 @@ export type LempiHappyModResult = {
   version?: string
   imagen?: string
   url: string
-}
-
-function apiKey() {
-  const key = config.lempiApiKey.trim()
-  if (!key) throw new Error('LEMPI_API_KEY no está configurada en el .env del servidor.')
-  return key
-}
-
-function endpoint(pathname: string, params: Record<string, string | number | undefined>) {
-  const url = new URL(pathname.replace(/^\//, ''), `${config.lempiBaseUrl.replace(/\/$/, '')}/`)
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && String(value).trim() !== '') url.searchParams.set(key, String(value))
-  }
-  url.searchParams.set('apikey', apiKey())
-  return url
-}
-
-async function requestJson<T>(pathname: string, params: Record<string, string | number | undefined>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
-  const response = await fetch(endpoint(pathname, params), {
-    method: 'GET',
-    headers: { 'content-type': 'application/json', accept: 'application/json' },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(timeoutMs),
-  })
-
-  const text = await response.text()
-  let payload: unknown
-  try {
-    payload = JSON.parse(text)
-  } catch {
-    throw new Error(`API Lempi devolvió una respuesta no válida (HTTP ${response.status}).`)
-  }
-
-  if (!response.ok) throw new Error(`API Lempi respondió HTTP ${response.status}.`)
-  if (!payload || typeof payload !== 'object') throw new Error('API Lempi devolvió un formato inesperado.')
-  if ('status' in payload && (payload as { status?: boolean }).status === false) {
-    const detail = 'message' in payload ? String((payload as { message?: unknown }).message ?? '') : ''
-    throw new Error(detail || 'API Lempi rechazó la solicitud.')
-  }
-
-  return payload as T
+  download?: string
 }
 
 function stringValue(value: unknown) {
@@ -108,7 +69,9 @@ function stringValue(value: unknown) {
 }
 
 function numberValue(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
+  return undefined
 }
 
 function firstString(...values: unknown[]) {
@@ -119,27 +82,90 @@ function firstString(...values: unknown[]) {
   return undefined
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function collectRecords(value: unknown, out: Record<string, unknown>[] = [], depth = 0) {
+  if (depth > 8 || value === null || value === undefined) return out
+  if (Array.isArray(value)) {
+    for (const item of value) collectRecords(item, out, depth + 1)
+    return out
+  }
+  const record = asRecord(value)
+  if (!record) return out
+  out.push(record)
+  for (const child of Object.values(record)) collectRecords(child, out, depth + 1)
+  return out
+}
+
+function normalizeUrl(value: string) {
+  try {
+    const parsed = new URL(value)
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : null
+  } catch {
+    return null
+  }
+}
+
+function collectUrls(value: unknown, out: string[] = [], depth = 0) {
+  if (depth > 8 || value === null || value === undefined) return out
+  if (typeof value === 'string') {
+    const match = normalizeUrl(value.trim())
+    if (match) out.push(match)
+    return out
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectUrls(item, out, depth + 1)
+    return out
+  }
+  const record = asRecord(value)
+  if (!record) return out
+  for (const child of Object.values(record)) collectUrls(child, out, depth + 1)
+  return out
+}
+
 function mediaKindFrom(value?: string, url?: string): LempiMediaKind {
   const input = `${value ?? ''} ${url ?? ''}`.toLowerCase()
+  if (/\.apk(?:$|[?#])/.test(input)) return 'document'
   if (/gif|jpe?g|png|webp|avif/.test(input)) return 'image'
   if (/mp4|webm|mov|m4v/.test(input)) return 'video'
   if (/mp3|m4a|ogg|opus|wav/.test(input)) return 'audio'
-  if (/\.apk(?:$|[?#])/.test(input)) return 'document'
   return 'unknown'
 }
 
+function mediaUrls(value: unknown, imagesOnly = false) {
+  const urls = [...new Set(collectUrls(value))]
+    .filter((url) => !/api\.lempi\.lat/i.test(url))
+    .filter((url) => !/\/avatar\b|thumbnail|thumb/i.test(url))
+
+  const scored = urls.map((url) => {
+    const lower = url.toLowerCase()
+    let score = 0
+    if (/\.jpg|\.jpeg|\.png|\.webp|\.avif/.test(lower)) score += 100
+    if (/\.mp4|\.webm|\.mov|\.m4v/.test(lower)) score += 90
+    if (/\/originals\//.test(lower)) score += 20
+    if (/\/download\b|\/media\b|\/video\b|\/image\b/.test(lower)) score += 10
+    if (/pinimg|cdn/.test(lower)) score += 5
+    return { url, score }
+  }).sort((a, b) => b.score - a.score)
+
+  return (imagesOnly ? scored.filter(({ url }) => mediaKindFrom(undefined, url) === 'image') : scored)
+    .map(({ url }) => url)
+}
+
 function normalizeTikTok(raw: Record<string, unknown>): LempiTikTokResult | null {
-  const video = firstString(raw.video, raw.download, raw.descarga)
-  const url = firstString(raw.url, raw.link)
+  const video = firstString(raw.video, raw.download, raw.descarga, raw.url_video, raw.mp4)
+  const url = firstString(raw.url, raw.link, raw.tiktok)
   if (!url || !video) return null
-  const author = raw.autor && typeof raw.autor === 'object' ? raw.autor as Record<string, unknown> : {}
-  const stats = raw.estadisticas && typeof raw.estadisticas === 'object' ? raw.estadisticas as Record<string, unknown> : {}
-  const music = raw.musica && typeof raw.musica === 'object' ? raw.musica as Record<string, unknown> : {}
+  const author = asRecord(raw.autor) ?? asRecord(raw.author) ?? {}
+  const stats = asRecord(raw.estadisticas) ?? asRecord(raw.stats) ?? {}
+  const music = asRecord(raw.musica) ?? asRecord(raw.music) ?? {}
   return {
     id: firstString(raw.id) ?? url,
     title: firstString(raw.titulo, raw.title, raw.description) ?? 'TikTok',
     url,
-    duration: numberValue(raw.duracion),
+    duration: numberValue(raw.duracion ?? raw.duration),
     video,
     quality: firstString(raw.calidad, raw.quality),
     author: {
@@ -164,23 +190,23 @@ function normalizeTikTok(raw: Record<string, unknown>): LempiTikTokResult | null
 }
 
 function normalizePinterest(raw: Record<string, unknown>): LempiPinterestResult | null {
-  const download = firstString(raw.descarga, raw.download, raw.image, raw.imagen)
+  const download = firstString(raw.descarga, raw.download, raw.image, raw.imagen, raw.original, raw.originalUrl)
   if (!download) return null
   return {
-    title: stringValue(raw.titulo) ?? stringValue(raw.title),
+    title: firstString(raw.titulo, raw.title),
     author: firstString(raw.autor, raw.author),
     likes: firstString(raw.likes),
     type: firstString(raw.tipo, raw.type),
-    url: firstString(raw.url, raw.link),
+    url: firstString(raw.url, raw.link, raw.pin),
     download,
   }
 }
 
 function normalizeInstagram(raw: Record<string, unknown>): LempiInstagramResult | null {
-  const video = firstString(raw.video, raw.mp4)
-  const image = firstString(raw.imagen, raw.image, raw.foto, raw.photo)
-  const download = firstString(raw.descarga, raw.download, raw.media, raw.direct)
-  const url = firstString(raw.url, raw.link)
+  const video = firstString(raw.video, raw.mp4, raw.video_url, raw.videoUrl)
+  const image = firstString(raw.imagen, raw.image, raw.foto, raw.photo, raw.image_url, raw.imageUrl)
+  const download = firstString(raw.descarga, raw.download, raw.media, raw.direct, raw.download_url, raw.downloadUrl)
+  const url = firstString(raw.url, raw.link, raw.instagram)
   if (!video && !image && !download) return null
   return {
     id: firstString(raw.id),
@@ -192,39 +218,61 @@ function normalizeInstagram(raw: Record<string, unknown>): LempiInstagramResult 
     image,
     download,
     thumbnail: firstString(raw.thumbnail, raw.thumb, raw.portada),
-    duration: numberValue(raw.duracion),
+    duration: numberValue(raw.duracion ?? raw.duration),
+  }
+}
+
+function normalizeHappyMod(raw: Record<string, unknown>): LempiHappyModResult | null {
+  const name = firstString(raw.nombre, raw.name, raw.title, raw.app)
+  const url = firstString(raw.url, raw.link, raw.page, raw.source)
+  const download = firstString(raw.descarga, raw.download, raw.apk, raw.apk_url, raw.apkUrl, raw.direct)
+  if (!name || !url) return null
+  return {
+    numero: numberValue(raw.numero ?? raw.number ?? raw.id),
+    nombre: name,
+    version: firstString(raw.version, raw.ver),
+    imagen: firstString(raw.imagen, raw.image, raw.icon, raw.logo),
+    url,
+    download,
   }
 }
 
 export async function searchLempiTikTok(query: string): Promise<LempiTikTokResult[]> {
-  const payload = await requestJson<{ resultados?: unknown[] }>('/s/tiktok', { q: query })
-  const rows = Array.isArray(payload.resultados) ? payload.resultados : []
+  const payload = await requestLempiJson<{ resultados?: unknown[]; results?: unknown[] }>('/s/tiktok', { q: query })
+  const rows = Array.isArray(payload.resultados) ? payload.resultados : Array.isArray(payload.results) ? payload.results : collectRecords(payload)
   return rows
-    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item)))
     .map(normalizeTikTok)
     .filter((item): item is LempiTikTokResult => Boolean(item))
     .slice(0, 20)
 }
 
 export async function searchLempiPinterest(query: string, limit = 20): Promise<LempiPinterestResult[]> {
-  const payload = await requestJson<{ results?: unknown[] }>('/s/pin', { q: query, limit })
-  const rows = Array.isArray(payload.results) ? payload.results : []
-  return rows
-    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-    .map(normalizePinterest)
-    .filter((item): item is LempiPinterestResult => Boolean(item))
-    .slice(0, Math.max(1, Math.min(20, limit)))
+  let lastError: unknown
+  for (const endpoint of config.lempiPinterestSearchEndpoints) {
+    try {
+      const payload = await requestLempiJson<unknown>(endpoint, { q: query, limit })
+      const records = collectRecords(payload)
+      const normalized = records
+        .map(normalizePinterest)
+        .filter((item): item is LempiPinterestResult => Boolean(item))
+        .slice(0, Math.max(1, Math.min(20, limit)))
+      if (normalized.length) return normalized
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (lastError) throw lastError
+  return []
 }
 
 export async function searchLempiInstagram(query: string, limit = 10): Promise<LempiInstagramResult[]> {
   const endpoints = ['/s/instagram', '/s/ig']
   let lastError: unknown
-  for (const pathname of endpoints) {
+  for (const endpoint of endpoints) {
     try {
-      const payload = await requestJson<{ resultados?: unknown[]; results?: unknown[] }>(pathname, { q: query, limit })
-      const rows = Array.isArray(payload.resultados) ? payload.resultados : Array.isArray(payload.results) ? payload.results : []
-      const normalized = rows
-        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+      const payload = await requestLempiJson<unknown>(endpoint, { q: query, limit })
+      const normalized = collectRecords(payload)
         .map(normalizeInstagram)
         .filter((item): item is LempiInstagramResult => Boolean(item))
         .slice(0, Math.max(1, Math.min(20, limit)))
@@ -233,35 +281,72 @@ export async function searchLempiInstagram(query: string, limit = 10): Promise<L
       lastError = error
     }
   }
-  if (lastError instanceof Error) throw lastError
+  if (lastError) throw lastError
   return []
 }
 
-export async function searchLempiHappyMod(query: string, limit = 10): Promise<LempiHappyModResult[]> {
-  const payload = await requestJson<{ data?: { resultados?: unknown[] } }>('/search/happymod', { q: query })
-  const rows = Array.isArray(payload.data?.resultados) ? payload.data.resultados : []
-  return rows
-    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-    .map((item): LempiHappyModResult | null => {
-      const name = firstString(item.nombre, item.name)
-      const url = firstString(item.url, item.link)
-      if (!name || !url) return null
-      return {
-        numero: numberValue(item.numero),
-        nombre: name,
-        version: firstString(item.version),
-        imagen: firstString(item.imagen, item.image, item.icon),
-        url,
+export async function downloadLempiInstagram(sourceUrl: string, imagesOnly = false): Promise<LempiDownloadedMedia[]> {
+  let lastError: unknown
+  for (const endpoint of config.lempiInstagramEndpoints) {
+    try {
+      const payload = await requestLempiJson<unknown>(endpoint, { url: sourceUrl }, { timeoutMs: 90_000 })
+      const records = collectRecords(payload)
+      const normalized = records.map(normalizeInstagram).filter((item): item is LempiInstagramResult => Boolean(item))
+      const urls = mediaUrls(normalized.length ? normalized : payload, imagesOnly)
+      if (!urls.length) {
+        const direct = normalized.flatMap((item) => [item.image, item.video, item.download].filter(Boolean) as string[])
+        if (direct.length) return downloadLempiMediaList(direct, imagesOnly ? 'image' : undefined, 'instagram')
+        continue
       }
-    })
-    .filter((item): item is LempiHappyModResult => item !== null)
-    .slice(0, Math.max(1, Math.min(20, limit)))
+      return downloadLempiMediaList(urls, imagesOnly ? 'image' : undefined, 'instagram')
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (lastError) throw lastError
+  throw new Error('No se pudo obtener el contenido de Instagram.')
+}
+
+export async function searchLempiHappyMod(query: string, limit = 10): Promise<LempiHappyModResult[]> {
+  let lastError: unknown
+  for (const endpoint of config.lempiHappyModSearchEndpoints) {
+    try {
+      const payload = await requestLempiJson<unknown>(endpoint, { q: query, limit })
+      const normalized = collectRecords(payload)
+        .map(normalizeHappyMod)
+        .filter((item): item is LempiHappyModResult => Boolean(item))
+      const unique = [...new Map(normalized.map((item) => [item.url, item])).values()]
+      if (unique.length) return unique.slice(0, Math.max(1, Math.min(20, limit)))
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (lastError) throw lastError
+  return []
+}
+
+export async function resolveLempiHappyMod(sourceUrl: string): Promise<string> {
+  let lastError: unknown
+  for (const endpoint of config.lempiHappyModDownloadEndpoints) {
+    try {
+      const payload = await requestLempiJson<unknown>(endpoint, { url: sourceUrl }, { timeoutMs: 90_000 })
+      const candidates = [...new Set(collectUrls(payload))]
+        .filter((url) => !/api\.lempi\.lat/i.test(url))
+      const apk = candidates.find((url) => /\.apk(?:$|[?#])/i.test(url))
+      if (apk) return apk
+      if (candidates.length) return candidates[0]!
+    } catch (error) {
+      lastError = error
+    }
+  }
+  if (lastError) throw lastError
+  throw new Error('No se pudo obtener el archivo solicitado.')
 }
 
 export async function askLempiDeepSeek(query: string): Promise<string> {
-  const payload = await requestJson<{ resultado?: { respuesta?: unknown }; respuesta?: unknown }>('/ai/deepseek', { q: query }, 120_000)
+  const payload = await requestLempiJson<{ resultado?: { respuesta?: unknown }; respuesta?: unknown }>('/ai/deepseek', { q: query }, { timeoutMs: 120_000 })
   const response = payload.resultado?.respuesta ?? payload.respuesta
-  if (typeof response !== 'string' || !response.trim()) throw new Error('DeepSeek no devolvió una respuesta utilizable.')
+  if (typeof response !== 'string' || !response.trim()) throw new Error('La respuesta no está disponible por el momento.')
   return response.trim()
 }
 
@@ -281,11 +366,24 @@ function extensionFromContentType(contentType: string, kind: LempiMediaKind, sou
 }
 
 function safeFileName(value: string) {
-  return value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 90) || 'lemppi-media'
+  return value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 90) || 'ghostnexora-media'
 }
 
 function isZipLikeApk(buffer: Buffer) {
   return buffer[0] === 0x50 && buffer[1] === 0x4b && [0x03, 0x05, 0x07].includes(buffer[2] ?? -1)
+}
+
+async function downloadLempiMediaList(urls: string[], forcedKind?: LempiMediaKind, baseName = 'media') {
+  const results: LempiDownloadedMedia[] = []
+  for (const [index, url] of [...new Set(urls)].slice(0, 12).entries()) {
+    const result = await downloadLempiMedia(url, {
+      kind: forcedKind,
+      baseName: `${baseName}-${index + 1}`,
+    })
+    results.push(result)
+  }
+  if (!results.length) throw new Error('No se pudo descargar ningún archivo.')
+  return results
 }
 
 export async function downloadLempiMedia(
@@ -293,24 +391,24 @@ export async function downloadLempiMedia(
   options: { kind?: LempiMediaKind; baseName?: string } = {},
 ): Promise<LempiDownloadedMedia> {
   const url = new URL(sourceUrl)
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('La URL de media no usa HTTP/HTTPS.')
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('La URL de descarga no es válida.')
 
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-lempi-'))
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-media-'))
   try {
     const response = await fetch(url, {
       redirect: 'follow',
       headers: {
-        'user-agent': 'GhostNexoraBot/1.1 (+https://api.lempi.lat)',
+        'user-agent': 'GhostNexoraBot',
         accept: '*/*',
       },
       signal: AbortSignal.timeout(MEDIA_TIMEOUT_MS),
     })
-    if (!response.ok || !response.body) throw new Error(`No se pudo descargar media (HTTP ${response.status}).`)
+    if (!response.ok || !response.body) throw new Error('No se pudo descargar el archivo.')
 
     const contentType = response.headers.get('content-type') ?? ''
     const kind = options.kind ?? mediaKindFrom(contentType, response.url || sourceUrl)
     if (/text\/html|application\/json/i.test(contentType) && kind !== 'document') {
-      throw new Error('La URL no devolvió un archivo multimedia directo.')
+      throw new Error('El enlace no devolvió un archivo multimedia.')
     }
 
     const ext = extensionFromContentType(contentType, kind, response.url || sourceUrl)
@@ -328,14 +426,14 @@ export async function downloadLempiMedia(
           : null, chunk)
       },
     })
-    await pipeline(response.body as any, limiter, createWriteStream(filePath))
+    await pipeline(response.body as any, limiter, createWriteStream(filePath, { mode: 0o600 }))
     const file = await stat(filePath)
-    if (file.size <= 0) throw new Error('El proveedor devolvió un archivo vacío.')
+    if (file.size <= 0) throw new Error('El archivo descargado está vacío.')
 
     if (kind === 'document') {
-      if (file.size < 1024) throw new Error('La descarga no parece ser una APK válida.')
+      if (file.size < 1024) throw new Error('El archivo descargado no parece ser una APK válida.')
       const header = await readFile(filePath).then((buffer) => buffer.subarray(0, 4))
-      if (!isZipLikeApk(header)) throw new Error('HappyMod no devolvió un APK/ZIP válido; se recibió otro tipo de archivo.')
+      if (!isZipLikeApk(header)) throw new Error('El archivo descargado no es una APK válida.')
     }
 
     return {
