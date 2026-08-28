@@ -1,14 +1,23 @@
 {
   "bot": "Ghost Nexora Bot",
   "version": "0.0.7c",
-  "status": "BETA",
-  "description": "Catálogo base. El comando .channelcatalog genera el catálogo completo desde el registro real de comandos en runtime.",
+  "status": "BETA · EN CONSTRUCCIÓN · MEJORANDO COMANDOS",
+  "description": "Manifest seguro del catálogo. .channelcatalog genera en runtime un JSON completo a partir del registro efectivo de comandos.",
   "author": "Ghost Developer / Nexora",
-  "generatedBy": "Ghost Nexora runtime command registry",
-  "commandSource": "apps/bot/src/commands/index.ts",
+  "features": {
+    "apk": ["official-source-only", "uptodown", "liteapks", "happymod", "carousel"],
+    "pvz2": ["pvz2", "pvz2set", "pvz2info", "pvz2del"],
+    "channel": ["channelinfo", "channelpost", "channelshare", "channelreact", "channelname", "channeldescription", "channelcatalog"],
+    "developer": ["devhelp", "devstatus", "devmemory", "devdisk", "devenv", "devcommands", "apkbuild"],
+    "humanInteraction": ["400+ response catalog", "10s maximum per-chat auto interaction interval", "contextual responses", "global sticker triggers"],
+    "ai": ["90s provider timeout", "120s message routing timeout"],
+    "version": "0.0.7c"
+  },
   "notes": [
     "No contiene credenciales ni API keys.",
-    "Los permisos se derivan de las propiedades ownerOnly, staffOnly, adminOnly y groupOnly.",
-    "El catálogo publicado por .channelcatalog siempre refleja los comandos efectivos después de los overrides."
+    "Los permisos se derivan de ownerOnly, staffOnly, adminOnly y groupOnly.",
+    "El catálogo publicado por .channelcatalog refleja los comandos efectivos después de los overrides.",
+    "Android ZIPs are validated and not executed directly on the production VPS.",
+    "Protected Telegram posts are not redistributed."
   ]
 }
