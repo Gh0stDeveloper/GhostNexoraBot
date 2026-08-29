@@ -21,6 +21,7 @@ import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { miniLLM } from './services/mini-llm.js'
 import { autoChat } from './services/auto-chat.js'
+import { enqueueLiveMessage } from './llm/live-queue.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -180,7 +181,7 @@ async function routeMessage(
       chatId.endsWith('@g.us'),
       text.startsWith(settings.prefix),
     )
-    if (text.length >= 2 && !text.startsWith(settings.prefix)) miniLLM.addLive(text)
+    if (text.length >= 2 && !text.startsWith(settings.prefix)) enqueueLiveMessage(text)
   }
 
   if (await handleAntiViewOnce(socket, message).catch((error) => {
@@ -268,7 +269,7 @@ await settings.init()
 startTempCleanup()
 startHealthServer()
 startAutomationScheduler(() => mainSocket)
-miniLLM.startAutoTrain()
+// El aprendizaje automático vive en ghost-nexora-llm.service; el proceso WhatsApp solo encola mensajes.
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
