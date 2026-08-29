@@ -8,6 +8,9 @@ type TrainingState = {
   requestedAt?: string
   requestedBy?: string
   stopAfterCurrent?: boolean
+  lastRequestedAt?: string
+  lastRequestedBy?: string
+  lastStopAfterCurrent?: boolean
 }
 
 const ROOT = path.resolve(config.dataDir, 'llm')
@@ -24,6 +27,9 @@ export function requestTraining(reason = 'manual', requestedBy?: string, stopAft
   state.requestedAt = new Date().toISOString()
   state.requestedBy = requestedBy
   state.stopAfterCurrent = stopAfterCurrent
+  state.lastRequestedAt = state.requestedAt
+  state.lastRequestedBy = requestedBy
+  state.lastStopAfterCurrent = stopAfterCurrent
   write(state)
 }
 
@@ -31,7 +37,12 @@ export function consumeTrainingRequest() {
   const state = read()
   if (!state.requested) return null
   state.requested = false
-  write({ requested: false })
+  write({
+    requested: false,
+    lastRequestedAt: state.requestedAt ?? state.lastRequestedAt,
+    lastRequestedBy: state.requestedBy ?? state.lastRequestedBy,
+    lastStopAfterCurrent: state.stopAfterCurrent !== false,
+  })
   return {
     reason: state.reason ?? 'manual',
     requestedAt: state.requestedAt,
