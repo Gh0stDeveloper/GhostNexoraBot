@@ -1,5 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { miniLLM } from '../services/mini-llm.js'
+import { prepareCorpusAndTrain } from '../llm/train.js'
 
 function formatBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
@@ -8,10 +9,10 @@ function formatBytes(bytes: number) {
   return `${bytes} B`
 }
 function help(prefix: string) {
-  return ['╭━━〔 🧠 *MINI-LLM LOCAL V2* 〕━━╮', `┃ ${prefix}llm status`, `┃ ${prefix}llm progress`, `┃ ${prefix}llm docs`, `┃ ${prefix}llm add`, `┃ ${prefix}llm train`, `┃ ${prefix}llm ask <pregunta>`, `┃ ${prefix}llm search <texto>`, `┃ ${prefix}llm auto on|off`, '╰━━━━━━━━━━━━━━━━━━╯', '', 'Corpus local: PDF, DOCX, TXT, MD, JSON y CSV.'].join('\n')
+  return ['╭━━〔 🧠 *MINI-LLM LOCAL V2* 〕━━╮', `┃ ${prefix}llm status`, `┃ ${prefix}llm progress`, `┃ ${prefix}llm docs`, `┃ ${prefix}llm add`, `┃ ${prefix}llm import`, `┃ ${prefix}llm train`, `┃ ${prefix}llm ask <pregunta>`, `┃ ${prefix}llm search <texto>`, `┃ ${prefix}llm auto on|off`, '╰━━━━━━━━━━━━━━━━━━╯', '', 'Corpus local: PDF, DOCX, TXT, MD, JSON y CSV.'].join('\n')
 }
 export const miniLlmCommands: BotCommand[] = [{
-  name: 'llm', aliases: ['minillm', 'localai'], category: 'tools', description: 'Gestiona el Mini-LLM local, corpus, memoria y entrenamiento.', usage: 'llm <status|progress|docs|add|train|ask|search|auto>',
+  name: 'llm', aliases: ['minillm', 'localai'], category: 'tools', description: 'Gestiona el Mini-LLM local, corpus, memoria y entrenamiento.', usage: 'llm <status|progress|docs|add|import|train|ask|search|auto>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
@@ -31,6 +32,16 @@ export const miniLlmCommands: BotCommand[] = [{
       await ctx.reply('📥 *MINI-LLM*\n━━━━━━━━━━━━━━\nProcesando documento y actualizando el corpus...')
       const result = await miniLLM.addDocument(ctx.socket, ctx.message)
       await ctx.reply(`✅ *DOCUMENTO AÑADIDO*\n━━━━━━━━━━━━━━\n📄 ${result.name}\n🧩 Fragmentos: *${result.chunks}*\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*`); return
+    }
+    if (sub === 'import' || sub === 'importar' || sub === 'rebuild' || sub === 'reconstruir') {
+      if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede importar el corpus.')
+      if (miniLLM.stats().learning) { await ctx.reply(`🧠 Ya hay un entrenamiento en ejecución. Consulta *${ctx.prefix}llm progress*.`); return }
+      await ctx.reply(`📚 *IMPORTACIÓN DEL CORPUS*\n━━━━━━━━━━━━━━\nLeyendo PDF, DOCX y TXT desde *data/llm/corpus*...`)
+      void prepareCorpusAndTrain().then(async (result) => {
+        if (!result.ok) { await ctx.reply('No se encontraron documentos compatibles en el corpus local.'); return }
+        await ctx.reply(`✅ *CORPUS PREPARADO*\n━━━━━━━━━━━━━━\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*\n📄 Fragmentos/oraciones: *${result.sentences}*\n🔤 Vocabulario BPE: *${result.vocab}*\n\n🧠 Entrenamiento iniciado/completado según el estado del corpus.`)
+      }).catch(async (error) => { await ctx.reply('❌ No se pudo preparar el corpus. Revisa los logs del bot.').catch(() => undefined); console.error(error) })
+      return
     }
     if (sub === 'train' || sub === 'entrenar') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede iniciar entrenamiento.')
