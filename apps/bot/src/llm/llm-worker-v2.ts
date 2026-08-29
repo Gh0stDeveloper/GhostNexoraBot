@@ -6,7 +6,7 @@ import { getQueueState, updateDocumentJob } from './document-queue.js'
 import { drainLiveMessages } from './live-queue.js'
 import { consumeTrainingRequest } from './training-queue.js'
 import { ingestDocument, ingestLive, countCorpusDocuments, migrateLegacyVectors, countVectors } from './incremental-corpus.js'
-import { checkpointRound, ensureBaseCheckpoint, expandVocab, ensureModelVocabularySize, loadVocab } from './incremental-training.js'
+import { checkpointRound, ensureBaseCheckpoint, ensureModelVocabularySize, loadVocab } from './incremental-training.js'
 
 const ROOT = path.resolve(config.dataDir, 'llm')
 const STATE = path.join(ROOT, 'state.json')
@@ -41,12 +41,7 @@ async function processDocuments() {
       const result = await ingestDocument(target)
       updateDocumentJob(job.id, { status: 'completed', finishedAt: new Date().toISOString(), path: target })
       const state = readState()
-      writeState({
-        totalDocuments: countCorpusDocuments(),
-        totalChunks: Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0),
-        vectorRecords: countVectors(),
-        currentMessage: `Documento procesado: ${job.filename}`,
-      })
+      writeState({ totalDocuments: countCorpusDocuments(), totalChunks: Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0), vectorRecords: countVectors(), currentMessage: `Documento procesado: ${job.filename}` })
       processed++
     } catch (error) {
       updateDocumentJob(job.id, { status: 'failed', finishedAt: new Date().toISOString(), error: extractStateError(error) })
@@ -61,14 +56,9 @@ function processLiveMessages() {
   if (!messages.length) return 0
   let added = 0
   for (const message of messages) {
-    try {
-      const result = ingestLive(message)
-      added += result.vectors
-    } catch (error) {
-      console.error('[LLM worker] mensaje vivo:', extractStateError(error))
-    }
+    try { added += ingestLive(message).vectors } catch (error) { console.error('[LLM worker] mensaje vivo:', extractStateError(error)) }
   }
-  if (messages.length) writeState({ totalMessages: Number(readState().totalMessages ?? 0) + messages.length, vectorRecords: countVectors(), currentMessage: `Memoria viva: ${messages.length} mensajes` })
+  writeState({ totalMessages: Number(readState().totalMessages ?? 0) + messages.length, vectorRecords: countVectors(), currentMessage: `Memoria viva: ${messages.length} mensajes` })
   return added
 }
 
@@ -78,19 +68,9 @@ async function trainOnce(reason: string) {
   const vocabBefore = loadVocab()
   if (vocabBefore.length === 0) throw new Error('No existe vocabulario base; no se permite reinicialización automática.')
   if (currentRun > 0) ensureBaseCheckpoint(currentRun)
+  ensureModelVocabularySize(vocabBefore.length)
 
-  const corpusFiles = fs.existsSync(CORPUS) ? fs.readdirSync(CORPUS, { recursive: true }).filter((value): value is string => typeof value === 'string') : []
-  const texts: string[] = []
-  for (const relative of corpusFiles) {
-    const file = path.join(CORPUS, relative)
-    try { if (fs.statSync(file).isFile()) texts.push(fs.readFileSync(file, 'utf8')) } catch {}
-  }
-  const merged = expandVocab(texts)
-  if (merged.newSize < vocabBefore.length) throw new Error(`INVARIANTE: vocabulario bajó de ${vocabBefore.length} a ${merged.newSize}. Abortado.`)
-  ensureModelVocabularySize(merged.newSize)
-
-  // IMPORTANT: miniLLM.train() is the owner of the learning lock. The worker must not
-  // set learning=true before calling it, otherwise train() self-rejects as already_running.
+  // miniLLM.train() owns the learning lock. Never set learning=true here.
   writeState({ currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: Number(process.env.LLM_TRAIN_EPOCHS ?? 2), currentMessage: `Preparando vuelta ${nextRun} (${reason})`, vectorRecords: countVectors() })
   const result = await miniLLM.train(`incremental-${nextRun}`)
   if (!result.started) {
@@ -98,7 +78,7 @@ async function trainOnce(reason: string) {
     return result
   }
   const finalVocab = loadVocab()
-  if (finalVocab.length < merged.oldSize) throw new Error(`INVARIANTE: vocabulario final ${finalVocab.length} < base ${merged.oldSize}. Abortado.`)
+  if (finalVocab.length < vocabBefore.length) throw new Error(`INVARIANTE: vocabulario final ${finalVocab.length} < base ${vocabBefore.length}. Abortado.`)
   checkpointRound(nextRun)
   writeState({ learning: false, currentProgress: 100, currentMessage: `Completado: vuelta ${nextRun}`, modelVersion: nextRun + 2, vectorRecords: countVectors() })
   return result
