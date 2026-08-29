@@ -23,9 +23,10 @@ const TOP_K = 5
 const MAX_TRAIN_RECORDS = 5000
 const AUTO_TRAIN_EVERY_MS = 30 * 60 * 1000
 const MIN_AUTO_TRAIN_MESSAGES = 20
+const MIN_MODEL_TRAIN_STEPS_FOR_GENERATION = 250
 const MAGIC = Buffer.from('NXLLM2\0', 'ascii')
 
-export type LlmState = {
+type LlmState = {
   startedAt: string
   totalDocuments: number
   totalChunks: number
@@ -67,8 +68,8 @@ const DEFAULT_STATE: LlmState = {
   startedAt: new Date().toISOString(), totalDocuments: 0, totalChunks: 0, totalMessages: 0,
   trainedMessages: 0, trainRuns: 0, trainSteps: 0, modelVersion: 2,
   lastTrainAt: null, lastTrainDurationMs: 0, lastLoss: null, bestLoss: null,
-  learning: false, autoTrainEnabled: true, currentProgress: 0, currentStep: 0,
-  currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: 0, currentMessage: 'En espera',
+  learning: false, autoTrainEnabled: true, currentProgress: 0, currentStep: 0, currentTotalSteps: 0,
+  currentEpoch: 0, currentTotalEpochs: 0, currentMessage: 'En espera',
 }
 
 function ensureDirs() {
@@ -96,7 +97,6 @@ function splitChunks(text: string) {
   }
   return out.filter(Boolean)
 }
-
 function hashVector(text: string) {
   const v = new Float32Array(DIM); const lower = text.toLowerCase()
   for (let i = 0; i < lower.length; i++) {
@@ -139,8 +139,22 @@ function cosine(a: Float32Array, b: Float32Array) {
   for (let i = 0; i < DIM; i++) { dot += a[i]! * b[i]!; na += a[i]! * a[i]!; nb += b[i]! * b[i]! }
   return dot / ((Math.sqrt(na) * Math.sqrt(nb)) || 1)
 }
+function normalizeTerms(text: string) {
+  return tokenize(text).map((value) => value.toLocaleLowerCase('es-MX')).filter((value) => value.length >= 2)
+}
+function lexicalScore(query: string, text: string) {
+  const terms = normalizeTerms(query); if (!terms.length) return 0
+  const haystack = normalizeTerms(text); const counts = new Map<string, number>(); for (const token of haystack) counts.set(token, (counts.get(token) ?? 0) + 1)
+  let matched = 0
+  for (const term of new Set(terms)) if ((counts.get(term) ?? 0) > 0) matched += 1
+  return matched / new Set(terms).size
+}
 function search(query: string, topK = TOP_K): Result[] {
-  const q = hashVector(query); return readBinary().map((item) => ({ text: item.text, score: cosine(q, item.vector) })).sort((a, b) => b.score - a.score).slice(0, topK)
+  const q = hashVector(query)
+  return readBinary()
+    .map((item) => ({ text: item.text, score: 0.55 * cosine(q, item.vector) + 0.45 * lexicalScore(query, item.text) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
 }
 
 function tokenize(text: string) {
@@ -194,36 +208,34 @@ function forward(model: Model, ids: number[]) {
     for (let i = 0; i < DIM; i++) h[i] = model.embeddings[base + i]! + positional(p, i)
     states.push(h)
   }
-  const residual = states.map((h) => {
-    const q = matVec(model.wq, h, DIM, DIM); const k = matVec(model.wk, h, DIM, DIM); const v = matVec(model.wv, h, DIM, DIM)
+  const residual = states.map((h, position) => {
+    const q = matVec(model.wq, h, DIM, DIM)
     const context = new Float32Array(DIM)
     for (let head = 0; head < HEADS; head++) {
       const start = head * HEAD_DIM; const scores: number[] = []
-      for (let j = 0; j < tokens.length; j++) {
-        if (j > states.indexOf(h)) { scores.push(-Infinity); continue }
+      for (let j = 0; j <= position; j++) {
         const kj = matVec(model.wk, states[j]!, DIM, DIM); let dot = 0
         for (let d = 0; d < HEAD_DIM; d++) dot += q[start + d]! * kj[start + d]!
         scores.push(dot / Math.sqrt(HEAD_DIM))
       }
       let max = -Infinity; for (const score of scores) if (score > max) max = score
       let total = 0; for (let i = 0; i < scores.length; i++) { scores[i] = Math.exp(scores[i]! - max); total += scores[i]! }
-      for (let j = 0; j < tokens.length; j++) {
+      for (let j = 0; j <= position; j++) {
         const weight = scores[j]! / Math.max(total, 1e-9); const vj = matVec(model.wv, states[j]!, DIM, DIM)
         for (let d = 0; d < HEAD_DIM; d++) context[start + d] += weight * vj[start + d]!
       }
     }
-    const projected = matVec(model.wo, context, DIM, DIM); for (let i = 0; i < DIM; i++) projected[i] = relu(projected[i]! + h[i]!)
+    const projected = matVec(model.wo, context, DIM, DIM)
+    for (let i = 0; i < DIM; i++) projected[i] = relu(projected[i]! + h[i]!)
     return projected
   })
-  const h = new Float32Array(DIM); const last = residual.at(-1)!
-  for (let i = 0; i < DIM; i++) h[i] = last[i]!
-  const logits = new Float32Array(model.vocabSize); let max = -Infinity
-  for (let i = 0; i < model.vocabSize; i++) { let value = model.bias[i]!; const base = i * DIM; for (let j = 0; j < DIM; j++) value += model.output[base + j]! * h[j]!; logits[i] = value; if (value > max) max = value }
+  const last = residual.at(-1)!; const logits = new Float32Array(model.vocabSize); let max = -Infinity
+  for (let i = 0; i < model.vocabSize; i++) { let value = model.bias[i]!; const base = i * DIM; for (let j = 0; j < DIM; j++) value += model.output[base + j]! * last[j]!; logits[i] = value; if (value > max) max = value }
   let sum = 0; for (let i = 0; i < logits.length; i++) { logits[i] = Math.exp(Math.max(-30, logits[i]! - max)); sum += logits[i]! }
   for (let i = 0; i < logits.length; i++) logits[i] /= Math.max(sum, 1e-9)
-  return { hidden: h, probs: logits }
+  return { hidden: last, probs: logits }
 }
-function trainStep(model: Model, ids: number[], learningRate = 0.001, momentum = 0.9) {
+function trainStep(model: Model, ids: number[], learningRate = 0.001) {
   if (ids.length < 2) return null
   const target = ids.at(-1)!; const input = ids.slice(0, -1); const pass = forward(model, input); const targetProb = Math.max(pass.probs[target]!, 1e-9); const loss = -Math.log(targetProb)
   for (let i = 0; i < model.vocabSize; i++) {
@@ -232,16 +244,36 @@ function trainStep(model: Model, ids: number[], learningRate = 0.001, momentum =
     model.bias[i] -= learningRate * grad
   }
   const base = target * DIM
-  for (let j = 0; j < DIM; j++) model.embeddings[base + j] += learningRate * (1 - momentum) * pass.hidden[j]!
+  for (let j = 0; j < DIM; j++) model.embeddings[base + j] += learningRate * 0.1 * pass.hidden[j]!
   return loss
 }
-function sample(probs: Float32Array, temperature = 0.8, topK = 24) {
+function sample(probs: Float32Array, temperature = 0.65, topK = 16) {
   const items = [...probs].map((value, index) => ({ value: Math.pow(Math.max(value, 1e-12), 1 / Math.max(temperature, 0.1)), index })).sort((a, b) => b.value - a.value).slice(0, topK)
   const total = items.reduce((sum, x) => sum + x.value, 0); let cursor = Math.random() * total
   for (const item of items) { cursor -= item.value; if (cursor <= 0) return item.index }
   return items[0]?.index ?? 0
 }
-function vectorSearchAnswer(query: string) { const hits = search(query, 3); if (!hits.length) return 'No tengo conocimiento local suficiente todavía.'; return hits.map((hit, i) => `${i + 1}. ${hit.text.slice(0, 700)}`).join('\n\n') }
+function vectorSearchAnswer(query: string) {
+  const hits = search(query, 3); if (!hits.length) return 'No tengo conocimiento local suficiente todavía.'
+  return hits.map((hit, i) => `${i + 1}. ${hit.text.slice(0, 700)}`).join('\n\n')
+}
+function bestExtractiveAnswer(query: string, hits: Result[]) {
+  const terms = new Set(normalizeTerms(query))
+  const candidates: { sentence: string; score: number; source: number }[] = []
+  hits.forEach((hit, source) => {
+    const sentences = hit.text.split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter((x) => x.length >= 20)
+    for (const sentence of sentences) {
+      const sentenceTerms = new Set(normalizeTerms(sentence));
+      let overlap = 0; for (const term of terms) if (sentenceTerms.has(term)) overlap++
+      const score = overlap / Math.max(terms.size, 1) + hit.score * 0.25
+      if (score > 0) candidates.push({ sentence, score, source })
+    }
+  })
+  candidates.sort((a, b) => b.score - a.score)
+  const unique: string[] = []
+  for (const candidate of candidates) if (!unique.includes(candidate.sentence)) unique.push(candidate.sentence)
+  return unique.slice(0, 3)
+}
 
 async function addDocument(socket: WASocket, message: WAMessage) {
   const media = await downloadMessageMedia(message); if (!media || media.kind !== 'document') throw new Error('Envía o responde a un PDF, DOCX o TXT con este comando.')
@@ -279,6 +311,7 @@ async function train(reason = 'manual') {
           const loss = trainStep(model, ids.slice(Math.max(0, i - MAX_CONTEXT), i + 1))
           if (loss !== null) { lossTotal += loss; steps++ }
           const s = getState(); s.currentStep++; s.currentProgress = Math.min(100, Math.round((s.currentStep / Math.max(s.currentTotalSteps, 1)) * 100)); if (steps % 25 === 0) s.currentMessage = `Loss medio: ${(lossTotal / steps).toFixed(5)}`; saveState(s)
+          if (steps % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
         }
       }
     }
@@ -296,11 +329,20 @@ function stats() {
 }
 function listDocuments() { ensureDirs(); return fs.readdirSync(CORPUS_DIR).filter((x) => x.endsWith('.txt')).map((name) => { const stat = fs.statSync(path.join(CORPUS_DIR, name)); return { name, size: stat.size } }) }
 function answer(query: string) {
-  const hits = search(query, 2); const vocab = readVocab(); if (!hits.length || !vocab.length) return 'No tengo conocimiento local suficiente todavía.'
+  const hits = search(query, 4); const vocab = readVocab(); const s = getState();
+  if (!hits.length) return 'No tengo conocimiento local suficiente todavía.'
+  const extractive = bestExtractiveAnswer(query, hits)
+  const modelReady = Boolean(vocab.length && s.trainSteps >= MIN_MODEL_TRAIN_STEPS_FOR_GENERATION)
+  if (extractive.length > 0 && (!modelReady || hits[0]!.score < 0.55)) {
+    return `${extractive.join(' ')}\n\nFuente local:\n${hits.slice(0, 2).map((h, i) => `${i + 1}. ${h.text.slice(0, 450)}`).join('\n\n')}`
+  }
+  if (!vocab.length) return vectorSearchAnswer(query)
   const ids = tokenize(query).map((token) => vocab.indexOf(token)).filter((id) => id >= 0); if (ids.length < 1) return vectorSearchAnswer(query)
-  const model = loadModel(vocab.length); const generated: number[] = [...ids]; for (let i = 0; i < 24; i++) { const next = sample(forward(model, generated).probs); generated.push(next); if (next === 2) break }
+  const model = loadModel(vocab.length); const generated: number[] = [...ids]
+  for (let i = 0; i < 24; i++) { const next = sample(forward(model, generated).probs); generated.push(next); if (next === 2) break }
   const generatedText = generated.slice(ids.length).map((id) => vocab[id] ?? '').filter(Boolean).join(' ').trim()
-  return generatedText.length >= 8 ? `${generatedText}\n\nContexto local:\n${hits.map((h, i) => `${i + 1}. ${h.text.slice(0, 500)}`).join('\n\n')}` : vectorSearchAnswer(query)
+  if (generatedText.length >= 8) return `${generatedText}\n\nContexto local:\n${hits.slice(0, 2).map((h, i) => `${i + 1}. ${h.text.slice(0, 500)}`).join('\n\n')}`
+  return vectorSearchAnswer(query)
 }
 function startAutoTrain() {
   ensureDirs(); setInterval(() => { const s = getState(); if (s.autoTrainEnabled && !s.learning && s.totalMessages - s.trainedMessages >= MIN_AUTO_TRAIN_MESSAGES) void train('auto').catch((error) => logger.warn({ error }, 'mini-llm auto training failed')) }, AUTO_TRAIN_EVERY_MS).unref()
