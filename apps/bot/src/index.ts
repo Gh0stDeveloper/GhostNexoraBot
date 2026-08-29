@@ -20,6 +20,7 @@ import { startAutomationScheduler } from './services/automation-v4.js'
 import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { miniLLM } from './services/mini-llm.js'
+import { autoChat } from './services/auto-chat.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -171,8 +172,8 @@ async function routeMessage(
   await observeMessageIdentity(socket, message).catch((error) => logger.debug({ error }, 'identity observation skipped'))
 
   const chatId = message.key.remoteJid
+  const text = getMessageText(message).trim()
   if (chatId && !message.key.fromMe) {
-    const text = getMessageText(message).trim()
     observeGroupActivity(
       chatId,
       resolveStoredIdentity(getSender(message)),
@@ -182,7 +183,6 @@ async function routeMessage(
     if (text.length >= 2 && !text.startsWith(settings.prefix)) miniLLM.addLive(text)
   }
 
-  // Anti ver una vez: republicar foto/video como media normal en el grupo
   if (await handleAntiViewOnce(socket, message).catch((error) => {
     logger.warn({ error, chatId }, 'anti view-once handler failed')
     return false
@@ -195,6 +195,17 @@ async function routeMessage(
 
   const handled = await router.handle(socket, message)
   if (handled) return
+
+  if (chatId && text.length >= 2 && !text.startsWith(settings.prefix) && autoChat.isEnabled(chatId) && autoChat.canRespond(chatId)) {
+    try {
+      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+      const response = await autoChat.respond(chatId, text)
+      if (response) await socket.sendMessage(chatId, { text: response }, { quoted: message })
+    } catch (error) {
+      logger.warn({ error, chatId }, 'auto-chat response failed')
+    }
+    return
+  }
 
   if (chatId?.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
   await maybeHumanInteraction(socket, message).catch(() => false)
