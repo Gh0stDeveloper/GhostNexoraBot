@@ -1,17 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-type MammothModule = {
-  extractRawText?: (options: { path: string }) => Promise<{ value: string }>
-}
-
-type PdfModule = {
-  PDFParse?: new (options: { data: Buffer }) => {
-    getText: () => Promise<{ text: string }>
-    destroy?: () => Promise<void>
-  }
-  default?: ((buffer: Buffer) => Promise<{ text?: string }>) | (new (options: { data: Buffer }) => { getText: () => Promise<{ text: string }>; destroy?: () => Promise<void> })
-}
+type MammothModule = { extractRawText?: (options: { path: string }) => Promise<{ value: string }> }
+type PdfClass = new (options: { data: Buffer }) => { getText: () => Promise<{ text: string }>; destroy?: () => Promise<void> }
+type PdfLegacy = (buffer: Buffer) => Promise<{ text?: string }>
+type PdfModule = { PDFParse?: PdfClass; default?: PdfLegacy }
 
 const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm', '.pdf', '.docx'])
 const MAX_CORPUS_CHARS = 20_000_000
@@ -28,65 +21,36 @@ function listCorpusFiles(dir: string): string[] {
 }
 
 function stripMarkup(text: string): string {
-  return text
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#39;/gi, "'")
-    .replace(/&quot;/gi, '"')
+  return text.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&#39;/gi, "'").replace(/&quot;/gi, '"')
 }
-
 function normalizeStructuredText(text: string, ext: string): string {
   if (ext === '.html' || ext === '.htm' || ext === '.xml') return stripMarkup(text)
-  if (ext === '.json') {
-    try { return JSON.stringify(JSON.parse(text)) } catch { return text }
-  }
+  if (ext === '.json') { try { return JSON.stringify(JSON.parse(text)) } catch { return text } }
   return text
 }
-
 async function extractPdfText(filePath: string): Promise<string> {
   const module = await import('pdf-parse') as unknown as PdfModule
   const buffer = fs.readFileSync(filePath)
-  if (typeof module.PDFParse === 'function') {
-    const parser = new module.PDFParse({ data: buffer })
-    try { return (await parser.getText()).text ?? '' } finally { await parser.destroy?.() }
-  }
-  const legacy = module.default
-  if (typeof legacy === 'function') return String((await legacy(buffer)).text ?? '')
+  if (typeof module.PDFParse === 'function') { const parser = new module.PDFParse({ data: buffer }); try { return (await parser.getText()).text ?? '' } finally { await parser.destroy?.() } }
+  if (typeof module.default === 'function') return String((await module.default(buffer)).text ?? '')
   throw new Error('pdf-parse: API no reconocida (ni PDFParse ni función default).')
 }
 
 export async function loadCorpus(dir = './corpus'): Promise<string> {
   if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); return '' }
-  const pieces: string[] = []
-  let total = 0
+  const pieces: string[] = []; let total = 0
   for (const fullPath of listCorpusFiles(dir)) {
     if (total >= MAX_CORPUS_CHARS) break
-    const file = path.relative(dir, fullPath)
-    const ext = path.extname(fullPath).toLowerCase()
+    const file = path.relative(dir, fullPath), ext = path.extname(fullPath).toLowerCase()
     try {
       let text = ''
       if (['.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm'].includes(ext)) text = normalizeStructuredText(fs.readFileSync(fullPath, 'utf8'), ext)
       else if (ext === '.pdf') text = await extractPdfText(fullPath)
-      else if (ext === '.docx') {
-        const module = await import('mammoth') as unknown as MammothModule
-        if (!module.extractRawText) throw new Error('mammoth no expone extractRawText.')
-        text = (await module.extractRawText({ path: fullPath })).value
-      }
+      else if (ext === '.docx') { const module = await import('mammoth') as unknown as MammothModule; if (!module.extractRawText) throw new Error('mammoth no expone extractRawText.'); text = (await module.extractRawText({ path: fullPath })).value }
       if (!text) continue
-      const remaining = MAX_CORPUS_CHARS - total
-      pieces.push(text.slice(0, remaining)); total += Math.min(text.length, remaining)
-    } catch (error) {
-      console.error(`[LLM loader] Error leyendo ${file}:`, error instanceof Error ? error.message : String(error))
-    }
+      const remaining = MAX_CORPUS_CHARS - total; pieces.push(text.slice(0, remaining)); total += Math.min(text.length, remaining)
+    } catch (error) { console.error(`[LLM loader] Error leyendo ${file}:`, error instanceof Error ? error.message : String(error)) }
   }
   return cleanText(pieces.join('\n'))
 }
-
-export function cleanText(text: string): string {
-  return text.normalize('NFKC').toLocaleLowerCase('es-MX').replace(/[^\p{L}\p{N}\s.,!?;:'"()\-_/\\%+=*<>\[\]{}]/gu, ' ').replace(/\s+/g, ' ').trim()
-}
+export function cleanText(text: string): string { return text.normalize('NFKC').toLocaleLowerCase('es-MX').replace(/[^\p{L}\p{N}\s.,!?;:'"()\-_/\\%+=*<>\[\]{}]/gu, ' ').replace(/\s+/g, ' ').trim() }
