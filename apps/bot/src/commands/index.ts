@@ -65,6 +65,7 @@ import { lempiApiCommands } from './lempi-api.js'
 import { mediaDownloadFixCommands } from './media-download-fixes-v2.js'
 import { miniLlmCommands } from './mini-llm.js'
 import { autoChatCommands } from './auto-chat.js'
+import { llmCorpusCommands } from './llm-corpus.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -131,6 +132,7 @@ export const commands: BotCommand[] = [
   ...animeDownloadCommands,
   ...miniLlmCommands,
   ...autoChatCommands,
+  ...llmCorpusCommands,
 ]
 
 setMenuCommandProvider(() => commands)
