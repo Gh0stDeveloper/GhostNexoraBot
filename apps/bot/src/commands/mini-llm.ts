@@ -115,7 +115,7 @@ export const miniLlmCommands: BotCommand[] = [{
       await ctx.reply(`⬇️ *LLM · CORPUS*\n━━━━━━━━━━━━━━\nIniciando descarga de *${ids.length}* fuente(s).\nAl terminar, el corpus se procesará y el modelo se entrenará automáticamente.`)
       void downloadAndTrain(ids)
         .then(async (result) => {
-          if (!result.training) {
+          if (!result.training || !result.training.ok) {
             await ctx.reply('⚠️ La descarga terminó, pero ninguna fuente quedó disponible para entrenar.')
             return
           }
