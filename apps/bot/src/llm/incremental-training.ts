@@ -5,24 +5,22 @@ import { config } from '../config.js'
 const ROOT = path.resolve(config.dataDir, 'llm')
 const VOCAB_FILE = path.join(ROOT, 'vocab.json')
 const MODEL_FILE = path.join(ROOT, 'model.bin')
-const CHECKPOINT_DIR = path.join(ROOT, 'checkpoints')
 const MAX_VOCAB = 8000
 const DIM = 128
 const MODEL_VERSION = 2
 
 function ensure() {
   fs.mkdirSync(ROOT, { recursive: true })
-  fs.mkdirSync(CHECKPOINT_DIR, { recursive: true })
 }
 
 function tokenize(text: string): string[] {
   return text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]/gu) ?? []
 }
 
-export function loadVocab(): string[] {
+export function loadVocab(file = VOCAB_FILE): string[] {
   ensure()
-  if (!fs.existsSync(VOCAB_FILE)) return []
-  const parsed = JSON.parse(fs.readFileSync(VOCAB_FILE, 'utf8')) as { vocab?: unknown }
+  if (!fs.existsSync(file)) return []
+  const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { vocab?: unknown }
   return Array.isArray(parsed.vocab) ? parsed.vocab.map(String) : []
 }
 
@@ -32,21 +30,18 @@ function saveVocab(vocab: string[], destination = VOCAB_FILE) {
   fs.renameSync(tmp, destination)
 }
 
-/** Preserve every existing token and append only new tokens. Never rebuilds/reorders the old vocabulary. */
 export function expandVocab(texts: string[]): { oldSize: number; newSize: number; added: number } {
   ensure()
   const oldVocab = loadVocab()
   const baseline = oldVocab.length
   const seen = new Set(oldVocab)
   const counts = new Map<string, number>()
-  for (const text of texts) {
-    for (const token of tokenize(text)) counts.set(token, (counts.get(token) ?? 0) + 1)
-  }
+  for (const text of texts) for (const token of tokenize(text)) counts.set(token, (counts.get(token) ?? 0) + 1)
   const additions = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es-MX'))
     .map(([token]) => token)
     .filter((token) => !seen.has(token))
-    .slice(0, Math.max(0, MAX_VOCAB - oldVocab.length))
+    .slice(0, Math.max(0, MAX_VOCAB - baseline))
   const next = [...oldVocab, ...additions]
   if (next.length < baseline) throw new Error(`INVARIANTE VIOLADA: vocabulario descendió de ${baseline} a ${next.length}. Entrenamiento abortado.`)
   saveVocab(next)
@@ -66,10 +61,9 @@ function parseModel(buffer: Buffer) {
   const payloadOffset = newline + 1
   const expected = payloadOffset + oldEmbeddingBytes + matrixBytes * 4 + oldOutputBytes + biasBytes
   if (buffer.length < expected) throw new Error('model.bin está truncado o corrupto.')
-  return { newline, meta, payloadOffset, oldVocabSize, oldEmbeddingBytes, matrixBytes, oldOutputBytes, biasBytes }
+  return { newline, payloadOffset, oldVocabSize, oldEmbeddingBytes, matrixBytes, oldOutputBytes, biasBytes }
 }
 
-/** Expand model.bin without reinitializing existing weights. New rows/columns are seeded deterministically. */
 export function ensureModelVocabularySize(targetVocabSize: number) {
   ensure()
   if (!fs.existsSync(MODEL_FILE)) throw new Error('No existe model.bin; no se permite reinicializar un entrenamiento incremental sin un modelo base.')
@@ -104,7 +98,6 @@ export function ensureModelVocabularySize(targetVocabSize: number) {
   }
   const newBias = Buffer.alloc(targetVocabSize * 4)
   oldBias.copy(newBias)
-
   const header = Buffer.from(JSON.stringify({ version: MODEL_VERSION, vocabSize: targetVocabSize, dim: DIM, heads: 4 }) + '\n')
   const temp = `${MODEL_FILE}.tmp`
   fs.writeFileSync(temp, Buffer.concat([header, newEmb, oldWq, oldWk, oldWv, oldWo, newOutput, newBias]))
@@ -115,8 +108,8 @@ export function ensureModelVocabularySize(targetVocabSize: number) {
 export function checkpointRound(round: number) {
   ensure()
   if (!fs.existsSync(MODEL_FILE) || !fs.existsSync(VOCAB_FILE)) throw new Error('No se puede crear checkpoint: faltan model.bin o vocab.json.')
-  const modelDest = path.join(CHECKPOINT_DIR, `model-${round}.bin`)
-  const vocabDest = path.join(CHECKPOINT_DIR, `vocab-${round}.json`)
+  const modelDest = path.join(ROOT, `model-${round}.bin`)
+  const vocabDest = path.join(ROOT, `vocab-${round}.json`)
   fs.copyFileSync(MODEL_FILE, modelDest)
   fs.copyFileSync(VOCAB_FILE, vocabDest)
   return { round, model: modelDest, vocab: vocabDest }
@@ -124,16 +117,16 @@ export function checkpointRound(round: number) {
 
 export function ensureBaseCheckpoint(round: number) {
   ensure()
-  const modelDest = path.join(CHECKPOINT_DIR, `model-${round}.bin`)
-  const vocabDest = path.join(CHECKPOINT_DIR, `vocab-${round}.json`)
+  const modelDest = path.join(ROOT, `model-${round}.bin`)
+  const vocabDest = path.join(ROOT, `vocab-${round}.json`)
   if (!fs.existsSync(modelDest) || !fs.existsSync(vocabDest)) return checkpointRound(round)
   return { round, model: modelDest, vocab: vocabDest }
 }
 
 export function restoreCheckpoint(round: number) {
   ensure()
-  const modelSource = path.join(CHECKPOINT_DIR, `model-${round}.bin`)
-  const vocabSource = path.join(CHECKPOINT_DIR, `vocab-${round}.json`)
+  const modelSource = path.join(ROOT, `model-${round}.bin`)
+  const vocabSource = path.join(ROOT, `vocab-${round}.json`)
   if (!fs.existsSync(modelSource) || !fs.existsSync(vocabSource)) throw new Error(`Falta el checkpoint de la vuelta ${round}.`)
   fs.copyFileSync(modelSource, MODEL_FILE)
   fs.copyFileSync(vocabSource, VOCAB_FILE)
@@ -142,5 +135,5 @@ export function restoreCheckpoint(round: number) {
 
 export function checkpointPaths() {
   ensure()
-  return fs.readdirSync(CHECKPOINT_DIR).sort()
+  return fs.readdirSync(ROOT).filter((name) => /^model-\d+\.bin$|^vocab-\d+\.json$/.test(name)).sort()
 }
