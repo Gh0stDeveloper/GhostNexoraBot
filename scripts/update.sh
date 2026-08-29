@@ -71,9 +71,10 @@ fi
 chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
 ok 'Propietario/permisos de datos verificados.'
 
-if [[ -x "${INSTALL_DIR}/scripts/install-llm-worker-service.sh" ]]; then
+if [[ -f "${INSTALL_DIR}/scripts/install-llm-worker-service.sh" ]]; then
   info 'Configurando worker LLM independiente...'
-  INSTALL_DIR="${INSTALL_DIR}" SERVICE_USER="${SERVICE_USER}" "${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
+  chmod +x "${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
+  INSTALL_DIR="${INSTALL_DIR}" SERVICE_USER="${SERVICE_USER}" bash "${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
   ok 'Worker LLM listo.'
 fi
 
@@ -103,30 +104,9 @@ if [[ "${BOT_STATE}" != 'active' ]]; then
   printf '%s\n' '----- FIN DE LOGS -----'
   exit 1
 fi
-if [[ "${WEB_STATE}" != 'active' ]]; then warn 'ghost-nexora-web no quedó active; revisa su estado.'; fi
-ok "Bot: ${BOT_STATE}"
-ok "Web: ${WEB_STATE}"
-ok "LLM worker: ${LLM_STATE}"
-
-HEALTH_URL="$(grep '^BOT_HEALTH_URL=' .env | cut -d= -f2- || true)"
-if [[ -n "${HEALTH_URL}" ]] && command -v curl >/dev/null 2>&1; then
-  if curl -fsS --max-time 8 "${HEALTH_URL}" >/tmp/ghost-nexora-health.json; then
-    ok "Health endpoint respondió correctamente."
-  else
-    warn "Health endpoint no respondió todavía; revisa: ${HEALTH_URL}"
-  fi
+if [[ "${WEB_STATE}" != 'active' ]]; then
+  warn 'ghost-nexora-web no quedó active; el bot y el worker sí están activos.'
 fi
 
-printf '\n╔══════════════════════════════════════════════════╗\n'
-printf '║        GHOST NEXORA · ACTUALIZACIÓN OK          ║\n'
-printf '╚══════════════════════════════════════════════════╝\n'
-printf 'Versión anterior : %s\n' "${OLD_SHA:0:12}"
-printf 'Versión actual   : %s\n' "${NEW_SHA:0:12}"
-printf 'Bot              : %s\n' "${BOT_STATE}"
-printf 'Web              : %s\n' "${WEB_STATE}"
-printf 'LLM worker       : %s\n' "${LLM_STATE}"
-printf 'Tiempo           : %ss\n' "$(( $(date +%s) - START_TS ))"
-printf 'Datos preservados: SQLite, sesión, .env y STATE_DIR\n'
-printf 'Logs bot         : journalctl -u ghost-nexora-bot -f\n'
-printf 'Logs LLM         : journalctl -u ghost-nexora-llm -f\n'
-printf '══════════════════════════════════════════════════\n'
+ELAPSED=$(( $(date +%s) - START_TS ))
+ok "Actualización finalizada en ${ELAPSED}s. Bot=${BOT_STATE}, Web=${WEB_STATE}, LLM=${LLM_STATE}."
