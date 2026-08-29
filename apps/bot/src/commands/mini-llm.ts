@@ -126,14 +126,14 @@ export const miniLlmCommands: BotCommand[] = [{
       try { const candidate = Number(fs.readFileSync(pidFile, 'utf8').trim()); if (Number.isInteger(candidate) && candidate > 1) pid = candidate } catch {}
       try { fs.writeFileSync(trainingQueueFile, JSON.stringify({ requested: false }, null, 2)) } catch {}
       if (pid !== null) { try { process.kill(pid, 'SIGTERM') } catch (error) { if (!(error instanceof Error) || !error.message.includes('ESRCH')) throw error } }
-      try { const statePath = path.join(miniLLM.ROOT, 'state.json'); const current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>; current.learning = false; current.currentProgress = 0; current.currentStep = 0; current.currentTotalSteps = 0; current.currentEpoch = 0; current.currentTotalEpochs = 0; current.currentMessage = 'Detenido por usuario'; const tmp = `${statePath}.tmp`; fs.writeFileSync(tmp, JSON.stringify(current, null, 2)); fs.renameSync(tmp, statePath) } catch {}
+      try { const statePath = path.join(miniLLM.ROOT, 'state.json'); const current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>; current.learning = false; current.currentProgress = 0; current.currentStep = 0; current.currentTotalSteps = 0; current.currentTotalEpochs = 0; current.currentMessage = 'Detenido por usuario'; const tmp = `${statePath}.tmp`; fs.writeFileSync(tmp, JSON.stringify(current, null, 2)); fs.renameSync(tmp, statePath) } catch {}
       await ctx.reply(pid !== null ? '⏹️ *ENTRENAMIENTO DETENIDO*\n━━━━━━━━━━━━━━\nEl worker fue detenido y la solicitud pendiente fue cancelada. Puedes usar `.llm train` para iniciar otro entrenamiento.' : '⏹️ *ENTRENAMIENTO DETENIDO*\n━━━━━━━━━━━━━━\nNo había un worker activo; también se limpió la cola de entrenamiento.'); return
     }
 
     if (sub === 'import' || sub === 'importar' || sub === 'rebuild' || sub === 'reconstruir' || sub === 'train' || sub === 'entrenar') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede controlar el entrenamiento.')
-      requestTraining(sub === 'import' || sub === 'importar' ? 'import' : 'manual')
-      await ctx.reply(`🧠 *TRABAJO LLM ENCOLADO*\n━━━━━━━━━━━━━━\nEl worker independiente procesará el corpus y actualizará el modelo.\nConsulta *${ctx.prefix}llm progress*.`); return
+      requestTraining(sub === 'import' || sub === 'importar' ? 'import' : 'manual', ctx.sender, true)
+      await ctx.reply(`🧠 *TRABAJO LLM ENCOLADO*\n━━━━━━━━━━━━━━\nEl worker independiente procesará el corpus y actualizará el modelo.\nAl terminar esta corrida se guardará un checkpoint final y se detendrá el entrenamiento automático.\nConsulta *${ctx.prefix}llm progress*.`); return
     }
 
     if (sub === 'ask' || sub === 'pregunta' || sub === 'query') { const query = ctx.args.slice(1).join(' ').trim(); if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}llm ask <pregunta>`); await ctx.reply('🧠 Consultando memoria local...'); await ctx.reply(miniLLM.answer(query)); return }
