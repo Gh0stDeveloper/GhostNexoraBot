@@ -1,7 +1,7 @@
 import type { BotCommand } from '../types.js'
 import { miniLLM } from '../services/mini-llm.js'
 import { CORPUS_SOURCES } from '../llm/corpus-sources.js'
-import { downloadDefaults, downloadSources, sourceStatus } from '../llm/corpus-manager.js'
+import { downloadSources, sourceStatus } from '../llm/corpus-manager.js'
 
 let corpusDownloadRunning = false
 let corpusTrainingRunning = false
@@ -53,7 +53,7 @@ function corpusProgressText(prefix: string) {
 
 function help(prefix: string) {
   return [
-    '╭━━〔 🧠 *MINI-LLM LOCAL V2* 〕━━╮',
+    '╭━━〔 🧠 *MINI-LLM LOCAL V3* 〕━━╮',
     `┃ ${prefix}llm status`,
     `┃ ${prefix}llm progress`,
     `┃ ${prefix}llm docs`,
@@ -82,14 +82,6 @@ async function trainDownloadedCorpus() {
   }
 }
 
-async function downloadAndTrain(ids: string[]) {
-  const result = await downloadSources(ids)
-  const downloaded = result.state.completed.length
-  if (!downloaded) return { download: result, training: null }
-  const training = await trainDownloadedCorpus()
-  return { download: result, training }
-}
-
 export const miniLlmCommands: BotCommand[] = [{
   name: 'llm',
   aliases: ['minillm', 'localai', 'corpus', 'llmcorpus'],
@@ -112,18 +104,16 @@ export const miniLlmCommands: BotCommand[] = [{
         : (sub.includes('defaults') ? CORPUS_SOURCES.filter((source) => source.enabledByDefault).map((source) => source.id) : requested)
       if (!ids.length) throw new Error(`Indica fuentes. Ejemplo: ${ctx.prefix}llm download ts-book node-book`)
       corpusDownloadRunning = true
-      await ctx.reply(`⬇️ *LLM · CORPUS*\n━━━━━━━━━━━━━━\nIniciando descarga de *${ids.length}* fuente(s).\nAl terminar, el corpus se procesará y el modelo se entrenará automáticamente.`)
-      void downloadAndTrain(ids)
+      await ctx.reply(`⬇️ *LLM · CORPUS*\n━━━━━━━━━━━━━━\nIniciando descarga de *${ids.length}* fuente(s).\nEl bot seguirá disponible mientras se descargan.\nDespués usa *${ctx.prefix}llm import* o *${ctx.prefix}llm train* para estudiar los documentos.`)
+      void downloadSources(ids)
         .then(async (result) => {
-          if (!result.training || !result.training.ok) {
-            await ctx.reply('⚠️ La descarga terminó, pero ninguna fuente quedó disponible para entrenar.')
-            return
-          }
-          await ctx.reply(`✅ *LLM · APRENDIZAJE*\n━━━━━━━━━━━━━━\n📚 Documentos detectados: *${result.training.documents}*\n📝 Texto: *${result.training.characters.toLocaleString('es-MX')}* caracteres\n🔤 Vocabulario: *${result.training.vocab}*\n🧠 Pasos: *${result.training.steps}*\n📉 Loss promedio: *${result.training.averageLoss?.toFixed(5) ?? 'N/D'}*\n\nEl mismo *model.bin* utilizado por el bot fue actualizado.`)
+          const completed = result.state.completed.filter((id) => ids.includes(id))
+          const failed = result.state.failed.filter((id) => ids.includes(id))
+          await ctx.reply(`✅ *LLM · DESCARGA TERMINADA*\n━━━━━━━━━━━━━━\n📥 Completadas: *${completed.length}/${ids.length}*\n❌ Fallidas: *${failed.length}*\n📚 Archivos locales: *${result.files.length}*\n\nUsa *${ctx.prefix}llm import* para procesar y entrenar el corpus.`)
         })
         .catch(async (error) => {
           console.error(error)
-          await ctx.reply('❌ La preparación/entrenamiento del corpus falló. Revisa los logs del bot.').catch(() => undefined)
+          await ctx.reply(`❌ *LLM · DESCARGA*\n━━━━━━━━━━━━━━\n${error instanceof Error ? error.message : 'No se pudo completar la descarga.'}`).catch(() => undefined)
         })
         .finally(() => { corpusDownloadRunning = false })
       return
@@ -177,19 +167,24 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'import' || sub === 'importar' || sub === 'rebuild' || sub === 'reconstruir') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede importar el corpus.')
       if (corpusTrainingRunning || miniLLM.stats().learning) { await ctx.reply(`🧠 Ya hay un entrenamiento en ejecución. Consulta *${ctx.prefix}llm progress*.`); return }
-      await ctx.reply(`📚 *IMPORTACIÓN DEL CORPUS*\n━━━━━━━━━━━━━━\nLeyendo PDF, DOCX y TXT desde el corpus local...`)
+      await ctx.reply(`📚 *IMPORTACIÓN DEL CORPUS*\n━━━━━━━━━━━━━━\nLeyendo PDF, DOCX y TXT desde el corpus local y preparando el aprendizaje...`)
       void trainDownloadedCorpus().then(async (result) => {
         if (!result?.ok) { await ctx.reply('No se encontraron documentos compatibles en el corpus local.'); return }
-        await ctx.reply(`✅ *CORPUS APRENDIDO*\n━━━━━━━━━━━━━━\n📚 Documentos: *${result.documents}*\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*\n🔤 Vocabulario: *${result.vocab}*\n🧠 Pasos: *${result.steps}*\n📉 Loss promedio: *${result.averageLoss?.toFixed(5) ?? 'N/D'}*`)
-      }).catch(async (error) => { console.error(error); await ctx.reply('❌ No se pudo preparar el corpus. Revisa los logs del bot.').catch(() => undefined) })
+        await ctx.reply(`✅ *CORPUS PREPARADO Y APRENDIDO*\n━━━━━━━━━━━━━━\n📚 Documentos: *${result.documents}*\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*\n🔤 Vocabulario: *${result.vocab}*\n🧠 Pasos: *${result.steps}*\n📉 Loss promedio: *${result.averageLoss?.toFixed(5) ?? 'N/D'}*`)
+      }).catch(async (error) => { console.error(error); await ctx.reply(`❌ No se pudo preparar el corpus: ${error instanceof Error ? error.message : 'error desconocido'}`).catch(() => undefined) })
       return
     }
 
     if (sub === 'train' || sub === 'entrenar') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede iniciar entrenamiento.')
       if (corpusTrainingRunning || miniLLM.stats().learning) { await ctx.reply(`🧠 Ya hay un entrenamiento en ejecución. Consulta *${ctx.prefix}llm progress*.`); return }
-      await ctx.reply(`🧠 *ENTRENAMIENTO INICIADO*\n━━━━━━━━━━━━━━\nSe procesará primero el corpus disponible y después se actualizará el modelo.\nConsulta *${ctx.prefix}llm progress* para ver el avance.`)
-      void trainDownloadedCorpus().catch(async (error) => { console.error(error); await ctx.reply('❌ El entrenamiento local falló. Revisa los logs del bot.').catch(() => undefined) })
+      await ctx.reply(`🧠 *ENTRENAMIENTO INICIADO*\n━━━━━━━━━━━━━━\nSe procesará el corpus disponible y se actualizará *model.bin*.\nConsulta *${ctx.prefix}llm progress* mientras aprende.`)
+      void trainDownloadedCorpus()
+        .then(async (result) => {
+          if (!result?.ok) { await ctx.reply('No hay corpus válido para entrenar. Ejecuta primero *.llm download ...* y luego *.llm import*.'); return }
+          await ctx.reply(`✅ *ENTRENAMIENTO TERMINADO*\n━━━━━━━━━━━━━━\n📚 Documentos: *${result.documents}*\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*\n🧠 Pasos: *${result.steps}*\n📉 Loss promedio: *${result.averageLoss?.toFixed(5) ?? 'N/D'}*`)
+        })
+        .catch(async (error) => { console.error(error); await ctx.reply(`❌ El entrenamiento local falló: ${error instanceof Error ? error.message : 'error desconocido'}`).catch(() => undefined) })
       return
     }
 
