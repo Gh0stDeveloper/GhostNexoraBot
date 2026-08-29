@@ -4,6 +4,8 @@ import { CORPUS_SOURCES } from '../llm/corpus-sources.js'
 import { downloadSources, sourceStatus } from '../llm/corpus-manager.js'
 import { enqueueDocumentFromWhatsApp, getQueueState } from '../llm/document-queue.js'
 import { requestTraining, trainingQueueStatus } from '../llm/training-queue.js'
+import fs from 'node:fs'
+import path from 'node:path'
 
 function formatBytes(value: number) {
   if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GB`
@@ -25,6 +27,7 @@ function help(prefix: string) {
     `┃ ${prefix}llm download-progress`,
     `┃ ${prefix}llm import`,
     `┃ ${prefix}llm train`,
+    `┃ ${prefix}llm stop`,
     `┃ ${prefix}llm ask <pregunta>`,
     `┃ ${prefix}llm search <texto>`,
     `┃ ${prefix}llm auto on|off`,
@@ -71,7 +74,7 @@ export const miniLlmCommands: BotCommand[] = [{
   aliases: ['minillm', 'localai', 'corpus', 'llmcorpus'],
   category: 'tools',
   description: 'Gestiona memoria, corpus, documentos y Mini-LLM local.',
-  usage: 'llm <status|progress|docs|add|sources|download|download-progress|import|train|ask|search|auto>',
+  usage: 'llm <status|progress|docs|add|sources|download|download-progress|import|train|stop|ask|search|auto>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
@@ -129,6 +132,41 @@ export const miniLlmCommands: BotCommand[] = [{
       return
     }
 
+    if (sub === 'stop' || sub === 'detener' || sub === 'cancel') {
+      if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede detener el entrenamiento.')
+      const pidFile = path.join(miniLLM.ROOT, 'worker.pid')
+      const trainingQueueFile = path.join(miniLLM.ROOT, 'training-queue.json')
+      let pid: number | null = null
+      try {
+        const candidate = Number(fs.readFileSync(pidFile, 'utf8').trim())
+        if (Number.isInteger(candidate) && candidate > 1) pid = candidate
+      } catch {}
+      try { fs.writeFileSync(trainingQueueFile, JSON.stringify({ requested: false }, null, 2)) } catch {}
+      if (pid !== null) {
+        try { process.kill(pid, 'SIGTERM') } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes('ESRCH')) throw error
+        }
+      }
+      try {
+        const statePath = path.join(miniLLM.ROOT, 'state.json')
+        const current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>
+        current.learning = false
+        current.currentProgress = 0
+        current.currentStep = 0
+        current.currentTotalSteps = 0
+        current.currentEpoch = 0
+        current.currentTotalEpochs = 0
+        current.currentMessage = 'Detenido por usuario'
+        const tmp = `${statePath}.tmp`
+        fs.writeFileSync(tmp, JSON.stringify(current, null, 2))
+        fs.renameSync(tmp, statePath)
+      } catch {}
+      await ctx.reply(pid !== null
+        ? '⏹️ *ENTRENAMIENTO DETENIDO*\n━━━━━━━━━━━━━━\nEl worker fue detenido y la solicitud pendiente fue cancelada. Puedes usar `.llm train` para iniciar otro entrenamiento.'
+        : '⏹️ *ENTRENAMIENTO DETENIDO*\n━━━━━━━━━━━━━━\nNo había un worker activo; también se limpió la cola de entrenamiento.')
+      return
+    }
+
     if (sub === 'import' || sub === 'importar' || sub === 'rebuild' || sub === 'reconstruir' || sub === 'train' || sub === 'entrenar') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede controlar el entrenamiento.')
       requestTraining(sub === 'import' || sub === 'importar' ? 'import' : 'manual')
@@ -150,7 +188,7 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'auto') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede cambiar el auto-entrenamiento.')
       const mode = (ctx.args[1] ?? '').toLowerCase(); if (!['on', 'off'].includes(mode)) throw new Error(`Uso: ${ctx.prefix}llm auto on|off`)
-      const statePath = `${miniLLM.ROOT}/state.json`; const fs = await import('node:fs'); let current: Record<string, unknown> = {}; try { current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown> } catch {}
+      const statePath = `${miniLLM.ROOT}/state.json`; let current: Record<string, unknown> = {}; try { current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown> } catch {}
       current.autoTrainEnabled = mode === 'on'; fs.writeFileSync(statePath, JSON.stringify(current, null, 2)); await ctx.reply(`🧠 Auto-entrenamiento: *${mode.toUpperCase()}*`); return
     }
 
