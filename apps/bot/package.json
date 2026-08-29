@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
-    "llm:train": "node dist/llm/llm-worker-v2.js",
+    "llm:train": "node dist/llm/train.js",
     "llm:worker": "node dist/llm/llm-worker-v2.js"
   },
   "dependencies": {
