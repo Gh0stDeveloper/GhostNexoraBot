@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/ghost-nexora-bot}"
 BRANCH="${BRANCH:-main}"
-SERVICE_USER="${SERVICE_USER:-ghostbot}"
+SERVICE_USER="${SERVICE_USER:-}"
 START_TS=$(date +%s)
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -18,9 +18,14 @@ if [[ ! -d "${INSTALL_DIR}/.git" ]]; then fail "No existe un repositorio Git vá
 
 cd "${INSTALL_DIR}"
 OLD_SHA="$(git rev-parse HEAD)"
+if [[ -z "${SERVICE_USER}" ]]; then
+  SERVICE_USER="$(systemctl show -p User --value ghost-nexora-bot.service 2>/dev/null || true)"
+  [[ -z "${SERVICE_USER}" ]] && SERVICE_USER="root"
+fi
 
 section 'Ghost Nexora Bot · ACTUALIZACIÓN'
 info "Rama: ${BRANCH}"
+info "Usuario de servicios: ${SERVICE_USER}"
 info "Versión anterior: ${OLD_SHA:0:12}"
 info "Datos persistentes: ${STATE_DIR:-/var/lib/ghost-nexora-bot}"
 
@@ -60,11 +65,11 @@ npm run build >/tmp/ghost-nexora-build.log 2>&1
 ok 'Build completado.'
 
 section '5/6 · Permisos persistentes'
-if id "${SERVICE_USER}" >/dev/null 2>&1 && [[ -d "${STATE_DIR:-/var/lib/ghost-nexora-bot}" ]]; then
-  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR:-/var/lib/ghost-nexora-bot}"
-  chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
-  ok 'Propietario/permisos de datos verificados.'
+if [[ -d "${STATE_DIR:-/var/lib/ghost-nexora-bot}" ]]; then
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR:-/var/lib/ghost-nexora-bot}" || warn 'No se pudo ajustar STATE_DIR.'
 fi
+chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
+ok 'Propietario/permisos de datos verificados.'
 
 if [[ -x "${INSTALL_DIR}/scripts/install-llm-worker-service.sh" ]]; then
   info 'Configurando worker LLM independiente...'
