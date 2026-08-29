@@ -17,6 +17,10 @@
       "minimatch": "3.1.5"
     }
   },
+  "dependencies": {
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.8.0"
+  },
   "engines": {
     "node": ">=24.0.0",
     "npm": ">=11.0.0"
