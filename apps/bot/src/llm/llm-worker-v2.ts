@@ -43,7 +43,7 @@ async function processDocuments() {
       const state = readState()
       writeState({
         totalDocuments: countCorpusDocuments(),
-        totalChunks: Math.max(Number(state.totalChunks ?? 0), Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0)),
+        totalChunks: Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0),
         vectorRecords: countVectors(),
         currentMessage: `Documento procesado: ${job.filename}`,
       })
@@ -89,7 +89,9 @@ async function trainOnce(reason: string) {
   if (merged.newSize < vocabBefore.length) throw new Error(`INVARIANTE: vocabulario bajó de ${vocabBefore.length} a ${merged.newSize}. Abortado.`)
   ensureModelVocabularySize(merged.newSize)
 
-  writeState({ learning: true, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: 2, currentMessage: `Preparando vuelta ${nextRun} (${reason})`, vectorRecords: countVectors() })
+  // IMPORTANT: miniLLM.train() is the owner of the learning lock. The worker must not
+  // set learning=true before calling it, otherwise train() self-rejects as already_running.
+  writeState({ currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: Number(process.env.LLM_TRAIN_EPOCHS ?? 2), currentMessage: `Preparando vuelta ${nextRun} (${reason})`, vectorRecords: countVectors() })
   const result = await miniLLM.train(`incremental-${nextRun}`)
   if (!result.started) {
     writeState({ learning: false, currentMessage: `Entrenamiento no iniciado: ${result.reason}` })
@@ -128,7 +130,7 @@ async function tick() {
 async function main() {
   fs.mkdirSync(ROOT, { recursive: true })
   const migratedVectors = migrateLegacyVectors()
-  writeState({ learning: false, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: 0, currentMessage: migratedVectors > 0 ? `Memoria migrada: ${migratedVectors} vectores` : 'En espera', vectorRecords: countVectors() })
+  writeState({ learning: false, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentTotalEpochs: 0, currentMessage: migratedVectors > 0 ? `Memoria migrada: ${migratedVectors} vectores` : 'En espera', vectorRecords: countVectors() })
   console.log(`[LLM worker v2] incremental activo; vectores migrados: ${migratedVectors}`)
   while (true) {
     try { await tick() } catch (error) { console.error('[LLM worker v2] tick:', extractStateError(error)) }
