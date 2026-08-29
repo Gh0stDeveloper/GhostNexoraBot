@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/ghost-nexora-bot}"
 BRANCH="${BRANCH:-main}"
-SERVICE_USER="${SERVICE_USER:-ghostbot}"
+SERVICE_USER="${SERVICE_USER:-}"
 START_TS=$(date +%s)
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -18,9 +18,14 @@ if [[ ! -d "${INSTALL_DIR}/.git" ]]; then fail "No existe un repositorio Git vá
 
 cd "${INSTALL_DIR}"
 OLD_SHA="$(git rev-parse HEAD)"
+if [[ -z "${SERVICE_USER}" ]]; then
+  SERVICE_USER="$(systemctl show -p User --value ghost-nexora-bot.service 2>/dev/null || true)"
+  [[ -z "${SERVICE_USER}" ]] && SERVICE_USER="root"
+fi
 
 section 'Ghost Nexora Bot · ACTUALIZACIÓN'
 info "Rama: ${BRANCH}"
+info "Usuario de servicios: ${SERVICE_USER}"
 info "Versión anterior: ${OLD_SHA:0:12}"
 info "Datos persistentes: ${STATE_DIR:-/var/lib/ghost-nexora-bot}"
 
@@ -60,20 +65,35 @@ npm run build >/tmp/ghost-nexora-build.log 2>&1
 ok 'Build completado.'
 
 section '5/6 · Permisos persistentes'
-if id "${SERVICE_USER}" >/dev/null 2>&1 && [[ -d "${STATE_DIR:-/var/lib/ghost-nexora-bot}" ]]; then
-  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR:-/var/lib/ghost-nexora-bot}"
-  chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
-  ok 'Propietario/permisos de datos verificados.'
+if [[ -d "${STATE_DIR:-/var/lib/ghost-nexora-bot}" ]]; then
+  chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR:-/var/lib/ghost-nexora-bot}" || warn 'No se pudo ajustar STATE_DIR.'
+fi
+chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
+ok 'Propietario/permisos de datos verificados.'
+
+if [[ -x "${INSTALL_DIR}/scripts/install-llm-worker-service.sh" ]]; then
+  info 'Configurando worker LLM independiente...'
+  INSTALL_DIR="${INSTALL_DIR}" SERVICE_USER="${SERVICE_USER}" "${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
+  ok 'Worker LLM listo.'
 fi
 
 section '6/6 · Reinicio y health check'
-systemctl restart ghost-nexora-bot.service ghost-nexora-web.service
+systemctl restart ghost-nexora-bot.service ghost-nexora-web.service ghost-nexora-llm.service
 sleep 3
 BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"
 WEB_STATE="$(systemctl is-active ghost-nexora-web.service || true)"
+LLM_STATE="$(systemctl is-active ghost-nexora-llm.service || true)"
 if [[ "${BOT_STATE}" != 'active' ]]; then
   sleep 4
   BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"
+fi
+if [[ "${LLM_STATE}" != 'active' ]]; then
+  fail 'ghost-nexora-llm no quedó active.'
+  systemctl --no-pager --full status ghost-nexora-llm.service || true
+  printf '\n----- ÚLTIMOS LOGS DEL WORKER LLM -----\n'
+  journalctl -u ghost-nexora-llm.service -n 80 --no-pager -o short-precise || true
+  printf '%s\n' '----- FIN DE LOGS WORKER -----'
+  exit 1
 fi
 if [[ "${BOT_STATE}" != 'active' ]]; then
   fail 'ghost-nexora-bot no quedó active.'
@@ -86,6 +106,7 @@ fi
 if [[ "${WEB_STATE}" != 'active' ]]; then warn 'ghost-nexora-web no quedó active; revisa su estado.'; fi
 ok "Bot: ${BOT_STATE}"
 ok "Web: ${WEB_STATE}"
+ok "LLM worker: ${LLM_STATE}"
 
 HEALTH_URL="$(grep '^BOT_HEALTH_URL=' .env | cut -d= -f2- || true)"
 if [[ -n "${HEALTH_URL}" ]] && command -v curl >/dev/null 2>&1; then
@@ -103,7 +124,9 @@ printf 'Versión anterior : %s\n' "${OLD_SHA:0:12}"
 printf 'Versión actual   : %s\n' "${NEW_SHA:0:12}"
 printf 'Bot              : %s\n' "${BOT_STATE}"
 printf 'Web              : %s\n' "${WEB_STATE}"
+printf 'LLM worker       : %s\n' "${LLM_STATE}"
 printf 'Tiempo           : %ss\n' "$(( $(date +%s) - START_TS ))"
 printf 'Datos preservados: SQLite, sesión, .env y STATE_DIR\n'
-printf 'Logs             : journalctl -u ghost-nexora-bot -f\n'
+printf 'Logs bot         : journalctl -u ghost-nexora-bot -f\n'
+printf 'Logs LLM         : journalctl -u ghost-nexora-llm -f\n'
 printf '══════════════════════════════════════════════════\n'

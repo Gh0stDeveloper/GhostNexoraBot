@@ -11,8 +11,17 @@ const ROOT = path.resolve(config.dataDir, 'llm', 'corpus')
 const RAW = path.join(ROOT, 'raw')
 const STATE_FILE = path.join(ROOT, 'download-state.json')
 
-type DownloadState = { active: boolean; current?: string; completed: string[]; failed: string[]; startedAt?: string; finishedAt?: string }
-const defaultState = (): DownloadState => ({ active: false, completed: [], failed: [] })
+type DownloadState = {
+  active: boolean
+  current?: string
+  completed: string[]
+  failed: string[]
+  failedDetails: Array<{ id: string; error: string }>
+  startedAt?: string
+  finishedAt?: string
+}
+
+const defaultState = (): DownloadState => ({ active: false, completed: [], failed: [], failedDetails: [] })
 
 function ensureDirs() {
   fs.mkdirSync(ROOT, { recursive: true })
@@ -22,7 +31,14 @@ function ensureDirs() {
 function loadState(): DownloadState {
   ensureDirs()
   try {
-    return { ...defaultState(), ...(JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as Partial<DownloadState>) }
+    const value = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as Partial<DownloadState>
+    const failedDetails = Array.isArray(value.failedDetails)
+      ? value.failedDetails.filter((item): item is { id: string; error: string } => Boolean(item && typeof item.id === 'string' && typeof item.error === 'string'))
+      : []
+    const failed = Array.isArray(value.failed)
+      ? value.failed.filter((item): item is string => typeof item === 'string')
+      : []
+    return { ...defaultState(), ...value, failed, failedDetails }
   } catch {
     return defaultState()
   }
@@ -35,46 +51,79 @@ function saveState(state: DownloadState) {
   fs.renameSync(temp, STATE_FILE)
 }
 
-function downloadFile(url: string, dest: string, depth = 0): Promise<void> {
-  if (depth > 5) return Promise.reject(new Error('Demasiadas redirecciones.'))
+function streamToFile(url: string, dest: string, depth = 0): Promise<void> {
+  if (depth > 7) return Promise.reject(new Error('Demasiadas redirecciones.'))
   ensureDirs()
+  const temp = `${dest}.part`
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest)
-    const cleanup = () => {
-      file.destroy()
-      try { fs.unlinkSync(dest) } catch {}
+    let settled = false
+    const finishError = (error: unknown) => {
+      if (settled) return
+      settled = true
+      try { fs.unlinkSync(temp) } catch {}
+      reject(error)
     }
-    const req = https.get(url, { headers: { 'User-Agent': 'GhostNexoraBot/1.0' } }, (res) => {
+    const finishOk = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': 'GhostNexoraBot/1.1 (+https://github.com/Gh0stDeveloper/GhostNexoraBot)',
+        Accept: '*/*',
+      },
+    }, (res) => {
       const code = res.statusCode ?? 0
       if ([301, 302, 303, 307, 308].includes(code) && res.headers.location) {
         res.resume()
-        file.close(() => undefined)
-        cleanup()
-        downloadFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(resolve, reject)
+        streamToFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(finishOk, finishError)
         return
       }
       if (code < 200 || code >= 300) {
         res.resume()
-        file.close(() => undefined)
-        cleanup()
-        reject(new Error(`HTTP ${code}`))
+        finishError(new Error(`HTTP ${code}`))
         return
       }
-      res.pipe(file)
-      file.on('finish', () => {
-        file.close((error) => error ? reject(error) : resolve())
-      })
-      file.on('error', (error) => {
-        cleanup()
-        reject(error)
+      const output = fs.createWriteStream(temp)
+      res.pipe(output)
+      res.on('error', finishError)
+      output.on('error', finishError)
+      output.on('finish', () => {
+        output.close((error) => {
+          if (error) {
+            finishError(error)
+            return
+          }
+          try {
+            fs.renameSync(temp, dest)
+            finishOk()
+          } catch (renameError) {
+            finishError(renameError)
+          }
+        })
       })
     })
-    req.setTimeout(30_000, () => req.destroy(new Error('Timeout de descarga.')))
-    req.on('error', (error) => {
-      cleanup()
-      reject(error)
-    })
+    req.setTimeout(120_000, () => req.destroy(new Error('Timeout de descarga.')))
+    req.on('error', finishError)
   })
+}
+
+async function extractArchive(filePath: string) {
+  if (filePath.endsWith('.tar.gz')) {
+    const extractRoot = path.join(RAW, path.basename(filePath, '.tar.gz'))
+    fs.mkdirSync(extractRoot, { recursive: true })
+    await execFileAsync('tar', ['-xzf', filePath, '-C', extractRoot])
+    fs.unlinkSync(filePath)
+    return
+  }
+  if (filePath.endsWith('.gz')) {
+    await execFileAsync('gzip', ['-df', filePath])
+    return
+  }
+  if (filePath.endsWith('.bz2')) {
+    await execFileAsync('bzip2', ['-df', filePath])
+  }
 }
 
 export function listSources(): CorpusSource[] {
@@ -84,22 +133,28 @@ export function listSources(): CorpusSource[] {
 export function sourceStatus() {
   ensureDirs()
   const state = loadState()
-  return {
-    state,
-    files: fs.readdirSync(RAW, { withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => ({ name: entry.name, bytes: fs.statSync(path.join(RAW, entry.name)).size })),
+  const files: Array<{ name: string; bytes: number; path: string }> = []
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(fullPath)
+      else files.push({ name: path.relative(RAW, fullPath), bytes: fs.statSync(fullPath).size, path: fullPath })
+    }
   }
+  walk(RAW)
+  return { state, files }
 }
 
 export async function downloadSources(ids: string[]) {
   ensureDirs()
   const unique = [...new Set(ids)]
+  if (!unique.length) throw new Error('No se indicaron fuentes.')
   const state = loadState()
   state.active = true
   state.startedAt = new Date().toISOString()
   state.finishedAt = undefined
   state.failed = []
+  state.failedDetails = []
   state.current = undefined
   saveState(state)
   try {
@@ -107,6 +162,7 @@ export async function downloadSources(ids: string[]) {
       const source = getCorpusSource(id)
       if (!source) {
         state.failed.push(id)
+        state.failedDetails.push({ id, error: 'Fuente no encontrada.' })
         saveState(state)
         continue
       }
@@ -114,12 +170,15 @@ export async function downloadSources(ids: string[]) {
       saveState(state)
       const dest = path.join(RAW, source.filename)
       try {
-        await downloadFile(source.url, dest)
-        if (source.filename.endsWith('.gz')) await execFileAsync('gzip', ['-df', dest])
+        await streamToFile(source.url, dest)
+        await extractArchive(dest)
         if (!state.completed.includes(id)) state.completed.push(id)
-      } catch {
-        state.failed.push(id)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!state.failed.includes(id)) state.failed.push(id)
+        state.failedDetails.push({ id, error: message })
         try { fs.unlinkSync(dest) } catch {}
+        try { fs.unlinkSync(`${dest}.part`) } catch {}
       }
       saveState(state)
     }
