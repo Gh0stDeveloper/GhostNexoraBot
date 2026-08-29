@@ -8,8 +8,9 @@ type MammothModule = {
 type PdfModule = {
   PDFParse?: new (options: { data: Buffer }) => {
     getText: () => Promise<{ text: string }>
-    destroy: () => Promise<void>
+    destroy?: () => Promise<void>
   }
+  default?: ((buffer: Buffer) => Promise<{ text?: string }>) | (new (options: { data: Buffer }) => { getText: () => Promise<{ text: string }>; destroy?: () => Promise<void> })
 }
 
 const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm', '.pdf', '.docx'])
@@ -47,12 +48,20 @@ function normalizeStructuredText(text: string, ext: string): string {
   return text
 }
 
-export async function loadCorpus(dir = './corpus'): Promise<string> {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-    return ''
+async function extractPdfText(filePath: string): Promise<string> {
+  const module = await import('pdf-parse') as unknown as PdfModule
+  const buffer = fs.readFileSync(filePath)
+  if (typeof module.PDFParse === 'function') {
+    const parser = new module.PDFParse({ data: buffer })
+    try { return (await parser.getText()).text ?? '' } finally { await parser.destroy?.() }
   }
+  const legacy = module.default
+  if (typeof legacy === 'function') return String((await legacy(buffer)).text ?? '')
+  throw new Error('pdf-parse: API no reconocida (ni PDFParse ni función default).')
+}
 
+export async function loadCorpus(dir = './corpus'): Promise<string> {
+  if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); return '' }
   const pieces: string[] = []
   let total = 0
   for (const fullPath of listCorpusFiles(dir)) {
@@ -61,35 +70,23 @@ export async function loadCorpus(dir = './corpus'): Promise<string> {
     const ext = path.extname(fullPath).toLowerCase()
     try {
       let text = ''
-      if (['.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm'].includes(ext)) {
-        text = normalizeStructuredText(fs.readFileSync(fullPath, 'utf8'), ext)
-      } else if (ext === '.pdf') {
-        const module = await import('pdf-parse') as unknown as PdfModule
-        if (!module.PDFParse) throw new Error('pdf-parse no expone PDFParse.')
-        const parser = new module.PDFParse({ data: fs.readFileSync(fullPath) })
-        try { text = (await parser.getText()).text } finally { await parser.destroy() }
-      } else if (ext === '.docx') {
+      if (['.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm'].includes(ext)) text = normalizeStructuredText(fs.readFileSync(fullPath, 'utf8'), ext)
+      else if (ext === '.pdf') text = await extractPdfText(fullPath)
+      else if (ext === '.docx') {
         const module = await import('mammoth') as unknown as MammothModule
         if (!module.extractRawText) throw new Error('mammoth no expone extractRawText.')
         text = (await module.extractRawText({ path: fullPath })).value
       }
       if (!text) continue
       const remaining = MAX_CORPUS_CHARS - total
-      pieces.push(text.slice(0, remaining))
-      total += Math.min(text.length, remaining)
+      pieces.push(text.slice(0, remaining)); total += Math.min(text.length, remaining)
     } catch (error) {
       console.error(`[LLM loader] Error leyendo ${file}:`, error instanceof Error ? error.message : String(error))
     }
   }
-
   return cleanText(pieces.join('\n'))
 }
 
 export function cleanText(text: string): string {
-  return text
-    .normalize('NFKC')
-    .toLocaleLowerCase('es-MX')
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-_/\\%+=*<>\[\]{}]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return text.normalize('NFKC').toLocaleLowerCase('es-MX').replace(/[^\p{L}\p{N}\s.,!?;:'"()\-_/\\%+=*<>\[\]{}]/gu, ' ').replace(/\s+/g, ' ').trim()
 }
