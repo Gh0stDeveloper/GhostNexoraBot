@@ -12,9 +12,8 @@ const CORPUS = path.join(ROOT, 'corpus')
 const INBOX = path.join(ROOT, 'inbox')
 const RAW_VECTORS = path.join(ROOT, 'corpus.bin')
 const VOCAB = path.join(ROOT, 'vocab.json')
-const MAGIC = Buffer.from('NXLLM2\0', 'ascii')
+const MAGIC = Buffer.from('NXLLM2\\0', 'ascii')
 const DIM = 128
-const MAX_CHUNK = 900
 const MAX_SENTENCES = 4000
 const POLL_MS = 2000
 const AUTO_MS = 30 * 60 * 1000
@@ -23,8 +22,8 @@ let busy = false
 let lastAuto = Date.now()
 
 function ensureDirs() { fs.mkdirSync(ROOT, { recursive: true }); fs.mkdirSync(INBOX, { recursive: true }); fs.mkdirSync(CORPUS, { recursive: true }) }
-function clean(text: string) { return text.normalize('NFKC').replace(/\r/g, '\n').replace(/[^\p{L}\p{N}\p{P}\p{Z}\n]/gu, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() }
-function tokens(text: string) { return text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]/gu) ?? [] }
+function clean(text: string) { return text.normalize('NFKC').replace(/\\r/g, '\\n').replace(/[^\\p{L}\\p{N}\\p{P}\\p{Z}\\n]/gu, ' ').replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim() }
+function tokens(text: string) { return text.toLocaleLowerCase('es-MX').match(/[\\p{L}\\p{N}]+|[^\\p{L}\\p{N}\\s]/gu) ?? [] }
 function buildVocab(texts: string[]) {
   const counts = new Map<string, number>()
   for (const text of texts) for (const token of tokens(text)) counts.set(token, (counts.get(token) ?? 0) + 1)
@@ -37,7 +36,7 @@ function hashVector(text: string) {
   return v
 }
 function rebuildIndexes(corpusText: string) {
-  const texts = clean(corpusText).split(/[.!?\n]+/).map((x) => x.trim()).filter((x) => x.length > 10).slice(0, MAX_SENTENCES)
+  const texts = clean(corpusText).split(/[.!?\\n]+/).map((x) => x.trim()).filter((x) => x.length > 10).slice(0, MAX_SENTENCES)
   if (!texts.length) throw new Error('El corpus no contiene texto utilizable.')
   const vocab = buildVocab(texts)
   fs.writeFileSync(VOCAB, JSON.stringify({ version: 2, vocab, generatedAt: new Date().toISOString() }, null, 2))
@@ -113,8 +112,10 @@ async function tick() {
 async function main() {
   ensureDirs()
   console.log('[LLM worker] iniciado; aprendizaje aislado del proceso WhatsApp')
-  setInterval(() => void tick().catch((error) => console.error('[LLM worker] tick:', error)), POLL_MS).unref()
-  await tick()
+  while (true) {
+    try { await tick() } catch (error) { console.error('[LLM worker] tick:', error) }
+    await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS))
+  }
 }
 
 main().catch((error) => { console.error('[LLM worker] fatal:', error); process.exitCode = 1 })
