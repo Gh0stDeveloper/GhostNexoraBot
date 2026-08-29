@@ -27,17 +27,24 @@ const sectionTitles: Record<SectionId, string> = {
 }
 
 const sets = {
-  knowledge: new Set(['ai','aistatus','investiga','google','wiki','anime','manga','mangachapters','mangadl']),
+  knowledge: new Set(['ai','aistatus','investiga','google','wiki','anime','manga','mangachapters','mangadl','deepseek','llm','minillm','localai']),
   youtube: new Set(['yts','ytmp3','ytmp4','play','playvideo','ytmusic','yt','ytformats','lyrics','soundcloud']),
   progress: new Set(['achievements','titles','season','reputation','rep','reptop','v4profile','clan','clantop','market','sell','buylisting','cancellisting','property','vehicle']),
   rpg: new Set(['grimorio','usar','givegema','inventory','pet','gather','craft','quests','quest','raid']),
-  automation: new Set(['groupstats','announce','rss','poll','polls']), support: new Set(['ticket','tickets']),
+  automation: new Set(['groupstats','announce','rss','poll','polls']),
+  support: new Set(['ticket','tickets']),
   personalization: new Set(['setbotname','setbotcurrency','setpfp','sb','welbanner','byebanner','delbanner','delwelbanner','delbyebanner']),
 }
 
 function sectionFor(command: BotCommand): SectionId {
   const name = command.name.toLowerCase()
-  for (const id of ['knowledge','youtube','progress','rpg','automation','support','personalization'] as const) if (sets[id].has(name)) return id
+  if (sets.knowledge.has(name)) return 'knowledge'
+  if (sets.youtube.has(name)) return 'youtube'
+  if (sets.progress.has(name)) return 'progress'
+  if (sets.rpg.has(name)) return 'rpg'
+  if (sets.automation.has(name)) return 'automation'
+  if (sets.support.has(name)) return 'support'
+  if (sets.personalization.has(name)) return 'personalization'
   if (command.category === 'downloads') return 'downloads'
   if (command.category === 'profile') return 'profile'
   if (command.category === 'economy') return 'economy'
@@ -103,7 +110,7 @@ async function menu(ctx: CommandContext) {
     `┃ ⏱️ Uptime » *${formatUptime()}*`, `┃ 🪙 Moneda » *${COIN_NAME} (${COIN_SYMBOL})*`,
     `┃ 💼 Profesión » *${profession.emoji} ${profession.label}*`, `┃ 🏷️ Rol » *${role}*`,
     `┃ 🔐 Privado » *${privateAccess ? 'HABILITADO' : 'NO HABILITADO'}*`, '╰━━━━━━━━━━━━━━━━━━━━╯', '',
-    ...sections, '📢 *Accesos rápidos incluidos en este mensaje.*', '*Ghost Developer / Nexora*',
+    ...sections, `📚 *Total de comandos efectivos: ${effectiveCommands().filter((row) => visible(ctx, row.command)).length}*`, '', '*Ghost Developer / Nexora*',
   ].join('\n')
 
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
