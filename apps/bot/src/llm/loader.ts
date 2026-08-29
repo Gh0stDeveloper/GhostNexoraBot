@@ -4,6 +4,19 @@ import path from 'node:path'
 type PdfModule = { default?: (buffer: Buffer) => Promise<{ text: string }> }
 type MammothModule = { default?: { extractRawText: (options: { path: string }) => Promise<{ value: string }> }; extractRawText?: (options: { path: string }) => Promise<{ value: string }> }
 
+const SUPPORTED_EXTENSIONS = new Set(['.txt', '.pdf', '.docx'])
+
+function listCorpusFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) return []
+  const files: string[] = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name)
+    if (entry.isDirectory()) files.push(...listCorpusFiles(fullPath))
+    else if (SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) files.push(fullPath)
+  }
+  return files.sort()
+}
+
 export async function loadCorpus(dir = './corpus'): Promise<string> {
   let fullText = ''
   if (!fs.existsSync(dir)) {
@@ -11,9 +24,9 @@ export async function loadCorpus(dir = './corpus'): Promise<string> {
     return ''
   }
 
-  for (const file of fs.readdirSync(dir).sort()) {
-    const fullPath = path.join(dir, file)
-    const ext = path.extname(file).toLowerCase()
+  for (const fullPath of listCorpusFiles(dir)) {
+    const file = path.relative(dir, fullPath)
+    const ext = path.extname(fullPath).toLowerCase()
     try {
       if (ext === '.txt') {
         fullText += `${fs.readFileSync(fullPath, 'utf8')}\n`
