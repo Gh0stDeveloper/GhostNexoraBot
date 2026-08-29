@@ -63,6 +63,7 @@ import { developerV8Commands } from './developer-v8.js'
 import { groupControlsV9Commands } from './group-controls-v9.js'
 import { lempiApiCommands } from './lempi-api.js'
 import { mediaDownloadFixCommands } from './media-download-fixes-v2.js'
+import { miniLlmCommands } from './mini-llm.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -126,8 +127,8 @@ export const commands: BotCommand[] = [
   ...groupControlsV9Commands,
   ...lempiApiCommands,
   ...mediaDownloadFixCommands,
-  // Keep the dedicated anime command last so it wins over any legacy collision.
   ...animeDownloadCommands,
+  ...miniLlmCommands,
 ]
 
 setMenuCommandProvider(() => commands)

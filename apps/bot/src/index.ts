@@ -19,6 +19,7 @@ import { observeGroupActivity } from './services/progression-v4.js'
 import { startAutomationScheduler } from './services/automation-v4.js'
 import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
+import { miniLLM } from './services/mini-llm.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -178,6 +179,7 @@ async function routeMessage(
       chatId.endsWith('@g.us'),
       text.startsWith(settings.prefix),
     )
+    if (text.length >= 2 && !text.startsWith(settings.prefix)) miniLLM.addLive(text)
   }
 
   // Anti ver una vez: republicar foto/video como media normal en el grupo
@@ -255,6 +257,7 @@ await settings.init()
 startTempCleanup()
 startHealthServer()
 startAutomationScheduler(() => mainSocket)
+miniLLM.startAutoTrain()
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))

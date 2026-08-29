@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "feat/**", "fix/**"]
   pull_request:
 
 permissions:
@@ -38,6 +38,9 @@ jobs:
 
       - name: V5 compatibility smoke
         run: node scripts/v5-smoke.mjs
+
+      - name: Mini-LLM modular smoke
+        run: npx tsx apps/bot/src/llm/smoke.ts
 
       - name: Validate shell scripts
         run: bash -n scripts/install.sh scripts/update.sh

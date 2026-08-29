@@ -10,12 +10,17 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "bot": "npm run start --workspace=@ghostnexora/bot",
     "pair": "npm run pair --workspace=@ghostnexora/bot",
-    "web": "npm run start --workspace=@ghostnexora/web"
+    "web": "npm run start --workspace=@ghostnexora/web",
+    "llm:train": "npm run llm:train --workspace=@ghostnexora/bot"
   },
   "overrides": {
     "redstar": {
       "minimatch": "3.1.5"
     }
+  },
+  "dependencies": {
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.8.0"
   },
   "engines": {
     "node": ">=24.0.0",
