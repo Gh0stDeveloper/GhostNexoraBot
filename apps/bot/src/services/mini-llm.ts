@@ -1,1 +1,1 @@
-export { miniLLM } from './mini-llm-core.js'
+export { miniLLM } from './mini-llm-transformer.js'
