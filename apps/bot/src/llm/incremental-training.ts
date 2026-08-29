@@ -17,11 +17,43 @@ function tokenize(text: string): string[] {
   return text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]/gu) ?? []
 }
 
+function readModelVocabSize(): number | null {
+  try {
+    const buffer = fs.readFileSync(MODEL_FILE)
+    const newline = buffer.indexOf(10)
+    if (newline < 0) return null
+    const meta = JSON.parse(buffer.subarray(0, newline).toString('utf8')) as { version?: number; vocabSize?: number; dim?: number; heads?: number }
+    if (meta.version !== MODEL_VERSION || meta.dim !== DIM || meta.heads !== 4 || !Number.isInteger(meta.vocabSize)) return null
+    return Number(meta.vocabSize)
+  } catch {
+    return null
+  }
+}
+
+function healVocabToModelSize(vocab: string[]): string[] {
+  const modelSize = readModelVocabSize()
+  if (modelSize === null || modelSize <= vocab.length) return vocab
+  if (modelSize > MAX_VOCAB) throw new Error(`El modelo requiere ${modelSize} tokens, por encima del límite ${MAX_VOCAB}.`)
+  const seen = new Set(vocab)
+  const healed = [...vocab]
+  for (let i = healed.length; i < modelSize; i++) {
+    let token = `__legacy_token_${i}`
+    let n = 1
+    while (seen.has(token)) token = `__legacy_token_${i}_${n++}`
+    seen.add(token)
+    healed.push(token)
+  }
+  saveVocab(healed)
+  return healed
+}
+
 export function loadVocab(file = VOCAB_FILE): string[] {
   ensure()
   if (!fs.existsSync(file)) return []
   const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { vocab?: unknown }
-  return Array.isArray(parsed.vocab) ? parsed.vocab.map(String) : []
+  const vocab = Array.isArray(parsed.vocab) ? parsed.vocab.map(String) : []
+  if (file === VOCAB_FILE) return healVocabToModelSize(vocab)
+  return vocab
 }
 
 function saveVocab(vocab: string[], destination = VOCAB_FILE) {
@@ -66,6 +98,7 @@ function parseModel(buffer: Buffer) {
 
 export function ensureModelVocabularySize(targetVocabSize: number) {
   ensure()
+  if (!Number.isInteger(targetVocabSize) || targetVocabSize <= 0 || targetVocabSize > MAX_VOCAB) throw new Error(`Tamaño de vocabulario inválido: ${targetVocabSize}.`)
   if (!fs.existsSync(MODEL_FILE)) throw new Error('No existe model.bin; no se permite reinicializar un entrenamiento incremental sin un modelo base.')
   const buffer = fs.readFileSync(MODEL_FILE)
   const parsed = parseModel(buffer)
