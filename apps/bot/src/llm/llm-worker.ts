@@ -4,6 +4,7 @@ import { config } from '../config.js'
 import { loadCorpus } from './loader.js'
 import { miniLLM as coreMiniLLM } from '../services/mini-llm-transformer.js'
 import { getQueueState, updateDocumentJob } from './document-queue.js'
+import { drainLiveMessages } from './live-queue.js'
 import { consumeTrainingRequest } from './training-queue.js'
 
 const ROOT = path.resolve(config.dataDir, 'llm')
@@ -17,10 +18,11 @@ const MAX_CHUNK = 900
 const MAX_SENTENCES = 4000
 const POLL_MS = 2000
 const AUTO_MS = 30 * 60 * 1000
+const LIVE_BATCH = 100
 let busy = false
 let lastAuto = Date.now()
 
-function ensureDirs() { fs.mkdirSync(INBOX, { recursive: true }); fs.mkdirSync(CORPUS, { recursive: true }); fs.mkdirSync(ROOT, { recursive: true }) }
+function ensureDirs() { fs.mkdirSync(ROOT, { recursive: true }); fs.mkdirSync(INBOX, { recursive: true }); fs.mkdirSync(CORPUS, { recursive: true }) }
 function clean(text: string) { return text.normalize('NFKC').replace(/\r/g, '\n').replace(/[^\p{L}\p{N}\p{P}\p{Z}\n]/gu, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() }
 function tokens(text: string) { return text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]/gu) ?? [] }
 function buildVocab(texts: string[]) {
@@ -68,6 +70,13 @@ async function moveQueuedDocuments() {
   return moved
 }
 
+async function processLiveQueue() {
+  const messages = drainLiveMessages(LIVE_BATCH)
+  if (!messages.length) return 0
+  for (const text of messages) coreMiniLLM.addLive(text)
+  return messages.length
+}
+
 async function trainCorpus() {
   if (busy) return null
   busy = true
@@ -92,12 +101,13 @@ async function tick() {
   ensureDirs()
   if (busy) return
   const moved = await moveQueuedDocuments()
+  const liveProcessed = await processLiveQueue()
   const requested = consumeTrainingRequest()
   const stats = coreMiniLLM.stats()
   const autoDue = stats.autoTrainEnabled && Date.now() - lastAuto >= AUTO_MS && stats.pendingMessages >= 20
   if (moved > 0 || requested) await trainCorpus()
   else if (autoDue) await trainLive()
-  if (moved > 0 || requested || autoDue) lastAuto = Date.now()
+  if (moved > 0 || liveProcessed > 0 || requested || autoDue) lastAuto = Date.now()
 }
 
 async function main() {
