@@ -6,6 +6,8 @@ type TrainingState = {
   requested: boolean
   reason?: string
   requestedAt?: string
+  requestedBy?: string
+  stopAfterCurrent?: boolean
 }
 
 const ROOT = path.resolve(config.dataDir, 'llm')
@@ -15,11 +17,13 @@ function ensure() { fs.mkdirSync(ROOT, { recursive: true }) }
 function read(): TrainingState { ensure(); try { return JSON.parse(fs.readFileSync(FILE, 'utf8')) as TrainingState } catch { return { requested: false } } }
 function write(value: TrainingState) { ensure(); const temp = `${FILE}.tmp`; fs.writeFileSync(temp, JSON.stringify(value, null, 2)); fs.renameSync(temp, FILE) }
 
-export function requestTraining(reason = 'manual') {
+export function requestTraining(reason = 'manual', requestedBy?: string, stopAfterCurrent = true) {
   const state = read()
   state.requested = true
   state.reason = reason
   state.requestedAt = new Date().toISOString()
+  state.requestedBy = requestedBy
+  state.stopAfterCurrent = stopAfterCurrent
   write(state)
 }
 
@@ -27,8 +31,13 @@ export function consumeTrainingRequest() {
   const state = read()
   if (!state.requested) return null
   state.requested = false
-  write(state)
-  return { reason: state.reason ?? 'manual', requestedAt: state.requestedAt }
+  write({ requested: false })
+  return {
+    reason: state.reason ?? 'manual',
+    requestedAt: state.requestedAt,
+    requestedBy: state.requestedBy,
+    stopAfterCurrent: state.stopAfterCurrent !== false,
+  }
 }
 
 export function trainingQueueStatus() { return read() }
