@@ -15,6 +15,7 @@ const META_FILE = path.join(ROOT, 'training-meta.json')
 const MAX_SENTENCES = 4000
 const MAX_STEPS = 5000
 const EPOCHS = 2
+const YIELD_EVERY_STEPS = 25
 
 function tokenize(text: string): string[] {
   return text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]/gu) ?? []
@@ -55,6 +56,17 @@ function encode(text: string, vocab: string[], index: Map<string, number>): numb
   return tokenize(text).map((token) => index.get(token) ?? unk)
 }
 
+function writeTrainingMeta(patch: Record<string, unknown>) {
+  fs.mkdirSync(ROOT, { recursive: true })
+  let current: Record<string, unknown> = {}
+  try { current = JSON.parse(fs.readFileSync(META_FILE, 'utf8')) as Record<string, unknown> } catch {}
+  fs.writeFileSync(META_FILE, JSON.stringify({ ...current, ...patch }, null, 2))
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 export async function prepareCorpusAndTrain() {
   const corpus = await loadCorpus(INPUT_DIR)
   if (!corpus) return { ok: false as const, reason: 'empty_corpus' as const }
@@ -82,10 +94,29 @@ export async function prepareCorpusAndTrain() {
 
   const model = new MiniTransformer(vocab.length)
   const loadedExistingModel = model.load(MODEL_FILE)
+  const totalEstimate = sentences.reduce((total, sentence) => {
+    const length = encode(sentence, vocab!, index).length
+    return total + Math.max(0, length - 1)
+  }, 0) * EPOCHS
 
   let steps = 0
   let lossTotal = 0
   let lossCount = 0
+  const startedAt = new Date().toISOString()
+
+  writeTrainingMeta({
+    version: 3,
+    status: 'training',
+    startedAt,
+    characters: corpus.length,
+    sentences: sentences.length,
+    documentsDiscovered: countSupportedFiles(INPUT_DIR),
+    epochs: EPOCHS,
+    totalStepsEstimate: Math.min(MAX_STEPS, totalEstimate),
+    currentStep: 0,
+    currentEpoch: 1,
+    averageLoss: null,
+  })
 
   for (let epoch = 1; epoch <= EPOCHS && steps < MAX_STEPS; epoch++) {
     for (const sentence of sentences) {
@@ -96,6 +127,19 @@ export async function prepareCorpusAndTrain() {
         lossTotal += loss
         lossCount++
         steps++
+
+        if (steps % YIELD_EVERY_STEPS === 0) {
+          writeTrainingMeta({
+            status: 'training',
+            currentStep: steps,
+            currentEpoch: epoch,
+            totalStepsEstimate: Math.min(MAX_STEPS, totalEstimate),
+            progress: Math.min(99, Math.round((steps / Math.max(1, Math.min(MAX_STEPS, totalEstimate))) * 100)),
+            averageLoss: lossTotal / lossCount,
+            updatedAt: new Date().toISOString(),
+          })
+          await yieldToEventLoop()
+        }
       }
       if (steps >= MAX_STEPS) break
     }
@@ -103,8 +147,13 @@ export async function prepareCorpusAndTrain() {
 
   model.save(MODEL_FILE)
   const averageLoss = lossCount ? lossTotal / lossCount : null
+  const finishedAt = new Date().toISOString()
   fs.writeFileSync(META_FILE, JSON.stringify({
     version: 3,
+    status: 'completed',
+    startedAt,
+    trainedAt: finishedAt,
+    progress: 100,
     vocabSize: vocab.length,
     dim: model.dim,
     layers: model.layers,
@@ -116,7 +165,9 @@ export async function prepareCorpusAndTrain() {
     documentsDiscovered: countSupportedFiles(INPUT_DIR),
     sentences: sentences.length,
     characters: corpus.length,
-    trainedAt: new Date().toISOString(),
+    currentStep: steps,
+    currentEpoch: EPOCHS,
+    totalStepsEstimate: Math.min(MAX_STEPS, totalEstimate),
   }, null, 2))
 
   return {
