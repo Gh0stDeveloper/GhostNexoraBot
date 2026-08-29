@@ -1,8 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-type PdfModule = { default?: (buffer: Buffer) => Promise<{ text: string }> }
-type MammothModule = { default?: { extractRawText: (options: { path: string }) => Promise<{ value: string }> }; extractRawText?: (options: { path: string }) => Promise<{ value: string }> }
+type MammothModule = {
+  extractRawText?: (options: { path: string }) => Promise<{ value: string }>
+}
+
+type PdfModule = {
+  PDFParse?: new (options: { data: Buffer }) => {
+    getText: () => Promise<{ text: string }>
+    destroy: () => Promise<void>
+  }
+}
 
 const SUPPORTED_EXTENSIONS = new Set(['.txt', '.md', '.csv', '.tsv', '.json', '.xml', '.html', '.htm', '.pdf', '.docx'])
 const MAX_CORPUS_CHARS = 20_000_000
@@ -32,11 +40,10 @@ function stripMarkup(text: string): string {
 }
 
 function normalizeStructuredText(text: string, ext: string): string {
-  if (ext === '.html' || ext === '.htm') return stripMarkup(text)
+  if (ext === '.html' || ext === '.htm' || ext === '.xml') return stripMarkup(text)
   if (ext === '.json') {
     try { return JSON.stringify(JSON.parse(text)) } catch { return text }
   }
-  if (ext === '.xml') return stripMarkup(text)
   return text
 }
 
@@ -58,21 +65,20 @@ export async function loadCorpus(dir = './corpus'): Promise<string> {
         text = normalizeStructuredText(fs.readFileSync(fullPath, 'utf8'), ext)
       } else if (ext === '.pdf') {
         const module = await import('pdf-parse') as unknown as PdfModule
-        const parser = module.default
-        if (!parser) throw new Error('pdf-parse no expone un parser compatible.')
-        text = (await parser(fs.readFileSync(fullPath))).text
+        if (!module.PDFParse) throw new Error('pdf-parse no expone PDFParse.')
+        const parser = new module.PDFParse({ data: fs.readFileSync(fullPath) })
+        try { text = (await parser.getText()).text } finally { await parser.destroy() }
       } else if (ext === '.docx') {
         const module = await import('mammoth') as unknown as MammothModule
-        const extractRawText = module.extractRawText ?? module.default?.extractRawText
-        if (!extractRawText) throw new Error('mammoth no expone extractRawText.')
-        text = (await extractRawText({ path: fullPath })).value
+        if (!module.extractRawText) throw new Error('mammoth no expone extractRawText.')
+        text = (await module.extractRawText({ path: fullPath })).value
       }
       if (!text) continue
       const remaining = MAX_CORPUS_CHARS - total
       pieces.push(text.slice(0, remaining))
       total += Math.min(text.length, remaining)
     } catch (error) {
-      console.error(`Error leyendo ${file}:`, error)
+      console.error(`[LLM loader] Error leyendo ${file}:`, error instanceof Error ? error.message : String(error))
     }
   }
 
