@@ -6,6 +6,7 @@ import { config } from '../config.js'
 const ROOT = path.resolve(config.dataDir, 'llm')
 const PID_FILE = path.join(ROOT, 'worker.pid')
 const STATE_FILE = path.join(ROOT, 'state.json')
+const WORKER_FILE = path.join(process.cwd(), 'apps/bot/dist/llm/llm-worker-v2.js')
 
 function writeState(patch: Record<string, unknown>) {
   fs.mkdirSync(ROOT, { recursive: true })
@@ -23,7 +24,13 @@ function cleanup() {
 fs.mkdirSync(ROOT, { recursive: true })
 fs.writeFileSync(PID_FILE, String(process.pid), { mode: 0o600 })
 
-const child = spawn(process.execPath, [path.join(process.cwd(), 'apps/bot/dist/llm/llm-worker.js')], {
+if (!fs.existsSync(WORKER_FILE)) {
+  writeState({ learning: false, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentMessage: 'Worker LLM v2 no encontrado. Ejecuta el build.' })
+  cleanup()
+  process.exit(1)
+}
+
+const child = spawn(process.execPath, [WORKER_FILE], {
   cwd: process.cwd(),
   stdio: 'inherit',
   env: process.env,
