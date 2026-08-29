@@ -22,11 +22,6 @@ let lastAuto = Date.now()
 
 function ensureDirs() { fs.mkdirSync(INBOX, { recursive: true }); fs.mkdirSync(CORPUS, { recursive: true }); fs.mkdirSync(ROOT, { recursive: true }) }
 function clean(text: string) { return text.normalize('NFKC').replace(/\r/g, '\n').replace(/[^\p{L}\p{N}\p{P}\p{Z}\n]/gu, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim() }
-function chunks(text: string) {
-  const out: string[] = []
-  for (const paragraph of clean(text).split(/\n{2,}/)) for (let i = 0; i < paragraph.length; i += MAX_CHUNK) { const value = paragraph.slice(i, i + MAX_CHUNK).trim(); if (value) out.push(value) }
-  return out
-}
 function tokens(text: string) { return text.toLocaleLowerCase('es-MX').match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]/gu) ?? [] }
 function buildVocab(texts: string[]) {
   const counts = new Map<string, number>()
@@ -40,7 +35,7 @@ function hashVector(text: string) {
   return v
 }
 function rebuildIndexes(corpusText: string) {
-  const texts = corpusText.split(/[.!?\n]+/).map((x) => x.trim()).filter((x) => x.length > 10).slice(0, MAX_SENTENCES)
+  const texts = clean(corpusText).split(/[.!?\n]+/).map((x) => x.trim()).filter((x) => x.length > 10).slice(0, MAX_SENTENCES)
   if (!texts.length) throw new Error('El corpus no contiene texto utilizable.')
   const vocab = buildVocab(texts)
   fs.writeFileSync(VOCAB, JSON.stringify({ version: 2, vocab, generatedAt: new Date().toISOString() }, null, 2))
@@ -50,7 +45,7 @@ function rebuildIndexes(corpusText: string) {
     buffers.push(header, Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength), textBuffer)
   }
   fs.writeFileSync(RAW_VECTORS, Buffer.concat(buffers))
-  return { documentsText: texts.length, vocab: vocab.length, characters: corpusText.length }
+  return { chunks: texts.length, vocab: vocab.length, characters: corpusText.length }
 }
 
 async function moveQueuedDocuments() {
@@ -62,8 +57,9 @@ async function moveQueuedDocuments() {
       if (!fs.existsSync(job.path)) throw new Error('El archivo recibido ya no existe.')
       const ext = path.extname(job.filename).toLowerCase()
       if (!['.pdf', '.docx', '.txt', '.md', '.json', '.csv', '.tsv', '.xml', '.html', '.htm'].includes(ext)) throw new Error(`Formato no compatible: ${ext || 'sin extensión'}`)
-      fs.renameSync(job.path, path.join(CORPUS, `${job.id}-${job.filename}`))
-      updateDocumentJob(job.id, { status: 'completed', finishedAt: new Date().toISOString(), path: path.join(CORPUS, `${job.id}-${job.filename}`) })
+      const target = path.join(CORPUS, `${job.id}-${job.filename}`)
+      fs.renameSync(job.path, target)
+      updateDocumentJob(job.id, { status: 'completed', finishedAt: new Date().toISOString(), path: target })
       moved++
     } catch (error) {
       updateDocumentJob(job.id, { status: 'failed', finishedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) })
@@ -72,17 +68,24 @@ async function moveQueuedDocuments() {
   return moved
 }
 
-async function trainNow(reason: string) {
+async function trainCorpus() {
   if (busy) return null
   busy = true
   try {
     const corpusText = await loadCorpus(CORPUS)
     if (!corpusText) return { ok: false as const, reason: 'empty_corpus' as const }
     const index = rebuildIndexes(corpusText)
-    const result = await coreMiniLLM.train(reason)
+    const result = await coreMiniLLM.train('worker')
     if (!result.started) return { ok: false as const, reason: result.reason, ...index }
     return { ok: true as const, ...index, steps: result.steps, loss: result.loss }
   } finally { busy = false }
+}
+
+async function trainLive() {
+  if (busy) return null
+  busy = true
+  try { return await coreMiniLLM.train('auto') }
+  finally { busy = false }
 }
 
 async function tick() {
@@ -92,10 +95,9 @@ async function tick() {
   const requested = consumeTrainingRequest()
   const stats = coreMiniLLM.stats()
   const autoDue = stats.autoTrainEnabled && Date.now() - lastAuto >= AUTO_MS && stats.pendingMessages >= 20
-  if (moved > 0 || requested || autoDue) {
-    await trainNow(requested?.reason ?? (moved > 0 ? 'document' : 'auto')).catch((error) => console.error('[LLM worker] training:', error))
-    lastAuto = Date.now()
-  }
+  if (moved > 0 || requested) await trainCorpus()
+  else if (autoDue) await trainLive()
+  if (moved > 0 || requested || autoDue) lastAuto = Date.now()
 }
 
 async function main() {
