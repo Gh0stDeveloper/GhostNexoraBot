@@ -33,7 +33,47 @@ try {
   assert.equal(hits.length, 1)
   assert.equal(hits[0]?.id, 1)
 
-  console.log('LLM modular smoke: OK')
+  // Incremental-training smoke: preserve the old vocabulary, expand only with new tokens,
+  // preserve existing model bytes, and create a round checkpoint.
+  process.env.DATA_DIR = temp
+  const incremental = await import('./incremental-training.js')
+  const llmDir = path.join(temp, 'llm')
+  fs.mkdirSync(llmDir, { recursive: true })
+  fs.writeFileSync(path.join(llmDir, 'vocab.json'), JSON.stringify({ version: 2, vocab: ['<unk>', '<bos>', '<eos>', 'ghost'] }))
+
+  const dim = 128
+  const vocabSize = 4
+  const header = Buffer.from(JSON.stringify({ version: 2, vocabSize, dim, heads: 4 }) + '\n')
+  const emb = new Float32Array(vocabSize * dim)
+  const w = new Float32Array(dim * dim)
+  const output = new Float32Array(vocabSize * dim)
+  const bias = new Float32Array(vocabSize)
+  emb.fill(0.125); w.fill(0.25); output.fill(0.5); bias.fill(0.75)
+  fs.writeFileSync(path.join(llmDir, 'model.bin'), Buffer.concat([
+    header,
+    Buffer.from(emb.buffer),
+    Buffer.from(w.buffer), Buffer.from(w.buffer), Buffer.from(w.buffer), Buffer.from(w.buffer),
+    Buffer.from(output.buffer), Buffer.from(bias.buffer),
+  ]))
+
+  const expanded = incremental.expandVocab(['ghost nuevo token'])
+  assert.ok(expanded.newSize >= expanded.oldSize)
+  const nextVocab = incremental.loadVocab()
+  assert.deepEqual(nextVocab.slice(0, 4), ['<unk>', '<bos>', '<eos>', 'ghost'])
+  assert.equal(nextVocab.length, expanded.newSize)
+
+  incremental.ensureModelVocabularySize(expanded.newSize)
+  const modelBuffer = fs.readFileSync(path.join(llmDir, 'model.bin'))
+  const split = modelBuffer.indexOf(10)
+  const meta = JSON.parse(modelBuffer.subarray(0, split).toString('utf8')) as { vocabSize: number }
+  assert.equal(meta.vocabSize, expanded.newSize)
+  assert.equal(modelBuffer.readFloatLE(split + 1), 0.125)
+
+  incremental.checkpointRound(2)
+  assert.ok(fs.existsSync(path.join(llmDir, 'model-2.bin')))
+  assert.ok(fs.existsSync(path.join(llmDir, 'vocab-2.json')))
+
+  console.log('LLM modular + incremental smoke: OK')
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })
 }
