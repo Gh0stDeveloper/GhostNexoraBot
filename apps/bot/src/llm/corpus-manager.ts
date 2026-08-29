@@ -50,9 +50,15 @@ function saveState(state: DownloadState) {
   fs.renameSync(temp, STATE_FILE)
 }
 
-function requestBuffer(url: string, depth = 0): Promise<Buffer> {
+function streamToFile(url: string, dest: string, depth = 0): Promise<void> {
   if (depth > 7) return Promise.reject(new Error('Demasiadas redirecciones.'))
+  ensureDirs()
+  const temp = `${dest}.part`
   return new Promise((resolve, reject) => {
+    const finishError = (error: unknown) => {
+      try { fs.unlinkSync(temp) } catch {}
+      reject(error)
+    }
     const req = https.get(url, {
       headers: {
         'User-Agent': 'GhostNexoraBot/1.1 (+https://github.com/Gh0stDeveloper/GhostNexoraBot)',
@@ -62,42 +68,36 @@ function requestBuffer(url: string, depth = 0): Promise<Buffer> {
       const code = res.statusCode ?? 0
       if ([301, 302, 303, 307, 308].includes(code) && res.headers.location) {
         res.resume()
-        resolve(requestBuffer(new URL(res.headers.location, url).toString(), depth + 1))
+        streamToFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(resolve, reject)
         return
       }
       if (code < 200 || code >= 300) {
         res.resume()
-        reject(new Error(`HTTP ${code}`))
+        finishError(new Error(`HTTP ${code}`))
         return
       }
-      const chunks: Buffer[] = []
-      let total = 0
-      res.on('data', (chunk) => {
-        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-        total += value.length
-        if (total > 2 * 1024 * 1024 * 1024) {
-          req.destroy(new Error('Archivo demasiado grande.'))
-          return
-        }
-        chunks.push(value)
+      const output = fs.createWriteStream(temp)
+      res.pipe(output)
+      res.on('error', finishError)
+      output.on('error', finishError)
+      output.on('finish', () => {
+        output.close((error) => {
+          if (error) {
+            finishError(error)
+            return
+          }
+          try {
+            fs.renameSync(temp, dest)
+            resolve()
+          } catch (renameError) {
+            finishError(renameError)
+          }
+        })
       })
-      res.on('end', () => resolve(Buffer.concat(chunks)))
-      res.on('error', reject)
     })
     req.setTimeout(120_000, () => req.destroy(new Error('Timeout de descarga.')))
-    req.on('error', reject)
+    req.on('error', finishError)
   })
-}
-
-async function downloadFile(url: string, dest: string) {
-  ensureDirs()
-  const temp = `${dest}.part`
-  try {
-    fs.writeFileSync(temp, await requestBuffer(url))
-    fs.renameSync(temp, dest)
-  } finally {
-    try { fs.unlinkSync(temp) } catch {}
-  }
 }
 
 async function extractArchive(filePath: string) {
@@ -159,13 +159,14 @@ export async function downloadSources(ids: string[]) {
       saveState(state)
       const dest = path.join(RAW, source.filename)
       try {
-        await downloadFile(source.url, dest)
+        await streamToFile(source.url, dest)
         await extractArchive(dest)
         if (!state.completed.includes(id)) state.completed.push(id)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         state.failed.push({ id, error: message })
         try { fs.unlinkSync(dest) } catch {}
+        try { fs.unlinkSync(`${dest}.part`) } catch {}
       }
       saveState(state)
     }
