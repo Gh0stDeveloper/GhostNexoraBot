@@ -68,12 +68,19 @@ fi
 
 section '6/6 · Reinicio y health check'
 systemctl restart ghost-nexora-bot.service ghost-nexora-web.service
-sleep 2
+sleep 3
 BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"
 WEB_STATE="$(systemctl is-active ghost-nexora-web.service || true)"
 if [[ "${BOT_STATE}" != 'active' ]]; then
+  sleep 4
+  BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"
+fi
+if [[ "${BOT_STATE}" != 'active' ]]; then
   fail 'ghost-nexora-bot no quedó active.'
   systemctl --no-pager --full status ghost-nexora-bot.service || true
+  printf '\n----- ÚLTIMOS LOGS DEL BOT -----\n'
+  journalctl -u ghost-nexora-bot.service -n 80 --no-pager -o short-precise || true
+  printf '%s\n' '----- FIN DE LOGS -----'
   exit 1
 fi
 if [[ "${WEB_STATE}" != 'active' ]]; then warn 'ghost-nexora-web no quedó active; revisa su estado.'; fi
