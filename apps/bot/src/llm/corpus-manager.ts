@@ -3,21 +3,41 @@ import path from 'node:path'
 import https from 'node:https'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { config } from '../config.js'
 import { CORPUS_SOURCES, type CorpusSource, getCorpusSource } from './corpus-sources.js'
 
 const execFileAsync = promisify(execFile)
-const ROOT = path.resolve('data/llm/corpus')
+const ROOT = path.resolve(config.dataDir, 'llm', 'corpus')
 const RAW = path.join(ROOT, 'raw')
 const STATE_FILE = path.join(ROOT, 'download-state.json')
-fs.mkdirSync(RAW, { recursive: true })
 
 type DownloadState = { active: boolean; current?: string; completed: string[]; failed: string[]; startedAt?: string; finishedAt?: string }
 const defaultState = (): DownloadState => ({ active: false, completed: [], failed: [] })
-function loadState(): DownloadState { try { return { ...defaultState(), ...(JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as Partial<DownloadState>) } } catch { return defaultState() } }
-function saveState(state: DownloadState) { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)) }
+
+function ensureDirs() {
+  fs.mkdirSync(ROOT, { recursive: true })
+  fs.mkdirSync(RAW, { recursive: true })
+}
+
+function loadState(): DownloadState {
+  ensureDirs()
+  try {
+    return { ...defaultState(), ...(JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as Partial<DownloadState>) }
+  } catch {
+    return defaultState()
+  }
+}
+
+function saveState(state: DownloadState) {
+  ensureDirs()
+  const temp = `${STATE_FILE}.tmp`
+  fs.writeFileSync(temp, JSON.stringify(state, null, 2))
+  fs.renameSync(temp, STATE_FILE)
+}
 
 function downloadFile(url: string, dest: string, depth = 0): Promise<void> {
   if (depth > 5) return Promise.reject(new Error('Demasiadas redirecciones.'))
+  ensureDirs()
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest)
     const finish = (error?: Error | null) => {
@@ -53,40 +73,62 @@ function downloadFile(url: string, dest: string, depth = 0): Promise<void> {
   })
 }
 
-export function listSources(): CorpusSource[] { return CORPUS_SOURCES }
+export function listSources(): CorpusSource[] {
+  return CORPUS_SOURCES
+}
+
 export function sourceStatus() {
+  ensureDirs()
   const state = loadState()
-  return { state, files: fs.readdirSync(RAW, { withFileTypes: true }).filter((x) => x.isFile()).map((x) => ({ name: x.name, bytes: fs.statSync(path.join(RAW, x.name)).size })) }
+  return {
+    state,
+    files: fs.readdirSync(RAW, { withFileTypes: true })
+      .filter((x) => x.isFile())
+      .map((x) => ({ name: x.name, bytes: fs.statSync(path.join(RAW, x.name)).size })),
+  }
 }
 
 export async function downloadSources(ids: string[]) {
+  ensureDirs()
   const unique = [...new Set(ids)]
   const state = loadState()
-  state.active = true; state.startedAt = new Date().toISOString(); state.finishedAt = undefined; state.failed = []; state.current = undefined
+  state.active = true
+  state.startedAt = new Date().toISOString()
+  state.finishedAt = undefined
+  state.failed = []
+  state.current = undefined
   saveState(state)
+
   try {
     for (const id of unique) {
       const source = getCorpusSource(id)
-      if (!source) { state.failed.push(id); continue }
-      state.current = id; saveState(state)
+      if (!source) {
+        state.failed.push(id)
+        continue
+      }
+      state.current = id
+      saveState(state)
       const dest = path.join(RAW, source.filename)
       try {
         await downloadFile(source.url, dest)
         if (source.filename.endsWith('.gz')) await execFileAsync('gzip', ['-df', dest])
-        state.completed.push(id)
-      } catch (error) {
+        if (!state.completed.includes(id)) state.completed.push(id)
+      } catch {
         state.failed.push(id)
         try { fs.unlinkSync(dest) } catch {}
       }
       saveState(state)
     }
   } finally {
-    state.active = false; state.current = undefined; state.finishedAt = new Date().toISOString(); saveState(state)
+    state.active = false
+    state.current = undefined
+    state.finishedAt = new Date().toISOString()
+    saveState(state)
   }
   return sourceStatus()
 }
 
 export async function downloadDefaults() {
-  const ids = CORPUS_SOURCES.filter((s) => s.enabledByDefault).map((s) => s.id)
+  const ids = CORPUS_SOURCES.filter((source) => source.enabledByDefault).map((source) => source.id)
   return downloadSources(ids)
 }
