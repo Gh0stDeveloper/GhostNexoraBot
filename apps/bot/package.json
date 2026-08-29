@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
-    "pair": "node dist/pair.js"
+    "pair": "node dist/pair.js",
+    "llm:train": "tsx src/llm/train.ts"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
