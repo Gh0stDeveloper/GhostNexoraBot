@@ -40,35 +40,39 @@ function downloadFile(url: string, dest: string, depth = 0): Promise<void> {
   ensureDirs()
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest)
-    const finish = (error?: Error | null) => {
-      if (error) reject(error)
-      else resolve()
+    const cleanup = () => {
+      file.destroy()
+      try { fs.unlinkSync(dest) } catch {}
     }
     const req = https.get(url, { headers: { 'User-Agent': 'GhostNexoraBot/1.0' } }, (res) => {
       const code = res.statusCode ?? 0
       if ([301, 302, 303, 307, 308].includes(code) && res.headers.location) {
         res.resume()
         file.close(() => undefined)
-        try { fs.unlinkSync(dest) } catch {}
+        cleanup()
         downloadFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(resolve, reject)
         return
       }
       if (code < 200 || code >= 300) {
         res.resume()
         file.close(() => undefined)
-        try { fs.unlinkSync(dest) } catch {}
+        cleanup()
         reject(new Error(`HTTP ${code}`))
         return
       }
       res.pipe(file)
-      file.on('finish', () => file.close(() => finish()))
-      file.on('error', finish)
+      file.on('finish', () => {
+        file.close((error) => error ? reject(error) : resolve())
+      })
+      file.on('error', (error) => {
+        cleanup()
+        reject(error)
+      })
     })
     req.setTimeout(30_000, () => req.destroy(new Error('Timeout de descarga.')))
-    req.on('error', (err) => {
-      file.close(() => undefined)
-      try { fs.unlinkSync(dest) } catch {}
-      reject(err)
+    req.on('error', (error) => {
+      cleanup()
+      reject(error)
     })
   })
 }
@@ -83,8 +87,8 @@ export function sourceStatus() {
   return {
     state,
     files: fs.readdirSync(RAW, { withFileTypes: true })
-      .filter((x) => x.isFile())
-      .map((x) => ({ name: x.name, bytes: fs.statSync(path.join(RAW, x.name)).size })),
+      .filter((entry) => entry.isFile())
+      .map((entry) => ({ name: entry.name, bytes: fs.statSync(path.join(RAW, entry.name)).size })),
   }
 }
 
@@ -98,12 +102,12 @@ export async function downloadSources(ids: string[]) {
   state.failed = []
   state.current = undefined
   saveState(state)
-
   try {
     for (const id of unique) {
       const source = getCorpusSource(id)
       if (!source) {
         state.failed.push(id)
+        saveState(state)
         continue
       }
       state.current = id
