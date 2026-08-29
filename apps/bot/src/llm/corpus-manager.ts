@@ -20,20 +20,36 @@ function downloadFile(url: string, dest: string, depth = 0): Promise<void> {
   if (depth > 5) return Promise.reject(new Error('Demasiadas redirecciones.'))
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest)
+    const finish = (error?: Error | null) => {
+      if (error) reject(error)
+      else resolve()
+    }
     const req = https.get(url, { headers: { 'User-Agent': 'GhostNexoraBot/1.0' } }, (res) => {
       const code = res.statusCode ?? 0
       if ([301, 302, 303, 307, 308].includes(code) && res.headers.location) {
-        res.resume(); file.close(); try { fs.unlinkSync(dest) } catch {}
+        res.resume()
+        file.close(() => undefined)
+        try { fs.unlinkSync(dest) } catch {}
         downloadFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(resolve, reject)
         return
       }
-      if (code < 200 || code >= 300) { res.resume(); file.close(); try { fs.unlinkSync(dest) } catch {} ; reject(new Error(`HTTP ${code}`)); return }
+      if (code < 200 || code >= 300) {
+        res.resume()
+        file.close(() => undefined)
+        try { fs.unlinkSync(dest) } catch {}
+        reject(new Error(`HTTP ${code}`))
+        return
+      }
       res.pipe(file)
-      file.on('finish', () => file.close(resolve))
-      file.on('error', reject)
+      file.on('finish', () => file.close(() => finish()))
+      file.on('error', finish)
     })
     req.setTimeout(30_000, () => req.destroy(new Error('Timeout de descarga.')))
-    req.on('error', (err) => { file.close(); try { fs.unlinkSync(dest) } catch {}; reject(err) })
+    req.on('error', (err) => {
+      file.close(() => undefined)
+      try { fs.unlinkSync(dest) } catch {}
+      reject(err)
+    })
   })
 }
 
