@@ -5,7 +5,7 @@ import { miniLLM } from '../services/mini-llm-transformer.js'
 import { getQueueState, updateDocumentJob } from './document-queue.js'
 import { drainLiveMessages } from './live-queue.js'
 import { consumeTrainingRequest } from './training-queue.js'
-import { ingestDocument, ingestLive, countCorpusDocuments } from './incremental-corpus.js'
+import { ingestDocument, ingestLive, countCorpusDocuments, migrateLegacyVectors, countVectors } from './incremental-corpus.js'
 import { checkpointRound, ensureBaseCheckpoint, expandVocab, ensureModelVocabularySize, loadVocab } from './incremental-training.js'
 
 const ROOT = path.resolve(config.dataDir, 'llm')
@@ -43,7 +43,8 @@ async function processDocuments() {
       const state = readState()
       writeState({
         totalDocuments: countCorpusDocuments(),
-        totalChunks: Math.max(Number(state.totalChunks ?? 0), Number(result.chunks ?? 0) + Number(state.totalChunks ?? 0)),
+        totalChunks: Math.max(Number(state.totalChunks ?? 0), Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0)),
+        vectorRecords: countVectors(),
         currentMessage: `Documento procesado: ${job.filename}`,
       })
       processed++
@@ -67,7 +68,7 @@ function processLiveMessages() {
       console.error('[LLM worker] mensaje vivo:', extractStateError(error))
     }
   }
-  if (messages.length) writeState({ totalMessages: Number(readState().totalMessages ?? 0) + messages.length, currentMessage: `Memoria viva: ${messages.length} mensajes` })
+  if (messages.length) writeState({ totalMessages: Number(readState().totalMessages ?? 0) + messages.length, vectorRecords: countVectors(), currentMessage: `Memoria viva: ${messages.length} mensajes` })
   return added
 }
 
@@ -78,7 +79,6 @@ async function trainOnce(reason: string) {
   if (vocabBefore.length === 0) throw new Error('No existe vocabulario base; no se permite reinicialización automática.')
   if (currentRun > 0) ensureBaseCheckpoint(currentRun)
 
-  // Preserve all existing vocabulary entries; only append new tokens discovered in corpus/live data.
   const corpusFiles = fs.existsSync(CORPUS) ? fs.readdirSync(CORPUS, { recursive: true }).filter((value): value is string => typeof value === 'string') : []
   const texts: string[] = []
   for (const relative of corpusFiles) {
@@ -89,7 +89,7 @@ async function trainOnce(reason: string) {
   if (merged.newSize < vocabBefore.length) throw new Error(`INVARIANTE: vocabulario bajó de ${vocabBefore.length} a ${merged.newSize}. Abortado.`)
   ensureModelVocabularySize(merged.newSize)
 
-  writeState({ learning: true, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: 2, currentMessage: `Preparando vuelta ${nextRun} (${reason})` })
+  writeState({ learning: true, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: 2, currentMessage: `Preparando vuelta ${nextRun} (${reason})`, vectorRecords: countVectors() })
   const result = await miniLLM.train(`incremental-${nextRun}`)
   if (!result.started) {
     writeState({ learning: false, currentMessage: `Entrenamiento no iniciado: ${result.reason}` })
@@ -98,7 +98,7 @@ async function trainOnce(reason: string) {
   const finalVocab = loadVocab()
   if (finalVocab.length < merged.oldSize) throw new Error(`INVARIANTE: vocabulario final ${finalVocab.length} < base ${merged.oldSize}. Abortado.`)
   checkpointRound(nextRun)
-  writeState({ learning: false, currentProgress: 100, currentMessage: `Completado: vuelta ${nextRun}`, modelVersion: nextRun + 2 })
+  writeState({ learning: false, currentProgress: 100, currentMessage: `Completado: vuelta ${nextRun}`, modelVersion: nextRun + 2, vectorRecords: countVectors() })
   return result
 }
 
@@ -120,13 +120,16 @@ async function tick() {
     } else if (autoDue) {
       try { await trainOnce('auto') } catch (error) { writeState({ learning: false, currentMessage: `Error: ${extractStateError(error)}` }); console.error('[LLM worker] auto-entrenamiento:', extractStateError(error)) }
     } else if (live > 0) {
-      writeState({ currentMessage: `Memoria actualizada: ${live} vectores nuevos` })
+      writeState({ currentMessage: `Memoria actualizada: ${live} vectores nuevos`, vectorRecords: countVectors() })
     }
   } finally { busy = false }
 }
 
 async function main() {
-  fs.mkdirSync(ROOT, { recursive: true }); console.log('[LLM worker v2] incremental activo; vocab/modelo preservados')
+  fs.mkdirSync(ROOT, { recursive: true })
+  const migratedVectors = migrateLegacyVectors()
+  writeState({ learning: false, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: 0, currentMessage: migratedVectors > 0 ? `Memoria migrada: ${migratedVectors} vectores` : 'En espera', vectorRecords: countVectors() })
+  console.log(`[LLM worker v2] incremental activo; vectores migrados: ${migratedVectors}`)
   while (true) {
     try { await tick() } catch (error) { console.error('[LLM worker v2] tick:', extractStateError(error)) }
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS))
