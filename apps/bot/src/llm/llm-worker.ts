@@ -1,13 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from '../config.js'
-import { prepareCorpusAndTrain } from './train.js'
+import { prepareCorpusAndTrainCore } from './train-core.js'
 import { getQueueState, updateDocumentJob } from './document-queue.js'
 import { consumeTrainingRequest } from './training-queue.js'
 
 const ROOT = path.resolve(config.dataDir, 'llm')
 const INBOX = path.join(ROOT, 'inbox')
-const CORPUS = path.join(ROOT, 'corpus', 'manual')
+const CORPUS = path.join(ROOT, 'corpus')
 const POLL_MS = 2000
 const AUTO_MS = 30 * 60 * 1000
 let busy = false
@@ -38,7 +38,7 @@ async function processDocuments() {
 async function runTraining() {
   if (busy) return null
   busy = true
-  try { return await prepareCorpusAndTrain() }
+  try { return await prepareCorpusAndTrainCore() }
   finally { busy = false }
 }
 
@@ -47,11 +47,12 @@ async function tick() {
   if (busy) return
   const moved = await processDocuments()
   const requested = consumeTrainingRequest()
-  if (requested || moved > 0 || Date.now() - lastAuto >= AUTO_MS) {
-    if (requested || moved > 0) await runTraining()
-    else lastAuto = Date.now()
+  if (requested || moved > 0) {
+    await runTraining()
+    lastAuto = Date.now()
+  } else if (Date.now() - lastAuto >= AUTO_MS) {
+    lastAuto = Date.now()
   }
-  if (moved > 0 || requested) lastAuto = Date.now()
 }
 
 async function main() {
