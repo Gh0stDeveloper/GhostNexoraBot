@@ -74,7 +74,6 @@ export const miniLlmCommands: BotCommand[] = [{
   usage: 'llm <status|progress|docs|add|sources|download|download-progress|import|train|ask|search|auto>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
-
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
     if (sub === 'sources' || sub === 'fuentes') { await ctx.reply(sourcesText(ctx.prefix)); return }
     if (sub === 'download-progress' || sub === 'downloadprogress' || sub === 'descarga' || sub === 'progress-download') { await ctx.reply(progressText()); return }
@@ -82,12 +81,14 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'download' || sub === 'descargar' || sub === 'download-defaults' || sub === 'descargar-defaults') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede gestionar las descargas del corpus.')
       const requested = ctx.args.slice(1).filter(Boolean)
-      const ids = requested.length === 1 && requested[0].toLowerCase() === 'defaults' ? CORPUS_SOURCES.filter((source) => source.enabledByDefault).map((source) => source.id) : sub.includes('defaults') ? CORPUS_SOURCES.filter((source) => source.enabledByDefault).map((source) => source.id) : requested
-      if (!ids.length) throw new Error(`Ejemplo: ${ctx.prefix}llm download tatoeba-es`) 
+      const ids = requested.length === 1 && requested[0].toLowerCase() === 'defaults'
+        ? CORPUS_SOURCES.filter((source) => source.enabledByDefault).map((source) => source.id)
+        : sub.includes('defaults') ? CORPUS_SOURCES.filter((source) => source.enabledByDefault).map((source) => source.id) : requested
+      if (!ids.length) throw new Error(`Ejemplo: ${ctx.prefix}llm download tatoeba-es`)
       await ctx.reply(`⬇️ *LLM · CORPUS*\n━━━━━━━━━━━━━━\nDescargando *${ids.length}* fuente(s). El bot seguirá disponible.`)
       void downloadSources(ids).then(async (result) => {
         const completed = result.state.completed.filter((id) => ids.includes(id))
-        const failed = result.state.failed.filter((item) => ids.includes(typeof item === 'string' ? item : item.id))
+        const failed = result.state.failed.filter((id) => ids.includes(id))
         await ctx.reply(`✅ *DESCARGA TERMINADA*\n━━━━━━━━━━━━━━\nCompletadas: *${completed.length}/${ids.length}*\nFallidas: *${failed.length}*\nArchivos: *${result.files.length}*\n\nAhora usa *${ctx.prefix}llm import* o *${ctx.prefix}llm train*.`)
       }).catch(async (error) => { await ctx.reply(`❌ Error de descarga: ${error instanceof Error ? error.message : String(error)}`).catch(() => undefined) })
       return
@@ -111,7 +112,12 @@ export const miniLlmCommands: BotCommand[] = [{
 
     if (sub === 'docs' || sub === 'documentos') {
       const docs = miniLLM.listDocuments()
-      await ctx.reply(docs.length ? `📚 *CORPUS LOCAL*\n━━━━━━━━━━━━━━\n${docs.slice(-40).map((doc, i) => `${i + 1}. ${doc.name} · ${formatBytes(doc.size)}`).join('\n')}` : 'No hay documentos procesados en el corpus.')
+      const queue = getQueueState().jobs
+      const lines = docs.slice(-40).map((doc, i) => `${i + 1}. ${doc.name} · ${formatBytes(doc.size)}`)
+      const queued = queue.filter((job) => job.status === 'queued').map((job) => `⏳ ${job.filename} · ${job.id}`)
+      const failed = queue.filter((job) => job.status === 'failed').map((job) => `❌ ${job.filename} · ${job.error ?? 'error'}`)
+      const content = [...lines, ...(queued.length ? ['', '*Pendientes*', ...queued] : []), ...(failed.length ? ['', '*Fallidos*', ...failed] : [])]
+      await ctx.reply(content.length ? `📚 *CORPUS LOCAL*\n━━━━━━━━━━━━━━\n${content.join('\n')}` : 'No hay documentos procesados ni pendientes en el corpus.')
       return
     }
 
@@ -144,8 +150,8 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'auto') {
       if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede cambiar el auto-entrenamiento.')
       const mode = (ctx.args[1] ?? '').toLowerCase(); if (!['on', 'off'].includes(mode)) throw new Error(`Uso: ${ctx.prefix}llm auto on|off`)
-      const statePath = `${miniLLM.ROOT}/state.json`; const current = JSON.parse((await import('node:fs')).readFileSync(statePath, 'utf8')) as Record<string, unknown>
-      current.autoTrainEnabled = mode === 'on'; (await import('node:fs')).writeFileSync(statePath, JSON.stringify(current, null, 2)); await ctx.reply(`🧠 Auto-entrenamiento: *${mode.toUpperCase()}*`); return
+      const statePath = `${miniLLM.ROOT}/state.json`; const fs = await import('node:fs'); let current: Record<string, unknown> = {}; try { current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown> } catch {}
+      current.autoTrainEnabled = mode === 'on'; fs.writeFileSync(statePath, JSON.stringify(current, null, 2)); await ctx.reply(`🧠 Auto-entrenamiento: *${mode.toUpperCase()}*`); return
     }
 
     await ctx.reply(help(ctx.prefix))
