@@ -1,9 +1,13 @@
 import { miniLLM as core } from './mini-llm-transformer.js'
 import { enqueueDocumentFromWhatsApp } from '../llm/document-queue.js'
+import { enqueueLiveMessage } from '../llm/live-queue.js'
 import type { WAMessage } from 'baileys'
 
 export const miniLLM = {
   ...core,
+  addLive(text: string) {
+    enqueueLiveMessage(text)
+  },
   async addDocument(_socket: unknown, message: WAMessage) {
     const job = await enqueueDocumentFromWhatsApp(message)
     return {
