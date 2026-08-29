@@ -8,20 +8,17 @@ function formatBytes(bytes: number) {
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${bytes} B`
 }
-function duration(ms: number) {
-  if (ms < 1000) return `${ms} ms`
-  return `${(ms / 1000).toFixed(1)} s`
-}
 function help(prefix: string) {
   return [
-    `╭━━〔 🧠 *MINI-LLM LOCAL* 〕━━╮`,
+    '╭━━〔 🧠 *MINI-LLM LOCAL* 〕━━╮',
     `┃ ${prefix}llm status`,
+    `┃ ${prefix}llm progress`,
     `┃ ${prefix}llm docs`,
     `┃ ${prefix}llm add`,
     `┃ ${prefix}llm train`,
     `┃ ${prefix}llm ask <pregunta>`,
     `┃ ${prefix}llm auto on|off`,
-    `╰━━━━━━━━━━━━━━━━━━╯`,
+    '╰━━━━━━━━━━━━━━━━━━╯',
     '',
     'Envía o responde a un PDF, DOCX o TXT con *llm add* para incorporarlo al corpus.',
   ].join('\n')
@@ -29,18 +26,15 @@ function help(prefix: string) {
 
 export const miniLlmCommands: BotCommand[] = [
   {
-    name: 'llm',
-    aliases: ['minillm', 'localai'],
-    category: 'tools',
-    description: 'Gestiona el aprendizaje local y la memoria del Mini-LLM.',
-    usage: 'llm <status|docs|add|train|ask|auto>',
+    name: 'llm', aliases: ['minillm', 'localai'], category: 'tools', description: 'Gestiona el aprendizaje local y la memoria del Mini-LLM.', usage: 'llm <status|progress|docs|add|train|ask|auto>',
     async handler(ctx) {
       const sub = (ctx.args[0] ?? 'status').toLowerCase()
       if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
-      if (sub === 'status') {
+      if (sub === 'status' || sub === 'progress' || sub === 'avance') {
         const s = miniLLM.stats()
         await ctx.reply([
-          '╭━━〔 🧠 *MINI-LLM · ESTADO* 〕━━╮',
+          '╭━━〔 🧠 *MINI-LLM · AVANCE* 〕━━╮',
+          `┃ Estado » *${s.learning ? 'ENTRENANDO' : 'EN ESPERA'}*`,
           `┃ Documentos » *${s.totalDocuments}*`,
           `┃ Fragmentos » *${s.totalChunks}*`,
           `┃ Mensajes » *${s.totalMessages}*`,
@@ -48,13 +42,12 @@ export const miniLlmCommands: BotCommand[] = [
           `┃ Vectores » *${s.vectorRecords}*`,
           `┃ Vocabulario » *${s.vocabSize}*`,
           `┃ Entrenamientos » *${s.trainRuns}*`,
-          `┃ Pasos » *${s.trainSteps}*`,
+          `┃ Pasos realizados » *${s.trainSteps}*`,
           `┃ Modelo » *v${s.modelVersion}*`,
-          `┃ Último train » *${s.lastTrainAt ?? 'Nunca'}*`,
-          `┃ Última pérdida » *${s.lastLoss?.toFixed(5) ?? 'N/D'}*`,
+          `┃ Último loss » *${s.lastLoss?.toFixed(5) ?? 'N/D'}*`,
           `┃ Auto-train » *${s.autoTrainEnabled ? 'ON' : 'OFF'}*`,
           `┃ Almacenamiento » *${formatBytes(s.storageBytes)}*`,
-          `╰━━━━━━━━━━━━━━━━━━╯`,
+          '╰━━━━━━━━━━━━━━━━━━╯',
         ].join('\n'))
         return
       }
@@ -69,17 +62,16 @@ export const miniLlmCommands: BotCommand[] = [
         if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede añadir documentos al corpus.')
         const media = await downloadMessageMedia(ctx.message)
         if (!media || media.kind !== 'document') throw new Error('Envía o responde a un PDF, DOCX o TXT con el comando.')
-        const started = Date.now()
         await ctx.reply('📥 *MINI-LLM*\n━━━━━━━━━━━━━━\nProcesando documento y actualizando el corpus...')
         const result = await miniLLM.addDocument(ctx.socket, ctx.message)
-        await ctx.reply(`✅ *DOCUMENTO AÑADIDO*\n━━━━━━━━━━━━━━\n📄 ${result.name}\n🧩 Fragmentos: *${result.chunks}*\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*\n⏱️ ${duration(Date.now() - started)}`)
+        await ctx.reply(`✅ *DOCUMENTO AÑADIDO*\n━━━━━━━━━━━━━━\n📄 ${result.name}\n🧩 Fragmentos: *${result.chunks}*\n📝 Caracteres: *${result.characters.toLocaleString('es-MX')}*`)
         return
       }
       if (sub === 'train' || sub === 'entrenar') {
         if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede iniciar entrenamiento.')
         const result = await miniLLM.train('manual')
         if (!result.started) { await ctx.reply('🧠 Ya hay un entrenamiento en ejecución.'); return }
-        await ctx.reply(`✅ *ENTRENAMIENTO COMPLETADO*\n━━━━━━━━━━━━━━\nPasos: *${result.steps}*\nLoss: *${result.loss?.toFixed(5) ?? 'N/D'}*\nDuración: *${duration(result.durationMs)}*`)
+        await ctx.reply(`🧠 *ENTRENAMIENTO INICIADO*\n━━━━━━━━━━━━━━\nPuedes consultar el progreso con *${ctx.prefix}llm status*.`)
         return
       }
       if (sub === 'ask' || sub === 'pregunta' || sub === 'query') {
@@ -93,13 +85,12 @@ export const miniLlmCommands: BotCommand[] = [
         if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo Owner/Staff puede cambiar el auto-entrenamiento.')
         const mode = (ctx.args[1] ?? '').toLowerCase()
         if (!['on', 'off'].includes(mode)) throw new Error(`Uso: ${ctx.prefix}llm auto on|off`)
-        const stats = miniLLM.stats()
         const fs = await import('node:fs')
         const statePath = `${miniLLM.ROOT}/state.json`
         const current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>
         current.autoTrainEnabled = mode === 'on'
         fs.writeFileSync(statePath, JSON.stringify(current, null, 2))
-        await ctx.reply(`🧠 Auto-entrenamiento: *${mode.toUpperCase()}*\nIntervalo: *30 minutos*\nPendientes actuales: *${stats.pendingMessages}*`)
+        await ctx.reply(`🧠 Auto-entrenamiento: *${mode.toUpperCase()}*\nIntervalo: *30 minutos*`)
         return
       }
       await ctx.reply(help(ctx.prefix))
