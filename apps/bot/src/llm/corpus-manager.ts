@@ -15,12 +15,13 @@ type DownloadState = {
   active: boolean
   current?: string
   completed: string[]
-  failed: Array<{ id: string; error: string }>
+  failed: string[]
+  failedDetails: Array<{ id: string; error: string }>
   startedAt?: string
   finishedAt?: string
 }
 
-const defaultState = (): DownloadState => ({ active: false, completed: [], failed: [] })
+const defaultState = (): DownloadState => ({ active: false, completed: [], failed: [], failedDetails: [] })
 
 function ensureDirs() {
   fs.mkdirSync(ROOT, { recursive: true })
@@ -31,13 +32,13 @@ function loadState(): DownloadState {
   ensureDirs()
   try {
     const value = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) as Partial<DownloadState>
-    return {
-      ...defaultState(),
-      ...value,
-      failed: Array.isArray(value.failed)
-        ? value.failed.map((item) => typeof item === 'string' ? { id: item, error: 'unknown' } : item)
-        : [],
-    }
+    const failedDetails = Array.isArray(value.failedDetails)
+      ? value.failedDetails.filter((item): item is { id: string; error: string } => Boolean(item && typeof item.id === 'string' && typeof item.error === 'string'))
+      : []
+    const failed = Array.isArray(value.failed)
+      ? value.failed.filter((item): item is string => typeof item === 'string')
+      : []
+    return { ...defaultState(), ...value, failed, failedDetails }
   } catch {
     return defaultState()
   }
@@ -55,9 +56,17 @@ function streamToFile(url: string, dest: string, depth = 0): Promise<void> {
   ensureDirs()
   const temp = `${dest}.part`
   return new Promise((resolve, reject) => {
+    let settled = false
     const finishError = (error: unknown) => {
+      if (settled) return
+      settled = true
       try { fs.unlinkSync(temp) } catch {}
       reject(error)
+    }
+    const finishOk = () => {
+      if (settled) return
+      settled = true
+      resolve()
     }
     const req = https.get(url, {
       headers: {
@@ -68,7 +77,7 @@ function streamToFile(url: string, dest: string, depth = 0): Promise<void> {
       const code = res.statusCode ?? 0
       if ([301, 302, 303, 307, 308].includes(code) && res.headers.location) {
         res.resume()
-        streamToFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(resolve, reject)
+        streamToFile(new URL(res.headers.location, url).toString(), dest, depth + 1).then(finishOk, finishError)
         return
       }
       if (code < 200 || code >= 300) {
@@ -88,7 +97,7 @@ function streamToFile(url: string, dest: string, depth = 0): Promise<void> {
           }
           try {
             fs.renameSync(temp, dest)
-            resolve()
+            finishOk()
           } catch (renameError) {
             finishError(renameError)
           }
@@ -145,13 +154,15 @@ export async function downloadSources(ids: string[]) {
   state.startedAt = new Date().toISOString()
   state.finishedAt = undefined
   state.failed = []
+  state.failedDetails = []
   state.current = undefined
   saveState(state)
   try {
     for (const id of unique) {
       const source = getCorpusSource(id)
       if (!source) {
-        state.failed.push({ id, error: 'Fuente no encontrada.' })
+        state.failed.push(id)
+        state.failedDetails.push({ id, error: 'Fuente no encontrada.' })
         saveState(state)
         continue
       }
@@ -164,7 +175,8 @@ export async function downloadSources(ids: string[]) {
         if (!state.completed.includes(id)) state.completed.push(id)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        state.failed.push({ id, error: message })
+        if (!state.failed.includes(id)) state.failed.push(id)
+        state.failedDetails.push({ id, error: message })
         try { fs.unlinkSync(dest) } catch {}
         try { fs.unlinkSync(`${dest}.part`) } catch {}
       }
