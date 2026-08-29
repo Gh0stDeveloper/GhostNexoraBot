@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
     "llm:train": "node dist/llm/train.js",
-    "llm:worker": "node dist/llm/llm-worker-v2.js"
+    "llm:worker": "node dist/llm/llm-worker-supervisor.js"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
@@ -32,6 +32,10 @@
     "@types/qrcode": "^1.5.5",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/yt-search": "^2.10.3",
+    "@types/yt-search": "^2.10.3",
+    "@types/qrcode-terminal": "^0.12.2",
+    "@types/yt-search": "^2.10.3",
+    "@types/node": "^24.3.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
