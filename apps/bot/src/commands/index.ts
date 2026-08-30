@@ -25,6 +25,7 @@ import { waifuExtendedCommands } from './waifu-extended.js'
 import { subbotCommands } from './subbots.js'
 import { adultCommands } from './adult.js'
 import { eromeCommands } from './erome.js'
+import { hentaiCommands } from './hentai.js'
 import { personalizationCommands } from './personalization.js'
 import { privateAccessCommands } from './private-access.js'
 import { systemCommands } from './system.js'
@@ -90,7 +91,7 @@ export const commands: BotCommand[] = [
   ...subbotCommands,
   ...adultCommands,
   ...eromeCommands,
-  // adult-roleplay.ts (legacy) removed: unified in adult-roleplay-v8
+  ...hentaiCommands,
   ...personalizationCommands,
   ...privateAccessCommands,
   ...systemCommands,

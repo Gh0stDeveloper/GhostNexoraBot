@@ -32,7 +32,6 @@ type Def = {
   category: ReactionCategory
   title: string
   text: string
-  /** Tags for optional external NSFW anime GIF APIs (waifu.pics / similar). */
   nsfwTags: string[]
 }
 
@@ -124,9 +123,7 @@ async function run(def: Def, ctx: CommandContext) {
   ].join('\n')
   const mentions = [ctx.sender, other]
 
-  await ctx.reply('🎞️ Cargando reacción…').catch(() => undefined)
-
-  // 1) Local / global staff media (priority)
+  // 1) Local / global staff media
   const local = await pickAdultReactionMedia(def.name)
   if (local) {
     const isVideo = /video|gif|webm/i.test(local.mimeType)
@@ -148,7 +145,7 @@ async function run(def: Def, ctx: CommandContext) {
     return
   }
 
-  // 2) Optional external NSFW anime GIF (only after consent gates)
+  // 2) External NSFW anime GIF
   try {
     const nsfwUrl = await fetchNsfwAnimeGif(def.nsfwTags)
     if (nsfwUrl) {
@@ -157,10 +154,10 @@ async function run(def: Def, ctx: CommandContext) {
       return
     }
   } catch {
-    // continue to SFW fallback
+    // continue
   }
 
-  // 3) SFW nekos.best fallback
+  // 3) SFW fallback
   try {
     const reaction = await getReactionGif(def.category)
     const video = await reactionGifToMp4(reaction.url)
@@ -174,7 +171,7 @@ export const adultRoleplayV8Commands: BotCommand[] = defs.map((def) => ({
   name: def.name,
   aliases: def.aliases,
   category: 'adult',
-  description: `Roleplay 18+ con consentimiento mutuo: ${def.name}. Prioriza medios locales (adultgif); si no hay, intenta NSFW externo; último recurso SFW.`,
+  description: `Roleplay 18+ con consentimiento mutuo: ${def.name}. Prioriza medios locales (adultgif).`,
   usage: `${def.name} @usuario`,
   handler: (ctx) => run(def, ctx),
 }))
