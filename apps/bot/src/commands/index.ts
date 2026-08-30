@@ -66,6 +66,7 @@ import { lempiApiCommands } from './lempi-api.js'
 import { mediaDownloadFixCommands } from './media-download-fixes-v2.js'
 import { miniLlmCommands } from './mini-llm.js'
 import { autoChatCommands } from './auto-chat.js'
+import { dinoCommands } from './dino.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -84,6 +85,7 @@ export const commands: BotCommand[] = [
   ...economyCommands,
   ...advancedEconomyCommands,
   ...gameCommands,
+  ...dinoCommands,
   ...pvpGameCommands,
   ...rpgCommands,
   ...waifuCommands,
