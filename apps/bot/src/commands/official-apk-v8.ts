@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { BotCommand, CommandContext } from '../types.js'
-import { sendCarousel } from '../services/interactive.js'
+import { sendInteractiveCard } from '../services/interactive.js'
 import { config } from '../config.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
@@ -26,7 +26,7 @@ const UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 GhostNexoraBot/1.3'
 const CACHE_TTL_MS = 30 * 60_000
 const MAX_RESOLVE_DEPTH = 5
-const MAX_CARDS = 8
+const MAX_RESULTS = 8
 
 const cfg: Record<Source, { host: RegExp; queries: (q: string) => string[] }> = {
   Uptodown: {
@@ -134,7 +134,7 @@ function parse($: cheerio.CheerioAPI, source: Source, base: string, _query: stri
   const seen = new Set<string>()
 
   $('a[href]').each((_i, el) => {
-    if (result.length >= 10) return false
+    if (result.length >= 12) return false
     const href = official(absolute(base, $(el).attr('href')) || '', source)
     if (!href || seen.has(href)) return
 
@@ -277,7 +277,7 @@ async function resolveOfficialApk(item: Item): Promise<string> {
   }
 
   throw new Error(
-    `${item.source} no expuso un enlace APK directo recuperable. Abre la fuente desde el carrusel e intenta descargar manualmente.`,
+    `${item.source} no expuso un enlace APK directo. Usa el enlace del resultado e intenta desde el sitio.`,
   )
 }
 
@@ -302,24 +302,50 @@ function bytes(value?: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
-/** Erome-style card: short body, exactly 2 buttons. */
-function apkCard(ctx: CommandContext, item: Item, index: number) {
-  const title =
-    item.source === 'Uptodown' || item.source === 'LiteAPKS'
-      ? `#${index + 1} · ${item.name}`
-      : `#${index + 1} · ${item.name}`
-  const bodyParts = [
-    item.source,
-    item.version ? `v${item.version}` : undefined,
-  ].filter(Boolean)
-  return {
-    title: title.slice(0, 60),
-    body: bodyParts.join(' · ').slice(0, 80),
-    imageUrl: item.icon,
-    buttons: [
-      { type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}officialapkdl ${item.token}` },
-      { type: 'url' as const, text: '🌐 Sitio', url: item.url },
-    ],
+/**
+ * UI sin carrusel: el mensaje interactivo tipo carousel provoca
+ * "Actualizar WhatsApp" en muchas versiones/clientes (sobre todo cuenta empresa).
+ * Texto plano siempre legible + hasta 3 botones quick_reply en una sola tarjeta.
+ */
+async function showResults(ctx: CommandContext, title: string, query: string, items: Item[]) {
+  const list = items.slice(0, MAX_RESULTS)
+  const lines = list.map((item, index) => {
+    const ver = item.version ? ` · v${item.version}` : ''
+    return [
+      `*${index + 1}. ${item.name}*${ver}`,
+      `   ${item.source}`,
+      `   ⬇️ ${ctx.prefix}officialapkdl ${item.token}`,
+      `   🌐 ${item.url}`,
+    ].join('\n')
+  })
+
+  await ctx.reply(
+    [
+      `📦 *${title}*`,
+      `🔎 ${query}`,
+      '━━━━━━━━━━━━━━',
+      ...lines,
+      '',
+      `_Toca un comando ⬇️ o usa los botones de abajo (máx. 3)._`,
+    ].join('\n'),
+  )
+
+  const top = list.slice(0, 3)
+  if (!top.length) return
+
+  try {
+    await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+      title: `📦 ${title}`,
+      body: `Descarga rápida · ${query}`.slice(0, 120),
+      footer: 'Ghost Nexora Bot',
+      buttons: top.map((item, index) => ({
+        type: 'reply' as const,
+        text: `${index + 1}. ${item.name}`.slice(0, 20),
+        id: `${ctx.prefix}officialapkdl ${item.token}`,
+      })),
+    })
+  } catch {
+    // El listado de texto ya es suficiente
   }
 }
 
@@ -389,15 +415,10 @@ async function searchSource(ctx: CommandContext, source: Source, query: string) 
 
   await ctx.reply(`📦 *${source}* · buscando ${text}…`)
 
-  const items = (await search(source, text)).slice(0, MAX_CARDS)
+  const items = (await search(source, text)).slice(0, MAX_RESULTS)
   if (!items.length) throw new Error(`No encontré resultados en ${source}.`)
 
-  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: `📦 ${source}`,
-    body: text.slice(0, 80),
-    footer: source,
-    cards: items.map((item, index) => apkCard(ctx, item, index)),
-  })
+  await showResults(ctx, source, text, items)
 }
 
 async function apk(ctx: CommandContext) {
@@ -410,19 +431,14 @@ async function apk(ctx: CommandContext) {
   const groups = await Promise.all(
     sources.map(async (source) => ({ source, items: await search(source, query) })),
   )
-  const all = groups.flatMap((g) => g.items).slice(0, MAX_CARDS)
+  const all = groups.flatMap((g) => g.items).slice(0, MAX_RESULTS)
   if (!all.length) {
     throw new Error(
       `No encontré resultados. Prueba ${ctx.prefix}happymod <app> o ${ctx.prefix}aptoide <app>.`,
     )
   }
 
-  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '📦 APK',
-    body: query.slice(0, 80),
-    footer: 'Uptodown · LiteAPKS',
-    cards: all.map((item, index) => apkCard(ctx, item, index)),
-  })
+  await showResults(ctx, 'APK · oficiales', query, all)
 }
 
 async function info(ctx: CommandContext) {
