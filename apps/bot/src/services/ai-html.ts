@@ -5,15 +5,69 @@ import { logger } from '../utils/logger.js'
 /**
  * Envía un juego/UI HTML embebido vía richResponseMessage (formato experimental Meta AI).
  *
- * Importante: WhatsApp puede aceptar o rechazar este payload de forma intermitente.
- * Cuando el cliente no lo soporta muestra "Actualizar WhatsApp" aunque el relay haya
- * tenido éxito en el servidor. No es un fallo del bot ni del LLM worker.
+ * Se marca como *reenviado desde el canal* (forwardedNewsletterMessageInfo), igual que
+ * otros bots: muchos clientes solo renderizan el HTML si llega con esa atribución.
+ *
+ * Canal por defecto: https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i
+ * Override: WHATSAPP_CHANNEL_JID, WHATSAPP_CHANNEL_NAME, WHATSAPP_CHANNEL_INVITE
  */
 
 type HtmlPrimitiveName =
   | 'GenAIaeacdsnwHtmlPrimitive'
   | 'FOAHtmlPrimitiveDemoDONOTUSE'
   | 'GenAIHtmlPrimitive'
+
+const DEFAULT_CHANNEL_INVITE = '0029VbCWbix9RZAfkkKOqP2i'
+const DEFAULT_CHANNEL_NAME = 'Ghost Nexora'
+
+let cachedChannel: { jid: string; name: string } | null = null
+
+async function resolveChannel(socket: WASocket): Promise<{ jid: string; name: string }> {
+  if (cachedChannel) return cachedChannel
+
+  const envJid = process.env.WHATSAPP_CHANNEL_JID?.trim()
+  const envName = process.env.WHATSAPP_CHANNEL_NAME?.trim() || DEFAULT_CHANNEL_NAME
+  if (envJid && envJid.includes('@newsletter')) {
+    cachedChannel = { jid: envJid, name: envName }
+    return cachedChannel
+  }
+
+  const invite =
+    process.env.WHATSAPP_CHANNEL_INVITE?.trim() ||
+    DEFAULT_CHANNEL_INVITE
+
+  try {
+    const metaFn = (socket as unknown as {
+      newsletterMetadata?: (
+        type: 'invite' | 'jid',
+        key: string,
+      ) => Promise<{ id?: string; name?: string } | null>
+    }).newsletterMetadata
+
+    if (typeof metaFn === 'function') {
+      const meta = await metaFn.call(socket, 'invite', invite)
+      if (meta?.id) {
+        cachedChannel = {
+          jid: meta.id.includes('@') ? meta.id : `${meta.id}@newsletter`,
+          name: meta.name || envName,
+        }
+        logger.info({ channel: cachedChannel }, 'resolved WhatsApp channel for HTML games')
+        return cachedChannel
+      }
+    }
+  } catch (error) {
+    logger.warn({ error, invite }, 'could not resolve channel invite; using fallback jid pattern')
+  }
+
+  // Fallback: algunos clientes aceptan solo el invite embebido en el nombre;
+  // el jid real es necesario para la etiqueta del canal. Si no resolvimos,
+  // usamos un placeholder que al menos activa isForwarded + newsletterName.
+  cachedChannel = {
+    jid: envJid || `120363000000000000@newsletter`,
+    name: envName,
+  }
+  return cachedChannel
+}
 
 function buildSections(html: string, typename: HtmlPrimitiveName, trustedSources: string[]) {
   return [
@@ -35,7 +89,7 @@ function buildContent(
   title: string,
   trustedSources: string[],
   typename: HtmlPrimitiveName,
-  withBotForwardMeta: boolean,
+  channel: { jid: string; name: string },
 ) {
   const unifiedData = Buffer.from(
     JSON.stringify({
@@ -44,13 +98,18 @@ function buildContent(
     }),
   ).toString('base64')
 
-  // Evitamos isForwarded/forwardingScore (etiqueta "Reenviado"),
-  // pero algunos clientes solo renderizan rich HTML si hay metadata de bot AI.
-  const richContext = withBotForwardMeta
-    ? {
-        forwardedAiBotMessageInfo: { botJid: '0@bot' },
-      }
-    : {}
+  const channelContext = {
+    forwardingScore: 999,
+    isForwarded: true,
+    forwardedNewsletterMessageInfo: {
+      newsletterJid: channel.jid,
+      newsletterName: channel.name,
+      serverMessageId: 100,
+    },
+    forwardedAiBotMessageInfo: {
+      botJid: '0@bot',
+    },
+  }
 
   return {
     messageContextInfo: {
@@ -67,9 +126,11 @@ function buildContent(
           messageType: 1,
           submessages: [] as unknown[],
           unifiedResponse: { data: unifiedData },
-          contextInfo: richContext,
+          contextInfo: channelContext,
         },
       },
+      // Algunos clientes leen el contextInfo del wrapper
+      contextInfo: channelContext,
     },
   }
 }
@@ -89,25 +150,20 @@ export async function sendAiHtmlMessage(
 
   const title = options.title ?? 'Ghost Nexora'
   const trustedSources = options.trustedSources ?? ['nixel.dev']
+  const channel = await resolveChannel(socket)
 
-  // Orden de intento: el primitivo más usado por forks de juegos, luego el original Nixel.
-  const attempts: Array<{ typename: HtmlPrimitiveName; withBotForwardMeta: boolean }> = [
-    { typename: 'FOAHtmlPrimitiveDemoDONOTUSE', withBotForwardMeta: true },
-    { typename: 'GenAIaeacdsnwHtmlPrimitive', withBotForwardMeta: true },
-    { typename: 'GenAIaeacdsnwHtmlPrimitive', withBotForwardMeta: false },
-    { typename: 'GenAIHtmlPrimitive', withBotForwardMeta: true },
+  // Primero el primitivo original Nixel (el que funcionó al inicio),
+  // luego FOA (usado por forks de juegos).
+  const attempts: HtmlPrimitiveName[] = [
+    'GenAIaeacdsnwHtmlPrimitive',
+    'FOAHtmlPrimitiveDemoDONOTUSE',
+    'GenAIHtmlPrimitive',
   ]
 
   let lastError: unknown
-  for (const attempt of attempts) {
+  for (const typename of attempts) {
     try {
-      const content = buildContent(
-        html,
-        title,
-        trustedSources,
-        attempt.typename,
-        attempt.withBotForwardMeta,
-      )
+      const content = buildContent(html, title, trustedSources, typename, channel)
       const message = generateWAMessageFromContent(chatId, content as never, {
         userJid,
         quoted: options.quoted,
@@ -120,22 +176,16 @@ export async function sendAiHtmlMessage(
           chatId,
           messageId: message.key.id,
           title,
-          typename: attempt.typename,
-          withBotForwardMeta: attempt.withBotForwardMeta,
+          typename,
+          channelJid: channel.jid,
+          channelName: channel.name,
         },
-        'ai-html message relayed',
+        'ai-html message relayed (channel-forwarded)',
       )
       return message
     } catch (error) {
       lastError = error
-      logger.warn(
-        {
-          error,
-          typename: attempt.typename,
-          withBotForwardMeta: attempt.withBotForwardMeta,
-        },
-        'ai-html attempt failed; trying next variant',
-      )
+      logger.warn({ error, typename }, 'ai-html attempt failed; trying next variant')
     }
   }
 
