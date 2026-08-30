@@ -1,29 +1,77 @@
+import { jidNormalizedUser } from 'baileys'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import type { BotCommand, CommandContext } from '../types.js'
 import { economy } from '../services/economy.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
-import { getContextInfo } from '../utils/message.js'
+import { digitsFromJid, getContextInfo } from '../utils/message.js'
 import { pickAdultReactionMedia } from '../services/adult-media-v8.js'
 
 const prohibited = /\b(child|children|underage|minor|preteen|pre-teen|niñ[oa]s?|menor(?:es)?)\b/i
 
-async function target(ctx: CommandContext) {
-  const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
-  if (!mention) throw new Error('Menciona o responde a otro usuario.')
-  return mention
+function normalizeJid(value?: string | null) {
+  if (!value) return ''
+  try {
+    return jidNormalizedUser(value)
+  } catch {
+    return value
+  }
 }
 
-function gate(ctx: CommandContext) {
-  if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) {
-    throw new Error(`Confirma mayoría de edad con ${ctx.prefix}adult18 accept.`)
-  }
-  if (ctx.isGroup && !economy.getGroupPolicy(ctx.chatId).adultAllowed) {
-    throw new Error(`Este grupo debe habilitar NSFW con ${ctx.prefix}adultmode on.`)
-  }
-  if (!ctx.isGroup && (!settings.adultEnabled || !config.adultPrivateEnabled)) {
+/** Same gate as erome / xvideos / pornhub (adult.ts). */
+function assertAdultAccess(ctx: CommandContext) {
+  if (ctx.isGroup) {
+    if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
+      throw new Error(
+        `Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ${ctx.prefix}adultmode on.`,
+      )
+    }
+  } else if (!settings.adultEnabled || !config.adultPrivateEnabled) {
     throw new Error('El módulo 18+ está desactivado en este chat privado.')
   }
+
+  if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) {
+    throw new Error(
+      `Antes debes confirmar que eres mayor de edad con ${ctx.prefix}adult18 accept.`,
+    )
+  }
+}
+
+async function resolveTargetJid(ctx: CommandContext): Promise<string> {
+  const info = getContextInfo(ctx.message)
+  const mention = info?.mentionedJid?.[0]
+  const quotedParticipant = info?.participant
+  const raw = mention || quotedParticipant
+  if (!raw) throw new Error(`Menciona o responde a otro usuario. Ejemplo: ${ctx.prefix}fuck @usuario`)
+
+  let candidates = [normalizeJid(raw), raw].filter(Boolean)
+
+  // In groups, map LID → phone JID when WhatsApp only exposes @lid in mentions.
+  if (ctx.isGroup) {
+    try {
+      const metadata = await ctx.socket.groupMetadata(ctx.chatId)
+      const match = metadata.participants.find((p) => {
+        const ids = [p.id, p.phoneNumber, p.lid].map(normalizeJid).filter(Boolean)
+        return ids.some((id) => candidates.includes(id) || candidates.includes(normalizeJid(id)))
+      })
+      if (match) {
+        const preferred =
+          normalizeJid(match.phoneNumber)
+          || normalizeJid(match.id)
+          || normalizeJid(match.lid)
+        if (preferred) candidates = [preferred, ...candidates, normalizeJid(match.id), normalizeJid(match.lid), normalizeJid(match.phoneNumber)].filter(Boolean)
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
+  const pn = candidates.find((j) => /@s\.whatsapp\.net$/i.test(j))
+  return pn || candidates[0]!
+}
+
+function hasAdultConsent(jid: string, extra: string[] = []) {
+  return Boolean(economy.hasEntitlement(jid, 'adult_consent', extra))
 }
 
 type Def = {
@@ -107,11 +155,20 @@ async function sendGifPlayback(
 }
 
 async function run(def: Def, ctx: CommandContext) {
-  gate(ctx)
-  const other = await target(ctx)
-  if (other === ctx.sender) throw new Error('Este roleplay requiere otro participante.')
-  if (!economy.hasEntitlement(other, 'adult_consent')) {
-    throw new Error(`El destinatario también debe usar ${ctx.prefix}adult18 accept.`)
+  assertAdultAccess(ctx)
+  const other = await resolveTargetJid(ctx)
+
+  const senderDigits = digitsFromJid(ctx.sender)
+  const otherDigits = digitsFromJid(other)
+  if (other === ctx.sender || (senderDigits && otherDigits && senderDigits === otherDigits)) {
+    throw new Error('Este roleplay requiere otro participante.')
+  }
+
+  // Target may appear as LID while consent was stored under phone JID.
+  if (!hasAdultConsent(other, [other])) {
+    throw new Error(
+      `El destinatario también debe confirmar mayoría de edad con ${ctx.prefix}adult18 accept.`,
+    )
   }
 
   const caption = [

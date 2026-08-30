@@ -44,6 +44,10 @@ export type SubbotRecord = {
 const now = () => Date.now()
 const int = (value: unknown) => Number(value ?? 0)
 
+function digitsFromJid(jid: string): string {
+  return jid.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? ''
+}
+
 function normalizeProfession(value: string): ProfessionId | null {
   const normalized = value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   for (const [id, config] of Object.entries(PROFESSIONS) as Array<[ProfessionId, typeof PROFESSIONS[ProfessionId]]>) {
@@ -262,10 +266,43 @@ export class EconomyStore {
     return expiresAt
   }
 
-  hasEntitlement(userJid: string, kind: string) {
-    const row = this.db.prepare('SELECT MAX(expires_at) as expiresAt FROM entitlements WHERE user_jid = ? AND kind = ? AND expires_at > ?')
-      .get(userJid, kind, now()) as { expiresAt?: number | null }
-    return int(row.expiresAt) || null
+  /**
+   * Active entitlement lookup.
+   * Matches exact user_jid first, then any stored row whose JID shares the same
+   * phone digits (handles PN vs device-suffix and some format drift).
+   * Pure LID JIDs without digits still rely on exact match or explicit candidates.
+   */
+  hasEntitlement(userJid: string, kind: string, extraCandidates: string[] = []) {
+    const stamp = now()
+    const candidates = [...new Set([userJid, ...extraCandidates].filter(Boolean))]
+
+    for (const candidate of candidates) {
+      const row = this.db
+        .prepare('SELECT MAX(expires_at) as expiresAt FROM entitlements WHERE user_jid = ? AND kind = ? AND expires_at > ?')
+        .get(candidate, kind, stamp) as { expiresAt?: number | null }
+      const expires = int(row.expiresAt)
+      if (expires) return expires
+    }
+
+    const digitsList = [...new Set(candidates.map(digitsFromJid).filter((d) => d.length >= 8))]
+    for (const digits of digitsList) {
+      const rows = this.db
+        .prepare(
+          `SELECT user_jid as userJid, expires_at as expiresAt FROM entitlements
+           WHERE kind = ? AND expires_at > ? AND user_jid LIKE ?`,
+        )
+        .all(kind, stamp, `${digits}@%`) as Array<{ userJid: string; expiresAt: number }>
+
+      let best = 0
+      for (const row of rows) {
+        if (digitsFromJid(row.userJid) === digits && int(row.expiresAt) > best) {
+          best = int(row.expiresAt)
+        }
+      }
+      if (best) return best
+    }
+
+    return null
   }
 
   purchase(userJid: string, price: number, kind: string, durationMs: number, metadata?: Record<string, unknown>) {

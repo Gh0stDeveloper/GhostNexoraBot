@@ -26,6 +26,7 @@ const UA =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 GhostNexoraBot/1.3'
 const CACHE_TTL_MS = 30 * 60_000
 const MAX_RESOLVE_DEPTH = 5
+const MAX_CARDS = 8
 
 const cfg: Record<Source, { host: RegExp; queries: (q: string) => string[] }> = {
   Uptodown: {
@@ -150,7 +151,7 @@ function parse($: cheerio.CheerioAPI, source: Source, base: string, _query: stri
 
     seen.add(href)
     const root = $(el).closest('article,li,.card,.item,.app,.post,div').first()
-    const summary = root.text().replace(/\s+/g, ' ').trim().slice(0, 220)
+    const summary = root.text().replace(/\s+/g, ' ').trim().slice(0, 80)
     const icon = absolute(
       base,
       root.find('img').first().attr('data-src')
@@ -162,7 +163,7 @@ function parse($: cheerio.CheerioAPI, source: Source, base: string, _query: stri
       remember({
         token: token(source, href),
         source,
-        name: text.replace(/\s+(APK|Mod APK|download|Descargar)$/i, '').slice(0, 100),
+        name: text.replace(/\s+(APK|Mod APK|download|Descargar)$/i, '').slice(0, 60),
         url: href,
         icon: publicHttpUrl(icon),
         version,
@@ -301,6 +302,27 @@ function bytes(value?: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
+/** Erome-style card: short body, exactly 2 buttons. */
+function apkCard(ctx: CommandContext, item: Item, index: number) {
+  const title =
+    item.source === 'Uptodown' || item.source === 'LiteAPKS'
+      ? `#${index + 1} · ${item.name}`
+      : `#${index + 1} · ${item.name}`
+  const bodyParts = [
+    item.source,
+    item.version ? `v${item.version}` : undefined,
+  ].filter(Boolean)
+  return {
+    title: title.slice(0, 60),
+    body: bodyParts.join(' · ').slice(0, 80),
+    imageUrl: item.icon,
+    buttons: [
+      { type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}officialapkdl ${item.token}` },
+      { type: 'url' as const, text: '🌐 Sitio', url: item.url },
+    ],
+  }
+}
+
 async function downloadOfficialApk(item: Item) {
   const direct = await resolveOfficialApk(item)
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-official-apk-'))
@@ -365,38 +387,16 @@ async function searchSource(ctx: CommandContext, source: Source, query: string) 
   const text = query.trim()
   if (text.length < 2) throw new Error(`Uso: ${ctx.prefix}${source.toLowerCase()} <aplicación>`)
 
-  await ctx.reply(
-    [
-      `📦 *${source.toUpperCase()} · BUSCANDO*`,
-      '━━━━━━━━━━━━━━',
-      `🔎 ${text}`,
-      '⏳ Consultando la web oficial...',
-    ].join('\n'),
-  )
+  await ctx.reply(`📦 *${source}* · buscando ${text}…`)
 
-  const items = await search(source, text)
+  const items = (await search(source, text)).slice(0, MAX_CARDS)
   if (!items.length) throw new Error(`No encontré resultados en ${source}.`)
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: `📦 ${source.toUpperCase()} · APK`,
-    body: `Resultados oficiales para *${text}*`,
-    footer: `${source} · Ghost Nexora Bot`,
-    cards: items.map((item, index) => ({
-      title: `#${index + 1} · ${item.name}`.slice(0, 120),
-      body: [
-        `🌐 Fuente » ${item.source}`,
-        item.version ? `🔄 Versión » ${item.version}` : '',
-        item.summary || '',
-        '✅ Página oficial · verifica antes de instalar',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      imageUrl: item.icon,
-      buttons: [
-        { type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}officialapkdl ${item.token}` },
-        { type: 'url' as const, text: '🌐 Abrir', url: item.url },
-      ],
-    })),
+    title: `📦 ${source}`,
+    body: text.slice(0, 80),
+    footer: source,
+    cards: items.map((item, index) => apkCard(ctx, item, index)),
   })
 }
 
@@ -404,46 +404,24 @@ async function apk(ctx: CommandContext) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}apk <aplicación>`)
 
-  await ctx.reply(
-    [
-      '📦 *ANDROID · FUENTES OFICIALES*',
-      '━━━━━━━━━━━━━━',
-      `🔎 ${query}`,
-      '⏳ Consultando Uptodown y LiteAPKS...',
-      `💡 Mods: ${ctx.prefix}happymod <app> · Aptoide/otros: ${ctx.prefix}aptoide <app>`,
-    ].join('\n'),
-  )
+  await ctx.reply(`📦 Buscando ${query} en Uptodown y LiteAPKS…`)
 
   const sources: Source[] = ['Uptodown', 'LiteAPKS']
   const groups = await Promise.all(
     sources.map(async (source) => ({ source, items: await search(source, query) })),
   )
-  const all = groups.flatMap((g) => g.items).slice(0, 12)
+  const all = groups.flatMap((g) => g.items).slice(0, MAX_CARDS)
   if (!all.length) {
     throw new Error(
-      `No encontré resultados en Uptodown/LiteAPKS. Prueba ${ctx.prefix}happymod <app> para mods o ${ctx.prefix}aptoide <app>.`,
+      `No encontré resultados. Prueba ${ctx.prefix}happymod <app> o ${ctx.prefix}aptoide <app>.`,
     )
   }
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '📦 ANDROID · FUENTES OFICIALES',
-    body: `Resultados para *${query}*\nUptodown · LiteAPKS · HappyMod vía ${ctx.prefix}happymod`,
-    footer: 'Verifica el origen antes de instalar APKs externas.',
-    cards: all.map((item, index) => ({
-      title: `#${index + 1} · ${item.source} · ${item.name}`.slice(0, 120),
-      body: [
-        item.version ? `🔄 ${item.version}` : '',
-        item.summary || '',
-        '✅ Fuente oficial',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      imageUrl: item.icon,
-      buttons: [
-        { type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}officialapkdl ${item.token}` },
-        { type: 'url' as const, text: '🌐 Fuente', url: item.url },
-      ],
-    })),
+    title: '📦 APK',
+    body: query.slice(0, 80),
+    footer: 'Uptodown · LiteAPKS',
+    cards: all.map((item, index) => apkCard(ctx, item, index)),
   })
 }
 
@@ -452,13 +430,9 @@ async function info(ctx: CommandContext) {
   await ctx.reply(
     [
       `📦 *${item.name}*`,
-      '━━━━━━━━━━━━━━',
-      `Fuente: *${item.source}*`,
+      `Fuente: ${item.source}`,
       item.version ? `Versión: ${item.version}` : '',
-      item.summary || '',
-      '',
       item.url,
-      '',
       `Descargar: ${ctx.prefix}officialapkdl ${item.token}`,
     ]
       .filter(Boolean)
@@ -469,18 +443,7 @@ async function info(ctx: CommandContext) {
 async function download(ctx: CommandContext) {
   const item = getSelected(ctx.args[0] || '')
 
-  await ctx.reply(
-    [
-      '📦 *DESCARGA OFICIAL INICIADA*',
-      '━━━━━━━━━━━━━━',
-      `📱 ${item.name}`,
-      `🌐 Fuente » ${item.source}`,
-      item.version ? `🔄 Versión » ${item.version}` : '',
-      '⏳ Resolviendo enlace y validando el archivo APK...',
-    ]
-      .filter(Boolean)
-      .join('\n'),
-  )
+  await ctx.reply(`📦 Descargando ${item.name} (${item.source})…`)
 
   const result = await downloadOfficialApk(item)
   try {
@@ -492,13 +455,8 @@ async function download(ctx: CommandContext) {
         fileName: result.fileName,
         caption: [
           `📦 *${item.name}*`,
-          `🌐 Fuente oficial » ${item.source}`,
-          item.version ? `🔄 Versión » ${item.version}` : '',
-          `📏 Peso » ${bytes(result.size)}`,
-          '',
-          '✅ Validado como APK/ZIP',
-          '',
-          '👻 Ghost Nexora Bot',
+          `${item.source}${item.version ? ` · v${item.version}` : ''}`,
+          bytes(result.size) ? `${bytes(result.size)}` : '',
         ]
           .filter(Boolean)
           .join('\n'),
