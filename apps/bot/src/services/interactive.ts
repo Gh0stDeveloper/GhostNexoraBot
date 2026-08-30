@@ -141,11 +141,10 @@ export async function sendCarousel(
   const userJid = socket.user?.id
   if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
 
-  // WhatsApp interactive carousels break or prompt "update WhatsApp" when
-  // payloads are too large (many cards, long button IDs, heavy bodies).
-  // Keep a hard cap aligned with the Erome-style UI (≤ 8 cards).
   const sourceCards = input.cards.slice(0, 8)
   const preparedImages = await Promise.all(sourceCards.map((card) => imageMessageFromUrl(socket, card.imageUrl)))
+  const overflowButtons = sourceCards.flatMap((card) => card.buttons.slice(2)).slice(0, 3)
+
   const cards = sourceCards.map((card, index) => {
     const imageMessage = preparedImages[index]
     return {
@@ -156,7 +155,7 @@ export async function sendCarousel(
         hasMediaAttachment: Boolean(imageMessage),
         ...(imageMessage ? { imageMessage } : {}),
       }),
-      nativeFlowMessage: nativeFlow(card.buttons),
+      nativeFlowMessage: nativeFlow(card.buttons.slice(0, 2)),
     }
   })
 
@@ -182,6 +181,15 @@ export async function sendCarousel(
       'carousel relay',
     )
     logger.info({ chatId, messageId: message.key.id, cards: cards.length, relayNodes: additionalNodes.map((node) => node.tag) }, 'carousel relay completed')
+
+    if (overflowButtons.length) {
+      await sendInteractiveCard(socket, chatId, quoted, {
+        title: 'Navegación',
+        body: 'Hay más opciones disponibles.',
+        footer: input.footer ?? 'Ghost Nexora Bot',
+        buttons: overflowButtons,
+      })
+    }
   } catch (error) {
     logger.warn({ error, chatId, cards: cards.length }, 'carousel relay failed; sending text fallback')
     const summary = input.cards.slice(0, 8).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
