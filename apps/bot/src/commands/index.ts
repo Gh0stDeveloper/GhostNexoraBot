@@ -68,6 +68,7 @@ import { miniLlmCommands } from './mini-llm.js'
 import { autoChatCommands } from './auto-chat.js'
 import { dinoCommands } from './dino.js'
 import { snakeCommands } from './snake.js'
+import { doomCommands } from './doom.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -88,6 +89,7 @@ export const commands: BotCommand[] = [
   ...gameCommands,
   ...dinoCommands,
   ...snakeCommands,
+  ...doomCommands,
   ...pvpGameCommands,
   ...rpgCommands,
   ...waifuCommands,
