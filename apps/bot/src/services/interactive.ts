@@ -141,15 +141,18 @@ export async function sendCarousel(
   const userJid = socket.user?.id
   if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
 
-  const sourceCards = input.cards.slice(0, 12)
+  // WhatsApp interactive carousels break or prompt "update WhatsApp" when
+  // payloads are too large (many cards, long button IDs, heavy bodies).
+  // Keep a hard cap aligned with the Erome-style UI (≤ 8 cards).
+  const sourceCards = input.cards.slice(0, 8)
   const preparedImages = await Promise.all(sourceCards.map((card) => imageMessageFromUrl(socket, card.imageUrl)))
   const cards = sourceCards.map((card, index) => {
     const imageMessage = preparedImages[index]
     return {
-      body: proto.Message.InteractiveMessage.Body.fromObject({ text: card.body }),
-      footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: card.footer ?? 'Ghost Nexora Bot' }),
+      body: proto.Message.InteractiveMessage.Body.fromObject({ text: card.body.slice(0, 140) }),
+      footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: (card.footer ?? 'Ghost Nexora Bot').slice(0, 60) }),
       header: proto.Message.InteractiveMessage.Header.fromObject({
-        title: card.title,
+        title: card.title.slice(0, 80),
         hasMediaAttachment: Boolean(imageMessage),
         ...(imageMessage ? { imageMessage } : {}),
       }),
@@ -162,9 +165,9 @@ export async function sendCarousel(
       message: {
         messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
         interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-          body: proto.Message.InteractiveMessage.Body.create({ text: input.body ?? input.title }),
-          footer: proto.Message.InteractiveMessage.Footer.create({ text: input.footer ?? 'Ghost Nexora Bot' }),
-          header: proto.Message.InteractiveMessage.Header.create({ title: input.title, hasMediaAttachment: false }),
+          body: proto.Message.InteractiveMessage.Body.create({ text: (input.body ?? input.title).slice(0, 200) }),
+          footer: proto.Message.InteractiveMessage.Footer.create({ text: (input.footer ?? 'Ghost Nexora Bot').slice(0, 60) }),
+          header: proto.Message.InteractiveMessage.Header.create({ title: input.title.slice(0, 80), hasMediaAttachment: false }),
           carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({ cards }),
         }),
       },
@@ -181,7 +184,7 @@ export async function sendCarousel(
     logger.info({ chatId, messageId: message.key.id, cards: cards.length, relayNodes: additionalNodes.map((node) => node.tag) }, 'carousel relay completed')
   } catch (error) {
     logger.warn({ error, chatId, cards: cards.length }, 'carousel relay failed; sending text fallback')
-    const summary = input.cards.slice(0, 10).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
+    const summary = input.cards.slice(0, 8).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
     await sendTextFallback(socket, chatId, quoted, input.title, [input.body, summary].filter(Boolean).join('\n\n'), input.footer)
   }
 }
