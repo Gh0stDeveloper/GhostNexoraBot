@@ -5,7 +5,7 @@ import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 function requireQuery(ctx: CommandContext) {
   const query = ctx.argText.trim()
-  if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}apk <nombre de aplicación>`)
+  if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}aptoide <nombre de aplicación>`)
   return query
 }
 
@@ -57,11 +57,11 @@ function resultButtons(ctx: CommandContext, item: UnifiedApkItem): InteractiveBu
 }
 
 async function showApkResults(ctx: CommandContext, query: string) {
-  await ctx.reply(`🔎 *APK · BUSCANDO*\n━━━━━━━━━━━━━━\nConsultando Aptoide, APK.Tools y AndroForever para *${query}*...`)
+  await ctx.reply(`🔎 *APTOIDE / MULTI-FUENTE*\n━━━━━━━━━━━━━━\nConsultando Aptoide, APK.Tools y AndroForever para *${query}*...\n\n💡 Oficiales: ${ctx.prefix}apk · Mods: ${ctx.prefix}happymod`)
   const results = await searchAndroidApks(query, 12)
   if (!results.length) throw new Error('No encontré APKs para esa búsqueda en las fuentes disponibles.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '🤖 ANDROID · APKs',
+    title: '🤖 ANDROID · APTOIDE / MULTI',
     body: `Resultados para: ${query}\nAptoide · APK.Tools · AndroForever`,
     footer: 'Verifica siempre el origen antes de instalar APKs externas.',
     cards: results.map((item, index) => ({
@@ -76,15 +76,27 @@ async function showApkResults(ctx: CommandContext, query: string) {
 
 export const apkMultisourceCommands: BotCommand[] = [
   {
-    name: 'apk', aliases: ['apks', 'androidapp', 'androidapk', 'aptoide', 'apktool', 'apktools', 'androforever', 'androidforever'], category: 'downloads',
-    description: 'Busca APKs en Aptoide, APK.Tools y AndroForever mediante carrusel.', usage: 'apk <aplicación>',
-    async handler(ctx) { await showApkResults(ctx, requireQuery(ctx)) },
+    name: 'aptoide',
+    aliases: ['aptoidesearch', 'apktool', 'apktools', 'androforever', 'androidforever', 'androidapp'],
+    category: 'downloads',
+    description: 'Busca APKs en Aptoide, APK.Tools y AndroForever mediante carrusel.',
+    usage: 'aptoide <aplicación>',
+    async handler(ctx) {
+      await showApkResults(ctx, requireQuery(ctx))
+    },
   },
   {
-    name: 'apkinfo', aliases: ['appinfo'], category: 'downloads', description: 'Muestra detalles de un resultado APK.', usage: 'apkinfo <token>',
+    name: 'apkinfo',
+    aliases: ['appinfo', 'aptoideinfo'],
+    category: 'downloads',
+    description: 'Muestra detalles de un resultado APK (Aptoide/multi-fuente).',
+    usage: 'apkinfo <token>',
     async handler(ctx) {
       const token = ctx.args[0]
-      if (!token) throw new Error(`Usa primero ${ctx.prefix}apk <aplicación>.`)
+      if (!token) throw new Error(`Usa primero ${ctx.prefix}aptoide <aplicación>.`)
+      if (/^(ud_|la_)/i.test(token)) {
+        throw new Error(`Ese token es de Uptodown/LiteAPKS. Usa ${ctx.prefix}officialapkinfo ${token}`)
+      }
       const item = getAndroidApk(token)
       const buttons: InteractiveButton[] = [
         { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${item.token}` },
@@ -104,10 +116,17 @@ export const apkMultisourceCommands: BotCommand[] = [
     },
   },
   {
-    name: 'apkdl', aliases: ['appdl'], category: 'downloads', description: 'Descarga un resultado APK seleccionado.', usage: 'apkdl <token>',
+    name: 'apkdl',
+    aliases: ['appdl', 'aptoidedl'],
+    category: 'downloads',
+    description: 'Descarga un resultado APK de Aptoide / APK.Tools / AndroForever.',
+    usage: 'apkdl <token>',
     async handler(ctx) {
       const token = ctx.args[0]
-      if (!token) throw new Error(`Usa primero ${ctx.prefix}apk <aplicación>.`)
+      if (!token) throw new Error(`Usa primero ${ctx.prefix}aptoide <aplicación>.`)
+      if (/^(ud_|la_)/i.test(token)) {
+        throw new Error(`Ese token es de Uptodown/LiteAPKS. Usa ${ctx.prefix}officialapkdl ${token}`)
+      }
       const selected = getAndroidApk(token)
       await ctx.reply([
         '🤖 *DESCARGA INICIADA*',

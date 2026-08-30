@@ -25,7 +25,7 @@ import { waifuExtendedCommands } from './waifu-extended.js'
 import { subbotCommands } from './subbots.js'
 import { adultCommands } from './adult.js'
 import { eromeCommands } from './erome.js'
-import { adultRoleplayCommands } from './adult-roleplay.js'
+import { hentaiCommands } from './hentai.js'
 import { personalizationCommands } from './personalization.js'
 import { privateAccessCommands } from './private-access.js'
 import { systemCommands } from './system.js'
@@ -59,6 +59,7 @@ import { adultMediaV8Commands } from './adult-media-v8.js'
 import { adultRoleplayV8Commands } from './adult-roleplay-v8.js'
 import { reactionV8Commands } from './reactions-v8.js'
 import { officialApkV8Commands } from './official-apk-v8.js'
+import { happyModCommands } from './happymod.js'
 import { developerV8Commands } from './developer-v8.js'
 import { groupControlsV9Commands } from './group-controls-v9.js'
 import { lempiApiCommands } from './lempi-api.js'
@@ -90,7 +91,7 @@ export const commands: BotCommand[] = [
   ...subbotCommands,
   ...adultCommands,
   ...eromeCommands,
-  ...adultRoleplayCommands,
+  ...hentaiCommands,
   ...personalizationCommands,
   ...privateAccessCommands,
   ...systemCommands,
@@ -124,6 +125,7 @@ export const commands: BotCommand[] = [
   ...adultRoleplayV8Commands,
   ...reactionV8Commands,
   ...officialApkV8Commands,
+  ...happyModCommands,
   ...developerV8Commands,
   ...groupControlsV9Commands,
   ...lempiApiCommands,
