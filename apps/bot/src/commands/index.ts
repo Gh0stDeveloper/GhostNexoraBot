@@ -58,8 +58,8 @@ import { versionV8Commands } from './version-v8.js'
 import { adultMediaV8Commands } from './adult-media-v8.js'
 import { adultRoleplayV8Commands } from './adult-roleplay-v8.js'
 import { reactionV8Commands } from './reactions-v8.js'
-import { officialApkV8Commands } from './official-apk-v8.js'
 import { happyModCommands } from './happymod.js'
+import { officialApkV9Commands } from './official-apk-v9.js'
 import { developerV8Commands } from './developer-v8.js'
 import { groupControlsV9Commands } from './group-controls-v9.js'
 import { lempiApiCommands } from './lempi-api.js'
@@ -124,8 +124,8 @@ export const commands: BotCommand[] = [
   ...adultMediaV8Commands,
   ...adultRoleplayV8Commands,
   ...reactionV8Commands,
-  ...officialApkV8Commands,
   ...happyModCommands,
+  ...officialApkV9Commands,
   ...developerV8Commands,
   ...groupControlsV9Commands,
   ...lempiApiCommands,
