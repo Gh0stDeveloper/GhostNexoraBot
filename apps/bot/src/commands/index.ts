@@ -69,6 +69,7 @@ import { autoChatCommands } from './auto-chat.js'
 import { dinoCommands } from './dino.js'
 import { snakeCommands } from './snake.js'
 import { doomCommands } from './doom.js'
+import { ninjaCommands } from './ninja.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -90,6 +91,7 @@ export const commands: BotCommand[] = [
   ...dinoCommands,
   ...snakeCommands,
   ...doomCommands,
+  ...ninjaCommands,
   ...pvpGameCommands,
   ...rpgCommands,
   ...waifuCommands,
