@@ -25,7 +25,7 @@ import { waifuExtendedCommands } from './waifu-extended.js'
 import { subbotCommands } from './subbots.js'
 import { adultCommands } from './adult.js'
 import { eromeCommands } from './erome.js'
-import { hentaiCommands } from './hentai.js'
+import { hentaiV9Commands } from './hentai-v9.js'
 import { personalizationCommands } from './personalization.js'
 import { privateAccessCommands } from './private-access.js'
 import { systemCommands } from './system.js'
@@ -91,7 +91,7 @@ export const commands: BotCommand[] = [
   ...subbotCommands,
   ...adultCommands,
   ...eromeCommands,
-  ...hentaiCommands,
+  ...hentaiV9Commands,
   ...personalizationCommands,
   ...privateAccessCommands,
   ...systemCommands,
@@ -124,8 +124,8 @@ export const commands: BotCommand[] = [
   ...adultMediaV8Commands,
   ...adultRoleplayV8Commands,
   ...reactionV8Commands,
-  ...happyModCommands,
   ...officialApkV9Commands,
+  ...happyModCommands,
   ...developerV8Commands,
   ...groupControlsV9Commands,
   ...lempiApiCommands,
