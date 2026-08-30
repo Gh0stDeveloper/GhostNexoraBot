@@ -4,6 +4,9 @@ set -Eeuo pipefail
 INSTALL_DIR="${INSTALL_DIR:-/opt/ghost-nexora-bot}"
 SERVICE_USER="${SERVICE_USER:-}"
 SERVICE_FILE="/etc/systemd/system/ghost-nexora-llm.service"
+# When 1, only write/enable the unit file; do not systemctl restart.
+# Used by update.sh while mini-LLM training is in progress.
+SKIP_LLM_RESTART="${SKIP_LLM_RESTART:-0}"
 
 if [[ "${EUID}" -ne 0 ]]; then echo 'Ejecuta con sudo/root.' >&2; exit 1; fi
 if [[ -z "${SERVICE_USER}" ]]; then
@@ -34,6 +37,17 @@ EOF
 
 systemctl daemon-reload
 systemctl enable ghost-nexora-llm.service
+
+if [[ "${SKIP_LLM_RESTART}" == "1" || "${SKIP_LLM_RESTART}" == "true" ]]; then
+  echo "ghost-nexora-llm.service unit actualizada (SKIP_LLM_RESTART=1); no se reinició el proceso."
+  if systemctl is-active --quiet ghost-nexora-llm.service; then
+    echo "Estado actual: active (entrenamiento u otro trabajo en curso puede continuar)."
+  else
+    echo "Advertencia: el servicio no está active. No se forzó restart por SKIP_LLM_RESTART." >&2
+  fi
+  exit 0
+fi
+
 systemctl restart ghost-nexora-llm.service
 sleep 2
 if ! systemctl is-active --quiet ghost-nexora-llm.service; then
