@@ -70,6 +70,9 @@ import { dinoCommands } from './dino.js'
 import { snakeCommands } from './snake.js'
 import { doomCommands } from './doom.js'
 import { ninjaCommands } from './ninja.js'
+import { spaceDodgeCommands } from './spacedodge.js'
+import { gatoCommands } from './gato.js'
+import { damasCommands } from './damas.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -92,6 +95,9 @@ export const commands: BotCommand[] = [
   ...snakeCommands,
   ...doomCommands,
   ...ninjaCommands,
+  ...spaceDodgeCommands,
+  ...gatoCommands,
+  ...damasCommands,
   ...pvpGameCommands,
   ...rpgCommands,
   ...waifuCommands,
