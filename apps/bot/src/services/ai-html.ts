@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js'
 
 /**
  * Envía un juego/UI HTML embebido vía richResponseMessage (formato experimental Meta AI).
+ * No marca el mensaje como reenviado (sin isForwarded / forwardingScore).
  * No todos los clientes de WhatsApp lo renderizan; si falla el relay, el caller debe hacer fallback de texto.
  */
 export async function sendAiHtmlMessage(
@@ -39,6 +40,8 @@ export async function sendAiHtmlMessage(
     }),
   ).toString('base64')
 
+  // richResponse vive dentro de botForwardedMessage (requisito del protocolo),
+  // pero el contextInfo NO lleva isForwarded para evitar la etiqueta "Reenviado".
   const content = {
     messageContextInfo: {
       deviceListMetadata: {},
@@ -54,12 +57,7 @@ export async function sendAiHtmlMessage(
           messageType: 1,
           submessages: [] as unknown[],
           unifiedResponse: { data: unifiedData },
-          contextInfo: {
-            forwardingScore: 1,
-            isForwarded: true,
-            forwardedAiBotMessageInfo: { botJid: '0@bot' },
-            forwardOrigin: 4,
-          },
+          contextInfo: {},
         },
       },
     },
