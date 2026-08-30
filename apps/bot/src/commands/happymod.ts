@@ -8,6 +8,8 @@ import {
 } from '../services/happymod.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
+const MAX_CARDS = 8
+
 function requireQuery(ctx: CommandContext) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}happymod <nombre de aplicación>`)
@@ -20,52 +22,38 @@ function bytes(value?: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
-function itemBody(item: HappyModItem) {
-  return [
-    '🧩 Fuente » HappyMod',
-    item.version ? `🔄 Versión » ${item.version}` : '',
-    item.sizeLabel ? `📏 Peso » ${item.sizeLabel}` : '',
-    item.category ? `📁 Categoría » ${item.category}` : '',
-    '⚠️ APK modificada · instala solo si confías en la fuente',
-    item.summary ? `\n${item.summary.slice(0, 220)}${item.summary.length > 220 ? '…' : ''}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
-
+/** Short body · max 2 buttons (Erome style). */
 function resultButtons(ctx: CommandContext, item: HappyModItem): InteractiveButton[] {
   const buttons: InteractiveButton[] = [
-    { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}happymoddl ${item.token}` },
-    { type: 'reply', text: 'ℹ️ Detalles', id: `${ctx.prefix}happymodinfo ${item.token}` },
+    { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}happymoddl ${item.token}` },
   ]
-  if (item.url) buttons.push({ type: 'url', text: '🌐 Abrir', url: item.url })
-  return buttons
+  if (item.url) buttons.push({ type: 'url', text: '🌐 Sitio', url: item.url })
+  return buttons.slice(0, 2)
+}
+
+function cardBody(item: HappyModItem) {
+  return [item.version ? `v${item.version}` : undefined, item.sizeLabel]
+    .filter(Boolean)
+    .join(' · ')
+    .slice(0, 80) || 'HappyMod'
 }
 
 async function showResults(ctx: CommandContext, query: string) {
-  await ctx.reply(
-    [
-      '🧩 *HAPPYMOD · BUSCANDO*',
-      '━━━━━━━━━━━━━━',
-      `🔎 ${query}`,
-      '⏳ Consultando la web de HappyMod...',
-    ].join('\n'),
-  )
+  await ctx.reply(`🧩 HappyMod · buscando ${query}…`)
 
-  const results = await searchHappyMod(query, 10)
+  const results = (await searchHappyMod(query, MAX_CARDS)).slice(0, MAX_CARDS)
   if (!results.length) {
     throw new Error('No encontré resultados públicos en HappyMod para esa búsqueda.')
   }
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '🧩 HAPPYMOD · RESULTADOS',
-    body: `Resultados para: ${query}\nAPKs modificadas · verifica antes de instalar.`,
-    footer: 'HappyMod · Ghost Nexora Bot',
+    title: '🧩 HappyMod',
+    body: query.slice(0, 80),
+    footer: 'HappyMod',
     cards: results.map((item, index) => ({
-      title: `#${index + 1} · ${item.name}`.slice(0, 120),
-      body: itemBody(item),
+      title: `#${index + 1} · ${item.name}`.slice(0, 60),
+      body: cardBody(item),
       imageUrl: item.icon,
-      footer: 'Ghost Nexora Bot · HappyMod',
       buttons: resultButtons(ctx, item),
     })),
   })
@@ -93,24 +81,17 @@ export const happyModCommands: BotCommand[] = [
       if (!token) throw new Error(`Usa primero ${ctx.prefix}happymod <aplicación>.`)
 
       const item = getHappyModItem(token)
-      const buttons: InteractiveButton[] = [
-        { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}happymoddl ${item.token}` },
-      ]
-      if (item.url) buttons.push({ type: 'url', text: '🌐 Abrir fuente', url: item.url })
-
-      await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-        title: '🧩 HAPPYMOD · DETALLES',
-        body: item.name,
-        footer: 'Ghost Nexora Bot',
-        cards: [
-          {
-            title: item.name,
-            body: itemBody(item),
-            imageUrl: item.icon,
-            buttons,
-          },
-        ],
-      })
+      await ctx.reply(
+        [
+          `🧩 *${item.name}*`,
+          item.version ? `Versión: ${item.version}` : '',
+          item.sizeLabel ? `Peso: ${item.sizeLabel}` : '',
+          item.url || '',
+          `Descargar: ${ctx.prefix}happymoddl ${item.token}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
     },
   },
   {
@@ -124,19 +105,7 @@ export const happyModCommands: BotCommand[] = [
       if (!token) throw new Error(`Usa primero ${ctx.prefix}happymod <aplicación>.`)
 
       const selected = getHappyModItem(token)
-      await ctx.reply(
-        [
-          '🧩 *HAPPYMOD · DESCARGA INICIADA*',
-          '━━━━━━━━━━━━━━',
-          `📱 ${selected.name}`,
-          selected.version ? `🔄 Versión » ${selected.version}` : '',
-          '⏳ Resolviendo enlace y validando el archivo APK...',
-          '',
-          '⚠️ Las APKs de HappyMod son modificadas. Instálalas solo si confías en el origen.',
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      )
+      await ctx.reply(`🧩 Descargando ${selected.name}…`)
 
       const result = await downloadHappyModApk(token)
       try {
@@ -148,13 +117,9 @@ export const happyModCommands: BotCommand[] = [
             fileName: result.fileName,
             caption: [
               `🧩 *${result.name}*`,
-              '🌐 Fuente » HappyMod',
-              result.version ? `🔄 Versión » ${result.version}` : '',
-              `📏 Peso » ${bytes(result.size)}`,
-              '',
-              '⚠️ APK modificada · revisa permisos antes de instalar.',
-              '',
-              '👻 Ghost Nexora Bot',
+              'HappyMod',
+              result.version ? `v${result.version}` : '',
+              bytes(result.size) || '',
             ]
               .filter(Boolean)
               .join('\n'),
