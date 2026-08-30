@@ -1,6 +1,15 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { SettingsStore } from './core/settings.js'
 
+/**
+ * Project-local socket type.
+ * Baileys supports message editing through the `edit` field, while the
+ * installed typings in this project do not expose that field consistently.
+ */
+export type NexoraSocket = Omit<WASocket, 'sendMessage'> & {
+  sendMessage: (...args: any[]) => Promise<any>
+}
+
 export type CommandCategory =
   | 'general'
   | 'profile'
@@ -17,7 +26,7 @@ export type CommandCategory =
   | 'owner'
 
 export interface CommandContext {
-  socket: WASocket
+  socket: NexoraSocket
   message: WAMessage
   chatId: string
   sender: string
