@@ -1,5 +1,6 @@
 import { miniLLM } from './mini-llm.js'
 import { conversationMemory } from './conversation-memory.js'
+import { ollama } from './ollama.js'
 
 function pickOne(list: string[]) {
   return list[Math.floor(Math.random() * list.length)] ?? list[0] ?? ''
@@ -31,6 +32,7 @@ function isLowValue(text: string | null | undefined) {
   if (/enséñame con más ejemplos/i.test(t)) return true
   if (/dime algo y te respondo/i.test(t)) return true
   if (/checklist|banco grande de pares/i.test(t)) return true
+  if (/^(no sé|no se|no puedo ayudarte|como ia no puedo)/i.test(t)) return true
   return false
 }
 
@@ -65,9 +67,9 @@ function softContinue(topic: string[], lastBot: string | null) {
 
 /**
  * Respuesta coherente con el hilo del chat.
- * Usa memoria corta + búsqueda / pares del Mini-LLM.
+ * Prioriza Ollama cuando está habilitado y mantiene Mini-LLM/vector search como fallback.
  */
-export function contextualAnswer(chatId: string, userText: string): string | null {
+export async function contextualAnswer(chatId: string, userText: string): Promise<string | null> {
   const text = userText.replace(/\s+/g, ' ').trim()
   if (text.length < 2) return null
 
@@ -75,6 +77,14 @@ export function contextualAnswer(chatId: string, userText: string): string | nul
   const topics = conversationMemory.topicKeywords(chatId, text)
   const lastBot = conversationMemory.lastBot(chatId)
   const followUp = isFollowUp(text)
+
+  // 0) LLM generativo local: conserva contexto real del chat y responde de forma natural.
+  if (ollama.isEnabled()) {
+    const generated = await ollama.generate({ userText: text, history: recent })
+    if (generated && !isLowValue(generated) && (!lastBot || !similar(generated, lastBot))) {
+      return generated.slice(0, 900)
+    }
+  }
 
   // 1) Respuesta directa al mensaje (pares, identidad, hora…)
   let primary = miniLLM.answer(text)
@@ -92,13 +102,11 @@ export function contextualAnswer(chatId: string, userText: string): string | nul
         secondary = ''
       }
     }
-    // búsqueda vectorial extra
     if (!secondary) {
       try {
         const hits = miniLLM.search(topicQuery || text, 4)
         const hit = hits.find((h: { text: string; score: number }) => h.score > 0.18 && !isLowValue(h.text))
         if (hit) {
-          // preferir frase corta del hit
           const sentence =
             hit.text
               .split(/(?<=[.!?])\s+|\n+/)
@@ -114,13 +122,11 @@ export function contextualAnswer(chatId: string, userText: string): string | nul
 
   let reply = primary || secondary
 
-  // 3) Evitar repetir la última respuesta del bot
   if (reply && lastBot && similar(reply, lastBot)) {
     const alt = secondary && !similar(secondary, lastBot) ? secondary : softContinue(topics, lastBot)
     if (alt) reply = alt
   }
 
-  // 4) Si sigue vacío pero hay hilo, enganchar al tema
   if (!reply || isLowValue(reply)) {
     const soft = softContinue(topics, lastBot)
     if (soft) reply = soft
@@ -128,7 +134,6 @@ export function contextualAnswer(chatId: string, userText: string): string | nul
 
   if (!reply || isLowValue(reply)) return null
 
-  // 5) En grupos, a veces anclar al tema (sin sonar a plantilla siempre)
   if (recent.length >= 3 && topics.length >= 2 && Math.random() < 0.28 && !/^sobre |siguiendo con/i.test(reply)) {
     const hook = pickOne([
       `Sobre ${topics[0]}: `,
