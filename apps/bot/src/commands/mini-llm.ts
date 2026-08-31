@@ -9,8 +9,8 @@ import {
   retryFailedJobs,
 } from '../llm/document-queue.js'
 import { requestTraining, trainingQueueStatus } from '../llm/training-queue.js'
-import { installSeedCorpus } from '../llm/seed-corpus.js'
-import { countVectors } from '../llm/incremental-corpus.js'
+import { installSeedCorpus, getSeedSourceDir } from '../llm/seed-corpus.js'
+import { countVectors, ingestAllCorpusFiles } from '../llm/incremental-corpus.js'
 import { llmFreeChat } from '../services/llm-free-chat.js'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -26,12 +26,9 @@ function help(prefix: string) {
   return [
     '╭━━〔 🧠 *MINI-LLM* 〕━━╮',
     `│ ${prefix}llm status | progress | queue | docs`,
-    `│ ${prefix}llm free on|off | global on|off`,
-    `│ ${prefix}llm free mention|react|slang on|off`,
+    `│ ${prefix}llm memory | ingest  — carga textos a memoria`,
+    `│ ${prefix}llm free on|off | global | antispam | slang`,
     `│ ${prefix}llm free cooldown on|off | set <ms>`,
-    `│ ${prefix}llm free antispam on|off`,
-    `│ ${prefix}llm free spam <n> [ventana_s]`,
-    `│ ${prefix}llm free group add|remove|list|clear`,
     `│ ${prefix}llm add | process | seed | train | stop`,
     `│ ${prefix}llm ask <q> | search <q>`,
     '╰━━━━━━━━━━━━━━━━━━╯',
@@ -43,7 +40,7 @@ export const miniLlmCommands: BotCommand[] = [{
   aliases: ['minillm', 'localai', 'corpus', 'llmcorpus'],
   category: 'tools',
   description: 'Mini-LLM local: cola, train, modo libre y memoria.',
-  usage: 'llm <status|progress|free|add|process|seed|train|ask|…>',
+  usage: 'llm <status|progress|memory|free|add|process|seed|train|ask|…>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
@@ -93,6 +90,30 @@ export const miniLlmCommands: BotCommand[] = [{
       return
     }
 
+    // Carga seeds + todos los .txt del corpus a memoria vectorial
+    if (sub === 'memory' || sub === 'memoria' || sub === 'ingest' || sub === 'load') {
+      await ctx.reply('🧠 Cargando documentos a memoria (seed + corpus)…')
+      const seed = await installSeedCorpus(true)
+      const ingested = await ingestAllCorpusFiles()
+      requestTraining('manual', ctx.sender, true)
+      const seedLine = seed.ok
+        ? `Seed: ${seed.reason} · ${seed.installed} archivos · ${seed.chunks ?? 0} chunks`
+        : `Seed: no encontrado (${getSeedSourceDir() ?? 'sin ruta'})`
+      await ctx.reply([
+        '✅ *MEMORIA ACTUALIZADA*',
+        seedLine,
+        `Corpus: ${ingested.ok}/${ingested.files} archivos OK`,
+        `Chunks nuevos: ${ingested.chunks}`,
+        `Vectores totales: ${ingested.vectors}`,
+        ingested.failed ? `Fallidos: ${ingested.failed}` : '',
+        ingested.errors.length ? ingested.errors.join('\n') : '',
+        '',
+        'Prueba: `.llm ask hola` · `.llm search anime`',
+        'Train encolado para reforzar el modelo.',
+      ].filter(Boolean).join('\n'))
+      return
+    }
+
     if (sub === 'free' || sub === 'libre') {
       const mode = (ctx.args[1] ?? '').toLowerCase()
       const mode2 = (ctx.args[2] ?? '').toLowerCase()
@@ -130,47 +151,40 @@ export const miniLlmCommands: BotCommand[] = [{
         }
         if (mode2 === 'set' || mode2 === 'ms') {
           const ms = Number(mode3 || ctx.args[3])
-          if (!Number.isFinite(ms) || ms < 0) throw new Error(`Uso: ${ctx.prefix}llm free cooldown set <ms>  (0–120000)`)
+          if (!Number.isFinite(ms) || ms < 0) throw new Error(`Uso: ${ctx.prefix}llm free cooldown set <ms>`)
           const value = llmFreeChat.setCooldownMs(ms)
           llmFreeChat.setCooldownEnabled(true)
-          await ctx.reply(`🧠 Cooldown = *${value} ms* (activado)\n${llmFreeChat.statusLine()}`)
-          return
-        }
-        if (mode2 === 'status' || mode2 === '') {
-          const s = llmFreeChat.getState()
-          await ctx.reply(`🧠 Cooldown: *${s.cooldownEnabled ? 'ON' : 'OFF'}* · ${s.cooldownMs} ms\nAnti-spam: *${s.antispamEnabled ? 'ON' : 'OFF'}* · máx ${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s`)
+          await ctx.reply(`🧠 Cooldown = *${value} ms*\n${llmFreeChat.statusLine()}`)
           return
         }
         throw new Error(`Uso: ${ctx.prefix}llm free cooldown on|off | set <ms>`)
       }
-      if (mode === 'antispam' || mode === 'anti-spam') {
-        if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free antispam on|off`)
-        llmFreeChat.setAntispamEnabled(mode2 === 'on')
-        await ctx.reply(`🧠 Anti-spam LLM: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
-        return
-      }
-      if (mode === 'spam') {
+      if (mode === 'antispam' || mode === 'anti-spam' || mode === 'spam') {
         if (mode2 === 'on' || mode2 === 'off') {
           llmFreeChat.setAntispamEnabled(mode2 === 'on')
-          await ctx.reply(`🧠 Anti-spam LLM: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+          await ctx.reply(`🧠 Anti-spam: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
           return
         }
-        const n = Number(mode2)
-        if (!Number.isFinite(n) || n < 1) throw new Error(`Uso: ${ctx.prefix}llm free spam on|off  o  spam <max> [ventana_s]`)
-        llmFreeChat.setMaxRepliesPerWindow(n)
-        llmFreeChat.setAntispamEnabled(true)
-        if (mode3) {
-          const sec = Number(mode3)
-          if (Number.isFinite(sec) && sec >= 5) llmFreeChat.setSpamWindowMs(sec * 1000)
+        if (mode === 'spam') {
+          const n = Number(mode2)
+          if (Number.isFinite(n) && n >= 1) {
+            llmFreeChat.setMaxRepliesPerWindow(n)
+            llmFreeChat.setAntispamEnabled(true)
+            if (mode3) {
+              const sec = Number(mode3)
+              if (Number.isFinite(sec) && sec >= 5) llmFreeChat.setSpamWindowMs(sec * 1000)
+            }
+            await ctx.reply(`🧠 Anti-spam actualizado\n${llmFreeChat.statusLine()}`)
+            return
+          }
         }
-        await ctx.reply(`🧠 Anti-spam actualizado (activado)\n${llmFreeChat.statusLine()}`)
-        return
+        throw new Error(`Uso: ${ctx.prefix}llm free antispam on|off`)
       }
       if (mode === 'group' || mode === 'grupo') {
         if (mode2 === 'add') {
           if (!ctx.chatId.endsWith('@g.us')) throw new Error('Usa esto dentro de un grupo.')
           llmFreeChat.addGroup(ctx.chatId)
-          await ctx.reply(`✅ Grupo en whitelist.\n${llmFreeChat.statusLine()}`)
+          await ctx.reply(`✅ Grupo en whitelist.`)
           return
         }
         if (mode2 === 'remove' || mode2 === 'del') {
@@ -180,7 +194,7 @@ export const miniLlmCommands: BotCommand[] = [{
         }
         if (mode2 === 'clear') {
           llmFreeChat.clearGroupWhitelist()
-          await ctx.reply('✅ Whitelist vacía (= todos los grupos enabled).')
+          await ctx.reply('✅ Whitelist vacía.')
           return
         }
         if (mode2 === 'list') {
@@ -191,21 +205,21 @@ export const miniLlmCommands: BotCommand[] = [{
         throw new Error(`Uso: ${ctx.prefix}llm free group add|remove|list|clear`)
       }
       if (!['on', 'off', 'status', ''].includes(mode)) {
-        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | react | slang | cooldown | antispam | spam | group`)
+        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | antispam | slang | cooldown | group`)
       }
       if (mode === 'status' || mode === '') {
-        await ctx.reply(`🧠 Libre chat: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
+        await ctx.reply(`🧠 Libre: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
         return
       }
       llmFreeChat.setChat(ctx.chatId, mode === 'on')
-      await ctx.reply(mode === 'on' ? '🔓 LLM liberado en este chat.' : '🔒 LLM bloqueado en este chat.')
+      await ctx.reply(mode === 'on' ? '🔓 LLM liberado.' : '🔒 LLM bloqueado.')
       return
     }
 
     if (sub === 'seed') {
       const force = (ctx.args[1] ?? '') === 'force'
       const result = await installSeedCorpus(force)
-      await ctx.reply(result.ok ? `✅ Seed: ${result.reason} (${result.installed})` : '❌ Seed no encontrado')
+      await ctx.reply(result.ok ? `✅ Seed: ${result.reason} (${result.installed} · chunks ${result.chunks ?? 0})` : '❌ Seed no encontrado')
       return
     }
     if (sub === 'process') {
@@ -224,8 +238,7 @@ export const miniLlmCommands: BotCommand[] = [{
     }
     if (sub === 'add') {
       const job = await enqueueDocumentFromWhatsApp(ctx.message)
-      await ctx.reply(`✅ En cola: ${job.filename} (${formatBytes(job.bytes)})`)
-      return
+      await ctx.reply(`✅ En cola: ${job.filename} (${formatBytes(job.bytes)})\nUsa *${ctx.prefix}llm memory* o *${ctx.prefix}llm process* para cargarlo a memoria.`)\n      return
     }
     if (sub === 'stop') {
       try {
