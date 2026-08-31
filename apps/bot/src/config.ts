@@ -33,8 +33,6 @@ const schema = z.object({
   WELCOME_IMAGE_URL: z.string().default(''),
   OFFICIAL_CHANNEL_URL: z.string().url().default('https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i'),
 
-  // Lempi: LEMPI_API_KEY remains supported for backwards compatibility.
-  // Prefer LEMPI_API_KEYS with comma- or newline-separated keys.
   LEMPI_API_KEY: z.string().default(''),
   LEMPI_API_KEYS: z.string().default(''),
   LEMPI_BASE_URL: z.string().url().default('https://api.lempi.lat'),
@@ -50,6 +48,12 @@ const schema = z.object({
   TELEGRAM_CHANNEL_ID: z.string().default(''),
   TELEGRAM_CHANNEL_URL: z.string().default(''),
   YTDLP_COOKIES_FILE: z.string().default(''),
+
+  // Ollama (charla rápida local)
+  OLLAMA_ENABLED: z.string().default('false'),
+  OLLAMA_BASE_URL: z.string().default('http://127.0.0.1:11434'),
+  OLLAMA_MODEL: z.string().default('qwen2.5:1.5b'),
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().min(3000).max(120_000).default(25_000),
 })
 
 const raw = schema.parse(process.env)
@@ -97,5 +101,9 @@ export const config = {
   ytdlpCookiesFile: raw.YTDLP_COOKIES_FILE
     ? resolveFromRoot(raw.YTDLP_COOKIES_FILE)
     : '',
+  ollamaEnabled: truthy(raw.OLLAMA_ENABLED),
+  ollamaBaseUrl: raw.OLLAMA_BASE_URL.replace(/\/$/, ''),
+  ollamaModel: raw.OLLAMA_MODEL.trim() || 'qwen2.5:1.5b',
+  ollamaTimeoutMs: raw.OLLAMA_TIMEOUT_MS,
   workspaceRoot,
 } as const

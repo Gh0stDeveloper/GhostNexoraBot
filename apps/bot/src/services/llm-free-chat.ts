@@ -4,7 +4,8 @@ import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
 import { getContextInfo } from '../utils/message.js'
 import { conversationMemory } from './conversation-memory.js'
-import { contextualAnswer } from './llm-contextual-answer.js'
+import { executeAgentActions, runLlmAgent, type AgentResult } from './llm-agent.js'
+import { ollama } from './ollama.js'
 
 type State = {
   chats: Record<string, boolean>
@@ -137,35 +138,16 @@ function pickOne(list: string[]) {
 function slangReply(text: string): string | null {
   const t = text.toLocaleLowerCase('es-MX').normalize('NFKC')
   const heavy =
-    /\b(pendejo|pendeja|idiota|est[uú]pid[oa]|imb[eé]cil|culero|culera|cabr[oó]n|cabrona|puto|puta|pinche|verga|alv|nmms|nms|ctm|ctmr|chinga|chingado|mierda|basura|in[uú]til|joto|maric[oó]n|mam[oó]n|tarado|hocico)\b/i.test(
+    /\b(pendejo|pendeja|idiota|est[uú]pid[oa]|imb[eé]cil|culero|culera|cabr[oó]n|cabrona|puto|puta|pinche|verga|alv|nmms|nms|ctm|ctmr|chinga|chingado|mierda|basura|in[uú]til)\b/i.test(
       t,
-    ) ||
-    /vete a la verga|a la verga|a la chingada|chinga tu madre|no mames|vales verga|me caes mal|te odio|callate|c[aá]llate/i.test(
-      t,
-    )
+    ) || /vete a la verga|a la verga|no mames|vales verga|callate|c[aá]llate/i.test(t)
   if (!heavy) return null
   return pickOne([
     'Jajaja ok pendejo, ya desfogaste. ¿Qué quieres en serio?',
     'Orale cabrón, con ese tono también se habla. Tira la duda.',
     'Pinche energía la tuya. Igual te escucho, no mames.',
     'Te la paso wey. Ahora sí: ¿qué ocupas?',
-    'A la verga, qué agresivo. Dime el punto y ya.',
-    'Nmms, relájate. Aquí sigo si quieres algo útil.',
-    'Puedes hablarme feo, no me apago. ¿Qué pedo entonces?',
-    'Jaja qué pendejada. Cuando termines, pregunta en serio.',
   ])
-}
-
-function pickReaction(userText: string, answer: string): string | null {
-  const t = `${userText} ${answer}`.toLowerCase()
-  if (/hola|buenas|hey|holi/.test(t)) return '👋'
-  if (/gracias|thank/.test(t)) return '🙏'
-  if (/jaja|lol|xd|pendejo|verga|alv|nmms/.test(t)) return '😂'
-  if (/triste|ánimo|animo|mal día/.test(t)) return '💪'
-  if (/hora|fecha|día|dia/.test(t)) return '🕒'
-  if (/fire|genial|excelente|órale|orale/.test(t)) return '🔥'
-  if (/ok|vale|listo|perfecto/.test(t)) return '👍'
-  return '✨'
 }
 
 export const llmFreeChat = {
@@ -273,7 +255,6 @@ export const llmFreeChat = {
     commitRateLimit(chatId, load())
   },
 
-  /** Guarda mensajes del grupo/chat aunque el bot no responda (contexto). */
   rememberIncoming(chatId: string, text: string, pushName?: string) {
     if (!this.isEnabled(chatId)) return
     if (!this.isGroupAllowed(chatId)) return
@@ -302,39 +283,32 @@ export const llmFreeChat = {
     return true
   },
 
-  /** Respuesta con contexto del chat. */
-  respond(text: string, chatId: string, pushName?: string) {
-    try {
-      conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
-      const state = load()
-      if (state.slangEnabled) {
-        const slang = slangReply(text)
-        if (slang) {
-          conversationMemory.pushBot(chatId, slang)
-          return slang
-        }
+  /** Agente async: Ollama + acciones (sticker/react/kick). */
+  async respondAgent(opts: {
+    socket: WASocket
+    message: WAMessage
+    chatId: string
+    text: string
+    pushName?: string
+  }): Promise<AgentResult> {
+    const state = load()
+    if (state.slangEnabled) {
+      const slang = slangReply(opts.text)
+      if (slang) {
+        conversationMemory.pushUser(opts.chatId, opts.text, opts.pushName || 'Usuario')
+        conversationMemory.pushBot(opts.chatId, slang)
+        return { reply: slang, actions: state.reactions ? [{ type: 'react', emoji: '😂' }] : [] }
       }
-      const answer = contextualAnswer(chatId, text)
-      if (!answer) return null
-      conversationMemory.pushBot(chatId, answer)
-      return answer.slice(0, 900)
-    } catch {
-      return null
     }
+    return runLlmAgent(opts)
   },
 
-  async maybeReact(socket: WASocket, message: WAMessage, userText: string, answer: string) {
+  async applyActions(socket: WASocket, message: WAMessage, chatId: string, result: AgentResult) {
     const state = load()
-    if (!state.reactions) return
-    const emoji = pickReaction(userText, answer)
-    if (!emoji || !message.key) return
-    try {
-      await socket.sendMessage(message.key.remoteJid!, {
-        react: { text: emoji, key: message.key },
-      })
-    } catch {
-      // ignore
-    }
+    const actions = state.reactions
+      ? result.actions
+      : result.actions.filter((a) => a.type !== 'react')
+    await executeAgentActions(socket, message, chatId, actions)
   },
 
   statusLine() {
@@ -342,6 +316,6 @@ export const llmFreeChat = {
     const chats = Object.keys(s.chats).length
     const cd = s.cooldownEnabled ? `${s.cooldownMs}ms` : 'OFF'
     const spam = s.antispamEnabled ? `≤${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s` : 'OFF'
-    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam=${spam} · slang=${s.slangEnabled ? 'ON' : 'OFF'} · react=${s.reactions ? 'ON' : 'OFF'} · ctx=ON`
+    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam=${spam} · ${ollama.statusLine()}`
   },
 }

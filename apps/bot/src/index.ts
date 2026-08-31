@@ -129,7 +129,6 @@ async function routeMessage(
       text.startsWith(settings.prefix),
     )
     if (text.length >= 2 && !text.startsWith(settings.prefix) && shouldLearnText(text)) enqueueLiveMessage(text)
-    // Memoria de hilo aunque no se mencione al bot (contexto de grupo)
     if (text.length >= 2 && !text.startsWith(settings.prefix)) {
       llmFreeChat.rememberIncoming(chatId, text, pushName)
     }
@@ -150,12 +149,17 @@ async function routeMessage(
 
   if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
     try {
-      const response = llmFreeChat.respond(text, chatId, pushName)
-      if (!response) return
-      llmFreeChat.commitRespond(chatId)
       await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
-      await socket.sendMessage(chatId, { text: response }, { quoted: message })
-      await llmFreeChat.maybeReact(socket, message, text, response)
+      const result = await llmFreeChat.respondAgent({ socket, message, chatId, text, pushName })
+      if (!result.reply && !result.actions.length) {
+        await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
+        return
+      }
+      llmFreeChat.commitRespond(chatId)
+      if (result.reply) {
+        await socket.sendMessage(chatId, { text: result.reply }, { quoted: message })
+      }
+      await llmFreeChat.applyActions(socket, message, chatId, result)
       await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     } catch (error) {
       logger.warn({ error, chatId }, 'llm free-chat response failed')
