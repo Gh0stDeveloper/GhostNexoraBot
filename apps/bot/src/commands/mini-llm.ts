@@ -12,6 +12,7 @@ import { requestTraining, trainingQueueStatus } from '../llm/training-queue.js'
 import { installSeedCorpus, getSeedSourceDir } from '../llm/seed-corpus.js'
 import { countVectors, ingestAllCorpusFiles } from '../llm/incremental-corpus.js'
 import { llmFreeChat } from '../services/llm-free-chat.js'
+import { ollama } from '../services/ollama.js'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -24,12 +25,11 @@ function formatBytes(value: number) {
 
 function help(prefix: string) {
   return [
-    '╭━━〔 🧠 *MINI-LLM* 〕━━╮',
-    `│ ${prefix}llm status | progress | queue | docs`,
-    `│ ${prefix}llm memory | ingest  — carga textos a memoria`,
-    `│ ${prefix}llm free on|off | global | antispam | slang`,
-    `│ ${prefix}llm free cooldown on|off | set <ms>`,
-    `│ ${prefix}llm add | process | seed | train | stop`,
+    '╭━━〔 🧠 *MINI-LLM / OLLAMA* 〕━━╮',
+    `│ ${prefix}llm status | progress | memory`,
+    `│ ${prefix}llm ollama status|on|off|model <id>`,
+    `│ ${prefix}llm free on|off | global | mention`,
+    `│ ${prefix}llm add | process | seed | train`,
     `│ ${prefix}llm ask <q> | search <q>`,
     '╰━━━━━━━━━━━━━━━━━━╯',
   ].join('\n')
@@ -39,13 +39,13 @@ export const miniLlmCommands: BotCommand[] = [{
   name: 'llm',
   aliases: ['minillm', 'localai', 'corpus', 'llmcorpus'],
   category: 'tools',
-  description: 'Mini-LLM local: cola, train, modo libre y memoria.',
-  usage: 'llm <status|progress|memory|free|add|process|seed|train|ask|…>',
+  description: 'Mini-LLM + Ollama: memoria, modo libre y agente.',
+  usage: 'llm <status|memory|ollama|free|add|ask|…>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
     if (!ctx.isOwner && !ctx.isBotStaff) {
-      throw new Error('Los comandos .llm son solo para Owner/Staff. Con modo libre activo, escribe sin prefijo (en grupos: mención).')
+      throw new Error('Los comandos .llm son solo para Owner/Staff.')
     }
 
     if (sub === 'status' || sub === 'estado') {
@@ -53,14 +53,52 @@ export const miniLlmCommands: BotCommand[] = [{
       const q = getQueueStats()
       let vectors = s.vectorRecords
       try { vectors = countVectors() } catch {}
+      const ping = await ollama.ping()
       await ctx.reply([
         '╭━━〔 🧠 *STATUS* 〕━━╮',
-        `┃ Modelo v${s.modelVersion} · vocab ${s.vocabSize}`,
+        `┃ Mini-LLM v${s.modelVersion} · vocab ${s.vocabSize}`,
         `┃ Vectores ${vectors} · steps ${s.trainSteps}`,
-        `┃ Loss ${s.lastLoss?.toFixed(4) ?? 'N/D'}`,
+        `┃ ${ollama.statusLine()}`,
+        ping.ok
+          ? `┃ Ollama OK · modelos: ${(ping.models ?? []).slice(0, 4).join(', ') || '—'}${ping.hasModel ? ' · modelo listo' : ' · ¡pull del modelo!'}`
+          : `┃ Ollama: no responde (${'error' in ping ? ping.error : 'off'})`,
         `┃ Libre: ${llmFreeChat.statusLine()}`,
-        `┃ Cola Q:${q.queued} P:${q.processing} OK:${q.completed}`,
+        `┃ Cola Q:${q.queued} OK:${q.completed}`,
         '╰━━━━━━━━━━━━━━━━━━╯',
+      ].join('\n'))
+      return
+    }
+
+    if (sub === 'ollama') {
+      const mode = (ctx.args[1] ?? 'status').toLowerCase()
+      if (mode === 'on' || mode === 'off') {
+        ollama.setEnabled(mode === 'on')
+        await ctx.reply(`🧠 Ollama: *${mode.toUpperCase()}*\n${ollama.statusLine()}`)
+        return
+      }
+      if (mode === 'model') {
+        const name = ctx.args.slice(2).join(' ').trim()
+        if (!name) throw new Error(`Uso: ${ctx.prefix}llm ollama model qwen2.5:1.5b`)
+        ollama.setModel(name)
+        await ctx.reply(`🧠 Modelo Ollama: *${name}*\nHaz \`ollama pull ${name}\` en el servidor si aún no está.`)
+        return
+      }
+      if (mode === 'url') {
+        const url = ctx.args[2]?.trim()
+        if (!url) throw new Error(`Uso: ${ctx.prefix}llm ollama url http://127.0.0.1:11434`)
+        ollama.setBaseUrl(url)
+        await ctx.reply(`🧠 Ollama URL: ${url}`)
+        return
+      }
+      const ping = await ollama.ping()
+      await ctx.reply([
+        '🧠 *OLLAMA*',
+        ollama.statusLine(),
+        ping.ok
+          ? `Estado: OK\nModelos: ${(ping.models ?? []).join(', ') || 'ninguno'}\nModelo activo listo: ${ping.hasModel ? 'sí' : 'no (ollama pull …)'}`
+          : `Estado: ERROR — ${'error' in ping ? ping.error : 'desconocido'}\nInstala: curl -fsSL https://ollama.com/install.sh | sh`,
+        '',
+        `Docs: docs/OLLAMA.md`,
       ].join('\n'))
       return
     }
@@ -102,14 +140,9 @@ export const miniLlmCommands: BotCommand[] = [{
         '✅ *MEMORIA ACTUALIZADA*',
         seedLine,
         `Corpus: ${ingested.ok}/${ingested.files} archivos OK`,
-        `Chunks nuevos: ${ingested.chunks}`,
-        `Vectores totales: ${ingested.vectors}`,
-        ingested.failed ? `Fallidos: ${ingested.failed}` : '',
-        ingested.errors.length ? ingested.errors.join('\n') : '',
-        '',
-        'Prueba: `.llm ask hola` · `.llm search anime`',
-        'Train encolado para reforzar el modelo.',
-      ].filter(Boolean).join('\n'))
+        `Chunks: ${ingested.chunks} · Vectores: ${ingested.vectors}`,
+        'Ollama usará esta memoria como contexto (RAG).',
+      ].join('\n'))
       return
     }
 
@@ -139,21 +172,21 @@ export const miniLlmCommands: BotCommand[] = [{
       if (mode === 'slang' || mode === 'groserias' || mode === 'groserías') {
         if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free slang on|off`)
         llmFreeChat.setSlangEnabled(mode2 === 'on')
-        await ctx.reply(`🧠 Respuestas con groserías: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+        await ctx.reply(`🧠 Slang: *${mode2.toUpperCase()}*`)
         return
       }
       if (mode === 'cooldown' || mode === 'cd') {
         if (mode2 === 'on' || mode2 === 'off') {
           llmFreeChat.setCooldownEnabled(mode2 === 'on')
-          await ctx.reply(`🧠 Cooldown: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+          await ctx.reply(`🧠 Cooldown: *${mode2.toUpperCase()}*`)
           return
         }
         if (mode2 === 'set' || mode2 === 'ms') {
           const ms = Number(mode3 || ctx.args[3])
           if (!Number.isFinite(ms) || ms < 0) throw new Error(`Uso: ${ctx.prefix}llm free cooldown set <ms>`)
-          const value = llmFreeChat.setCooldownMs(ms)
+          llmFreeChat.setCooldownMs(ms)
           llmFreeChat.setCooldownEnabled(true)
-          await ctx.reply(`🧠 Cooldown = *${value} ms*\n${llmFreeChat.statusLine()}`)
+          await ctx.reply(`🧠 Cooldown = *${ms} ms*`)
           return
         }
         throw new Error(`Uso: ${ctx.prefix}llm free cooldown on|off | set <ms>`)
@@ -161,21 +194,8 @@ export const miniLlmCommands: BotCommand[] = [{
       if (mode === 'antispam' || mode === 'anti-spam' || mode === 'spam') {
         if (mode2 === 'on' || mode2 === 'off') {
           llmFreeChat.setAntispamEnabled(mode2 === 'on')
-          await ctx.reply(`🧠 Anti-spam: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+          await ctx.reply(`🧠 Anti-spam: *${mode2.toUpperCase()}*`)
           return
-        }
-        if (mode === 'spam') {
-          const n = Number(mode2)
-          if (Number.isFinite(n) && n >= 1) {
-            llmFreeChat.setMaxRepliesPerWindow(n)
-            llmFreeChat.setAntispamEnabled(true)
-            if (mode3) {
-              const sec = Number(mode3)
-              if (Number.isFinite(sec) && sec >= 5) llmFreeChat.setSpamWindowMs(sec * 1000)
-            }
-            await ctx.reply(`🧠 Anti-spam actualizado\n${llmFreeChat.statusLine()}`)
-            return
-          }
         }
         throw new Error(`Uso: ${ctx.prefix}llm free antispam on|off`)
       }
@@ -204,21 +224,21 @@ export const miniLlmCommands: BotCommand[] = [{
         throw new Error(`Uso: ${ctx.prefix}llm free group add|remove|list|clear`)
       }
       if (!['on', 'off', 'status', ''].includes(mode)) {
-        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | antispam | slang | cooldown | group`)
+        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | antispam`)
       }
       if (mode === 'status' || mode === '') {
         await ctx.reply(`🧠 Libre: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
         return
       }
       llmFreeChat.setChat(ctx.chatId, mode === 'on')
-      await ctx.reply(mode === 'on' ? '🔓 LLM liberado.' : '🔒 LLM bloqueado.')
+      await ctx.reply(mode === 'on' ? '🔓 LLM liberado (Ollama + acciones).' : '🔒 LLM bloqueado.')
       return
     }
 
     if (sub === 'seed') {
       const force = (ctx.args[1] ?? '') === 'force'
       const result = await installSeedCorpus(force)
-      await ctx.reply(result.ok ? `✅ Seed: ${result.reason} (${result.installed} · chunks ${result.chunks ?? 0})` : '❌ Seed no encontrado')
+      await ctx.reply(result.ok ? `✅ Seed: ${result.reason} (${result.installed})` : '❌ Seed no encontrado')
       return
     }
     if (sub === 'process') {
@@ -237,10 +257,7 @@ export const miniLlmCommands: BotCommand[] = [{
     }
     if (sub === 'add') {
       const job = await enqueueDocumentFromWhatsApp(ctx.message)
-      await ctx.reply(
-        `✅ En cola: ${job.filename} (${formatBytes(job.bytes)})\nUsa *${ctx.prefix}llm memory* o *${ctx.prefix}llm process* para cargarlo a memoria.`,
-      )
-      return
+      await ctx.reply(`✅ En cola: ${job.filename} (${formatBytes(job.bytes)})\nLuego: *${ctx.prefix}llm memory*`)\n      return
     }
     if (sub === 'stop') {
       try {
@@ -261,6 +278,23 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'ask') {
       const query = ctx.args.slice(1).join(' ').trim()
       if (query.length < 2) throw new Error('llm ask <pregunta>')
+      // Prefer Ollama if available
+      try {
+        if (ollama.getState().enabled) {
+          const { runLlmAgent } = await import('../services/llm-agent.js')
+          const result = await runLlmAgent({
+            socket: ctx.socket,
+            message: ctx.message,
+            chatId: ctx.chatId,
+            text: query,
+            pushName: ctx.pushName,
+          })
+          if (result.reply) {
+            await ctx.reply(result.reply)
+            return
+          }
+        }
+      } catch {}
       await ctx.reply(miniLLM.answer(query))
       return
     }
