@@ -10,8 +10,6 @@ import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
 import { createSocket } from './session.js'
 
- console.log // keep types clean
-
 export type SubbotMessageHandler = (socket: WASocket, message: WAMessage, record: SubbotRecord) => Promise<void>
 
 type PairResult =
@@ -77,7 +75,6 @@ class SubbotManager {
     })
   }
 
-  /** Cierra el socket actual sin borrar credenciales (para recrear limpio en pair/qr). */
   private async detachSocket(id: number) {
     const socket = this.sockets.get(id)
     this.sockets.delete(id)
@@ -115,14 +112,12 @@ class SubbotManager {
         return { code: null, qr: null, alreadyLinked: true }
       }
 
-      // Socket a medias / sesión rota: soltar y conectar de nuevo
       if (existing && !existing.authState.creds.registered) {
         await this.detachSocket(record.id)
       }
 
       const { socket } = await this.connect({ ...record, phone, status: 'pairing' }, false)
 
-      // Esperar handshake Baileys antes de pedir código (clave para que no falle)
       await sleep(2500)
 
       if (socket.authState.creds.registered) {
@@ -130,7 +125,6 @@ class SubbotManager {
         return { code: null, qr: null, alreadyLinked: true }
       }
 
-      // Intentar código de emparejamiento primero
       try {
         const code = await withTimeout(
           socket.requestPairingCode(phone),
@@ -144,7 +138,6 @@ class SubbotManager {
         const reason = error instanceof Error ? error.message : String(error)
         logger.warn({ subbotId: record.id, errorMessage: reason }, 'subbot pairing code failed; QR fallback')
 
-        // Si el código falla, pedir QR fresco
         this.qrCache.delete(record.id)
         try {
           const qr = await this.waitForQr(socket, record.id, 55_000)
