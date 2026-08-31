@@ -46,4 +46,4 @@ fi
 log 'Ollama listo.'
 log "Modelo: ${MODEL}"
 log "API: http://${OLLAMA_HOST}"
-log 'Prueba: ollama run "'"${MODEL}"'" "hola"'
+log "Prueba: ollama run ${MODEL} \"hola\""
