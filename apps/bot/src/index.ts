@@ -33,7 +33,6 @@ let connectedAt: Date | null = null
 let activeJid: string | null = null
 let reconnectTimer: NodeJS.Timeout | null = null
 let mainSocket: WASocket | null = null
-const subbotRouters = new Map<number, CommandRouter>()
 
 function json(res: http.ServerResponse, status: number, payload: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -54,9 +53,7 @@ async function readJson(req: http.IncomingMessage) {
 
 async function executeControl(body: Record<string, unknown>) {
   const action = String(body.action ?? '')
-  if (action === 'economy-sync') {
-    return { ok: true, result: { top: economyV2.globalTop(10) } }
-  }
+  if (action === 'economy-sync') return { ok: true, result: { top: economyV2.globalTop(10) } }
   return { ok: false, error: 'unknown_action' }
 }
 
@@ -141,18 +138,13 @@ async function routeMessage(
       text.startsWith(settings.prefix),
     )
     if (text.length >= 2 && !text.startsWith(settings.prefix) && shouldLearnText(text)) enqueueLiveMessage(text)
-    // Memoria de hilo aunque no se mencione al bot (contexto de grupo)
-    if (text.length >= 2 && !text.startsWith(settings.prefix)) {
-      llmFreeChat.rememberIncoming(chatId, text, pushName)
-    }
+    if (text.length >= 2 && !text.startsWith(settings.prefix)) llmFreeChat.rememberIncoming(chatId, text, pushName)
   }
 
   if (await handleAntiViewOnce(socket, message).catch((error) => {
     logger.warn({ error, chatId }, 'anti view-once handler failed')
     return false
-  })) {
-    return
-  }
+  })) return
 
   if (await handleKickSticker(socket, message).catch(() => false)) return
   if (await moderateIncomingV2(socket, message)) return
@@ -253,15 +245,6 @@ startAutomationScheduler(() => mainSocket)
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
-
-subbotManager.setMessageHandler(async (socket, message, record) => {
-  let router = subbotRouters.get(record.id)
-  if (!router) {
-    router = new CommandRouter(commands, { instanceId: record.id, instanceOwnerJid: record.ownerJid })
-    subbotRouters.set(record.id, router)
-  }
-  await routeMessage(socket, message, router)
-})
 
 await subbotManager.startActive()
 await connect()
