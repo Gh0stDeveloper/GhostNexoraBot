@@ -90,7 +90,6 @@ export const miniLlmCommands: BotCommand[] = [{
       return
     }
 
-    // Carga seeds + todos los .txt del corpus a memoria vectorial
     if (sub === 'memory' || sub === 'memoria' || sub === 'ingest' || sub === 'load') {
       await ctx.reply('🧠 Cargando documentos a memoria (seed + corpus)…')
       const seed = await installSeedCorpus(true)
@@ -184,7 +183,7 @@ export const miniLlmCommands: BotCommand[] = [{
         if (mode2 === 'add') {
           if (!ctx.chatId.endsWith('@g.us')) throw new Error('Usa esto dentro de un grupo.')
           llmFreeChat.addGroup(ctx.chatId)
-          await ctx.reply(`✅ Grupo en whitelist.`)
+          await ctx.reply('✅ Grupo en whitelist.')
           return
         }
         if (mode2 === 'remove' || mode2 === 'del') {
@@ -238,7 +237,10 @@ export const miniLlmCommands: BotCommand[] = [{
     }
     if (sub === 'add') {
       const job = await enqueueDocumentFromWhatsApp(ctx.message)
-      await ctx.reply(`✅ En cola: ${job.filename} (${formatBytes(job.bytes)})\nUsa *${ctx.prefix}llm memory* o *${ctx.prefix}llm process* para cargarlo a memoria.`)\n      return
+      await ctx.reply(
+        `✅ En cola: ${job.filename} (${formatBytes(job.bytes)})\nUsa *${ctx.prefix}llm memory* o *${ctx.prefix}llm process* para cargarlo a memoria.`,
+      )
+      return
     }
     if (sub === 'stop') {
       try {
