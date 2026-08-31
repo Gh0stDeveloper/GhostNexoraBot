@@ -195,14 +195,39 @@ function mexicoCityNow() {
     date: fmt({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
   }
 }
+function pickOne(list: string[]) {
+  return list[Math.floor(Math.random() * list.length)] ?? list[0] ?? ''
+}
 function identityAnswer(query: string): string | null {
   const key = query.toLocaleLowerCase('es-MX').normalize('NFKC').replace(/[¿?¡!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim()
   if (!key) return null
-  const hints = ['como te llamas','cómo te llamas','quien eres','quién eres','cual es tu nombre','cuál es tu nombre','tu nombre','nombre del bot','quien te creo','quién te creó','quien es tu dueño','quién es tu dueño','presentate','preséntate','que eres','qué eres','ghost nexora','ghost developer','nexora','about','github','repositorio']
+  const hints = ['como te llamas','cómo te llamas','quien eres','quién eres','cual es tu nombre','cuál es tu nombre','tu nombre','nombre del bot','quien te creo','quién te creó','quien es tu dueño','quién es tu dueño','presentate','preséntate','que eres','qué eres','ghost nexora','ghost developer','nexora','about','github','repositorio','eres un bot','que bot eres']
   if (!hints.some((h) => key === h || key.includes(h))) return null
-  if (/github|repositorio|repo/.test(key)) return 'El proyecto lo mantiene Ghost Developer en GitHub: Gh0stDeveloper/GhostNexoraBot.'
-  if (/dueño|dueno|creo|creó|developer/.test(key)) return 'Mi dueño y desarrollador es Ghost Developer (empresa Nexora).'
-  return 'Me llamo Ghost Nexora Bot. Fui desarrollado por la empresa Nexora; mi dueño es Ghost Developer.'
+  if (/github|repositorio|repo/.test(key)) {
+    return pickOne([
+      'El código vive en GitHub: Gh0stDeveloper/GhostNexoraBot, mantenido por Ghost Developer.',
+      'Repositorio oficial: Gh0stDeveloper/GhostNexoraBot (Ghost Developer).',
+      'Si buscas el proyecto en GitHub, es Gh0stDeveloper/GhostNexoraBot.',
+    ])
+  }
+  if (/dueño|dueno|creo|creó|developer|desarrollador|creador/.test(key)) {
+    return pickOne([
+      'Mi dueño y desarrollador es Ghost Developer, de la empresa Nexora.',
+      'Me creó Ghost Developer (Nexora). Él es quien mantiene el proyecto.',
+      'Desarrollador: Ghost Developer · Empresa: Nexora.',
+      'Ghost Developer es mi creador; Nexora es la empresa detrás del bot.',
+    ])
+  }
+  return pickOne([
+    'Me llamo Ghost Nexora Bot. Me desarrolló la empresa Nexora; mi dueño es Ghost Developer.',
+    'Soy Ghost Nexora Bot — un bot de WhatsApp de Nexora, creado por Ghost Developer.',
+    'Ghost Nexora Bot, a tu servicio. Proyecto de Nexora, dueño Ghost Developer.',
+    'Puedes decirme Nexora o Ghost Nexora. Fui hecho por Ghost Developer (empresa Nexora).',
+    'Soy el bot Ghost Nexora. Datos clave: nombre Ghost Nexora Bot · empresa Nexora · dueño Ghost Developer.',
+    '¡Hola! Soy Ghost Nexora Bot. Nexora me desarrolló y Ghost Developer es el dueño del proyecto.',
+    'Identidad rápida → Nombre: Ghost Nexora Bot · Empresa: Nexora · Dueño: Ghost Developer.',
+    'En corto: me llaman Ghost Nexora Bot. Vengo de Nexora y mi dueño es Ghost Developer.',
+  ])
 }
 function timeDateAnswer(query: string): string | null {
   const key = query.toLocaleLowerCase('es-MX').normalize('NFKC').replace(/[¿?¡!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim()
@@ -210,9 +235,21 @@ function timeDateAnswer(query: string): string | null {
   const wantsDate = /(que|qué)?\s*fecha|fecha de hoy|que dia|qué día|dia es|día es/.test(key) || key === 'fecha'
   if (!wantsTime && !wantsDate) return null
   const now = mexicoCityNow()
-  if (wantsTime && wantsDate) return `En Ciudad de México son las ${now.time}. Hoy es ${now.date}.`
-  if (wantsTime) return `En Ciudad de México son las ${now.time}.`
-  return `Hoy en Ciudad de México es ${now.date}.`
+  if (wantsTime && wantsDate) return pickOne([
+    `En Ciudad de México son las ${now.time}. Hoy es ${now.date}.`,
+    `Hora CDMX: ${now.time}. Fecha: ${now.date}.`,
+    `Ahora en CDMX: ${now.time} · ${now.date}.`,
+  ])
+  if (wantsTime) return pickOne([
+    `En Ciudad de México son las ${now.time}.`,
+    `Hora CDMX: ${now.time}.`,
+    `Son las ${now.time} en Ciudad de México.`,
+  ])
+  return pickOne([
+    `Hoy en Ciudad de México es ${now.date}.`,
+    `Fecha CDMX: ${now.date}.`,
+    `Hoy es ${now.date} (hora México).`,
+  ])
 }
 function vectorSearchAnswer(query: string) { const hits = search(query, 3); return hits.length ? hits.map((h, i) => `${i + 1}. ${h.text.slice(0, 700)}`).join('\n\n') : 'No tengo conocimiento local suficiente todavía.' }
 function bestExtractiveAnswer(query: string, hits: Result[]) {
@@ -272,22 +309,22 @@ function isGibberish(text: string) {
 }
 function fallbackGreeting(query: string) {
   const key = normalizeQueryKey(query)
-  const map: Record<string, string> = {
-    hola: '¡Hola! ¿Qué tal?',
-    holis: '¡Holis! ¿Cómo andas?',
-    buenas: '¡Buenas! ¿Qué hay?',
-    'buenos dias': '¡Buenos días! ¿Cómo estás?',
-    'buenas tardes': '¡Buenas tardes!',
-    'buenas noches': '¡Buenas noches!',
-    hey: 'Hey, ¿qué tal?',
-    'que haces': 'Aquí, aprendiendo de lo que me van enseñando. ¿Y tú?',
-    'qué haces': 'Aquí, aprendiendo de lo que me van enseñando. ¿Y tú?',
-    'como estas': 'Todo bien por aquí. ¿Y tú?',
-    'cómo estás': 'Todo bien por aquí. ¿Y tú?',
+  const map: Record<string, string[]> = {
+    hola: ['¡Hola! ¿Qué tal?', 'Hola 👋 ¿Cómo andas?', '¡Qué onda! ¿Todo bien?'],
+    holis: ['¡Holis! ¿Cómo andas?', 'Holis ✨'],
+    buenas: ['¡Buenas! ¿Qué hay?', 'Buenas, dime.'],
+    'buenos dias': ['¡Buenos días! ¿Cómo estás?', 'Buenos días ☀️'],
+    'buenas tardes': ['¡Buenas tardes!', 'Buenas tardes, ¿en qué te ayudo?'],
+    'buenas noches': ['¡Buenas noches!', 'Buenas noches 🌙'],
+    hey: ['Hey, ¿qué tal?', 'Hey 👋'],
+    'que haces': ['Aquí, aprendiendo de lo que me van enseñando. ¿Y tú?', 'Respondiendo y guardando lo útil del chat.'],
+    'qué haces': ['Aquí, aprendiendo de lo que me van enseñando. ¿Y tú?', 'Charlando y aprendiendo del grupo.'],
+    'como estas': ['Todo bien por aquí. ¿Y tú?', 'Bien, gracias. ¿Tú qué tal?'],
+    'cómo estás': ['Todo bien por aquí. ¿Y tú?', 'De buena, ¿tú?'],
   }
-  if (map[key]) return map[key]
-  for (const [prompt, reply] of Object.entries(map)) {
-    if (key.includes(prompt) || prompt.includes(key)) return reply
+  if (map[key]) return pickOne(map[key]!)
+  for (const [prompt, replies] of Object.entries(map)) {
+    if (key.includes(prompt) || prompt.includes(key)) return pickOne(replies)
   }
   return null
 }
