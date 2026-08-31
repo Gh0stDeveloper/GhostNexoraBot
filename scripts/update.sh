@@ -8,6 +8,7 @@ STATE_DIR="${STATE_DIR:-/var/lib/ghost-nexora-bot}"
 START_TS=$(date +%s)
 LLM_SERVICE="ghost-nexora-llm.service"
 LLM_INSTALLER="${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
+BROWSER_PROXY_INSTALLER="${INSTALL_DIR}/scripts/install-browser-proxy.sh"
 # Default LLM state path matches bot config DATA_DIR under STATE_DIR when using install.sh layout.
 LLM_STATE_CANDIDATES=(
   "${STATE_DIR}/llm/state.json"
@@ -39,7 +40,6 @@ find_llm_state() {
       return 0
     fi
   done
-  # Fallback: search under STATE_DIR / INSTALL_DIR (depth limited).
   local found
   found="$(find "${STATE_DIR}" "${INSTALL_DIR}" -maxdepth 5 -type f -name state.json -path '*/llm/state.json' 2>/dev/null | head -n 1 || true)"
   if [[ -n "${found}" ]]; then
@@ -49,15 +49,11 @@ find_llm_state() {
   return 1
 }
 
-# Returns 0 if mini-LLM reports an active training run that must not be killed.
 llm_training_active() {
   local state_file learning progress message
   state_file="$(find_llm_state 2>/dev/null || true)"
-  if [[ -z "${state_file}" || ! -f "${state_file}" ]]; then
-    return 1
-  fi
+  if [[ -z "${state_file}" || ! -f "${state_file}" ]]; then return 1; fi
 
-  # Prefer node for reliable JSON; fall back to simple grep.
   if command -v node >/dev/null 2>&1; then
     node -e '
       const fs = require("fs");
@@ -73,9 +69,7 @@ llm_training_active() {
   fi
 
   learning="$(grep -oE '"learning"[[:space:]]*:[[:space:]]*(true|false)' "${state_file}" 2>/dev/null | tail -n1 || true)"
-  if [[ "${learning}" == *true* ]]; then
-    return 0
-  fi
+  [[ "${learning}" == *true* ]] && return 0
   return 1
 }
 
@@ -101,34 +95,42 @@ else
   info 'No se detectó entrenamiento LLM en curso.'
 fi
 
-section '1/6 · Código'
+section '1/7 · Código'
 git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
 NEW_SHA="$(git rev-parse HEAD)"
 ok "Código actualizado: ${NEW_SHA:0:12}"
 
-section '2/6 · Herramientas'
+section '2/7 · Herramientas'
 if command -v yt-dlp >/dev/null 2>&1; then
   yt-dlp -U >/tmp/ghost-nexora-ytdlp-update.log 2>&1 || true
   ok "yt-dlp: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 fi
 
-section '3/6 · Dependencias Node'
+section '3/7 · Dependencias Node'
 npm install >/tmp/ghost-nexora-npm-install.log 2>&1
 ok 'Dependencias sincronizadas.'
 
-section '4/6 · Build'
+section '4/7 · Build'
 npm run build >/tmp/ghost-nexora-build.log 2>&1
 ok 'Build completado.'
 
-section '5/6 · Servicios y permisos'
+section '5/7 · Proxy de navegador y Nginx'
+if [[ -f "${BROWSER_PROXY_INSTALLER}" ]]; then
+  chmod +x "${BROWSER_PROXY_INSTALLER}"
+  INSTALL_DIR="${INSTALL_DIR}" bash "${BROWSER_PROXY_INSTALLER}"
+  ok 'Proxy de navegador/Nginx verificado y configurado.'
+else
+  warn "No existe ${BROWSER_PROXY_INSTALLER}; se omite configuración del proxy."
+fi
+
+section '6/7 · Servicios y permisos'
 if [[ -d "${STATE_DIR}" ]]; then
   chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR}" || warn 'No se pudo ajustar STATE_DIR.'
 fi
 chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
 
-# Install / refresh unit file without forcing a restart when training is active.
 if [[ -f "${LLM_INSTALLER}" ]]; then
   chmod +x "${LLM_INSTALLER}"
   if [[ "${LLM_BUSY}" -eq 1 ]]; then
@@ -159,18 +161,14 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable "${LLM_SERVICE}"
-  if [[ "${LLM_BUSY}" -eq 0 ]]; then
-    systemctl restart "${LLM_SERVICE}" || true
-  fi
+  if [[ "${LLM_BUSY}" -eq 0 ]]; then systemctl restart "${LLM_SERVICE}" || true; fi
   ok 'Unidad del worker LLM creada.'
 else
   ok 'Unidad LLM ya existía.'
 fi
 
-section '6/6 · Reinicio bot/web (LLM protegido si entrena)'
+section '7/7 · Reinicio bot/web (LLM protegido si entrena)'
 systemctl daemon-reload
-
-# Always restart bot + web. Never kill an active training process.
 systemctl restart ghost-nexora-bot.service ghost-nexora-web.service
 
 if [[ "${LLM_BUSY}" -eq 1 ]]; then
@@ -178,8 +176,7 @@ if [[ "${LLM_BUSY}" -eq 1 ]]; then
   if systemctl is-active --quiet "${LLM_SERVICE}"; then
     ok "${LLM_SERVICE} sigue active sin reinicio."
   else
-    warn "${LLM_SERVICE} no está active. El entrenamiento pudo haberse caído antes de esta actualización."
-    warn 'No se fuerza restart automático para no corromper un posible checkpoint a medias; revisa journalctl -u ghost-nexora-llm.'
+    warn "${LLM_SERVICE} no está active. Revisa journalctl -u ghost-nexora-llm."
   fi
 else
   systemctl restart "${LLM_SERVICE}"
@@ -218,7 +215,7 @@ if [[ "${WEB_STATE}" != 'active' ]]; then warn 'ghost-nexora-web no quedó activ
 
 ELAPSED=$(( $(date +%s) - START_TS ))
 if [[ "${LLM_BUSY}" -eq 1 ]]; then
-  ok "Actualización finalizada en ${ELAPSED}s. Bot=${BOT_STATE}, Web=${WEB_STATE}, LLM=${LLM_STATE} (entrenamiento preservado, sin reinicio)."
+  ok "Actualización finalizada en ${ELAPSED}s. Bot=${BOT_STATE}, Web=${WEB_STATE}, LLM=${LLM_STATE} (entrenamiento preservado)."
 else
   ok "Actualización finalizada en ${ELAPSED}s. Bot=${BOT_STATE}, Web=${WEB_STATE}, LLM=${LLM_STATE}."
 fi
