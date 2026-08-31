@@ -21,7 +21,7 @@ import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { miniLLM } from './services/mini-llm.js'
 import { autoChat } from './services/auto-chat.js'
-import { llmFreeChat } from './services/llm-free-chat.js'
+import { llmFreeChat, shouldLearnText } from './services/llm-free-chat.js'
 import { enqueueLiveMessage } from './llm/live-queue.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
@@ -120,7 +120,7 @@ async function routeMessage(
       chatId.endsWith('@g.us'),
       text.startsWith(settings.prefix),
     )
-    if (text.length >= 2 && !text.startsWith(settings.prefix)) enqueueLiveMessage(text)
+    if (text.length >= 2 && !text.startsWith(settings.prefix) && shouldLearnText(text)) enqueueLiveMessage(text)
   }
 
   if (await handleAntiViewOnce(socket, message).catch((error) => {
@@ -136,11 +136,14 @@ async function routeMessage(
   const handled = await router.handle(socket, message)
   if (handled) return
 
-  if (chatId && llmFreeChat.shouldHandle(chatId, text, settings.prefix)) {
+  if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
     try {
       await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
       const response = llmFreeChat.respond(text)
-      if (response) await socket.sendMessage(chatId, { text: response }, { quoted: message })
+      if (response) {
+        await socket.sendMessage(chatId, { text: response }, { quoted: message })
+        await llmFreeChat.maybeReact(socket, message, text, response)
+      }
     } catch (error) {
       logger.warn({ error, chatId }, 'llm free-chat response failed')
     }
