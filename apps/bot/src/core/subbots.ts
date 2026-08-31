@@ -1,21 +1,35 @@
+import { fork, type ChildProcess } from 'node:child_process'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
-import { Boom } from '@hapi/boom'
-import { DisconnectReason, type WAMessage, type WASocket } from 'baileys'
-import { config } from '../config.js'
+import crypto from 'node:crypto'
 import { economy, type SubbotRecord } from '../services/economy.js'
-import { handleParticipantUpdateV2 } from '../services/moderation-v2.js'
-import { recordSubbotMessage } from '../services/subbot-metrics.js'
+import { subbotCustomization } from '../services/subbot-customization.js'
+import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
-import { withTimeout } from '../utils/timeout.js'
-import { createSocket } from './session.js'
 
-export type SubbotMessageHandler = (socket: WASocket, message: WAMessage, record: SubbotRecord) => Promise<void>
-
-type PairResult =
+export type PairResult =
   | { alreadyLinked: true; code: null; qr: null }
   | { alreadyLinked: false; code: string; qr: null }
   | { alreadyLinked: false; code: null; qr: string; fallbackReason?: string }
+
+type WorkerMessage = {
+  type?: string
+  subbotId?: number
+  status?: string
+  code?: string | null
+  qr?: string | null
+  ok?: boolean
+  error?: string
+  jid?: string | null
+  phone?: string | null
+  name?: string
+}
+
+type Waiter = {
+  resolve: (value: { ok: boolean; code?: string | null; qr?: string | null; error?: string }) => void
+  reject: (error: Error) => void
+  timer: NodeJS.Timeout
+}
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -29,136 +43,170 @@ function normalizePhone(raw: string) {
   return phone
 }
 
+function workerPath() {
+  return path.resolve(path.dirname(new URL(import.meta.url).pathname), '../subbot-worker.js')
+}
+
 class SubbotManager {
-  private readonly sockets = new Map<number, WASocket>()
-  private readonly qrCache = new Map<number, { value: string; createdAt: number }>()
-  private readonly resetting = new Set<number>()
+  private readonly workers = new Map<number, ChildProcess>()
   private readonly pairingLocks = new Set<number>()
-  /** Intentos de reconexión durante pairing / restart post-código */
-  private readonly reconnectAttempts = new Map<number, number>()
-  private handler: SubbotMessageHandler | null = null
+  private readonly waiters = new Map<string, Waiter>()
 
-  setMessageHandler(handler: SubbotMessageHandler) {
-    this.handler = handler
+  private key(id: number, action: 'pair' | 'qr') {
+    return `${id}:${action}`
   }
 
-  private sessionDir(id: number) {
-    return path.join(config.dataDir, 'subbots', String(id), 'session')
-  }
-
-  private freshQr(id: number) {
-    const cached = this.qrCache.get(id)
-    return cached && Date.now() - cached.createdAt <= 50_000 ? cached.value : null
-  }
-
-  private async waitForQr(socket: WASocket, subbotId: number, timeoutMs = 50_000) {
-    const cached = this.freshQr(subbotId)
-    if (cached) return cached
-    return new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socket.ev.off('connection.update', listener as never)
-        reject(new Error('WhatsApp no generó un QR a tiempo. Prueba .subbot reset y vuelve a intentar.'))
-      }, timeoutMs)
-      const listener = ({ qr, connection }: { qr?: string; connection?: string }) => {
-        if (qr) {
-          clearTimeout(timeout)
-          socket.ev.off('connection.update', listener as never)
-          this.qrCache.set(subbotId, { value: qr, createdAt: Date.now() })
-          resolve(qr)
-          return
-        }
-        if (connection === 'open' || socket.authState.creds.registered) {
-          clearTimeout(timeout)
-          socket.ev.off('connection.update', listener as never)
-          reject(new Error('La sesión ya fue vinculada.'))
-        }
-      }
-      socket.ev.on('connection.update', listener as never)
-    })
-  }
-
-  private async detachSocket(id: number) {
-    const socket = this.sockets.get(id)
-    this.sockets.delete(id)
-    this.qrCache.delete(id)
-    if (!socket) return
-    try {
-      socket.end(new Error('subbot detach for pairing'))
-    } catch {
-      /* noop */
+  private rejectWaiters(id: number, error: Error) {
+    for (const action of ['pair', 'qr'] as const) {
+      const key = this.key(id, action)
+      const waiter = this.waiters.get(key)
+      if (!waiter) continue
+      clearTimeout(waiter.timer)
+      this.waiters.delete(key)
+      waiter.reject(error)
     }
-    await sleep(800)
+  }
+
+  private handleWorkerMessage(message: WorkerMessage) {
+    const id = Number(message.subbotId ?? 0)
+    if (!id) return
+
+    if (message.type === 'status') {
+      const status = String(message.status ?? 'offline')
+      const patch: Partial<SubbotRecord> = { status, lastSeenAt: Date.now() }
+      if (typeof message.phone === 'string' && message.phone) patch.phone = message.phone
+      economy.updateSubbot(id, patch)
+      return
+    }
+
+    if (message.type === 'pair-result' || message.type === 'qr-result') {
+      const action = message.type === 'pair-result' ? 'pair' : 'qr'
+      const key = this.key(id, action)
+      const waiter = this.waiters.get(key)
+      if (!waiter) return
+      clearTimeout(waiter.timer)
+      this.waiters.delete(key)
+      waiter.resolve({
+        ok: Boolean(message.ok),
+        code: message.code ?? null,
+        qr: message.qr ?? null,
+        error: message.error,
+      })
+      return
+    }
+
+    if (message.type === 'customization' && typeof message.name === 'string') {
+      try {
+        const current = subbotCustomization.get(id)
+        subbotCustomization.setNames(id, current.shortName, message.name)
+      } catch (error) {
+        logger.warn({ error, subbotId: id }, 'failed to sync subbot customization from worker')
+      }
+    }
+  }
+
+  private spawn(record: SubbotRecord) {
+    const existing = this.workers.get(record.id)
+    if (existing && existing.connected) return existing
+
+    const customization = subbotCustomization.get(record.id)
+    const worker = fork(workerPath(), [], {
+      cwd: config.workspaceRoot,
+      env: {
+        ...process.env,
+        NEXORA_INSTANCE_ROLE: 'subbot',
+        NEXORA_SUBBOT_ID: String(record.id),
+        NEXORA_SUBBOT_OWNER_JID: record.ownerJid,
+        NEXORA_SUBBOT_PHONE: record.phone ?? '',
+        NEXORA_SUBBOT_EXPIRES_AT: String(record.expiresAt),
+        NEXORA_SUBBOT_NAME: customization.longName,
+        DATA_DIR: path.join(config.dataDir, 'subbots', String(record.id)),
+        SESSION_DIR: path.join(config.dataDir, 'subbots', String(record.id), 'session'),
+        BOT_NAME: customization.longName,
+        PREFIX: '.',
+        OWNER_NUMBERS: '',
+        AUTO_REACT: 'true',
+        ADULT_PRIVATE_ENABLED: 'false',
+        WELCOME_IMAGE_URL: '',
+        TELEGRAM_BOT_TOKEN: '',
+        TELEGRAM_CHANNEL_ID: '',
+        TELEGRAM_CHANNEL_URL: '',
+        OLLAMA_ENABLED: 'false',
+        OLLAMA_MODEL: 'qwen2.5:1.5b',
+        ADMIN_WEB_TOKEN: crypto.randomBytes(24).toString('hex'),
+        PUBLIC_WEB_URL: 'http://127.0.0.1:3000',
+      },
+      stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+    })
+
+    this.workers.set(record.id, worker)
+    worker.on('message', (message: WorkerMessage) => this.handleWorkerMessage(message))
+    worker.on('error', (error) => {
+      logger.error({ error, subbotId: record.id }, 'isolated subbot process error')
+      economy.updateSubbot(record.id, { status: 'offline', lastSeenAt: Date.now() })
+      this.rejectWaiters(record.id, error instanceof Error ? error : new Error(String(error)))
+    })
+    worker.on('exit', (code, signal) => {
+      if (this.workers.get(record.id) === worker) this.workers.delete(record.id)
+      this.rejectWaiters(record.id, new Error(`Subbot #${record.id} process exited (${code ?? signal ?? 'unknown'})`))
+      const current = economy.getActiveSubbot(record.ownerJid)
+      if (current?.id === record.id && current.expiresAt > Date.now() && !['logged_out', 'revoked', 'pending'].includes(current.status)) {
+        economy.updateSubbot(record.id, { status: 'offline', lastSeenAt: Date.now() })
+      }
+    })
+    return worker
+  }
+
+  private async request(record: SubbotRecord, action: 'pair' | 'qr') {
+    const worker = this.spawn(record)
+    const key = this.key(record.id, action)
+    if (this.waiters.has(key)) throw new Error(`Ya hay una operación ${action} en curso para este subbot.`)
+
+    const result = await new Promise<{ ok: boolean; code?: string | null; qr?: string | null; error?: string }>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.waiters.delete(key)
+        reject(new Error(`El subbot #${record.id} no respondió a tiempo.`))
+      }, action === 'qr' ? 65_000 : 35_000)
+      this.waiters.set(key, { resolve, reject, timer })
+      worker.send({ type: action }, (error) => {
+        if (!error) return
+        clearTimeout(timer)
+        this.waiters.delete(key)
+        reject(error)
+      })
+    })
+    return result
   }
 
   async startActive() {
     const active = economy
       .listSubbots()
       .filter((item) => item.expiresAt > Date.now() && ['online', 'offline', 'pairing'].includes(item.status))
-    await Promise.allSettled(active.map((record) => this.connect(record, true)))
+    for (const record of active) {
+      this.spawn(record)
+      await sleep(150)
+    }
   }
 
   async pair(ownerJid: string, rawPhone: string): Promise<PairResult> {
     const phone = normalizePhone(rawPhone)
     const record = economy.getActiveSubbot(ownerJid)
     if (!record) throw new Error('No tienes una suscripción de subbot activa. Compra una en .shop.')
-    if (this.pairingLocks.has(record.id)) {
-      throw new Error('Ya hay una vinculación en curso para este subbot. Espera unos segundos o usa .subbot reset.')
-    }
+    if (this.pairingLocks.has(record.id)) throw new Error('Ya hay una vinculación en curso para este subbot.')
     this.pairingLocks.add(record.id)
-    this.reconnectAttempts.set(record.id, 0)
-    economy.updateSubbot(record.id, { phone, status: 'pairing' })
+    economy.updateSubbot(record.id, { phone, status: 'pairing', lastSeenAt: Date.now() })
 
     try {
-      const existing = this.sockets.get(record.id)
-      if (existing?.authState.creds.registered) {
-        economy.updateSubbot(record.id, { status: record.status === 'online' ? 'online' : 'offline' })
-        return { code: null, qr: null, alreadyLinked: true }
-      }
+      const worker = this.spawn({ ...record, phone, status: 'pairing' })
+      worker.send({ type: 'customization', name: subbotCustomization.get(record.id).longName })
+      const result = await this.request({ ...record, phone, status: 'pairing' }, 'pair')
+      if (result.ok && result.code) return { alreadyLinked: false, code: result.code, qr: null }
+      if (result.ok && !result.code) return { alreadyLinked: true, code: null, qr: null }
 
-      if (existing && !existing.authState.creds.registered) {
-        await this.detachSocket(record.id)
-      }
-
-      // enableReconnect=true: tras introducir el código WhatsApp cierra (515) y hay que reabrir
-      const { socket } = await this.connect({ ...record, phone, status: 'pairing' }, true)
-
-      await sleep(2500)
-
-      if (socket.authState.creds.registered) {
-        economy.updateSubbot(record.id, { status: 'offline' })
-        return { code: null, qr: null, alreadyLinked: true }
-      }
-
-      try {
-        const code = await withTimeout(
-          socket.requestPairingCode(phone),
-          25_000,
-          `subbot pairing code #${record.id}`,
-        )
-        if (!code?.trim()) throw new Error('WhatsApp devolvió un código vacío.')
-        logger.info({ subbotId: record.id, phone }, 'subbot pairing code issued — keep socket alive for restart')
-        // NO cerrar el socket. WhatsApp reiniciará la conexión tras aceptar el código.
-        return { code: code.trim(), qr: null, alreadyLinked: false }
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error)
-        logger.warn({ subbotId: record.id, errorMessage: reason }, 'subbot pairing code failed; QR fallback')
-
-        this.qrCache.delete(record.id)
-        try {
-          const qr = await this.waitForQr(socket, record.id, 55_000)
-          return { code: null, qr, alreadyLinked: false, fallbackReason: reason }
-        } catch (qrError) {
-          const qrReason = qrError instanceof Error ? qrError.message : String(qrError)
-          throw new Error(
-            `No se pudo obtener código ni QR (${reason} / ${qrReason}). Usa .subbot reset y vuelve a intentar.`,
-          )
-        }
-      }
-    } catch (error) {
-      economy.updateSubbot(record.id, { status: 'pending' })
-      throw error
+      const qrResult = await this.request({ ...record, phone, status: 'pairing' }, 'qr')
+      if (!qrResult.ok || !qrResult.qr) throw new Error(result.error || qrResult.error || 'WhatsApp no devolvió código ni QR.')
+      return { alreadyLinked: false, code: null, qr: qrResult.qr, fallbackReason: result.error }
     } finally {
-      // Liberar lock pero mantener socket en memoria para completar el emparejamiento
       this.pairingLocks.delete(record.id)
     }
   }
@@ -166,36 +214,18 @@ class SubbotManager {
   async qr(ownerJid: string) {
     const record = economy.getActiveSubbot(ownerJid)
     if (!record) throw new Error('No tienes una suscripción de subbot activa. Compra una en .shop.')
-    if (this.pairingLocks.has(record.id)) {
-      throw new Error('Ya hay una vinculación en curso. Espera o usa .subbot reset.')
-    }
+    if (this.pairingLocks.has(record.id)) throw new Error('Ya hay una vinculación en curso para este subbot.')
     this.pairingLocks.add(record.id)
-    this.reconnectAttempts.set(record.id, 0)
+    economy.updateSubbot(record.id, { status: 'pairing', lastSeenAt: Date.now() })
     try {
-      const existing = this.sockets.get(record.id)
-      if (existing?.authState.creds.registered) {
-        economy.updateSubbot(record.id, { status: record.status === 'online' ? 'online' : 'offline' })
-        return { alreadyLinked: true as const, qr: null }
+      this.spawn(record)
+      const result = await this.request({ ...record, status: 'pairing' }, 'qr')
+      if (!result.ok || !result.qr) {
+        const current = economy.getActiveSubbot(ownerJid)
+        if (current?.status === 'online') return { alreadyLinked: true as const, qr: null }
+        throw new Error(result.error || 'WhatsApp no devolvió un QR válido.')
       }
-      if (existing && !existing.authState.creds.registered) {
-        await this.detachSocket(record.id)
-      }
-
-      const { socket } = await this.connect(record, true)
-      await sleep(1500)
-
-      if (socket.authState.creds.registered) {
-        economy.updateSubbot(record.id, { status: record.status === 'online' ? 'online' : 'offline' })
-        return { alreadyLinked: true as const, qr: null }
-      }
-
-      economy.updateSubbot(record.id, { status: 'pairing' })
-      this.qrCache.delete(record.id)
-      const qr = await this.waitForQr(socket, record.id, 55_000)
-      return { alreadyLinked: false as const, qr }
-    } catch (error) {
-      economy.updateSubbot(record.id, { status: 'pending' })
-      throw error
+      return { alreadyLinked: false as const, qr: result.qr }
     } finally {
       this.pairingLocks.delete(record.id)
     }
@@ -204,23 +234,16 @@ class SubbotManager {
   async resetById(id: number) {
     const record = economy.listSubbots().find((item) => item.id === id)
     if (!record) throw new Error('La instancia de subbot no existe.')
-    this.resetting.add(id)
-    this.pairingLocks.delete(id)
-    this.reconnectAttempts.delete(id)
-    const socket = this.sockets.get(id)
-    this.sockets.delete(id)
-    this.qrCache.delete(id)
-    economy.db
-      .prepare("UPDATE subbots SET phone = NULL, status = 'pending', last_seen_at = ? WHERE id = ?")
-      .run(Date.now(), id)
-    try {
-      if (socket) socket.end(new Error('subbot session reset'))
-    } catch {
-      /* noop */
-    }
-    await rm(this.sessionDir(id), { recursive: true, force: true })
+
+    const worker = this.workers.get(id)
+    this.workers.delete(id)
+    this.rejectWaiters(id, new Error(`Subbot #${id} reiniciado.`))
+    try { worker?.send({ type: 'stop' }) } catch {}
+    setTimeout(() => { try { worker?.kill('SIGKILL') } catch {} }, 1500)
+
+    await rm(path.join(config.dataDir, 'subbots', String(id)), { recursive: true, force: true })
+    economy.db.prepare("UPDATE subbots SET phone = NULL, status = 'pending', last_seen_at = ? WHERE id = ?").run(Date.now(), id)
     economy.db.prepare('DELETE FROM portal_tokens WHERE subbot_id = ?').run(id)
-    setTimeout(() => this.resetting.delete(id), 5_000)
     return { ...record, phone: null, status: 'pending' }
   }
 
@@ -228,145 +251,6 @@ class SubbotManager {
     const record = economy.getActiveSubbot(ownerJid)
     if (!record) throw new Error('No tienes una instancia activa para restablecer.')
     return this.resetById(record.id)
-  }
-
-  async connect(record: SubbotRecord, enableReconnect = true): Promise<{ socket: WASocket }> {
-    const current = this.sockets.get(record.id)
-    if (current) return { socket: current }
-
-    const { socket } = await createSocket(this.sessionDir(record.id))
-    this.sockets.set(record.id, socket)
-
-    socket.ev.on('messages.upsert', ({ messages, type }) => {
-      if (type !== 'notify' || !this.handler) return
-      const live = economy.getActiveSubbot(record.ownerJid)
-      if (
-        !live ||
-        live.id !== record.id ||
-        live.expiresAt <= Date.now() ||
-        ['pending', 'logged_out', 'revoked'].includes(live.status)
-      ) {
-        return
-      }
-      // pairing también puede recibir mensajes tras open; status online se setea en open
-      if (live.status === 'pairing') return
-      for (const message of messages) {
-        if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
-        recordSubbotMessage(record.id)
-        const chatId = message.key.remoteJid
-        void withTimeout(this.handler!(socket, message, live), 60_000, `subbot routeMessage ${chatId}`).catch(
-          (error) => logger.error({ error, subbotId: record.id, chatId }, 'subbot mensaje colgado o falló'),
-        )
-      }
-    })
-
-    socket.ev.on('group-participants.update', (update) => {
-      const live = economy.getActiveSubbot(record.ownerJid)
-      if (!live || live.id !== record.id || live.expiresAt <= Date.now()) return
-      if (['pending', 'pairing', 'logged_out', 'revoked'].includes(live.status)) return
-      void handleParticipantUpdateV2(socket, update, record.id).catch((error) =>
-        logger.error(
-          { error, subbotId: record.id, groupId: update.id, action: update.action },
-          'subbot participant update failed',
-        ),
-      )
-    })
-
-    socket.ev.on('connection.update', ({ connection, lastDisconnect, qr, isNewLogin }) => {
-      if (qr && !socket.authState.creds.registered) {
-        this.qrCache.set(record.id, { value: qr, createdAt: Date.now() })
-      }
-
-      // WhatsApp aceptó el emparejamiento; vendrá un close + reopen (igual que npm run pair)
-      if (isNewLogin) {
-        logger.info({ subbotId: record.id }, 'subbot pairing accepted (isNewLogin); waiting reconnect')
-        economy.updateSubbot(record.id, { status: 'pairing', lastSeenAt: Date.now() })
-      }
-
-      if (connection === 'open') {
-        this.qrCache.delete(record.id)
-        this.reconnectAttempts.delete(record.id)
-        const phoneFromWa = socket.user?.id?.split(':')[0]?.split('@')[0] ?? null
-        economy.updateSubbot(record.id, {
-          status: 'online',
-          lastSeenAt: Date.now(),
-          ...(phoneFromWa ? { phone: phoneFromWa } : {}),
-        })
-        logger.info({ subbotId: record.id, owner: record.ownerJid, jid: socket.user?.id }, 'subbot connected')
-      }
-
-      if (connection !== 'close') return
-
-      this.sockets.delete(record.id)
-      this.qrCache.delete(record.id)
-      if (this.resetting.has(record.id)) return
-
-      const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
-      const linked = Boolean(socket.authState.creds.registered)
-      const latest = economy.getActiveSubbot(record.ownerJid)
-      const stillValid = Boolean(latest && latest.id === record.id && latest.expiresAt > Date.now())
-      const wasPairing = latest?.status === 'pairing'
-
-      if (statusCode === DisconnectReason.loggedOut) {
-        economy.updateSubbot(record.id, { status: 'logged_out', lastSeenAt: Date.now() })
-        this.reconnectAttempts.delete(record.id)
-        logger.warn({ subbotId: record.id, statusCode }, 'subbot logged out')
-        return
-      }
-
-      // Tras pairing, Baileys suele cerrar con 515 (restartRequired) aunque ya haya creds.
-      // Hay que reconectar SIEMPRE si está registrado o sigue en fase pairing.
-      const shouldReconnect =
-        stillValid &&
-        (linked || wasPairing) &&
-        (enableReconnect || wasPairing || linked)
-
-      if (!shouldReconnect) {
-        economy.updateSubbot(record.id, {
-          status: linked ? 'offline' : 'pending',
-          lastSeenAt: Date.now(),
-        })
-        logger.warn(
-          { subbotId: record.id, statusCode, linked, wasPairing },
-          'subbot closed without reconnect',
-        )
-        return
-      }
-
-      const attempts = (this.reconnectAttempts.get(record.id) ?? 0) + 1
-      this.reconnectAttempts.set(record.id, attempts)
-      if (attempts > 8) {
-        economy.updateSubbot(record.id, {
-          status: linked ? 'offline' : 'pending',
-          lastSeenAt: Date.now(),
-        })
-        logger.error({ subbotId: record.id, attempts, statusCode }, 'subbot reconnect gave up')
-        this.reconnectAttempts.delete(record.id)
-        return
-      }
-
-      economy.updateSubbot(record.id, {
-        status: linked ? (wasPairing ? 'pairing' : 'offline') : 'pairing',
-        lastSeenAt: Date.now(),
-      })
-
-      const delay = linked || wasPairing ? 1500 : 4000
-      logger.info(
-        { subbotId: record.id, statusCode, linked, wasPairing, attempts, delay },
-        'subbot scheduling reconnect',
-      )
-
-      setTimeout(() => {
-        const again = economy.getActiveSubbot(record.ownerJid)
-        if (!again || again.id !== record.id || again.expiresAt <= Date.now()) return
-        if (['logged_out', 'revoked', 'pending'].includes(again.status) && !linked) return
-        void this.connect(again, true).catch((error) =>
-          logger.error({ error, subbotId: record.id }, 'subbot reconnect failed'),
-        )
-      }, delay)
-    })
-
-    return { socket }
   }
 }
 
