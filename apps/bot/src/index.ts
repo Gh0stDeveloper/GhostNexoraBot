@@ -150,7 +150,7 @@ async function routeMessage(
 
   if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
     try {
-      const response = llmFreeChat.respond(text, chatId, pushName)
+      const response = await llmFreeChat.respond(text, chatId, pushName)
       if (!response) return
       llmFreeChat.commitRespond(chatId)
       await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
