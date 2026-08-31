@@ -66,7 +66,7 @@ function statusText(prefix: string) {
     `┃ Cola » Q:${q.queued} P:${q.processing} OK:${q.completed} ✗:${q.failed}`,
     `┃ Disco » *${formatBytes(s.storageBytes)}*`,
     '╰━━━━━━━━━━━━━━━━━━╯',
-    `_Progress:_ *${prefix}llm progress*',
+    `_Progress:_ *${prefix}llm progress*`,
   ].join('\n')
 }
 
@@ -230,7 +230,7 @@ export const miniLlmCommands: BotCommand[] = [{
 
     if (sub === 'train' || sub === 'entrenar' || sub === 'import' || sub === 'importar') {
       requestTraining(sub.startsWith('import') ? 'import' : 'manual', ctx.sender, true)
-      await ctx.reply(`🧠 Train encolado. *${ctx.prefix}llm progress*`) 
+      await ctx.reply(`🧠 Train encolado. *${ctx.prefix}llm progress*`)
       return
     }
 
