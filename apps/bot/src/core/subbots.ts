@@ -2,6 +2,7 @@ import { fork, type ChildProcess } from 'node:child_process'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 import { economy, type SubbotRecord } from '../services/economy.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
 import { config } from '../config.js'
@@ -22,7 +23,6 @@ type WorkerMessage = {
   error?: string
   jid?: string | null
   phone?: string | null
-  name?: string
 }
 
 type Waiter = {
@@ -44,7 +44,7 @@ function normalizePhone(raw: string) {
 }
 
 function workerPath() {
-  return path.resolve(path.dirname(new URL(import.meta.url).pathname), '../subbot-worker.js')
+  return fileURLToPath(new URL('../subbot-worker.js', import.meta.url))
 }
 
 class SubbotManager {
@@ -72,8 +72,7 @@ class SubbotManager {
     if (!id) return
 
     if (message.type === 'status') {
-      const status = String(message.status ?? 'offline')
-      const patch: Partial<SubbotRecord> = { status, lastSeenAt: Date.now() }
+      const patch: Partial<SubbotRecord> = { status: String(message.status ?? 'offline'), lastSeenAt: Date.now() }
       if (typeof message.phone === 'string' && message.phone) patch.phone = message.phone
       economy.updateSubbot(id, patch)
       return
@@ -92,16 +91,6 @@ class SubbotManager {
         qr: message.qr ?? null,
         error: message.error,
       })
-      return
-    }
-
-    if (message.type === 'customization' && typeof message.name === 'string') {
-      try {
-        const current = subbotCustomization.get(id)
-        subbotCustomization.setNames(id, current.shortName, message.name)
-      } catch (error) {
-        logger.warn({ error, subbotId: id }, 'failed to sync subbot customization from worker')
-      }
     }
   }
 
@@ -119,6 +108,7 @@ class SubbotManager {
         NEXORA_SUBBOT_OWNER_JID: record.ownerJid,
         NEXORA_SUBBOT_PHONE: record.phone ?? '',
         NEXORA_SUBBOT_EXPIRES_AT: String(record.expiresAt),
+        NEXORA_SUBBOT_SHORT_NAME: customization.shortName,
         NEXORA_SUBBOT_NAME: customization.longName,
         DATA_DIR: path.join(config.dataDir, 'subbots', String(record.id)),
         SESSION_DIR: path.join(config.dataDir, 'subbots', String(record.id), 'session'),
@@ -198,7 +188,9 @@ class SubbotManager {
 
     try {
       const worker = this.spawn({ ...record, phone, status: 'pairing' })
-      worker.send({ type: 'customization', name: subbotCustomization.get(record.id).longName })
+      const customization = subbotCustomization.get(record.id)
+      worker.send({ type: 'phone', value: phone })
+      worker.send({ type: 'customization', shortName: customization.shortName, name: customization.longName })
       const result = await this.request({ ...record, phone, status: 'pairing' }, 'pair')
       if (result.ok && result.code) return { alreadyLinked: false, code: result.code, qr: null }
       if (result.ok && !result.code) return { alreadyLinked: true, code: null, qr: null }
@@ -218,7 +210,10 @@ class SubbotManager {
     this.pairingLocks.add(record.id)
     economy.updateSubbot(record.id, { status: 'pairing', lastSeenAt: Date.now() })
     try {
-      this.spawn(record)
+      const worker = this.spawn(record)
+      worker.send({ type: 'phone', value: record.phone ?? '' })
+      const customization = subbotCustomization.get(record.id)
+      worker.send({ type: 'customization', shortName: customization.shortName, name: customization.longName })
       const result = await this.request({ ...record, status: 'pairing' }, 'qr')
       if (!result.ok || !result.qr) {
         const current = economy.getActiveSubbot(ownerJid)
