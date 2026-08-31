@@ -1,6 +1,5 @@
 import type { BotCommand } from '../types.js'
 import { miniLLM } from '../services/mini-llm.js'
-import { CORPUS_SOURCES } from '../llm/corpus-sources.js'
 import { downloadSources } from '../llm/corpus-manager.js'
 import {
   enqueueDocumentFromWhatsApp,
@@ -33,7 +32,7 @@ function help(prefix: string) {
     `│ ${prefix}llm free react on|off`,
     `│ ${prefix}llm free group add|remove|list|clear`,
     `│ ${prefix}llm add | process | seed | train | stop`,
-    `│ ${prefix}llm ask <q> | search <q>`,
+    `│ ${prefix}llm ask <q> | search <q> | docs`,
     '╰━━━━━━━━━━━━━━━━━━╯',
   ].join('\n')
 }
@@ -80,6 +79,16 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'queue' || sub === 'cola') {
       const queued = listJobsByStatus('queued').slice(-10)
       await ctx.reply(queued.length ? queued.map((j) => `• ${j.filename}`).join('\n') : 'Cola vacía.')
+      return
+    }
+
+    if (sub === 'docs' || sub === 'documentos') {
+      const docs = miniLLM.listDocuments().slice(-40)
+      await ctx.reply(
+        docs.length
+          ? docs.map((d: { name: string; size: number }, i: number) => `${i + 1}. ${d.name} (${formatBytes(d.size)})`).join('\n')
+          : 'Sin documentos.',
+      )
       return
     }
 
@@ -190,7 +199,11 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'search') {
       const query = ctx.args.slice(1).join(' ').trim()
       const hits = miniLLM.search(query, 5)
-      await ctx.reply(hits.length ? hits.map((h, i) => `${i + 1}. ${h.text.slice(0, 400)}`).join('\n\n') : 'Sin hits')
+      await ctx.reply(
+        hits.length
+          ? hits.map((h: { score: number; text: string }, i: number) => `${i + 1}. ${Math.round(h.score * 100)}%\n${h.text.slice(0, 500)}`).join('\n\n')
+          : 'Sin hits',
+      )
       return
     }
     if (sub === 'auto') {

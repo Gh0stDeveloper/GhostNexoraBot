@@ -56,10 +56,7 @@ async function readJson(req: http.IncomingMessage) {
 async function executeControl(body: Record<string, unknown>) {
   const action = String(body.action ?? '')
   if (action === 'economy-sync') {
-    return { ok: true, result: economyV2.adminSnapshot() }
-  }
-  if (action === 'api-v4') {
-    return handleV4Api(body)
+    return { ok: true, result: { top: economyV2.globalTop(10) } }
   }
   return { ok: false, error: 'unknown_action' }
 }
@@ -79,6 +76,16 @@ function startHealthServer() {
         json(res, 400, { ok: false, error: error instanceof Error ? error.message : 'control_failed' })
       }
       return
+    }
+    if (req.url?.startsWith('/api/v1/')) {
+      try {
+        const handled = await handleV4Api(req, res)
+        if (handled) return
+      } catch (error) {
+        logger.warn({ error }, 'api v4 failed')
+        json(res, 500, { ok: false, error: 'api_v4_failed' })
+        return
+      }
     }
     if (req.url !== '/health') {
       json(res, 404, { ok: false, error: 'not_found' })
