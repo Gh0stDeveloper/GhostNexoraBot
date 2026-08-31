@@ -43,6 +43,7 @@ if (process.env.NEXORA_SUBBOT_NAME) {
   subbotCustomization.setNames(subbotId, process.env.NEXORA_SUBBOT_SHORT_NAME || customization.shortName, process.env.NEXORA_SUBBOT_NAME)
 }
 
+// Subbots are isolated tenants. Management/AI commands belong exclusively to the MainBot.
 const blockedNames = new Set([
   'llm', 'minillm', 'localai', 'corpus', 'llmcorpus',
   'subbot', 'jadibot', 'serbot', 'subbots', 'subbotlist', 'jadibots',
@@ -50,6 +51,7 @@ const blockedNames = new Set([
 ])
 const allowedCommands = commands.filter((command) =>
   !blockedNames.has(command.name.toLowerCase()) &&
+  command.category !== 'subbots' &&
   !command.ownerOnly &&
   (command.category !== 'owner' || command.subbotOwnerAllowed === true),
 )
