@@ -2,8 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
-import { miniLLM } from './mini-llm.js'
 import { getContextInfo } from '../utils/message.js'
+import { conversationMemory } from './conversation-memory.js'
+import { contextualAnswer } from './llm-contextual-answer.js'
 
 type State = {
   chats: Record<string, boolean>
@@ -13,12 +14,10 @@ type State = {
   learnAlways: boolean
   maxRepliesPerWindow: number
   spamWindowMs: number
-  /** si false, no aplica el tope de mensajes por ventana (útil para tests) */
   antispamEnabled: boolean
   cooldownMs: number
   cooldownEnabled: boolean
   reactions: boolean
-  /** el bot puede contestar con groserías si le hablan pesado */
   slangEnabled: boolean
 }
 
@@ -79,18 +78,6 @@ function looksLikeCommand(text: string, prefix: string) {
   return false
 }
 
-function isLowValueReply(text: string) {
-  const t = text.trim().toLowerCase()
-  if (t.length < 2) return true
-  if (/todavía no tengo una respuesta clara/i.test(t)) return true
-  if (/no tengo conocimiento local suficiente/i.test(t)) return true
-  if (/enséñame con más ejemplos/i.test(t)) return true
-  if (/no tengo una respuesta/i.test(t)) return true
-  if (/dime algo y te respondo/i.test(t)) return true
-  if (/^\d+\.\s/.test(t) && /checklist|banco grande|asocia cada/i.test(t)) return true
-  return false
-}
-
 export function shouldLearnText(text: string) {
   const t = text.trim()
   if (t.length < 2 || t.length > 1200) return false
@@ -147,7 +134,6 @@ function pickOne(list: string[]) {
   return list[Math.floor(Math.random() * list.length)] ?? list[0] ?? ''
 }
 
-/** Detecta tono pesado / groserías y contesta en el mismo registro */
 function slangReply(text: string): string | null {
   const t = text.toLocaleLowerCase('es-MX').normalize('NFKC')
   const heavy =
@@ -167,13 +153,6 @@ function slangReply(text: string): string | null {
     'Nmms, relájate. Aquí sigo si quieres algo útil.',
     'Puedes hablarme feo, no me apago. ¿Qué pedo entonces?',
     'Jaja qué pendejada. Cuando termines, pregunta en serio.',
-    'Vales verga tú también por pelear con un bot. ¿Comando o qué?',
-    'Cállate un segundo y dime qué necesitas, cabrón.',
-    'No mames, qué drama. Suéltalo claro.',
-    'Pinche bot de tu servicio jaja. ¿Qué falló o qué quieres?',
-    'Alv ok. Sin tanto pedo: ¿qué buscas?',
-    'Me vale tu enojo wey. Tira la pregunta.',
-    'Chinga, ya entendí que estás enojado. ¿Y ahora?',
   ])
 }
 
@@ -293,6 +272,16 @@ export const llmFreeChat = {
   commitRespond(chatId: string) {
     commitRateLimit(chatId, load())
   },
+
+  /** Guarda mensajes del grupo/chat aunque el bot no responda (contexto). */
+  rememberIncoming(chatId: string, text: string, pushName?: string) {
+    if (!this.isEnabled(chatId)) return
+    if (!this.isGroupAllowed(chatId)) return
+    if (!shouldLearnText(text) && text.trim().length < 2) return
+    if (looksLikeCommand(text, '.')) return
+    conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
+  },
+
   shouldHandle(opts: {
     chatId: string
     text: string
@@ -312,20 +301,28 @@ export const llmFreeChat = {
     if (!this.canRespond(chatId)) return false
     return true
   },
-  respond(text: string) {
+
+  /** Respuesta con contexto del chat. */
+  respond(text: string, chatId: string, pushName?: string) {
     try {
+      conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
       const state = load()
       if (state.slangEnabled) {
         const slang = slangReply(text)
-        if (slang) return slang
+        if (slang) {
+          conversationMemory.pushBot(chatId, slang)
+          return slang
+        }
       }
-      const answer = miniLLM.answer(text)
-      if (!answer || isLowValueReply(answer)) return null
+      const answer = contextualAnswer(chatId, text)
+      if (!answer) return null
+      conversationMemory.pushBot(chatId, answer)
       return answer.slice(0, 900)
     } catch {
       return null
     }
   },
+
   async maybeReact(socket: WASocket, message: WAMessage, userText: string, answer: string) {
     const state = load()
     if (!state.reactions) return
@@ -339,11 +336,12 @@ export const llmFreeChat = {
       // ignore
     }
   },
+
   statusLine() {
     const s = load()
     const chats = Object.keys(s.chats).length
     const cd = s.cooldownEnabled ? `${s.cooldownMs}ms` : 'OFF'
     const spam = s.antispamEnabled ? `≤${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s` : 'OFF'
-    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam=${spam} · slang=${s.slangEnabled ? 'ON' : 'OFF'} · react=${s.reactions ? 'ON' : 'OFF'}`
+    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam=${spam} · slang=${s.slangEnabled ? 'ON' : 'OFF'} · react=${s.reactions ? 'ON' : 'OFF'} · ctx=ON`
   },
 }

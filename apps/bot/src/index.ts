@@ -19,7 +19,6 @@ import { observeGroupActivity } from './services/progression-v4.js'
 import { startAutomationScheduler } from './services/automation-v4.js'
 import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
-import { miniLLM } from './services/mini-llm.js'
 import { autoChat } from './services/auto-chat.js'
 import { llmFreeChat, shouldLearnText } from './services/llm-free-chat.js'
 import { enqueueLiveMessage } from './llm/live-queue.js'
@@ -120,6 +119,8 @@ async function routeMessage(
 
   const chatId = message.key.remoteJid
   const text = getMessageText(message).trim()
+  const pushName = (message as { pushName?: string }).pushName || 'Usuario'
+
   if (chatId && !message.key.fromMe) {
     observeGroupActivity(
       chatId,
@@ -128,6 +129,10 @@ async function routeMessage(
       text.startsWith(settings.prefix),
     )
     if (text.length >= 2 && !text.startsWith(settings.prefix) && shouldLearnText(text)) enqueueLiveMessage(text)
+    // Memoria de hilo aunque no se mencione al bot (contexto de grupo)
+    if (text.length >= 2 && !text.startsWith(settings.prefix)) {
+      llmFreeChat.rememberIncoming(chatId, text, pushName)
+    }
   }
 
   if (await handleAntiViewOnce(socket, message).catch((error) => {
@@ -145,8 +150,7 @@ async function routeMessage(
 
   if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
     try {
-      // Primero busca respuesta; si no hay, silencio total (sin "escribiendo…")
-      const response = llmFreeChat.respond(text)
+      const response = llmFreeChat.respond(text, chatId, pushName)
       if (!response) return
       llmFreeChat.commitRespond(chatId)
       await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
