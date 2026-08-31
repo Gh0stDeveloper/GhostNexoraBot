@@ -16,9 +16,7 @@ import { withTimeout } from './utils/timeout.js'
 import { logger } from './utils/logger.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
 
-if (process.env.NEXORA_INSTANCE_ROLE !== 'subbot') {
-  throw new Error('subbot-worker.js debe ejecutarse con NEXORA_INSTANCE_ROLE=subbot')
-}
+if (process.env.NEXORA_INSTANCE_ROLE !== 'subbot') throw new Error('subbot-worker.js requiere NEXORA_INSTANCE_ROLE=subbot')
 
 const subbotId = Number(process.env.NEXORA_SUBBOT_ID ?? 0)
 const ownerJid = String(process.env.NEXORA_SUBBOT_OWNER_JID ?? '')
@@ -60,15 +58,13 @@ const allowedCommands = commands.filter((command) =>
   (command.category !== 'owner' || command.subbotOwnerAllowed === true),
 )
 
-const router = new CommandRouter(allowedCommands, {
-  instanceId: subbotId,
-  instanceOwnerJid: ownerJid,
-})
+const router = new CommandRouter(allowedCommands, { instanceId: subbotId, instanceOwnerJid: ownerJid })
 
 let socket: WASocket | null = null
 let reconnectTimer: NodeJS.Timeout | null = null
 let reconnectAttempts = 0
 let stopping = false
+let latestQr: { value: string; createdAt: number } | null = null
 
 function report(status: string, extra: Record<string, unknown> = {}) {
   sendParent({ type: 'status', subbotId, status, ...extra })
@@ -99,14 +95,8 @@ async function routeMessage(message: WAMessage) {
   await observeMessageIdentity(socket, message).catch(() => undefined)
 
   const text = getMessageText(message).trim()
-
   if (!message.key.fromMe) {
-    observeGroupActivity(
-      chatId,
-      resolveStoredIdentity(getSender(message)),
-      chatId.endsWith('@g.us'),
-      text.startsWith(settings.prefix),
-    )
+    observeGroupActivity(chatId, resolveStoredIdentity(getSender(message)), chatId.endsWith('@g.us'), text.startsWith(settings.prefix))
   }
 
   if (await handleAntiViewOnce(socket, message).catch(() => false)) return
@@ -126,6 +116,7 @@ async function start() {
     return
   }
 
+  latestQr = null
   const { createSocket } = await import('./core/session.js')
   const { socket: created } = await createSocket(config.sessionDir)
   socket = created
@@ -145,11 +136,15 @@ async function start() {
   })
 
   socket.ev.on('connection.update', ({ connection, lastDisconnect, qr, isNewLogin }) => {
-    if (qr && !socket?.authState.creds.registered) report('pairing', { qr })
+    if (qr && !socket?.authState.creds.registered) {
+      latestQr = { value: qr, createdAt: Date.now() }
+      report('pairing', { qr })
+    }
     if (isNewLogin) report('pairing')
 
     if (connection === 'open') {
       reconnectAttempts = 0
+      latestQr = null
       phone = socket?.user?.id?.split(':')[0]?.split('@')[0] ?? phone
       economy.db.prepare('UPDATE subbots SET status = ?, phone = ?, last_seen_at = ? WHERE id = ?')
         .run('online', phone, Date.now(), subbotId)
@@ -191,6 +186,8 @@ async function requestQr() {
   if (!socket) await start()
   if (!socket) throw new Error('Subbot socket no disponible.')
   if (socket.authState.creds.registered) return null
+  if (latestQr && Date.now() - latestQr.createdAt <= 50_000) return latestQr.value
+
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       socket?.ev.off('connection.update', listener as never)
@@ -198,6 +195,7 @@ async function requestQr() {
     }, 55_000)
     const listener = ({ qr, connection }: { qr?: string; connection?: string }) => {
       if (qr) {
+        latestQr = { value: qr, createdAt: Date.now() }
         clearTimeout(timeout)
         socket?.ev.off('connection.update', listener as never)
         resolve(qr)
@@ -216,25 +214,30 @@ async function requestQr() {
 process.on('message', (message: unknown) => {
   if (!message || typeof message !== 'object') return
   const value = message as Record<string, unknown>
+
   if (value.type === 'pair') {
     void requestPairingCode()
       .then((code) => sendParent({ type: 'pair-result', subbotId, ok: true, code, alreadyLinked: code === null }))
       .catch((error) => sendParent({ type: 'pair-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
+
   if (value.type === 'qr') {
     void requestQr()
       .then((qr) => sendParent({ type: 'qr-result', subbotId, ok: Boolean(qr), qr, alreadyLinked: qr === '' }))
       .catch((error) => sendParent({ type: 'qr-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
+
   if (value.type === 'phone' && typeof value.value === 'string') {
     phone = value.value.replace(/\D/g, '') || null
     economy.db.prepare('UPDATE subbots SET phone = ?, status = ? WHERE id = ?').run(phone, phone ? 'pairing' : 'pending', subbotId)
   }
+
   if (value.type === 'customization' && typeof value.shortName === 'string' && typeof value.name === 'string') {
     void subbotCustomization.setNames(subbotId, value.shortName, value.name)
       .then(() => settings.setBotDisplayName(value.name as string))
       .catch(() => undefined)
   }
+
   if (value.type === 'stop') {
     stopping = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
