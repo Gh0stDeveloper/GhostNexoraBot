@@ -1,15 +1,9 @@
-import { fork } from 'node:child_process'
-import type { ChildProcess } from 'node:child_process'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import crypto from 'node:crypto'
 import { DisconnectReason, type WAMessage, type WASocket } from 'baileys'
 import { config } from './config.js'
 import { CommandRouter } from './core/router.js'
 import { settings } from './core/settings.js'
 import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
-import { community } from './services/community.js'
 import { subbotCustomization } from './services/subbot-customization.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
@@ -21,18 +15,16 @@ import { autoChat } from './services/auto-chat.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { withTimeout } from './utils/timeout.js'
 import { logger } from './utils/logger.js'
-import { groupControlsV9 } from './services/group-controls-v9.js'
-import { handleAntiViewOnce } from './services/group-controls-v9.js'
+import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
 
-const ROLE = process.env.NEXORA_INSTANCE_ROLE ?? 'main'
-if (ROLE !== 'subbot') {
+if (process.env.NEXORA_INSTANCE_ROLE !== 'subbot') {
   throw new Error('subbot-worker.js debe ejecutarse con NEXORA_INSTANCE_ROLE=subbot')
 }
 
 const subbotId = Number(process.env.NEXORA_SUBBOT_ID ?? 0)
 const ownerJid = String(process.env.NEXORA_SUBBOT_OWNER_JID ?? '')
 const expiresAt = Number(process.env.NEXORA_SUBBOT_EXPIRES_AT ?? 0)
-const initialPhone = process.env.NEXORA_SUBBOT_PHONE || null
+let phone = process.env.NEXORA_SUBBOT_PHONE || null
 
 if (!Number.isInteger(subbotId) || subbotId <= 0) throw new Error('NEXORA_SUBBOT_ID inválido')
 if (!ownerJid) throw new Error('NEXORA_SUBBOT_OWNER_JID requerido')
@@ -41,25 +33,31 @@ function sendParent(message: Record<string, unknown>) {
   try { process.send?.(message) } catch {}
 }
 
-// The isolated process has its own SQLite/settings/cache directory. LLM is hard-disabled
-// in the child process even when the host .env enables it for the main bot.
-const localRecord = economy.listSubbots().find((row) => row.id === subbotId)
-if (!localRecord) {
+const existing = economy.listSubbots().find((row) => row.id === subbotId)
+if (!existing) {
   economy.db.prepare(`
     INSERT INTO subbots(id, owner_jid, phone, status, expires_at, created_at, last_seen_at, messages_processed, download_bytes)
     VALUES(?, ?, ?, 'pending', ?, ?, ?, 0, 0)
-  `).run(subbotId, ownerJid, initialPhone, expiresAt || Date.now() + 365 * 24 * 60 * 60_000, Date.now(), Date.now())
+  `).run(subbotId, ownerJid, phone, expiresAt || Date.now() + 365 * 24 * 60 * 60_000, Date.now(), Date.now())
 }
-subbotCustomization.get(subbotId)
 
-const allowedCommands = commands.filter((command) => {
-  const blockedNames = new Set([
-    'llm', 'minillm', 'localai', 'corpus', 'llmcorpus',
-    'subbot', 'jadibot', 'serbot', 'subbots', 'subbotlist', 'jadibots',
-    'adminpanel', 'dashboard',
-  ])
-  return !blockedNames.has(command.name.toLowerCase()) && !command.ownerOnly && command.category !== 'owner'
-})
+const customization = subbotCustomization.get(subbotId)
+if (process.env.NEXORA_SUBBOT_NAME) {
+  subbotCustomization.setNames(
+    subbotId,
+    process.env.NEXORA_SUBBOT_SHORT_NAME || customization.shortName,
+    process.env.NEXORA_SUBBOT_NAME,
+  )
+}
+
+const blockedNames = new Set([
+  'llm', 'minillm', 'localai', 'corpus', 'llmcorpus',
+  'subbot', 'jadibot', 'serbot', 'subbots', 'subbotlist', 'jadibots',
+  'adminpanel', 'dashboard',
+])
+const allowedCommands = commands.filter((command) =>
+  !blockedNames.has(command.name.toLowerCase()) && !command.ownerOnly && command.category !== 'owner',
+)
 
 const router = new CommandRouter(allowedCommands, {
   instanceId: subbotId,
@@ -71,19 +69,19 @@ let reconnectTimer: NodeJS.Timeout | null = null
 let reconnectAttempts = 0
 let stopping = false
 
-function status(status: string, extra: Record<string, unknown> = {}) {
+function report(status: string, extra: Record<string, unknown> = {}) {
   sendParent({ type: 'status', subbotId, status, ...extra })
 }
 
 function scheduleReconnect() {
   if (stopping || reconnectTimer) return
   if (Date.now() >= expiresAt) {
-    status('expired')
+    report('expired')
     return
   }
   reconnectAttempts += 1
   if (reconnectAttempts > 12) {
-    status('offline', { reason: 'reconnect_limit' })
+    report('offline', { reason: 'reconnect_limit' })
     return
   }
   const delay = Math.min(30_000, reconnectAttempts <= 2 ? 1500 : 3000 * reconnectAttempts)
@@ -100,7 +98,6 @@ async function routeMessage(message: WAMessage) {
   await observeMessageIdentity(socket, message).catch(() => undefined)
 
   const text = getMessageText(message).trim()
-  const pushName = message.pushName ?? 'Usuario'
 
   if (!message.key.fromMe) {
     observeGroupActivity(
@@ -118,29 +115,18 @@ async function routeMessage(message: WAMessage) {
   const handled = await router.handle(socket, message)
   if (handled) return
 
-  if (chatId && text.length >= 2 && !text.startsWith(settings.prefix) && autoChat.isEnabled(chatId) && autoChat.canRespond(chatId)) {
-    try {
-      const response = await autoChat.respond(chatId, text)
-      if (!response) return
-      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
-      await socket.sendMessage(chatId, { text: response }, { quoted: message })
-      await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
-    } catch (error) {
-      logger.warn({ error, chatId, subbotId }, 'isolated subbot auto-chat failed')
-    }
-  }
-
   if (chatId?.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
   await maybeHumanInteraction(socket, message).catch(() => false)
 }
 
 async function start() {
   if (stopping || Date.now() >= expiresAt) {
-    status('expired')
+    report('expired')
     return
   }
 
-  const { socket: created } = await import('./core/session.js').then((module) => module.createSocket(config.sessionDir))
+  const { createSocket } = await import('./core/session.js')
+  const { socket: created } = await createSocket(config.sessionDir)
   socket = created
 
   socket.ev.on('messages.upsert', ({ messages, type }) => {
@@ -158,15 +144,15 @@ async function start() {
   })
 
   socket.ev.on('connection.update', ({ connection, lastDisconnect, qr, isNewLogin }) => {
-    if (qr && !socket?.authState.creds.registered) status('pairing', { qr })
-    if (isNewLogin) status('pairing')
+    if (qr && !socket?.authState.creds.registered) report('pairing', { qr })
+    if (isNewLogin) report('pairing')
 
     if (connection === 'open') {
       reconnectAttempts = 0
-      const phone = socket?.user?.id?.split(':')[0]?.split('@')[0] ?? initialPhone
+      phone = socket?.user?.id?.split(':')[0]?.split('@')[0] ?? phone
       economy.db.prepare('UPDATE subbots SET status = ?, phone = ?, last_seen_at = ? WHERE id = ?')
-        .run('online', phone ?? null, Date.now(), subbotId)
-      status('online', { jid: socket?.user?.id ?? null, phone: phone ?? null })
+        .run('online', phone, Date.now(), subbotId)
+      report('online', { jid: socket?.user?.id ?? null, phone })
       return
     }
 
@@ -177,23 +163,22 @@ async function start() {
     const linked = Boolean(created.authState.creds.registered)
     if (code === DisconnectReason.loggedOut) {
       economy.db.prepare('UPDATE subbots SET status = ?, last_seen_at = ? WHERE id = ?').run('logged_out', Date.now(), subbotId)
-      status('logged_out', { statusCode: code })
+      report('logged_out', { statusCode: code })
       return
     }
 
     economy.db.prepare('UPDATE subbots SET status = ?, last_seen_at = ? WHERE id = ?')
       .run(linked ? 'offline' : 'pending', Date.now(), subbotId)
-    status(linked ? 'offline' : 'pending', { statusCode: code })
+    report(linked ? 'offline' : 'pending', { statusCode: code })
     scheduleReconnect()
   })
 
-  status(socket.authState.creds.registered ? 'starting' : 'pairing')
+  report(created.authState.creds.registered ? 'starting' : 'pairing')
 }
 
 async function requestPairingCode() {
   if (!socket) await start()
   if (!socket) throw new Error('Subbot socket no disponible.')
-  const phone = initialPhone ?? process.env.NEXORA_SUBBOT_PHONE
   if (!phone) throw new Error('No hay teléfono para solicitar código de vinculación.')
   await new Promise((resolve) => setTimeout(resolve, 2000))
   if (socket.authState.creds.registered) return null
@@ -240,14 +225,20 @@ process.on('message', (message: unknown) => {
       .then((qr) => sendParent({ type: 'qr-result', subbotId, ok: Boolean(qr), qr }))
       .catch((error) => sendParent({ type: 'qr-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
+  if (value.type === 'phone' && typeof value.value === 'string') {
+    phone = value.value.replace(/\D/g, '') || null
+    economy.db.prepare('UPDATE subbots SET phone = ?, status = ? WHERE id = ?').run(phone, phone ? 'pairing' : 'pending', subbotId)
+  }
+  if (value.type === 'customization' && typeof value.shortName === 'string' && typeof value.name === 'string') {
+    void subbotCustomization.setNames(subbotId, value.shortName, value.name)
+      .then(() => settings.setBotDisplayName(value.name as string))
+      .catch(() => undefined)
+  }
   if (value.type === 'stop') {
     stopping = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
     try { socket?.end(new Error('isolated subbot stop')) } catch {}
     process.exit(0)
-  }
-  if (value.type === 'customization' && typeof value.name === 'string') {
-    void settings.setBotDisplayName(value.name)
   }
 })
 
