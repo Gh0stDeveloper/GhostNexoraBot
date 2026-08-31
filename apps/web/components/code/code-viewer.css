@@ -1,0 +1,292 @@
+.nx-assistant-message {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-assistant-message__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  line-height: 1.72;
+}
+
+.nx-code-card {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(20, 27, 35, .98), rgba(10, 14, 19, .98));
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.nx-code-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(86, 243, 154, .32);
+  background: linear-gradient(135deg, rgba(23, 32, 40, 1), rgba(11, 16, 22, 1));
+}
+
+.nx-code-card:focus-visible,
+.nx-code-modal__copy:focus-visible,
+.nx-code-modal__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.nx-code-card__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--accent);
+  background: rgba(86, 243, 154, .10);
+  border: 1px solid rgba(86, 243, 154, .14);
+}
+
+.nx-code-card__body {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.nx-code-card__title {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.nx-code-card__preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #84909d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  mask-image: linear-gradient(to right, #000 80%, transparent);
+}
+
+.nx-code-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  color: #8effba;
+  background: rgba(86, 243, 154, .09);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.nx-code-modal {
+  position: fixed;
+  z-index: 9999;
+  inset: 0;
+  display: grid;
+  place-items: stretch;
+}
+
+.nx-code-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, .66);
+  backdrop-filter: blur(10px);
+}
+
+.nx-code-modal__panel {
+  position: relative;
+  width: min(100%, 1180px);
+  height: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #070b10;
+  border-inline: 1px solid rgba(255, 255, 255, .08);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .45);
+}
+
+.nx-code-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: max(14px, env(safe-area-inset-top)) 16px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(7, 11, 16, .94);
+  backdrop-filter: blur(18px);
+}
+
+.nx-code-modal__heading,
+.nx-code-modal__controls,
+.nx-code-modal__copy,
+.nx-code-modal__footer span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.nx-code-modal__heading {
+  min-width: 0;
+  gap: 11px;
+}
+
+.nx-code-modal__brand {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--accent);
+  background: rgba(86, 243, 154, .09);
+}
+
+.nx-code-modal__eyebrow {
+  margin: 0 0 2px;
+  color: #71808e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.nx-code-modal h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.nx-code-modal__controls {
+  gap: 8px;
+}
+
+.nx-code-modal__copy,
+.nx-code-modal__close {
+  border: 1px solid rgba(255, 255, 255, .09);
+  color: #e8edf2;
+  background: rgba(255, 255, 255, .045);
+  cursor: pointer;
+}
+
+.nx-code-modal__copy {
+  gap: 7px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.nx-code-modal__copy:hover {
+  border-color: rgba(86, 243, 154, .27);
+  color: var(--accent);
+}
+
+.nx-code-modal__close {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+}
+
+.nx-code-modal__content {
+  overflow: auto;
+  padding: 18px;
+  background: #060a0f;
+}
+
+.nx-code-modal__content pre {
+  margin: 0;
+  min-width: max-content;
+}
+
+.nx-code-modal__content code {
+  display: block;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 15px;
+  background: #090e14;
+  color: #dfe7ef;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.72;
+  tab-size: 2;
+  white-space: pre;
+}
+
+/* Highlight.js token palette. */
+.nx-code-modal__content .hljs-comment,
+.nx-code-modal__content .hljs-quote { color: #667382; }
+.nx-code-modal__content .hljs-keyword,
+.nx-code-modal__content .hljs-selector-tag,
+.nx-code-modal__content .hljs-literal { color: #83b7ff; }
+.nx-code-modal__content .hljs-string,
+.nx-code-modal__content .hljs-attr { color: #8ee6b4; }
+.nx-code-modal__content .hljs-number,
+.nx-code-modal__content .hljs-symbol { color: #d7a3ff; }
+.nx-code-modal__content .hljs-title,
+.nx-code-modal__content .hljs-title.class_,
+.nx-code-modal__content .hljs-function .hljs-title { color: #9fc5ff; }
+.nx-code-modal__content .hljs-variable,
+.nx-code-modal__content .hljs-template-variable,
+.nx-code-modal__content .hljs-type { color: #ffbe7b; }
+
+.nx-code-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  color: #65727f;
+  background: #070b10;
+  font-size: 11px;
+}
+
+.nx-code-modal__footer span {
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .nx-code-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .nx-code-card__action {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .nx-code-modal__header {
+    padding-inline: 12px;
+  }
+
+  .nx-code-modal__copy {
+    padding-inline: 9px;
+  }
+
+  .nx-code-modal__copy span {
+    display: none;
+  }
+
+  .nx-code-modal__content {
+    padding: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nx-code-card { transition: none; }
+}
