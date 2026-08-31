@@ -25,6 +25,7 @@ import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
+import { startBrowserProxy } from './services/browser-proxy.js'
 
 const startedAt = new Date()
 let connected = false
@@ -136,8 +137,6 @@ async function routeMessage(
       chatId.endsWith('@g.us'),
       text.startsWith(settings.prefix),
     )
-    // La respuesta usa Ollama directamente; no se alimenta el pipeline de entrenamiento
-    // desde el flujo normal de mensajes para evitar trabajo extra y latencia.
     if (text.length >= 2 && !text.startsWith(settings.prefix)) llmFreeChat.rememberIncoming(chatId, text, pushName)
   }
 
@@ -241,6 +240,7 @@ async function connect() {
 await settings.init()
 startTempCleanup()
 startHealthServer()
+startBrowserProxy()
 startAutomationScheduler(() => mainSocket)
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
