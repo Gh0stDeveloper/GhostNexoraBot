@@ -21,6 +21,7 @@ import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { miniLLM } from './services/mini-llm.js'
 import { autoChat } from './services/auto-chat.js'
+import { llmFreeChat } from './services/llm-free-chat.js'
 import { enqueueLiveMessage } from './llm/live-queue.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
@@ -52,81 +53,19 @@ async function readJson(req: http.IncomingMessage) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>
 }
 
-function controlJid(value: unknown) {
-  const raw = String(value ?? '').trim()
-  if (!raw) throw new Error('Falta userJid.')
-  if (raw.includes('@')) return resolveStoredIdentity(raw)
-  const digits = raw.replace(/\D/g, '')
-  if (digits.length < 8 || digits.length > 15) throw new Error('Usuario inválido.')
-  return resolveStoredIdentity(`${digits}@s.whatsapp.net`)
-}
-
-async function executeControl(payload: Record<string, unknown>) {
-  const action = String(payload.action ?? '')
-  if (action === 'add_nxc') {
-    const userJid = controlJid(payload.userJid)
-    const amount = Number(payload.amount)
-    const balance = economyV2.credit(userJid, amount, 'web_admin_grant')
-    return { ok: true, userJid, balance }
+async function executeControl(body: Record<string, unknown>) {
+  const action = String(body.action ?? '')
+  if (action === 'economy-sync') {
+    return { ok: true, result: economyV2.adminSnapshot() }
   }
-  if (action === 'grant_subbot') {
-    const userJid = controlJid(payload.userJid)
-    const durationMs = String(payload.duration ?? '').toLowerCase() === 'permanent'
-      ? 100 * 365 * 86400_000
-      : Math.max(3600_000, Number(payload.durationMs ?? 7 * 86400_000))
-    const expiresAt = economy.grantEntitlement(userJid, 'subbot_slot', durationMs, { webGrant: true })
-    const active = economy.getActiveSubbot(userJid)
-    const id = active?.id ?? economy.createSubbot(userJid, expiresAt)
-    economy.db.prepare('UPDATE subbots SET expires_at = ? WHERE id = ?').run(expiresAt, id)
-    return { ok: true, id, userJid, expiresAt }
+  if (action === 'api-v4') {
+    return handleV4Api(body)
   }
-  if (action === 'reset_subbot') {
-    const id = Number(payload.id)
-    if (!Number.isInteger(id) || id <= 0) throw new Error('ID de subbot inválido.')
-    const record = await subbotManager.resetById(id)
-    return { ok: true, record }
-  }
-  if (action === 'reset_own_subbot') {
-    const id = Number(payload.id)
-    const userJid = controlJid(payload.userJid)
-    const record = economy.listSubbots().find((item) => item.id === id && item.ownerJid === userJid && item.expiresAt > Date.now())
-    if (!record) throw new Error('No tienes permiso sobre esa instancia.')
-    await subbotManager.resetById(id)
-    return { ok: true, id }
-  }
-  if (action === 'broadcast') {
-    if (!mainSocket) throw new Error('MainBot no está conectado.')
-    const message = String(payload.message ?? '').trim().slice(0, 5000)
-    if (!message) throw new Error('Mensaje vacío.')
-    const groups = await mainSocket.groupFetchAllParticipating()
-    let sent = 0
-    let failed = 0
-    for (const group of Object.values(groups)) {
-      try {
-        await mainSocket.sendMessage(group.id, {
-          text: `╭━━〔 📢 *NOVEDADES GHOST NEXORA* 〕━━╮\n${message}\n╰━━━━━━━━━━━━━━━━╯\n\n👻 Usa *${settings.prefix}menu* para explorar las funciones.`,
-        })
-        sent += 1
-      } catch {
-        failed += 1
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250))
-    }
-    return { ok: true, sent, failed }
-  }
-  throw new Error('Acción de control no soportada.')
+  return { ok: false, error: 'unknown_action' }
 }
 
 function startHealthServer() {
   const server = http.createServer(async (req, res) => {
-    if (req.url?.startsWith('/api/v1/')) {
-      const auth = req.headers.authorization ?? ''
-      if (!config.adminWebToken || auth !== `Bearer ${config.adminWebToken}`) {
-        json(res, 401, { ok: false, error: 'unauthorized' })
-        return
-      }
-      if (await handleV4Api(req, res)) return
-    }
     if (req.method === 'POST' && req.url === '/control') {
       const auth = req.headers.authorization ?? ''
       if (!config.adminWebToken || auth !== `Bearer ${config.adminWebToken}`) {
@@ -196,6 +135,17 @@ async function routeMessage(
 
   const handled = await router.handle(socket, message)
   if (handled) return
+
+  if (chatId && llmFreeChat.shouldHandle(chatId, text, settings.prefix)) {
+    try {
+      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+      const response = llmFreeChat.respond(text)
+      if (response) await socket.sendMessage(chatId, { text: response }, { quoted: message })
+    } catch (error) {
+      logger.warn({ error, chatId }, 'llm free-chat response failed')
+    }
+    return
+  }
 
   if (chatId && text.length >= 2 && !text.startsWith(settings.prefix) && autoChat.isEnabled(chatId) && autoChat.canRespond(chatId)) {
     try {
@@ -269,7 +219,6 @@ await settings.init()
 startTempCleanup()
 startHealthServer()
 startAutomationScheduler(() => mainSocket)
-// El aprendizaje automático vive en ghost-nexora-llm.service; el proceso WhatsApp solo encola mensajes.
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
