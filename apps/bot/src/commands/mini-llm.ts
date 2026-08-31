@@ -1,15 +1,13 @@
 import type { BotCommand } from '../types.js'
 import { miniLLM } from '../services/mini-llm.js'
 import { CORPUS_SOURCES } from '../llm/corpus-sources.js'
-import { downloadSources, sourceStatus } from '../llm/corpus-manager.js'
+import { downloadSources } from '../llm/corpus-manager.js'
 import {
   enqueueDocumentFromWhatsApp,
-  getQueueState,
   getQueueStats,
   listJobsByStatus,
   clearCompletedJobs,
   retryFailedJobs,
-  documentQueuePaths,
 } from '../llm/document-queue.js'
 import { requestTraining, trainingQueueStatus } from '../llm/training-queue.js'
 import { installSeedCorpus } from '../llm/seed-corpus.js'
@@ -27,86 +25,16 @@ function formatBytes(value: number) {
 
 function help(prefix: string) {
   return [
-    '╭━━〔 🧠 *MINI-LLM LOCAL* 〕━━╮',
-    '│ *Estado*',
-    `│ ${prefix}llm status`,
-    `│ ${prefix}llm progress`,
-    `│ ${prefix}llm queue`,
-    '│ *Libre (chat sin prefijo)*',
+    '╭━━〔 🧠 *MINI-LLM* 〕━━╮',
+    `│ ${prefix}llm status | progress | queue`,
     `│ ${prefix}llm free on|off`,
     `│ ${prefix}llm free global on|off`,
-    '│ *Documentos / train*',
+    `│ ${prefix}llm free mention on|off`,
+    `│ ${prefix}llm free react on|off`,
+    `│ ${prefix}llm free group add|remove|list|clear`,
     `│ ${prefix}llm add | process | seed | train | stop`,
-    `│ ${prefix}llm docs | auto on|off`,
-    '│ *Memoria*',
     `│ ${prefix}llm ask <q> | search <q>`,
-    '│ *Corpus*',
-    `│ ${prefix}llm sources | download <id>`,
-    `│ ${prefix}llm retry-failed | clear-done`,
     '╰━━━━━━━━━━━━━━━━━━╯',
-  ].join('\n')
-}
-
-function statusText(prefix: string) {
-  const s = miniLLM.stats()
-  const q = getQueueStats()
-  const t = trainingQueueStatus()
-  let vectors = s.vectorRecords
-  try { vectors = countVectors() } catch {}
-  return [
-    '╭━━〔 🧠 *LLM · STATUS* 〕━━╮',
-    `┃ Modelo » *v${s.modelVersion}*`,
-    `┃ Vocab » *${s.vocabSize}/${miniLLM.constants.VOCAB_LIMIT}*`,
-    `┃ Vectores » *${vectors}*`,
-    `┃ Docs » *${s.totalDocuments}* · chunks *${s.totalChunks}*`,
-    `┃ Train runs » *${s.trainRuns}* · steps *${s.trainSteps}*`,
-    `┃ Loss » last *${s.lastLoss?.toFixed(4) ?? 'N/D'}* · best *${s.bestLoss?.toFixed(4) ?? 'N/D'}*`,
-    `┃ Auto-train » *${s.autoTrainEnabled ? 'ON' : 'OFF'}*`,
-    `┃ Libre » *${llmFreeChat.statusLine()}*`,
-    `┃ Cola » Q:${q.queued} P:${q.processing} OK:${q.completed} ✗:${q.failed}`,
-    `┃ Disco » *${formatBytes(s.storageBytes)}*`,
-    '╰━━━━━━━━━━━━━━━━━━╯',
-    `_Progress:_ *${prefix}llm progress*`,
-  ].join('\n')
-}
-
-function progressText(prefix: string) {
-  const s = miniLLM.stats()
-  const q = getQueueStats()
-  const t = trainingQueueStatus()
-  const learning = s.learning
-  const pct = learning ? Math.min(100, Math.max(0, Number(s.currentProgress) || 0)) : t.requested ? 0 : 100
-  const barLen = 12
-  const filled = Math.round((pct / 100) * barLen)
-  const bar = '█'.repeat(filled) + '░'.repeat(Math.max(0, barLen - filled))
-  return [
-    '╭━━〔 🧠 *LLM · PROGRESS* 〕━━╮',
-    `┃ Estado » *${learning ? 'ENTRENANDO' : t.requested ? 'EN COLA' : 'IDLE'}*`,
-    `┃ Barra » [${bar}] *${pct}%*`,
-    `┃ Paso » *${s.currentStep}/${Math.max(1, s.currentTotalSteps)}*`,
-    `┃ Época » *${s.currentEpoch}/${Math.max(1, s.currentTotalEpochs || 2)}*`,
-    `┃ Fase » ${learning ? (s.currentMessage || '…') : t.requested ? 'En cola' : 'Sin train'}`,
-    `┃ Loss » *${s.lastLoss?.toFixed(5) ?? 'N/D'}*`,
-    `┃ Cola docs » Q:${q.queued} P:${q.processing} OK:${q.completed} ✗:${q.failed}`,
-    '╰━━━━━━━━━━━━━━━━━━╯',
-  ].join('\n')
-}
-
-function queueText(prefix: string) {
-  const line = (job: { filename: string; id: string; error?: string }) =>
-    `• ${job.filename} \`${job.id.slice(0, 8)}\`${job.error ? ` — ${job.error.slice(0, 50)}` : ''}`
-  const queued = listJobsByStatus('queued').slice(-12)
-  const processing = listJobsByStatus('processing').slice(-8)
-  const completed = listJobsByStatus('completed').slice(-8)
-  const failed = listJobsByStatus('failed').slice(-8)
-  return [
-    '╭━━〔 🧠 *LLM · COLA* 〕━━╮',
-    '┃ 📥 Pendientes', queued.length ? queued.map(line).join('\n') : '┃ (vacío)',
-    '┃ 🔄 Procesando', processing.length ? processing.map(line).join('\n') : '┃ (vacío)',
-    '┃ ✅ Listos', completed.length ? completed.map(line).join('\n') : '┃ (vacío)',
-    '┃ ❌ Fallidos', failed.length ? failed.map(line).join('\n') : '┃ (vacío)',
-    '╰━━━━━━━━━━━━━━━━━━╯',
-    `*${prefix}llm process* · *${prefix}llm retry-failed* · *${prefix}llm clear-done*`,
   ].join('\n')
 }
 
@@ -115,153 +43,167 @@ export const miniLlmCommands: BotCommand[] = [{
   aliases: ['minillm', 'localai', 'corpus', 'llmcorpus'],
   category: 'tools',
   description: 'Mini-LLM local: cola, train, modo libre y memoria.',
-  usage: 'llm <status|progress|queue|free|add|process|seed|train|ask|search|…>',
+  usage: 'llm <status|progress|free|add|process|seed|train|ask|…>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
-
     if (!ctx.isOwner && !ctx.isBotStaff) {
-      throw new Error('Los comandos .llm son solo para Owner/Staff. Si el modo libre está activo, escribe sin prefijo.')
+      throw new Error('Los comandos .llm son solo para Owner/Staff. Con modo libre activo, escribe sin prefijo (en grupos: mención).')
     }
 
-    if (sub === 'status' || sub === 'estado' || sub === 'info') { await ctx.reply(statusText(ctx.prefix)); return }
-    if (sub === 'progress' || sub === 'avance' || sub === 'prog') { await ctx.reply(progressText(ctx.prefix)); return }
-    if (sub === 'queue' || sub === 'cola') { await ctx.reply(queueText(ctx.prefix)); return }
+    if (sub === 'status' || sub === 'estado') {
+      const s = miniLLM.stats()
+      const q = getQueueStats()
+      let vectors = s.vectorRecords
+      try { vectors = countVectors() } catch {}
+      await ctx.reply([
+        '╭━━〔 🧠 *STATUS* 〕━━╮',
+        `┃ Modelo v${s.modelVersion} · vocab ${s.vocabSize}`,
+        `┃ Vectores ${vectors} · steps ${s.trainSteps}`,
+        `┃ Loss ${s.lastLoss?.toFixed(4) ?? 'N/D'}`,
+        `┃ Libre: ${llmFreeChat.statusLine()}`,
+        `┃ Cola Q:${q.queued} P:${q.processing} OK:${q.completed}`,
+        '╰━━━━━━━━━━━━━━━━━━╯',
+      ].join('\n'))
+      return
+    }
 
-    if (sub === 'free' || sub === 'libre' || sub === 'release' || sub === 'liberar') {
+    if (sub === 'progress' || sub === 'avance') {
+      const s = miniLLM.stats()
+      const q = getQueueStats()
+      const t = trainingQueueStatus()
+      const pct = s.learning ? Math.min(100, Number(s.currentProgress) || 0) : t.requested ? 0 : 100
+      await ctx.reply(`🧠 Progress: ${s.learning ? 'ENTRENANDO' : t.requested ? 'EN COLA' : 'IDLE'} ${pct}%\nPaso ${s.currentStep}/${s.currentTotalSteps || 1}\nCola Q:${q.queued}`)
+      return
+    }
+
+    if (sub === 'queue' || sub === 'cola') {
+      const queued = listJobsByStatus('queued').slice(-10)
+      await ctx.reply(queued.length ? queued.map((j) => `• ${j.filename}`).join('\n') : 'Cola vacía.')
+      return
+    }
+
+    if (sub === 'free' || sub === 'libre') {
       const mode = (ctx.args[1] ?? '').toLowerCase()
       const mode2 = (ctx.args[2] ?? '').toLowerCase()
       if (mode === 'global') {
         if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free global on|off`)
         llmFreeChat.setGlobal(mode2 === 'on')
-        await ctx.reply(`🧠 *LLM LIBRE GLOBAL*: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+        await ctx.reply(`🧠 Libre GLOBAL: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
         return
       }
-      if (!['on', 'off', 'status', 'estado', ''].includes(mode)) {
-        throw new Error(`Uso: ${ctx.prefix}llm free on|off | ${ctx.prefix}llm free global on|off`)
+      if (mode === 'mention' || mode === 'mencion' || mode === 'mención') {
+        if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free mention on|off`)
+        llmFreeChat.setRequireMention(mode2 === 'on')
+        await ctx.reply(`🧠 Mención requerida en grupos: *${mode2.toUpperCase()}*`)
+        return
       }
-      if (mode === 'status' || mode === 'estado' || mode === '') {
-        await ctx.reply(`🧠 *LLM LIBRE*\nChat: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
+      if (mode === 'react' || mode === 'reacciones') {
+        if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free react on|off`)
+        llmFreeChat.setReactions(mode2 === 'on')
+        await ctx.reply(`🧠 Reacciones: *${mode2.toUpperCase()}*`)
+        return
+      }
+      if (mode === 'group' || mode === 'grupo') {
+        if (mode2 === 'add') {
+          if (!ctx.chatId.endsWith('@g.us')) throw new Error('Usa esto dentro de un grupo.')
+          llmFreeChat.addGroup(ctx.chatId)
+          await ctx.reply(`✅ Grupo en whitelist.\n${llmFreeChat.statusLine()}`)
+          return
+        }
+        if (mode2 === 'remove' || mode2 === 'del') {
+          llmFreeChat.removeGroup(ctx.chatId)
+          await ctx.reply('✅ Grupo fuera de whitelist.')
+          return
+        }
+        if (mode2 === 'clear') {
+          llmFreeChat.clearGroupWhitelist()
+          await ctx.reply('✅ Whitelist vacía (= todos los grupos enabled).')
+          return
+        }
+        if (mode2 === 'list') {
+          const list = llmFreeChat.getState().groupWhitelist
+          await ctx.reply(list.length ? list.map((g, i) => `${i + 1}. ${g}`).join('\n') : 'Whitelist vacía.')
+          return
+        }
+        throw new Error(`Uso: ${ctx.prefix}llm free group add|remove|list|clear`)
+      }
+      if (!['on', 'off', 'status', ''].includes(mode)) {
+        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | react | group`)
+      }
+      if (mode === 'status' || mode === '') {
+        await ctx.reply(`🧠 Libre chat: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
         return
       }
       llmFreeChat.setChat(ctx.chatId, mode === 'on')
-      await ctx.reply(mode === 'on'
-        ? `🔓 *LLM LIBERADO* en este chat. Responde sin prefijo si sabe algo. Off: *${ctx.prefix}llm free off*`
-        : `🔒 *LLM bloqueado* en este chat.`)
+      await ctx.reply(mode === 'on' ? '🔓 LLM liberado en este chat.' : '🔒 LLM bloqueado en este chat.')
       return
     }
 
-    if (sub === 'seed' || sub === 'semilla') {
-      const force = (ctx.args[1] ?? '').toLowerCase() === 'force'
-      await ctx.reply('🌱 Instalando seed…')
+    if (sub === 'seed') {
+      const force = (ctx.args[1] ?? '') === 'force'
       const result = await installSeedCorpus(force)
-      if (!result.ok) { await ctx.reply('❌ Seed no encontrado en el paquete.'); return }
-      if (result.reason === 'already_installed') {
-        await ctx.reply(`✅ Seed ya instalado (*${result.installed}*). Usa *${ctx.prefix}llm seed force* y luego *${ctx.prefix}llm train*.`)
-        return
-      }
-      await ctx.reply(`✅ Seed: *${result.installed}* archivos. Ahora *${ctx.prefix}llm train*.`)
+      await ctx.reply(result.ok ? `✅ Seed: ${result.reason} (${result.installed})` : '❌ Seed no encontrado')
       return
     }
-
-    if (sub === 'process' || sub === 'procesar') {
-      const stats = getQueueStats()
+    if (sub === 'process') {
       requestTraining('manual', ctx.sender, true)
-      await ctx.reply(`⚙️ Process encolado. Pendientes: *${stats.queued}*. Mira *${ctx.prefix}llm progress*.`)
+      await ctx.reply(`⚙️ Process + train encolado. Q:${getQueueStats().queued}`)
       return
     }
-
-    if (sub === 'retry-failed' || sub === 'reintentar') {
-      await ctx.reply(`🔁 Reencolados *${retryFailedJobs()}* fallidos.`)
+    if (sub === 'retry-failed') { await ctx.reply(`🔁 ${retryFailedJobs()} reencolados`); return }
+    if (sub === 'clear-done') { await ctx.reply(`🧹 ${clearCompletedJobs()} limpiados`); return }
+    if (sub === 'download') {
+      const ids = ctx.args.slice(1)
+      if (!ids.length) throw new Error('llm download <id>')
+      void downloadSources(ids)
+      await ctx.reply(`⬇️ Descargando ${ids.length}…`)
       return
     }
-    if (sub === 'clear-done' || sub === 'limpiar-listos') {
-      await ctx.reply(`🧹 Limpiados *${clearCompletedJobs()}* jobs completados del registro.`)
-      return
-    }
-
-    if (sub === 'download' || sub === 'descargar') {
-      const requested = ctx.args.slice(1).filter(Boolean)
-      const ids = requested.length === 1 && requested[0].toLowerCase() === 'defaults'
-        ? CORPUS_SOURCES.filter((s) => s.enabledByDefault).map((s) => s.id) : requested
-      if (!ids.length) throw new Error(`Ejemplo: ${ctx.prefix}llm download tatoeba-es`)
-      await ctx.reply(`⬇️ Descargando *${ids.length}* fuente(s)…`)
-      void downloadSources(ids).then(async (result) => {
-        await ctx.reply(`✅ Descarga: ${result.state.completed.length} ok, ${result.state.failed.length} fail. Luego *${ctx.prefix}llm process*.`)
-      }).catch(async (e) => { await ctx.reply(`❌ ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined) })
-      return
-    }
-
-    if (sub === 'sources' || sub === 'fuentes') {
-      const lines = CORPUS_SOURCES.map((s) => `• ${s.id} — ${s.title}`)
-      await ctx.reply(`Fuentes:\n${lines.join('\n')}\n\n${ctx.prefix}llm download <id>`)
-      return
-    }
-
-    if (sub === 'docs' || sub === 'documentos') {
-      const docs = miniLLM.listDocuments().slice(-30)
-      await ctx.reply(docs.length ? docs.map((d, i) => `${i + 1}. ${d.name} (${formatBytes(d.size)})`).join('\n') : 'Sin documentos.')
-      return
-    }
-
-    if (sub === 'add' || sub === 'agregar') {
+    if (sub === 'add') {
       const job = await enqueueDocumentFromWhatsApp(ctx.message)
-      await ctx.reply(`✅ En cola: *${job.filename}* (${formatBytes(job.bytes)})\n*${ctx.prefix}llm process*`)
+      await ctx.reply(`✅ En cola: ${job.filename} (${formatBytes(job.bytes)})`)
       return
     }
-
-    if (sub === 'stop' || sub === 'detener') {
-      const pidFile = path.join(miniLLM.ROOT, 'worker.pid')
-      const trainingQueueFile = path.join(miniLLM.ROOT, 'training-queue.json')
-      let pid: number | null = null
-      try { const c = Number(fs.readFileSync(pidFile, 'utf8').trim()); if (Number.isInteger(c) && c > 1) pid = c } catch {}
-      try { fs.writeFileSync(trainingQueueFile, JSON.stringify({ requested: false }, null, 2)) } catch {}
-      if (pid !== null) { try { process.kill(pid, 'SIGTERM') } catch (e) { if (!(e instanceof Error) || !e.message.includes('ESRCH')) throw e } }
+    if (sub === 'stop') {
       try {
         const statePath = path.join(miniLLM.ROOT, 'state.json')
         const current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown>
         current.learning = false
-        current.currentMessage = 'Detenido por usuario'
+        current.currentMessage = 'Detenido'
         fs.writeFileSync(statePath, JSON.stringify(current, null, 2))
       } catch {}
-      await ctx.reply('⏹️ Entrenamiento detenido. model.bin se conserva.')
+      await ctx.reply('⏹️ Stop solicitado.')
       return
     }
-
-    if (sub === 'train' || sub === 'entrenar' || sub === 'import' || sub === 'importar') {
-      requestTraining(sub.startsWith('import') ? 'import' : 'manual', ctx.sender, true)
-      await ctx.reply(`🧠 Train encolado. *${ctx.prefix}llm progress*`)
+    if (sub === 'train' || sub === 'entrenar') {
+      requestTraining('manual', ctx.sender, true)
+      await ctx.reply('🧠 Train encolado.')
       return
     }
-
-    if (sub === 'ask' || sub === 'pregunta' || sub === 'query') {
+    if (sub === 'ask') {
       const query = ctx.args.slice(1).join(' ').trim()
-      if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}llm ask <pregunta>`)
+      if (query.length < 2) throw new Error('llm ask <pregunta>')
       await ctx.reply(miniLLM.answer(query))
       return
     }
-
-    if (sub === 'search' || sub === 'buscar') {
+    if (sub === 'search') {
       const query = ctx.args.slice(1).join(' ').trim()
-      if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}llm search <texto>`)
       const hits = miniLLM.search(query, 5)
-      if (!hits.length) { await ctx.reply('Sin coincidencias.'); return }
-      await ctx.reply(hits.map((h, i) => `${i + 1}. ${Math.round(h.score * 100)}%\n${h.text.slice(0, 500)}`).join('\n\n'))
+      await ctx.reply(hits.length ? hits.map((h, i) => `${i + 1}. ${h.text.slice(0, 400)}`).join('\n\n') : 'Sin hits')
       return
     }
-
     if (sub === 'auto') {
       const mode = (ctx.args[1] ?? '').toLowerCase()
-      if (!['on', 'off'].includes(mode)) throw new Error(`Uso: ${ctx.prefix}llm auto on|off`)
+      if (!['on', 'off'].includes(mode)) throw new Error('llm auto on|off')
       const statePath = `${miniLLM.ROOT}/state.json`
       let current: Record<string, unknown> = {}
       try { current = JSON.parse(fs.readFileSync(statePath, 'utf8')) as Record<string, unknown> } catch {}
       current.autoTrainEnabled = mode === 'on'
       fs.writeFileSync(statePath, JSON.stringify(current, null, 2))
-      await ctx.reply(`🧠 Auto-train: *${mode.toUpperCase()}*`)
+      await ctx.reply(`Auto-train ${mode}`)
       return
     }
-
     await ctx.reply(help(ctx.prefix))
   },
 }]
