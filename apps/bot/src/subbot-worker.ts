@@ -218,12 +218,12 @@ process.on('message', (message: unknown) => {
   const value = message as Record<string, unknown>
   if (value.type === 'pair') {
     void requestPairingCode()
-      .then((code) => sendParent({ type: 'pair-result', subbotId, ok: Boolean(code), code }))
+      .then((code) => sendParent({ type: 'pair-result', subbotId, ok: true, code, alreadyLinked: code === null }))
       .catch((error) => sendParent({ type: 'pair-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
   if (value.type === 'qr') {
     void requestQr()
-      .then((qr) => sendParent({ type: 'qr-result', subbotId, ok: Boolean(qr), qr }))
+      .then((qr) => sendParent({ type: 'qr-result', subbotId, ok: Boolean(qr), qr, alreadyLinked: qr === '' }))
       .catch((error) => sendParent({ type: 'qr-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
   if (value.type === 'phone' && typeof value.value === 'string') {
