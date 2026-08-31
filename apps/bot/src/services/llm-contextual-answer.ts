@@ -1,6 +1,7 @@
 import { miniLLM } from './mini-llm.js'
 import { conversationMemory } from './conversation-memory.js'
 import { ollama } from './ollama.js'
+import { asksBotName, formatAssistantResponse } from './response-format.js'
 
 function pickOne(list: string[]) {
   return list[Math.floor(Math.random() * list.length)] ?? list[0] ?? ''
@@ -10,7 +11,7 @@ function normalize(s: string) {
   return s
     .toLocaleLowerCase('es-MX')
     .normalize('NFKC')
-    .replace(/[¿?¡!.,;:"'«»“”]+/g, ' ')
+    .replace(/[¿?¡!.,;:\"'«»“”]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -73,6 +74,9 @@ export async function contextualAnswer(chatId: string, userText: string): Promis
   const text = userText.replace(/\s+/g, ' ').trim()
   if (text.length < 2) return null
 
+  // Identidad fija: nunca dependemos del modelo para contestar el nombre del bot.
+  if (asksBotName(text)) return 'Soy Ghost Nexora Bot.'
+
   const recent = conversationMemory.recent(chatId, 12)
   const topics = conversationMemory.topicKeywords(chatId, text)
   const lastBot = conversationMemory.lastBot(chatId)
@@ -86,9 +90,13 @@ export async function contextualAnswer(chatId: string, userText: string): Promis
 
   // 0) LLM generativo local: conserva contexto real del chat y responde de forma natural.
   if (ollama.isEnabled()) {
-    const generated = await ollama.generate({ userText: text, history })
+    const generated = await ollama.generate({
+      userText: text,
+      history,
+      systemPrompt: 'Eres Ghost Nexora Bot, un asistente de WhatsApp rápido, natural y útil. Tu nombre SIEMPRE es Ghost Nexora Bot. Si te preguntan tu nombre, identidad o quién eres, responde que eres Ghost Nexora Bot. Responde en el idioma del usuario. Sé directo, evita inventar datos y no repitas la pregunta. Cuando entregues código, usa bloques Markdown de triple backtick y especifica el lenguaje cuando sea posible. No envuelvas explicaciones normales en bloques de código.',
+    })
     if (generated && !isLowValue(generated) && (!lastBot || !similar(generated, lastBot))) {
-      return generated.slice(0, 900)
+      return formatAssistantResponse(text, generated.slice(0, 900))
     }
   }
 
@@ -151,5 +159,5 @@ export async function contextualAnswer(chatId: string, userText: string): Promis
     }
   }
 
-  return reply.slice(0, 900)
+  return formatAssistantResponse(text, reply.slice(0, 900))
 }
