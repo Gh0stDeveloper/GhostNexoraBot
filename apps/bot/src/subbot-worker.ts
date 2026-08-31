@@ -40,11 +40,7 @@ if (!existing) {
 
 const customization = subbotCustomization.get(subbotId)
 if (process.env.NEXORA_SUBBOT_NAME) {
-  subbotCustomization.setNames(
-    subbotId,
-    process.env.NEXORA_SUBBOT_SHORT_NAME || customization.shortName,
-    process.env.NEXORA_SUBBOT_NAME,
-  )
+  subbotCustomization.setNames(subbotId, process.env.NEXORA_SUBBOT_SHORT_NAME || customization.shortName, process.env.NEXORA_SUBBOT_NAME)
 }
 
 const blockedNames = new Set([
@@ -93,8 +89,8 @@ async function routeMessage(message: WAMessage) {
   const chatId = message.key.remoteJid
   if (!chatId || chatId === 'status@broadcast' || !message.message) return
   await observeMessageIdentity(socket, message).catch(() => undefined)
-
   const text = getMessageText(message).trim()
+
   if (!message.key.fromMe) {
     observeGroupActivity(chatId, resolveStoredIdentity(getSender(message)), chatId.endsWith('@g.us'), text.startsWith(settings.prefix))
   }
@@ -105,7 +101,6 @@ async function routeMessage(message: WAMessage) {
 
   const handled = await router.handle(socket, message)
   if (handled) return
-
   if (chatId?.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
   await maybeHumanInteraction(socket, message).catch(() => false)
 }
@@ -115,7 +110,6 @@ async function start() {
     report('expired')
     return
   }
-
   latestQr = null
   const { createSocket } = await import('./core/session.js')
   const { socket: created } = await createSocket(config.sessionDir)
@@ -153,7 +147,6 @@ async function start() {
     }
 
     if (connection !== 'close') return
-
     socket = null
     const code = Number((lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode ?? 0)
     const linked = Boolean(created.authState.creds.registered)
@@ -185,7 +178,7 @@ async function requestPairingCode() {
 async function requestQr() {
   if (!socket) await start()
   if (!socket) throw new Error('Subbot socket no disponible.')
-  if (socket.authState.creds.registered) return null
+  if (socket.authState.creds.registered) return ''
   if (latestQr && Date.now() - latestQr.createdAt <= 50_000) return latestQr.value
 
   return new Promise<string>((resolve, reject) => {
@@ -214,30 +207,24 @@ async function requestQr() {
 process.on('message', (message: unknown) => {
   if (!message || typeof message !== 'object') return
   const value = message as Record<string, unknown>
-
   if (value.type === 'pair') {
     void requestPairingCode()
       .then((code) => sendParent({ type: 'pair-result', subbotId, ok: true, code, alreadyLinked: code === null }))
       .catch((error) => sendParent({ type: 'pair-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
-
   if (value.type === 'qr') {
     void requestQr()
       .then((qr) => sendParent({ type: 'qr-result', subbotId, ok: Boolean(qr), qr, alreadyLinked: qr === '' }))
       .catch((error) => sendParent({ type: 'qr-result', subbotId, ok: false, error: error instanceof Error ? error.message : String(error) }))
   }
-
   if (value.type === 'phone' && typeof value.value === 'string') {
     phone = value.value.replace(/\D/g, '') || null
     economy.db.prepare('UPDATE subbots SET phone = ?, status = ? WHERE id = ?').run(phone, phone ? 'pairing' : 'pending', subbotId)
   }
-
   if (value.type === 'customization' && typeof value.shortName === 'string' && typeof value.name === 'string') {
-    void subbotCustomization.setNames(subbotId, value.shortName, value.name)
-      .then(() => settings.setBotDisplayName(value.name as string))
-      .catch(() => undefined)
+    subbotCustomization.setNames(subbotId, value.shortName, value.name)
+    void settings.setBotDisplayName(value.name).catch(() => undefined)
   }
-
   if (value.type === 'stop') {
     stopping = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
