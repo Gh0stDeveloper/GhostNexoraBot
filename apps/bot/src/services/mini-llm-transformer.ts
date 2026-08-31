@@ -23,10 +23,11 @@ const TRAIN_EPOCHS = Math.max(1, Number(process.env.LLM_TRAIN_EPOCHS ?? 2))
 const MAX_STEPS_PER_RUN = Math.max(0, Number(process.env.LLM_MAX_STEPS_PER_RUN ?? 0))
 const AUTO_TRAIN_EVERY_MS = 30 * 60 * 1000
 const MIN_AUTO_TRAIN_MESSAGES = 20
-const MIN_MODEL_TRAIN_STEPS_FOR_GENERATION = 250
+const MIN_MODEL_TRAIN_STEPS_FOR_GENERATION = 80_000
+const MAX_LOSS_FOR_GENERATION = 2.8
 const CHECKPOINT_EVERY_STEPS = Math.max(100, Number(process.env.LLM_CHECKPOINT_EVERY ?? 1000))
 const PROGRESS_EVERY_STEPS = 25
-const MAGIC = Buffer.from('NXLLM2\\0', 'ascii')
+const MAGIC = Buffer.from('NXLLM2\0', 'ascii')
 
 type LlmState = {
   startedAt: string
@@ -189,8 +190,128 @@ function sample(probs: Float32Array, temperature = 0.65, topK = 16) {
 function vectorSearchAnswer(query: string) { const hits = search(query, 3); return hits.length ? hits.map((h, i) => `${i + 1}. ${h.text.slice(0, 700)}`).join('\n\n') : 'No tengo conocimiento local suficiente todavía.' }
 function bestExtractiveAnswer(query: string, hits: Result[]) {
   const terms = new Set(normalizeTerms(query)), candidates: { sentence: string; score: number }[] = []
-  for (const hit of hits) for (const sentence of hit.text.split(/(?<=[.!?])\s+|\n+/).map((value) => value.trim()).filter((value) => value.length >= 20)) { const set = new Set(normalizeTerms(sentence)); let overlap = 0; for (const term of terms) if (set.has(term)) overlap++; const score = overlap / Math.max(terms.size, 1) + hit.score * 0.25; if (score > 0) candidates.push({ sentence, score }) }
-  candidates.sort((a, b) => b.score - a.score); return [...new Set(candidates.map((item) => item.sentence))].slice(0, 3)
+  for (const hit of hits) for (const sentence of hit.text.split(/(?<=[.!?])\s+|\n+/).map((value) => value.trim()).filter((value) => value.length >= 8 && value.length <= 280)) {
+    const set = new Set(normalizeTerms(sentence)); let overlap = 0
+    for (const term of terms) if (set.has(term)) overlap++
+    const metaPenalty = /checklist|banco grande|asocia cada|estimulo respuesta|fuente local/i.test(sentence) ? 0.45 : 0
+    const score = overlap / Math.max(terms.size, 1) + hit.score * 0.25 - metaPenalty
+    if (score > 0.15) candidates.push({ sentence, score })
+  }
+  candidates.sort((a, b) => b.score - a.score)
+  return [...new Set(candidates.map((item) => item.sentence))].slice(0, 2)
+}
+function extractQuotedPairs(text: string): Array<{ prompt: string; reply: string }> {
+  const pairs: Array<{ prompt: string; reply: string }> = []
+  const re = /["«“]([^"»”\n]{1,100})["»”]\s*["«“]([^"»”\n]{1,160})["»”]/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text)) !== null) {
+    const prompt = match[1]!.trim()
+    const reply = match[2]!.trim()
+    if (prompt.length >= 1 && reply.length >= 1) pairs.push({ prompt, reply })
+  }
+  return pairs
+}
+function normalizeQueryKey(value: string) {
+  return value.toLocaleLowerCase('es-MX').normalize('NFKC').replace(/[¿?¡!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+function findDialogueReply(query: string, hits: Result[]): string | null {
+  const key = normalizeQueryKey(query)
+  if (!key) return null
+  let best: { reply: string; score: number } | null = null
+  for (const hit of hits) {
+    for (const pair of extractQuotedPairs(hit.text)) {
+      const p = normalizeQueryKey(pair.prompt)
+      if (!p) continue
+      let score = 0
+      if (p === key) score = 1
+      else if (p.startsWith(key) || key.startsWith(p)) score = 0.92
+      else if (p.includes(key) || key.includes(p)) score = 0.8
+      else continue
+      score += hit.score * 0.05
+      if (!best || score > best.score) best = { reply: pair.reply, score }
+    }
+  }
+  return best && best.score >= 0.8 ? best.reply : null
+}
+function isGibberish(text: string) {
+  const tokens = text.trim().split(/\s+/).filter(Boolean)
+  if (tokens.length < 2) return true
+  const shortish = tokens.filter((token) => token.length <= 2 || /^[.,;:]+$/.test(token)).length
+  if (shortish / tokens.length > 0.45) return true
+  const unique = new Set(tokens.map((token) => token.toLowerCase()))
+  if (unique.size <= 3 && tokens.length >= 6) return true
+  if ((text.match(/\./g) || []).length >= tokens.length * 0.35) return true
+  return false
+}
+function fallbackGreeting(query: string) {
+  const key = normalizeQueryKey(query)
+  const map: Record<string, string> = {
+    hola: '¡Hola! ¿Qué tal?',
+    holis: '¡Holis! ¿Cómo andas?',
+    buenas: '¡Buenas! ¿Qué hay?',
+    'buenos dias': '¡Buenos días! ¿Cómo estás?',
+    'buenas tardes': '¡Buenas tardes!',
+    'buenas noches': '¡Buenas noches!',
+    hey: 'Hey, ¿qué tal?',
+    'que haces': 'Aquí, aprendiendo de lo que me van enseñando. ¿Y tú?',
+    'qué haces': 'Aquí, aprendiendo de lo que me van enseñando. ¿Y tú?',
+    'como estas': 'Todo bien por aquí. ¿Y tú?',
+    'cómo estás': 'Todo bien por aquí. ¿Y tú?',
+  }
+  if (map[key]) return map[key]
+  for (const [prompt, reply] of Object.entries(map)) {
+    if (key.includes(prompt) || prompt.includes(key)) return reply
+  }
+  return null
+}
+function answer(query: string) {
+  const cleaned = clean(query)
+  if (!cleaned) return 'Dime algo y te respondo con lo que he aprendido.'
+  const hits = search(cleaned, 6)
+  const vocab = loadVocab()
+  const state = getState()
+
+  const dialogue = findDialogueReply(cleaned, hits)
+  if (dialogue) return dialogue
+
+  if (cleaned.length <= 40) {
+    const greeting = fallbackGreeting(cleaned)
+    if (greeting) return greeting
+  }
+
+  const extractive = bestExtractiveAnswer(cleaned, hits)
+  const extractiveText = extractive.length ? extractive.join(' ') : null
+
+  const ready =
+    Boolean(vocab.length) &&
+    state.trainSteps >= MIN_MODEL_TRAIN_STEPS_FOR_GENERATION &&
+    (state.lastLoss === null || state.lastLoss <= MAX_LOSS_FOR_GENERATION)
+
+  if (ready) {
+    try {
+      const ids = tokenize(cleaned).map((token) => vocab.indexOf(token)).filter((id) => id >= 0 && id < vocab.length)
+      if (ids.length) {
+        const model = loadModel(vocab.length)
+        const generated = [...ids]
+        for (let i = 0; i < 28; i++) {
+          const next = sample(forward(model, generated).probs, 0.55, 12)
+          generated.push(next)
+          if (next === 2) break
+        }
+        const text = generated.slice(ids.length).map((id) => vocab[id] ?? '').filter(Boolean).join(' ').trim()
+        if (text.length >= 8 && !isGibberish(text)) return text
+      }
+    } catch {
+      // cae a extractiva
+    }
+  }
+
+  if (extractiveText) return extractiveText
+  if (hits.length) {
+    const top = hits[0]!.text.replace(/\s+/g, ' ').trim().slice(0, 320)
+    if (top && !/checklist|banco grande de pares/i.test(top)) return top
+  }
+  return 'Todavía no tengo una respuesta clara para eso. Enséñame con más ejemplos o documentos (`.llm add` / `.llm train`).'
 }
 function addLive(text: string) {
   const value = clean(text); if (!value) return
@@ -233,17 +354,6 @@ function stats() {
 }
 function listDocuments() {
   ensureDirs(); const files: string[] = []; const walk = (dir: string) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else if (/\.(txt|md|csv|tsv|json|xml|html?|pdf|docx)$/i.test(entry.name)) files.push(full) } }; walk(CORPUS_DIR); return files.map((file) => ({ name: path.relative(CORPUS_DIR, file), size: fs.statSync(file).size }))
-}
-function answer(query: string) {
-  const hits = search(query, 4), vocab = loadVocab(), state = getState(); if (!hits.length) return 'No tengo conocimiento local suficiente todavía.'
-  const extractive = bestExtractiveAnswer(query, hits), ready = Boolean(vocab.length && state.trainSteps >= MIN_MODEL_TRAIN_STEPS_FOR_GENERATION)
-  if (extractive.length && !ready) return `${extractive.join(' ')}\n\nFuente local:\n${hits.slice(0, 2).map((h, i) => `${i + 1}. ${h.text.slice(0, 450)}`).join('\n\n')}`
-  if (!vocab.length) return vectorSearchAnswer(query)
-  const ids = tokenize(query).map((token) => vocab.indexOf(token)).filter((id) => id >= 0 && id < vocab.length); if (!ids.length) return vectorSearchAnswer(query)
-  const model = loadModel(vocab.length), generated = [...ids]
-  for (let i = 0; i < 24; i++) { const next = sample(forward(model, generated).probs); generated.push(next); if (next === 2) break }
-  const text = generated.slice(ids.length).map((id) => vocab[id] ?? '').filter(Boolean).join(' ').trim()
-  return text.length >= 8 ? `${text}\n\nContexto local:\n${hits.slice(0, 2).map((h, i) => `${i + 1}. ${h.text.slice(0, 500)}`).join('\n\n')}` : vectorSearchAnswer(query)
 }
 function startAutoTrain() { ensureDirs(); setInterval(() => { const state = getState(); if (state.autoTrainEnabled && !state.learning && state.totalMessages - state.trainedMessages >= MIN_AUTO_TRAIN_MESSAGES) void train('auto').catch(() => undefined) }, AUTO_TRAIN_EVERY_MS) }
 
