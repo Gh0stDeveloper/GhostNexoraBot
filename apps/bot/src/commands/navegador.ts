@@ -152,7 +152,11 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
     },
   }
 
-  const msg = generateWAMessageFromContent(ctx.chatId, slots as never, {})
+  // Baileys 7 requires userJid when constructing generated content.
+  // Use the authenticated bot JID; ctx.sender is only a defensive fallback.
+  const userJid = ctx.socket.user?.id ?? ctx.sender
+  if (!userJid) throw new Error('No se pudo determinar el JID del bot para generar el mensaje enriquecido.')
+  const msg = generateWAMessageFromContent(ctx.chatId, slots as never, { userJid })
   await ctx.socket.relayMessage(ctx.chatId, msg.message!, {})
 }
 
@@ -173,15 +177,12 @@ export const navegadorCommands: BotCommand[] = [
         const err = error instanceof Error ? error.message : String(error)
         await ctx.reply(
           [
-            '🌐 *Navegador Ghost Nexora*',
-            `URL: ${startUrl}`,
-            `Proxy: ${PUBLIC_PROXY}?url=${encodeURIComponent(startUrl)}`,
+            '❌ *No se pudo abrir el navegador*',
             '',
-            '_Si no ves el panel embebido, abre el enlace del proxy en el navegador._',
-            err ? `Detalle: ${err.slice(0, 120)}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n'),
+            `Motivo: ${err}`,
+            '',
+            `Comprueba el proxy con: ${PUBLIC_PROXY}?url=https://example.com`,
+          ].join('\n'),
         )
       }
     },
