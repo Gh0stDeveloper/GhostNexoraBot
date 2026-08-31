@@ -20,13 +20,14 @@ type WorkerMessage = {
   code?: string | null
   qr?: string | null
   ok?: boolean
+  alreadyLinked?: boolean
   error?: string
   jid?: string | null
   phone?: string | null
 }
 
 type Waiter = {
-  resolve: (value: { ok: boolean; code?: string | null; qr?: string | null; error?: string }) => void
+  resolve: (value: { ok: boolean; code?: string | null; qr?: string | null; alreadyLinked?: boolean; error?: string }) => void
   reject: (error: Error) => void
   timer: NodeJS.Timeout
 }
@@ -72,7 +73,10 @@ class SubbotManager {
     if (!id) return
 
     if (message.type === 'status') {
-      const patch: Partial<SubbotRecord> = { status: String(message.status ?? 'offline'), lastSeenAt: Date.now() }
+      const patch: { status?: string; lastSeenAt?: number; phone?: string } = {
+        status: String(message.status ?? 'offline'),
+        lastSeenAt: Date.now(),
+      }
       if (typeof message.phone === 'string' && message.phone) patch.phone = message.phone
       economy.updateSubbot(id, patch)
       return
@@ -89,6 +93,7 @@ class SubbotManager {
         ok: Boolean(message.ok),
         code: message.code ?? null,
         qr: message.qr ?? null,
+        alreadyLinked: Boolean(message.alreadyLinked),
         error: message.error,
       })
     }
@@ -152,7 +157,7 @@ class SubbotManager {
     const key = this.key(record.id, action)
     if (this.waiters.has(key)) throw new Error(`Ya hay una operación ${action} en curso para este subbot.`)
 
-    const result = await new Promise<{ ok: boolean; code?: string | null; qr?: string | null; error?: string }>((resolve, reject) => {
+    const result = await new Promise<{ ok: boolean; code?: string | null; qr?: string | null; alreadyLinked?: boolean; error?: string }>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiters.delete(key)
         reject(new Error(`El subbot #${record.id} no respondió a tiempo.`))
@@ -192,10 +197,11 @@ class SubbotManager {
       worker.send({ type: 'phone', value: phone })
       worker.send({ type: 'customization', shortName: customization.shortName, name: customization.longName })
       const result = await this.request({ ...record, phone, status: 'pairing' }, 'pair')
+      if (result.alreadyLinked || (result.ok && !result.code)) return { alreadyLinked: true, code: null, qr: null }
       if (result.ok && result.code) return { alreadyLinked: false, code: result.code, qr: null }
-      if (result.ok && !result.code) return { alreadyLinked: true, code: null, qr: null }
 
       const qrResult = await this.request({ ...record, phone, status: 'pairing' }, 'qr')
+      if (qrResult.alreadyLinked || (qrResult.ok && !qrResult.qr)) return { alreadyLinked: true, code: null, qr: null }
       if (!qrResult.ok || !qrResult.qr) throw new Error(result.error || qrResult.error || 'WhatsApp no devolvió código ni QR.')
       return { alreadyLinked: false, code: null, qr: qrResult.qr, fallbackReason: result.error }
     } finally {
@@ -215,11 +221,8 @@ class SubbotManager {
       const customization = subbotCustomization.get(record.id)
       worker.send({ type: 'customization', shortName: customization.shortName, name: customization.longName })
       const result = await this.request({ ...record, status: 'pairing' }, 'qr')
-      if (!result.ok || !result.qr) {
-        const current = economy.getActiveSubbot(ownerJid)
-        if (current?.status === 'online') return { alreadyLinked: true as const, qr: null }
-        throw new Error(result.error || 'WhatsApp no devolvió un QR válido.')
-      }
+      if (result.alreadyLinked || (result.ok && !result.qr)) return { alreadyLinked: true as const, qr: null }
+      if (!result.ok || !result.qr) throw new Error(result.error || 'WhatsApp no devolvió un QR válido.')
       return { alreadyLinked: false as const, qr: result.qr }
     } finally {
       this.pairingLocks.delete(record.id)
