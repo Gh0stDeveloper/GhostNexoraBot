@@ -145,23 +145,28 @@ async function routeMessage(
 
   if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
     try {
-      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+      // Primero busca respuesta; si no hay, silencio total (sin "escribiendo…")
       const response = llmFreeChat.respond(text)
-      if (response) {
-        await socket.sendMessage(chatId, { text: response }, { quoted: message })
-        await llmFreeChat.maybeReact(socket, message, text, response)
-      }
+      if (!response) return
+      llmFreeChat.commitRespond(chatId)
+      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+      await socket.sendMessage(chatId, { text: response }, { quoted: message })
+      await llmFreeChat.maybeReact(socket, message, text, response)
+      await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     } catch (error) {
       logger.warn({ error, chatId }, 'llm free-chat response failed')
+      if (chatId) await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     }
     return
   }
 
   if (chatId && text.length >= 2 && !text.startsWith(settings.prefix) && autoChat.isEnabled(chatId) && autoChat.canRespond(chatId)) {
     try {
-      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
       const response = await autoChat.respond(chatId, text)
-      if (response) await socket.sendMessage(chatId, { text: response }, { quoted: message })
+      if (!response) return
+      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+      await socket.sendMessage(chatId, { text: response }, { quoted: message })
+      await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     } catch (error) {
       logger.warn({ error, chatId }, 'auto-chat response failed')
     }

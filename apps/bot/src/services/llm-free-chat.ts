@@ -13,9 +13,7 @@ type State = {
   learnAlways: boolean
   maxRepliesPerWindow: number
   spamWindowMs: number
-  /** cooldown mínimo entre respuestas en el mismo chat (ms) */
   cooldownMs: number
-  /** si false, ignora cooldownMs (sigue el límite anti-spam) */
   cooldownEnabled: boolean
   reactions: boolean
 }
@@ -73,14 +71,19 @@ function looksLikeCommand(text: string, prefix: string) {
   return false
 }
 
+/** Respuestas basura / fallback → en modo libre = silencio total */
 function isLowValueReply(text: string) {
   const t = text.trim().toLowerCase()
   if (t.length < 2) return true
-  if (/todavía no tengo una respuesta clara|no tengo conocimiento local suficiente/i.test(t)) return true
+  if (/todavía no tengo una respuesta clara/i.test(t)) return true
+  if (/no tengo conocimiento local suficiente/i.test(t)) return true
+  if (/enséñame con más ejemplos/i.test(t)) return true
+  if (/no tengo una respuesta/i.test(t)) return true
+  if (/dime algo y te respondo/i.test(t)) return true
+  if (/^\d+\.\s/.test(t) && /checklist|banco grande|asocia cada/i.test(t)) return true
   return false
 }
 
-/** Filtro de aprendizaje: conversaciones/chat → memoria; no basura */
 export function shouldLearnText(text: string) {
   const t = text.trim()
   if (t.length < 2 || t.length > 1200) return false
@@ -119,9 +122,15 @@ function withinSpamLimit(chatId: string, state: State) {
     windowHits.set(chatId, hits)
     return false
   }
+  return true
+}
+
+function commitRateLimit(chatId: string, state: State) {
+  const now = Date.now()
+  const hits = (windowHits.get(chatId) ?? []).filter((t) => now - t < state.spamWindowMs)
   hits.push(now)
   windowHits.set(chatId, hits)
-  return true
+  lastAt.set(chatId, now)
 }
 
 function pickReaction(userText: string, answer: string): string | null {
@@ -217,14 +226,17 @@ export const llmFreeChat = {
     if (!state.groupWhitelist.length) return true
     return state.groupWhitelist.includes(chatId)
   },
+  /** Solo comprueba límites; no marca el contador hasta commitRespond */
   canRespond(chatId: string) {
     const state = load()
     const now = Date.now()
     const last = lastAt.get(chatId) ?? 0
     if (state.cooldownEnabled && state.cooldownMs > 0 && now - last < state.cooldownMs) return false
     if (!withinSpamLimit(chatId, state)) return false
-    lastAt.set(chatId, now)
     return true
+  },
+  commitRespond(chatId: string) {
+    commitRateLimit(chatId, load())
   },
   shouldHandle(opts: {
     chatId: string
@@ -245,10 +257,15 @@ export const llmFreeChat = {
     if (!this.canRespond(chatId)) return false
     return true
   },
+  /** null = no enviar nada (silencio) */
   respond(text: string) {
-    const answer = miniLLM.answer(text)
-    if (!answer || isLowValueReply(answer)) return null
-    return answer.slice(0, 900)
+    try {
+      const answer = miniLLM.answer(text)
+      if (!answer || isLowValueReply(answer)) return null
+      return answer.slice(0, 900)
+    } catch {
+      return null
+    }
   },
   async maybeReact(socket: WASocket, message: WAMessage, userText: string, answer: string) {
     const state = load()
