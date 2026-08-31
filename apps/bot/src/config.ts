@@ -46,6 +46,17 @@ const schema = z.object({
   LEMPI_HAPPYMOD_SEARCH_ENDPOINTS: z.string().default('/s/happymod,/s/hm,/search/happymod,/search/hm'),
   LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS: z.string().default('/d/happymod,/d/hm,/d/happymoddl,/download/happymod,/download/hm'),
 
+  // Local LLM (Ollama). Disabled by default so existing installations keep the
+  // deterministic Mini-LLM path until explicitly enabled in .env.
+  OLLAMA_ENABLED: z.string().default('false'),
+  OLLAMA_MODEL: z.string().min(1).default('qwen2.5:1.5b'),
+  OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().min(2_000).max(180_000).default(45_000),
+  OLLAMA_TEMPERATURE: z.coerce.number().min(0).max(2).default(0.65),
+  OLLAMA_TOP_P: z.coerce.number().min(0).max(1).default(0.9),
+  OLLAMA_MAX_HISTORY: z.coerce.number().int().min(2).max(20).default(10),
+  OLLAMA_SYSTEM_PROMPT: z.string().default('Eres Ghost Nexora Bot, un asistente de WhatsApp rápido, natural y útil. Responde en el idioma del usuario. Sé directo, evita inventar datos y no repitas la pregunta.'),
+
   TELEGRAM_BOT_TOKEN: z.string().default(''),
   TELEGRAM_CHANNEL_ID: z.string().default(''),
   TELEGRAM_CHANNEL_URL: z.string().default(''),
@@ -91,6 +102,14 @@ export const config = {
   lempiPinterestSearchEndpoints: splitList(raw.LEMPI_PINTEREST_SEARCH_ENDPOINTS),
   lempiHappyModSearchEndpoints: splitList(raw.LEMPI_HAPPYMOD_SEARCH_ENDPOINTS),
   lempiHappyModDownloadEndpoints: splitList(raw.LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS),
+  ollamaEnabled: truthy(raw.OLLAMA_ENABLED),
+  ollamaModel: raw.OLLAMA_MODEL,
+  ollamaBaseUrl: raw.OLLAMA_BASE_URL.replace(/\/+$/, ''),
+  ollamaTimeoutMs: raw.OLLAMA_TIMEOUT_MS,
+  ollamaTemperature: raw.OLLAMA_TEMPERATURE,
+  ollamaTopP: raw.OLLAMA_TOP_P,
+  ollamaMaxHistory: raw.OLLAMA_MAX_HISTORY,
+  ollamaSystemPrompt: raw.OLLAMA_SYSTEM_PROMPT,
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,
   telegramChannelId: raw.TELEGRAM_CHANNEL_ID,
   telegramChannelUrl: raw.TELEGRAM_CHANNEL_URL,
