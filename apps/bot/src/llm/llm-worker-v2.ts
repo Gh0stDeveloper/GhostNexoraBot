@@ -2,7 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from '../config.js'
 import { miniLLM } from '../services/mini-llm-transformer.js'
-import { getQueueState, updateDocumentJob } from './document-queue.js'
+import {
+  getQueueState,
+  markJobCompleted,
+  markJobFailed,
+  markJobProcessing,
+} from './document-queue.js'
 import { drainLiveMessages } from './live-queue.js'
 import { consumeTrainingRequest } from './training-queue.js'
 import { ingestDocument, ingestLive, countCorpusDocuments, migrateLegacyVectors, countVectors } from './incremental-corpus.js'
@@ -16,35 +21,53 @@ const LIVE_BATCH = 100
 let busy = false
 
 function readState() {
-  try { return JSON.parse(fs.readFileSync(STATE, 'utf8')) as Record<string, unknown> } catch { return {} }
+  try {
+    return JSON.parse(fs.readFileSync(STATE, 'utf8')) as Record<string, unknown>
+  } catch {
+    return {}
+  }
 }
+
 function writeState(patch: Record<string, unknown>) {
-  const current = readState(); const tmp = `${STATE}.tmp`
+  const current = readState()
+  const tmp = `${STATE}.tmp`
   fs.mkdirSync(ROOT, { recursive: true })
-  fs.writeFileSync(tmp, JSON.stringify({ ...current, ...patch }, null, 2)); fs.renameSync(tmp, STATE)
+  fs.writeFileSync(tmp, JSON.stringify({ ...current, ...patch }, null, 2))
+  fs.renameSync(tmp, STATE)
 }
+
 function trainRuns() {
   const value = Number(readState().trainRuns ?? 0)
   return Number.isInteger(value) && value >= 0 ? value : 0
 }
-function extractStateError(error: unknown) { return error instanceof Error ? `${error.name}: ${error.message}` : String(error) }
+
+function extractStateError(error: unknown) {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+}
 
 async function processDocuments() {
   const jobs = getQueueState().jobs.filter((job) => job.status === 'queued')
   let processed = 0
   for (const job of jobs) {
-    updateDocumentJob(job.id, { status: 'processing', startedAt: new Date().toISOString(), error: undefined })
+    const active = markJobProcessing(job.id)
+    if (!active) continue
     try {
-      if (!fs.existsSync(job.path)) throw new Error('El archivo de la cola ya no existe.')
-      const target = path.join(CORPUS, `${job.id}-${job.filename}`)
-      fs.renameSync(job.path, target)
+      if (!fs.existsSync(active.path)) throw new Error('El archivo de la cola ya no existe.')
+      fs.mkdirSync(CORPUS, { recursive: true })
+      const target = path.join(CORPUS, `${active.id}-${active.filename}`)
+      fs.renameSync(active.path, target)
       const result = await ingestDocument(target)
-      updateDocumentJob(job.id, { status: 'completed', finishedAt: new Date().toISOString(), path: target })
+      markJobCompleted(active.id, target)
       const state = readState()
-      writeState({ totalDocuments: countCorpusDocuments(), totalChunks: Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0), vectorRecords: countVectors(), currentMessage: `Documento procesado: ${job.filename}` })
+      writeState({
+        totalDocuments: countCorpusDocuments(),
+        totalChunks: Number(state.totalChunks ?? 0) + Number(result.chunks ?? 0),
+        vectorRecords: countVectors(),
+        currentMessage: `Documento procesado: ${active.filename}`,
+      })
       processed++
     } catch (error) {
-      updateDocumentJob(job.id, { status: 'failed', finishedAt: new Date().toISOString(), error: extractStateError(error) })
+      markJobFailed(job.id, extractStateError(error))
       console.error(`[LLM worker] documento ${job.filename}:`, extractStateError(error))
     }
   }
@@ -56,9 +79,17 @@ function processLiveMessages() {
   if (!messages.length) return 0
   let added = 0
   for (const message of messages) {
-    try { added += ingestLive(message).vectors } catch (error) { console.error('[LLM worker] mensaje vivo:', extractStateError(error)) }
+    try {
+      added += ingestLive(message).vectors
+    } catch (error) {
+      console.error('[LLM worker] mensaje vivo:', extractStateError(error))
+    }
   }
-  writeState({ totalMessages: Number(readState().totalMessages ?? 0) + messages.length, vectorRecords: countVectors(), currentMessage: `Memoria viva: ${messages.length} mensajes` })
+  writeState({
+    totalMessages: Number(readState().totalMessages ?? 0) + messages.length,
+    vectorRecords: countVectors(),
+    currentMessage: `Memoria viva: ${messages.length} mensajes`,
+  })
   return added
 }
 
@@ -70,17 +101,32 @@ async function trainOnce(reason: string) {
   if (currentRun > 0) ensureBaseCheckpoint(currentRun)
   ensureModelVocabularySize(vocabBefore.length)
 
-  // miniLLM.train() owns the learning lock. Never set learning=true here.
-  writeState({ currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentEpoch: 0, currentTotalEpochs: Number(process.env.LLM_TRAIN_EPOCHS ?? 2), currentMessage: `Preparando vuelta ${nextRun} (${reason})`, vectorRecords: countVectors() })
+  writeState({
+    currentProgress: 0,
+    currentStep: 0,
+    currentTotalSteps: 0,
+    currentEpoch: 0,
+    currentTotalEpochs: Number(process.env.LLM_TRAIN_EPOCHS ?? 2),
+    currentMessage: `Preparando vuelta ${nextRun} (${reason})`,
+    vectorRecords: countVectors(),
+  })
   const result = await miniLLM.train(`incremental-${nextRun}`)
   if (!result.started) {
     writeState({ learning: false, currentMessage: `Entrenamiento no iniciado: ${result.reason}` })
     return result
   }
   const finalVocab = loadVocab()
-  if (finalVocab.length < vocabBefore.length) throw new Error(`INVARIANTE: vocabulario final ${finalVocab.length} < base ${vocabBefore.length}. Abortado.`)
+  if (finalVocab.length < vocabBefore.length) {
+    throw new Error(`INVARIANTE: vocabulario final ${finalVocab.length} < base ${vocabBefore.length}. Abortado.`)
+  }
   checkpointRound(nextRun)
-  writeState({ learning: false, currentProgress: 100, currentMessage: `Completado: vuelta ${nextRun}`, modelVersion: nextRun + 2, vectorRecords: countVectors() })
+  writeState({
+    learning: false,
+    currentProgress: 100,
+    currentMessage: `Completado: vuelta ${nextRun}`,
+    modelVersion: nextRun + 2,
+    vectorRecords: countVectors(),
+  })
   return result
 }
 
@@ -94,28 +140,60 @@ async function tick() {
     const state = readState()
     const totalMessages = Number(state.totalMessages ?? 0)
     const trainedMessages = Number(state.trainedMessages ?? 0)
-    const autoEnabled = state.autoTrainEnabled !== false
+    const autoEnabled = state.autoTrainEnabled === true
     const lastTrain = state.lastTrainAt ? Date.parse(String(state.lastTrainAt)) : 0
-    const autoDue = autoEnabled && Date.now() - lastTrain >= 30 * 60 * 1000 && totalMessages - trainedMessages >= 20
+    const autoDue =
+      autoEnabled && Date.now() - lastTrain >= 30 * 60 * 1000 && totalMessages - trainedMessages >= 20
     if (docs > 0 || request) {
-      try { await trainOnce(request ? 'manual' : 'document') } catch (error) { writeState({ learning: false, currentMessage: `Error: ${extractStateError(error)}` }); console.error('[LLM worker] entrenamiento:', extractStateError(error)) }
+      try {
+        await trainOnce(request ? 'manual' : 'document')
+      } catch (error) {
+        writeState({ learning: false, currentMessage: `Error: ${extractStateError(error)}` })
+        console.error('[LLM worker] entrenamiento:', extractStateError(error))
+      }
     } else if (autoDue) {
-      try { await trainOnce('auto') } catch (error) { writeState({ learning: false, currentMessage: `Error: ${extractStateError(error)}` }); console.error('[LLM worker] auto-entrenamiento:', extractStateError(error)) }
+      try {
+        await trainOnce('auto')
+      } catch (error) {
+        writeState({ learning: false, currentMessage: `Error: ${extractStateError(error)}` })
+        console.error('[LLM worker] auto-entrenamiento:', extractStateError(error))
+      }
     } else if (live > 0) {
-      writeState({ currentMessage: `Memoria actualizada: ${live} vectores nuevos`, vectorRecords: countVectors() })
+      writeState({
+        currentMessage: `Memoria actualizada: ${live} vectores nuevos`,
+        vectorRecords: countVectors(),
+      })
     }
-  } finally { busy = false }
+  } finally {
+    busy = false
+  }
 }
 
 async function main() {
   fs.mkdirSync(ROOT, { recursive: true })
   const migratedVectors = migrateLegacyVectors()
-  writeState({ learning: false, currentProgress: 0, currentStep: 0, currentTotalSteps: 0, currentTotalEpochs: 0, currentMessage: migratedVectors > 0 ? `Memoria migrada: ${migratedVectors} vectores` : 'En espera', vectorRecords: countVectors() })
+  writeState({
+    learning: false,
+    currentProgress: 0,
+    currentStep: 0,
+    currentTotalSteps: 0,
+    currentTotalEpochs: 0,
+    currentMessage:
+      migratedVectors > 0 ? `Memoria migrada: ${migratedVectors} vectores` : 'En espera',
+    vectorRecords: countVectors(),
+  })
   console.log(`[LLM worker v2] incremental activo; vectores migrados: ${migratedVectors}`)
   while (true) {
-    try { await tick() } catch (error) { console.error('[LLM worker v2] tick:', extractStateError(error)) }
+    try {
+      await tick()
+    } catch (error) {
+      console.error('[LLM worker v2] tick:', extractStateError(error))
+    }
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_MS))
   }
 }
 
-main().catch((error) => { console.error('[LLM worker v2] fatal:', extractStateError(error)); process.exitCode = 1 })
+main().catch((error) => {
+  console.error('[LLM worker v2] fatal:', extractStateError(error))
+  process.exitCode = 1
+})
