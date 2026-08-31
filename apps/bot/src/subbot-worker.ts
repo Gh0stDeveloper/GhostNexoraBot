@@ -11,7 +11,6 @@ import { handleKickSticker } from './services/human-stickers.js'
 import { maybeHumanInteraction } from './services/human-behavior-v8.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { observeGroupActivity } from './services/progression-v4.js'
-import { autoChat } from './services/auto-chat.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { withTimeout } from './utils/timeout.js'
 import { logger } from './utils/logger.js'
@@ -56,7 +55,9 @@ const blockedNames = new Set([
   'adminpanel', 'dashboard',
 ])
 const allowedCommands = commands.filter((command) =>
-  !blockedNames.has(command.name.toLowerCase()) && !command.ownerOnly && command.category !== 'owner',
+  !blockedNames.has(command.name.toLowerCase()) &&
+  !command.ownerOnly &&
+  (command.category !== 'owner' || command.subbotOwnerAllowed === true),
 )
 
 const router = new CommandRouter(allowedCommands, {
