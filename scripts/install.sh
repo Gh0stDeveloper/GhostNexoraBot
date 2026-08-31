@@ -38,57 +38,42 @@ done
 export DEBIAN_FRONTEND=noninteractive
 
 section '1/9 · Dependencias del sistema'
-info 'Actualizando índices APT...'
 apt-get update >/tmp/ghost-nexora-apt-update.log
-ok 'Índices APT actualizados.'
-info 'Instalando dependencias base...'
-apt-get install -y ca-certificates curl git ffmpeg webp zip build-essential util-linux nginx unzip >/tmp/ghost-nexora-apt-install.log
+apt-get install -y ca-certificates curl git ffmpeg webp zip build-essential util-linux nginx unzip python3 >/tmp/ghost-nexora-apt-install.log
 ok 'Dependencias base instaladas.'
 
 section '2/9 · Node.js y yt-dlp'
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 24 ]]; then
-  info 'Instalando Node.js 24...'
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash - >/tmp/ghost-nexora-node.log
   apt-get install -y nodejs >>/tmp/ghost-nexora-node.log
-  ok "Node.js $(node -v) instalado."
-else
-  ok "Node.js existente: $(node -v)"
 fi
+ok "Node.js $(node -v) disponible."
 
 if ! command -v yt-dlp >/dev/null 2>&1; then
-  info 'Instalando yt-dlp...'
   curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp >/tmp/ghost-nexora-ytdlp.log
   chmod 0755 /usr/local/bin/yt-dlp
-  ok 'yt-dlp instalado.'
 else
   yt-dlp -U >/tmp/ghost-nexora-ytdlp.log 2>&1 || warn 'No se pudo actualizar yt-dlp; se conservará la versión instalada.'
-  ok "yt-dlp disponible: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 fi
+ok "yt-dlp disponible: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 
 section '3/9 · Usuario y almacenamiento persistente'
 if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
   useradd --system --home-dir "${STATE_DIR}" --create-home --shell /usr/sbin/nologin "${SERVICE_USER}"
-  ok "Usuario ${SERVICE_USER} creado."
-else
-  ok "Usuario ${SERVICE_USER} ya existe."
 fi
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${STATE_DIR}" "${STATE_DIR}/session" "${STATE_DIR}/data" "${STATE_DIR}/data/subbots"
 ok 'Almacenamiento persistente preparado.'
 
 section '4/9 · Código del bot'
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
-  info 'Repositorio existente: actualizando sin tocar .env ni datos persistentes...'
   git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
   git -C "${INSTALL_DIR}" checkout "${BRANCH}"
   git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"
 else
-  info 'Clonando repositorio...'
   git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
 fi
-ok "Código actualizado: $(git -C "${INSTALL_DIR}" rev-parse --short HEAD)"
-
 cd "${INSTALL_DIR}"
-[[ -f .env ]] || { cp .env.example .env; warn '.env no existía; se creó desde .env.example.'; }
+[[ -f .env ]] || cp .env.example .env
 
 set_env() {
   local key="$1" value="$2"
@@ -102,27 +87,24 @@ set_env WEB_PORT "${WEB_PORT}"
 set_env BOT_HEALTH_PORT "${BOT_HEALTH_PORT}"
 set_env BOT_HEALTH_URL "http://127.0.0.1:${BOT_HEALTH_PORT}/health"
 set_env OFFICIAL_CHANNEL_URL "https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i"
+set_env BROWSER_PROXY_PUBLIC_URL "https://${BOT_DOMAIN:-ghostnexorabot.duckdns.org}/proxy"
+set_env BROWSER_PROXY_PORT "3847"
 
 CURRENT_ADMIN_TOKEN="$(grep '^ADMIN_WEB_TOKEN=' .env | cut -d= -f2- || true)"
 if [[ -z "${CURRENT_ADMIN_TOKEN}" || "${CURRENT_ADMIN_TOKEN}" == "change-this-admin-token" ]]; then
   set_env ADMIN_WEB_TOKEN "$(node -e "process.stdout.write(require('crypto').randomBytes(24).toString('hex'))")"
-  ok 'ADMIN_WEB_TOKEN generado automáticamente.'
-else
-  ok 'ADMIN_WEB_TOKEN existente conservado.'
 fi
 
 if [[ -n "${BOT_DOMAIN}" ]]; then set_env PUBLIC_WEB_URL "https://${BOT_DOMAIN}"; else set_env PUBLIC_WEB_URL "http://127.0.0.1:${WEB_PORT}"; fi
 chown root:"${SERVICE_USER}" .env
 chmod 0640 .env
-ok '.env configurado y protegido (0640).'
+ok '.env configurado y protegido.'
 
 section '5/9 · Dependencias Node'
-info 'Ejecutando npm install...'
 npm install >/tmp/ghost-nexora-npm-install.log 2>&1
 ok 'Dependencias Node instaladas.'
 
 section '6/9 · Build de producción'
-info 'Compilando bot + web...'
 npm run build >/tmp/ghost-nexora-build.log 2>&1
 ok 'Build de producción completado.'
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"
@@ -155,61 +137,30 @@ if [[ "${REGISTERED}" != "true" ]]; then
   if [[ -n "${PHONE}" ]]; then
     CURRENT_OWNERS="$(grep '^OWNER_NUMBERS=' .env | cut -d= -f2- || true)"
     [[ -n "${CURRENT_OWNERS}" ]] || set_env OWNER_NUMBERS "${PHONE}"
-    info "Iniciando pairing como ${SERVICE_USER}..."
-    if runuser -u "${SERVICE_USER}" -- env ENV_FILE="${INSTALL_DIR}/.env" PAIRING_NUMBER="${PHONE}" npm --prefix "${INSTALL_DIR}" run pair; then
-      ok 'Vinculación completada.'
-    else
-      warn 'La vinculación no terminó. La instalación continuará y puedes repetir npm run pair después.'
-    fi
-  else
-    warn "Vinculación omitida. Ejecuta después: sudo -u ${SERVICE_USER} -H env ENV_FILE=${INSTALL_DIR}/.env npm --prefix ${INSTALL_DIR} run pair"
+    runuser -u "${SERVICE_USER}" -- env ENV_FILE="${INSTALL_DIR}/.env" PAIRING_NUMBER="${PHONE}" npm --prefix "${INSTALL_DIR}" run pair || warn 'La vinculación no terminó; puedes repetirla después.'
   fi
 else
   ok 'Sesión WhatsApp existente detectada; no se volvió a vincular.'
 fi
 
-section '9/9 · Servicios y web'
+section '9/9 · Servicios, proxy y Nginx'
 systemctl enable --now ghost-nexora-bot.service ghost-nexora-web.service nginx
 ok 'Servicios habilitados y arrancados.'
 
+if [[ -f "${INSTALL_DIR}/scripts/install-browser-proxy.sh" ]]; then
+  chmod +x "${INSTALL_DIR}/scripts/install-browser-proxy.sh"
+  INSTALL_DIR="${INSTALL_DIR}" BROWSER_PROXY_DOMAIN="${BOT_DOMAIN}" bash "${INSTALL_DIR}/scripts/install-browser-proxy.sh"
+else
+  warn 'No se encontró install-browser-proxy.sh; no se pudo configurar Nginx automáticamente.'
+fi
+
 if [[ -n "${BOT_DOMAIN}" ]]; then
-  cat > /etc/nginx/sites-available/ghost-nexora-bot <<NGINX
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${BOT_DOMAIN};
-    client_max_body_size 2g;
-    location / {
-        proxy_pass http://127.0.0.1:${WEB_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-NGINX
-  ln -sfn /etc/nginx/sites-available/ghost-nexora-bot /etc/nginx/sites-enabled/ghost-nexora-bot
-  nginx -t >/tmp/ghost-nexora-nginx-test.log
-  systemctl reload nginx
   apt-get install -y certbot python3-certbot-nginx >/tmp/ghost-nexora-certbot.log
   CERTBOT_ARGS=(--nginx --non-interactive --agree-tos --redirect -d "${BOT_DOMAIN}")
   if [[ -n "${LETSENCRYPT_EMAIL}" ]]; then CERTBOT_ARGS+=(--email "${LETSENCRYPT_EMAIL}"); else CERTBOT_ARGS+=(--register-unsafely-without-email); fi
-  certbot "${CERTBOT_ARGS[@]}" >/tmp/ghost-nexora-certbot-run.log 2>&1 || warn 'No se pudo emitir HTTPS todavía; revisa DNS y ejecuta certbot cuando corresponda.'
-  ok "Nginx configurado para ${BOT_DOMAIN}."
+  certbot "${CERTBOT_ARGS[@]}" >/tmp/ghost-nexora-certbot-run.log 2>&1 || warn 'HTTPS no pudo emitirse automáticamente; comprueba DNS.'
 fi
 
-printf '\n╔══════════════════════════════════════════════════════╗\n'
-printf '║       GHOST NEXORA BOT · INSTALACIÓN OK             ║\n'
-printf '╚══════════════════════════════════════════════════════╝\n'
-printf 'Código          : %s\n' "$(git -C "${INSTALL_DIR}" rev-parse --short HEAD)"
-printf 'Instalación     : %s\n' "${INSTALL_DIR}"
-printf 'Datos           : %s\n' "${STATE_DIR}"
-printf 'Usuario servicio: %s\n' "${SERVICE_USER}"
-printf 'Web             : %s\n' "${BOT_DOMAIN:+https://${BOT_DOMAIN}}${BOT_DOMAIN:-http://127.0.0.1:${WEB_PORT}}"
-printf 'Health          : http://127.0.0.1:%s/health\n' "${BOT_HEALTH_PORT}"
-printf 'Estado bot      : systemctl status ghost-nexora-bot --no-pager\n'
-printf 'Logs bot        : journalctl -u ghost-nexora-bot -f\n'
-printf 'Configuración   : %s/.env\n' "${INSTALL_DIR}"
-printf 'Nota seguridad  : secretos y ADMIN_WEB_TOKEN no se imprimen en el log.\n'
-printf '══════════════════════════════════════════════════════\n'
+printf '\nGhost Nexora Bot instalado. Código: %s\n' "$(git rev-parse --short HEAD)"
+printf 'Proxy: https://${BOT_DOMAIN:-ghostnexorabot.duckdns.org}/proxy\n'
+printf 'Health: http://127.0.0.1:${BOT_HEALTH_PORT}/health\n'
