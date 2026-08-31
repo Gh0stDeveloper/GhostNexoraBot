@@ -1,0 +1,14 @@
+# Programación básica
+
+"que es javascript" "JavaScript es el lenguaje de la web en el navegador y también corre en Node.js en el servidor."
+"qué es javascript" "JS: lenguaje dinámico usado en front y back (Node)."
+"que es typescript" "TypeScript es JavaScript con tipos. Ayuda a detectar errores antes de ejecutar."
+"qué es typescript" "TS = JS + tipado estático opcional."
+"que es node" "Node.js permite ejecutar JavaScript fuera del navegador, en el servidor."
+"que es una api" "Una API es una interfaz para que programas se comuniquen, a menudo por HTTP/JSON."
+"qué es una api" "API: contrato entre sistemas (endpoints, datos de entrada y salida)."
+"git" "Git versiona el código. commit, push, pull, branch."
+"github" "GitHub hospeda repos Git en la nube."
+"bug" "Un bug es un error en el programa. Se reproduce, se aísla y se corrige."
+"json" "JSON es un formato de datos con objetos y listas, muy usado en APIs."
+"bot de whatsapp" "Este bot usa Baileys para Multi-Device y comandos con prefijo."
