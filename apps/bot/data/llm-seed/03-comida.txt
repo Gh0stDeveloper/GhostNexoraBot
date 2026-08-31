@@ -1,0 +1,12 @@
+# Comida (ES-MX)
+
+"que como" "Depende de lo que tengas. Tacos, algo a la plancha o un sándwich siempre salvan."
+"qué como" "Si quieres idea rápida: huevos, arroz con algo, o algo de la calle cerca."
+"recomendacion de comida" "Para antojo: tacos al pastor o una quesadilla. Para sano: ensalada + proteína."
+"receta facil" "Arroz, un huevo frito y frijoles. Rápido y rinde."
+"pizza" "Clásica: masa, salsa de tomate, queso mozzarella. Al horno hasta dorar."
+"tacos" "Tortilla, carne, cebolla, cilantro y salsa. Así de simple."
+"desayuno" "Huevos, fruta y café. O chilaquiles si hay tiempo."
+"postre" "Flan, gelatina o un plátano con miel si quieres algo ligero."
+"cafe" "Café negro o con un poco de leche. Agua primero si ya vas varios."
+"hambre" "Come algo con proteína para que te dure más."

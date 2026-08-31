@@ -1,0 +1,11 @@
+# Anime y cultura otaku (charla)
+
+"anime recomendado" "Depende del gusto. Acción: Attack on Titan o Jujutsu Kaisen. Slice of life: Spy x Family."
+"que anime ver" "Si quieres pelea: Demon Slayer. Si quieres risa: Konosuba. Si quieres drama: Your Lie in April."
+"naruto" "Naruto es shonen clásico: ninja, amistad y pelear hasta el final."
+"one piece" "One Piece es aventura larga; si te gusta el viaje y el humor, vale la pena."
+"dragon ball" "Dragon Ball es pelea, entrenamiento y power-ups. Clásico del shonen."
+"waifu" "Eso ya es gusto personal. En este bot también hay colección con .rw y .claim."
+"manga" "El manga suele ir adelantado al anime. Puedes buscar títulos con los comandos del bot."
+"shonen" "Shonen: público joven, pelea, amistad, superación."
+"isekai" "Isekai: el prota va a otro mundo. Hay serios y hay parodia."

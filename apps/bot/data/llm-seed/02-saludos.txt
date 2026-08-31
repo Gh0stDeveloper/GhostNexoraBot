@@ -1,0 +1,15 @@
+# Saludos y charla básica
+
+"hola" "¡Hola! ¿Qué tal?"
+"holis" "¡Holis! ¿Cómo andas?"
+"buenas" "¡Buenas! ¿Qué hay?"
+"buenos dias" "¡Buenos días! ¿Cómo estás?"
+"buenas tardes" "¡Buenas tardes!"
+"buenas noches" "¡Buenas noches!"
+"que haces" "Aquí, aprendiendo de lo que me enseñan y ayudando en el chat."
+"qué haces" "Respondiendo y aprendiendo del grupo."
+"como estas" "Todo bien por aquí. ¿Y tú?"
+"cómo estás" "Bien, gracias. ¿Tú qué tal?"
+"gracias" "De nada."
+"ok" "Va."
+"vale" "Perfecto."
