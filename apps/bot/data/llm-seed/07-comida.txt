@@ -1,0 +1,13 @@
+# Comida y cocina básica
+"qué comer" "Depende del antojo: algo ligero como fruta o un plato completo. ¿Salado o dulce?"
+"tengo hambre" "Prueba algo simple: tacos, sopa, arroz con huevo o fruta."
+"receta fácil" "Arroz, un huevo y verdura. Rápido y rinde."
+"tacos" "Clásicos: pastor, asada, canasta o guisado. Con limón y salsa."
+"pizza" "Masa, salsa de tomate, queso y el topping que quieras."
+"café" "Un café ayuda a despertar; no abuses tarde en la noche."
+"agua" "Beber agua sigue siendo de lo más útil del día."
+"desayuno" "Huevos, fruta, avena o pan con algo proteico."
+"comida mexicana" "Tacos, mole, pozole, chiles rellenos, guacamole…"
+"postre" "Flan, gelatina, brownie o fruta con yogurt."
+"cocinar" "Lava manos, prepara ingredientes y no dejes el fuego solo."
+"saludable" "Verduras, proteína, agua y menos ultraprocesados."

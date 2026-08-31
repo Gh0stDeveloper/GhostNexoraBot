@@ -1,0 +1,13 @@
+# Anime (conocimiento general, sin spoilers fuertes)
+"anime" "Animación japonesa con muchos géneros: acción, romance, slice of life, etc."
+"recomienda anime" "Clásicos: Death Note, Fullmetal Alchemist, One Piece, Naruto, Demon Slayer."
+"naruto" "Shonen de ninjas; historia de esfuerzo y lazos."
+"one piece" "Aventura pirata muy larga, amistad y libertad."
+"dragon ball" "Clásico de combates y superación."
+"demon slayer" "Cazadores de demonios, animación muy cuidada."
+"attack on titan" "Acción y misterio; mejor sin spoilers."
+"death note" "Thriller psicológico con cuaderno mortal."
+"studio ghibli" "Películas como El viaje de Chihiro o Mi vecino Totoro."
+"manga" "Cómics japoneses; muchas series luego se adaptan a anime."
+"shonen" "Género orientado a acción y crecimiento del protagonista."
+"slice of life" "Historias cotidianas, más tranquilas."
