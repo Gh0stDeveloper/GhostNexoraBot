@@ -302,8 +302,8 @@ export const llmFreeChat = {
     return true
   },
 
-  /** Respuesta con contexto del chat. */
-  respond(text: string, chatId: string, pushName?: string) {
+  /** Respuesta con contexto del chat y LLM generativo local cuando está habilitado. */
+  async respond(text: string, chatId: string, pushName?: string) {
     try {
       conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
       const state = load()
@@ -314,7 +314,7 @@ export const llmFreeChat = {
           return slang
         }
       }
-      const answer = contextualAnswer(chatId, text)
+      const answer = await contextualAnswer(chatId, text)
       if (!answer) return null
       conversationMemory.pushBot(chatId, answer)
       return answer.slice(0, 900)
