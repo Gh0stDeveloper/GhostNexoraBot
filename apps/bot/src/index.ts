@@ -110,6 +110,18 @@ function startHealthServer() {
   server.listen(config.healthPort, '127.0.0.1', () => logger.info({ port: config.healthPort }, 'health/control/api server listening'))
 }
 
+function startTypingIndicator(socket: WASocket, chatId: string) {
+  void socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+  const timer = setInterval(() => {
+    void socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
+  }, 4500)
+  timer.unref?.()
+  return () => {
+    clearInterval(timer)
+    void socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
+  }
+}
+
 async function routeMessage(
   socket: Awaited<ReturnType<typeof createSocket>>['socket'],
   message: Parameters<CommandRouter['handle']>[1],
@@ -149,17 +161,17 @@ async function routeMessage(
   if (handled) return
 
   if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
+    const stopTyping = startTypingIndicator(socket, chatId)
     try {
       const response = await llmFreeChat.respond(text, chatId, pushName)
       if (!response) return
       llmFreeChat.commitRespond(chatId)
-      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
       await socket.sendMessage(chatId, { text: response }, { quoted: message })
       await llmFreeChat.maybeReact(socket, message, text, response)
-      await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     } catch (error) {
       logger.warn({ error, chatId }, 'llm free-chat response failed')
-      if (chatId) await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
+    } finally {
+      stopTyping()
     }
     return
   }
