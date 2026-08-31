@@ -1,5 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { miniLLM } from '../services/mini-llm.js'
+import { ollama } from '../services/ollama.js'
 import { downloadSources } from '../llm/corpus-manager.js'
 import {
   enqueueDocumentFromWhatsApp,
@@ -26,6 +27,7 @@ function help(prefix: string) {
   return [
     '╭━━〔 🧠 *MINI-LLM* 〕━━╮',
     `│ ${prefix}llm status | progress | queue | docs`,
+    `│ ${prefix}llm ollama status|on|off`,
     `│ ${prefix}llm memory | ingest  — carga textos a memoria`,
     `│ ${prefix}llm free on|off | global | antispam | slang`,
     `│ ${prefix}llm free cooldown on|off | set <ms>`,
@@ -39,8 +41,8 @@ export const miniLlmCommands: BotCommand[] = [{
   name: 'llm',
   aliases: ['minillm', 'localai', 'corpus', 'llmcorpus'],
   category: 'tools',
-  description: 'Mini-LLM local: cola, train, modo libre y memoria.',
-  usage: 'llm <status|progress|memory|free|add|process|seed|train|ask|…>',
+  description: 'Mini-LLM local + Ollama: cola, train, modo libre y memoria.',
+  usage: 'llm <status|ollama|progress|memory|free|add|process|seed|train|ask|…>',
   async handler(ctx) {
     const sub = (ctx.args[0] ?? 'status').toLowerCase()
     if (sub === 'help' || sub === 'ayuda') { await ctx.reply(help(ctx.prefix)); return }
@@ -48,16 +50,48 @@ export const miniLlmCommands: BotCommand[] = [{
       throw new Error('Los comandos .llm son solo para Owner/Staff. Con modo libre activo, escribe sin prefijo (en grupos: mención).')
     }
 
+    if (sub === 'ollama') {
+      const mode = (ctx.args[1] ?? 'status').toLowerCase()
+      if (mode === 'on' || mode === 'off') {
+        ollama.setEnabled(mode === 'on')
+        const cfg = ollama.getConfig()
+        await ctx.reply([
+          '╭━━〔 🤖 *OLLAMA* 〕━━╮',
+          `┃ Estado: *${cfg.enabled ? 'ON' : 'OFF'}*`,
+          `┃ Modelo: ${cfg.model}`,
+          `┃ URL: ${cfg.baseUrl}`,
+          '╰━━━━━━━━━━━━━━━━━━╯',
+        ].join('\n'))
+        return
+      }
+      if (!['status', 'estado'].includes(mode)) throw new Error(`Uso: ${ctx.prefix}llm ollama status|on|off`)
+      const result = await ollama.status()
+      const cfg = ollama.getConfig()
+      await ctx.reply([
+        '╭━━〔 🤖 *OLLAMA STATUS* 〕━━╮',
+        `┃ Habilitado: *${cfg.enabled ? 'SI' : 'NO'}*`,
+        `┃ API: *${result.ok ? 'ONLINE' : 'OFFLINE'}*`,
+        `┃ Modelo: *${cfg.model}*`,
+        `┃ Modelo instalado: *${result.modelAvailable ? 'SI' : 'NO'}*`,
+        `┃ Modelos: ${result.models.length || 0}`,
+        result.error ? `┃ Error: ${result.error.slice(0, 180)}` : '',
+        '╰━━━━━━━━━━━━━━━━━━╯',
+      ].filter(Boolean).join('\n'))
+      return
+    }
+
     if (sub === 'status' || sub === 'estado') {
       const s = miniLLM.stats()
       const q = getQueueStats()
       let vectors = s.vectorRecords
       try { vectors = countVectors() } catch {}
+      const ollamaCfg = ollama.getConfig()
       await ctx.reply([
         '╭━━〔 🧠 *STATUS* 〕━━╮',
-        `┃ Modelo v${s.modelVersion} · vocab ${s.vocabSize}`,
+        `┃ Mini-LLM v${s.modelVersion} · vocab ${s.vocabSize}`,
         `┃ Vectores ${vectors} · steps ${s.trainSteps}`,
         `┃ Loss ${s.lastLoss?.toFixed(4) ?? 'N/D'}`,
+        `┃ Ollama: ${ollamaCfg.enabled ? 'ON' : 'OFF'} · ${ollamaCfg.model}`,
         `┃ Libre: ${llmFreeChat.statusLine()}`,
         `┃ Cola Q:${q.queued} P:${q.processing} OK:${q.completed}`,
         '╰━━━━━━━━━━━━━━━━━━╯',
