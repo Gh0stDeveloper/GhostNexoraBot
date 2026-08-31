@@ -57,6 +57,10 @@ const schema = z.object({
   OLLAMA_MAX_HISTORY: z.coerce.number().int().min(2).max(20).default(10),
   OLLAMA_SYSTEM_PROMPT: z.string().default('Eres Ghost Nexora Bot, un asistente de WhatsApp rápido, natural y útil. Responde en el idioma del usuario. Sé directo, evita inventar datos y no repitas la pregunta.'),
 
+  // Navegador embebido (.nav) — proxy en 3847 (3000 suele estar ocupado)
+  BROWSER_PROXY_PUBLIC_URL: z.string().default('https://ghostnexorabot.duckdns.org/proxy'),
+  BROWSER_PROXY_PORT: z.coerce.number().int().min(1).max(65535).default(3847),
+
   TELEGRAM_BOT_TOKEN: z.string().default(''),
   TELEGRAM_CHANNEL_ID: z.string().default(''),
   TELEGRAM_CHANNEL_URL: z.string().default(''),
@@ -110,6 +114,8 @@ export const config = {
   ollamaTopP: raw.OLLAMA_TOP_P,
   ollamaMaxHistory: raw.OLLAMA_MAX_HISTORY,
   ollamaSystemPrompt: raw.OLLAMA_SYSTEM_PROMPT,
+  browserProxyPublicUrl: raw.BROWSER_PROXY_PUBLIC_URL.replace(/\/+$/, ''),
+  browserProxyPort: raw.BROWSER_PROXY_PORT,
   telegramBotToken: raw.TELEGRAM_BOT_TOKEN,
   telegramChannelId: raw.TELEGRAM_CHANNEL_ID,
   telegramChannelUrl: raw.TELEGRAM_CHANNEL_URL,
