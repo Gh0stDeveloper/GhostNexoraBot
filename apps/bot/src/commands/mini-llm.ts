@@ -27,9 +27,9 @@ function help(prefix: string) {
     '╭━━〔 🧠 *MINI-LLM* 〕━━╮',
     `│ ${prefix}llm status | progress | queue | docs`,
     `│ ${prefix}llm free on|off | global on|off`,
-    `│ ${prefix}llm free mention|react on|off`,
-    `│ ${prefix}llm free cooldown on|off`,
-    `│ ${prefix}llm free cooldown set <ms>`,
+    `│ ${prefix}llm free mention|react|slang on|off`,
+    `│ ${prefix}llm free cooldown on|off | set <ms>`,
+    `│ ${prefix}llm free antispam on|off`,
     `│ ${prefix}llm free spam <n> [ventana_s]`,
     `│ ${prefix}llm free group add|remove|list|clear`,
     `│ ${prefix}llm add | process | seed | train | stop`,
@@ -116,6 +116,12 @@ export const miniLlmCommands: BotCommand[] = [{
         await ctx.reply(`🧠 Reacciones: *${mode2.toUpperCase()}*`)
         return
       }
+      if (mode === 'slang' || mode === 'groserias' || mode === 'groserías') {
+        if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free slang on|off`)
+        llmFreeChat.setSlangEnabled(mode2 === 'on')
+        await ctx.reply(`🧠 Respuestas con groserías: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+        return
+      }
       if (mode === 'cooldown' || mode === 'cd') {
         if (mode2 === 'on' || mode2 === 'off') {
           llmFreeChat.setCooldownEnabled(mode2 === 'on')
@@ -132,20 +138,32 @@ export const miniLlmCommands: BotCommand[] = [{
         }
         if (mode2 === 'status' || mode2 === '') {
           const s = llmFreeChat.getState()
-          await ctx.reply(`🧠 Cooldown: *${s.cooldownEnabled ? 'ON' : 'OFF'}* · ${s.cooldownMs} ms\nSpam: máx ${s.maxRepliesPerWindow} / ${Math.round(s.spamWindowMs / 1000)}s`)
+          await ctx.reply(`🧠 Cooldown: *${s.cooldownEnabled ? 'ON' : 'OFF'}* · ${s.cooldownMs} ms\nAnti-spam: *${s.antispamEnabled ? 'ON' : 'OFF'}* · máx ${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s`)
           return
         }
         throw new Error(`Uso: ${ctx.prefix}llm free cooldown on|off | set <ms>`)
       }
+      if (mode === 'antispam' || mode === 'anti-spam') {
+        if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free antispam on|off`)
+        llmFreeChat.setAntispamEnabled(mode2 === 'on')
+        await ctx.reply(`🧠 Anti-spam LLM: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+        return
+      }
       if (mode === 'spam') {
+        if (mode2 === 'on' || mode2 === 'off') {
+          llmFreeChat.setAntispamEnabled(mode2 === 'on')
+          await ctx.reply(`🧠 Anti-spam LLM: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+          return
+        }
         const n = Number(mode2)
-        if (!Number.isFinite(n) || n < 1) throw new Error(`Uso: ${ctx.prefix}llm free spam <max> [ventana_segundos]`)
+        if (!Number.isFinite(n) || n < 1) throw new Error(`Uso: ${ctx.prefix}llm free spam on|off  o  spam <max> [ventana_s]`)
         llmFreeChat.setMaxRepliesPerWindow(n)
+        llmFreeChat.setAntispamEnabled(true)
         if (mode3) {
           const sec = Number(mode3)
           if (Number.isFinite(sec) && sec >= 5) llmFreeChat.setSpamWindowMs(sec * 1000)
         }
-        await ctx.reply(`🧠 Anti-spam actualizado\n${llmFreeChat.statusLine()}`)
+        await ctx.reply(`🧠 Anti-spam actualizado (activado)\n${llmFreeChat.statusLine()}`)
         return
       }
       if (mode === 'group' || mode === 'grupo') {
@@ -173,7 +191,7 @@ export const miniLlmCommands: BotCommand[] = [{
         throw new Error(`Uso: ${ctx.prefix}llm free group add|remove|list|clear`)
       }
       if (!['on', 'off', 'status', ''].includes(mode)) {
-        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | react | cooldown | spam | group`)
+        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | react | slang | cooldown | antispam | spam | group`)
       }
       if (mode === 'status' || mode === '') {
         await ctx.reply(`🧠 Libre chat: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
