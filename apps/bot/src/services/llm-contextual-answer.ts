@@ -78,9 +78,15 @@ export async function contextualAnswer(chatId: string, userText: string): Promis
   const lastBot = conversationMemory.lastBot(chatId)
   const followUp = isFollowUp(text)
 
+  // El mensaje actual puede haber sido guardado por rememberIncoming/respond.
+  // No lo enviamos dos veces a Ollama: history contiene solo turnos previos.
+  const history = recent.at(-1)?.role === 'user' && normalize(recent.at(-1)?.text ?? '') === normalize(text)
+    ? recent.slice(0, -1)
+    : recent
+
   // 0) LLM generativo local: conserva contexto real del chat y responde de forma natural.
   if (ollama.isEnabled()) {
-    const generated = await ollama.generate({ userText: text, history: recent })
+    const generated = await ollama.generate({ userText: text, history })
     if (generated && !isLowValue(generated) && (!lastBot || !similar(generated, lastBot))) {
       return generated.slice(0, 900)
     }
@@ -134,7 +140,7 @@ export async function contextualAnswer(chatId: string, userText: string): Promis
 
   if (!reply || isLowValue(reply)) return null
 
-  if (recent.length >= 3 && topics.length >= 2 && Math.random() < 0.28 && !/^sobre |siguiendo con/i.test(reply)) {
+  if (history.length >= 3 && topics.length >= 2 && Math.random() < 0.28 && !/^sobre |siguiendo con/i.test(reply)) {
     const hook = pickOne([
       `Sobre ${topics[0]}: `,
       `En ese tema: `,
