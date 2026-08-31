@@ -7,19 +7,16 @@ import { getContextInfo } from '../utils/message.js'
 
 type State = {
   chats: Record<string, boolean>
-  /** grupos permitidos para modo libre (vacío = todos si el chat está enabled / global) */
   groupWhitelist: string[]
   global: boolean
-  /** solo responder si mencionan al bot (recomendado en grupos) */
   requireMention: boolean
   learnAlways: boolean
-  /** máximo de respuestas por ventana */
   maxRepliesPerWindow: number
-  /** ventana anti-spam en ms */
   spamWindowMs: number
-  /** cooldown mínimo entre respuestas en el mismo chat */
+  /** cooldown mínimo entre respuestas en el mismo chat (ms) */
   cooldownMs: number
-  /** reaccionar con emoji simple según el tono */
+  /** si false, ignora cooldownMs (sigue el límite anti-spam) */
+  cooldownEnabled: boolean
   reactions: boolean
 }
 
@@ -36,6 +33,7 @@ const DEFAULT: State = {
   maxRepliesPerWindow: 8,
   spamWindowMs: 60_000,
   cooldownMs: 2800,
+  cooldownEnabled: true,
   reactions: true,
 }
 
@@ -52,6 +50,7 @@ function load(): State {
         typeof parsed.maxRepliesPerWindow === 'number' ? parsed.maxRepliesPerWindow : DEFAULT.maxRepliesPerWindow,
       spamWindowMs: typeof parsed.spamWindowMs === 'number' ? parsed.spamWindowMs : DEFAULT.spamWindowMs,
       cooldownMs: typeof parsed.cooldownMs === 'number' ? parsed.cooldownMs : DEFAULT.cooldownMs,
+      cooldownEnabled: parsed.cooldownEnabled !== false,
       reactions: parsed.reactions !== false,
     }
   } catch {
@@ -81,15 +80,14 @@ function isLowValueReply(text: string) {
   return false
 }
 
-/** Filtro de aprendizaje: no guardar basura / links / flood / +18 genérico */
+/** Filtro de aprendizaje: conversaciones/chat → memoria; no basura */
 export function shouldLearnText(text: string) {
   const t = text.trim()
   if (t.length < 2 || t.length > 1200) return false
   if (looksLikeCommand(t, '.')) return false
   if (/https?:\/\/|www\./i.test(t)) return false
-  if (/(.)\1{6,}/.test(t)) return false // flood de caracteres
+  if (/(.)\1{6,}/.test(t)) return false
   if (/^[@#]\S+$/.test(t)) return false
-  // términos sensibles básicos (sin adultmode no se aprende)
   if (/\b(porn|xxx|hentai|nsfw|onlyfans)\b/i.test(t)) return false
   if (/\b(kill yourself|suicidio)\b/i.test(t)) return false
   return true
@@ -107,7 +105,6 @@ function isBotMentioned(message: WAMessage, socket: WASocket, text: string) {
   const mentioned = (ctx?.mentionedJid ?? []).map(String)
   const bots = botJids(socket)
   if (mentioned.some((jid) => bots.some((b) => jid === b || jid.startsWith(b.split('@')[0] ?? '')))) return true
-  // texto tipo @123456 o nombre del bot
   const lower = text.toLowerCase()
   if (/\b(ghost\s*nexora|nexora\s*bot|@bot)\b/i.test(lower)) return true
   const digits = (socket.user?.id ?? '').split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? ''
@@ -173,6 +170,30 @@ export const llmFreeChat = {
     save(state)
     return enabled
   },
+  setCooldownEnabled(enabled: boolean) {
+    const state = load()
+    state.cooldownEnabled = enabled
+    save(state)
+    return enabled
+  },
+  setCooldownMs(ms: number) {
+    const state = load()
+    state.cooldownMs = Math.max(0, Math.min(120_000, Math.floor(ms)))
+    save(state)
+    return state.cooldownMs
+  },
+  setMaxRepliesPerWindow(n: number) {
+    const state = load()
+    state.maxRepliesPerWindow = Math.max(1, Math.min(60, Math.floor(n)))
+    save(state)
+    return state.maxRepliesPerWindow
+  },
+  setSpamWindowMs(ms: number) {
+    const state = load()
+    state.spamWindowMs = Math.max(5_000, Math.min(600_000, Math.floor(ms)))
+    save(state)
+    return state.spamWindowMs
+  },
   addGroup(groupId: string) {
     const state = load()
     if (!state.groupWhitelist.includes(groupId)) state.groupWhitelist.push(groupId)
@@ -192,15 +213,15 @@ export const llmFreeChat = {
   },
   isGroupAllowed(chatId: string) {
     const state = load()
-    if (!chatId.endsWith('@g.us')) return true // privados siempre si el chat está enabled
-    if (!state.groupWhitelist.length) return true // sin lista = todos los grupos enabled
+    if (!chatId.endsWith('@g.us')) return true
+    if (!state.groupWhitelist.length) return true
     return state.groupWhitelist.includes(chatId)
   },
   canRespond(chatId: string) {
     const state = load()
     const now = Date.now()
     const last = lastAt.get(chatId) ?? 0
-    if (now - last < state.cooldownMs) return false
+    if (state.cooldownEnabled && state.cooldownMs > 0 && now - last < state.cooldownMs) return false
     if (!withinSpamLimit(chatId, state)) return false
     lastAt.set(chatId, now)
     return true
@@ -245,6 +266,7 @@ export const llmFreeChat = {
   statusLine() {
     const s = load()
     const chats = Object.keys(s.chats).length
-    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · spam≤${s.maxRepliesPerWindow}/min · react=${s.reactions ? 'ON' : 'OFF'}`
+    const cd = s.cooldownEnabled ? `${s.cooldownMs}ms` : 'OFF'
+    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam≤${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s · react=${s.reactions ? 'ON' : 'OFF'}`
   },
 }

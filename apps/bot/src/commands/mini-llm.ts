@@ -25,14 +25,15 @@ function formatBytes(value: number) {
 function help(prefix: string) {
   return [
     '╭━━〔 🧠 *MINI-LLM* 〕━━╮',
-    `│ ${prefix}llm status | progress | queue`,
-    `│ ${prefix}llm free on|off`,
-    `│ ${prefix}llm free global on|off`,
-    `│ ${prefix}llm free mention on|off`,
-    `│ ${prefix}llm free react on|off`,
+    `│ ${prefix}llm status | progress | queue | docs`,
+    `│ ${prefix}llm free on|off | global on|off`,
+    `│ ${prefix}llm free mention|react on|off`,
+    `│ ${prefix}llm free cooldown on|off`,
+    `│ ${prefix}llm free cooldown set <ms>`,
+    `│ ${prefix}llm free spam <n> [ventana_s]`,
     `│ ${prefix}llm free group add|remove|list|clear`,
     `│ ${prefix}llm add | process | seed | train | stop`,
-    `│ ${prefix}llm ask <q> | search <q> | docs`,
+    `│ ${prefix}llm ask <q> | search <q>`,
     '╰━━━━━━━━━━━━━━━━━━╯',
   ].join('\n')
 }
@@ -95,6 +96,8 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'free' || sub === 'libre') {
       const mode = (ctx.args[1] ?? '').toLowerCase()
       const mode2 = (ctx.args[2] ?? '').toLowerCase()
+      const mode3 = (ctx.args[3] ?? '').toLowerCase()
+
       if (mode === 'global') {
         if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free global on|off`)
         llmFreeChat.setGlobal(mode2 === 'on')
@@ -104,13 +107,45 @@ export const miniLlmCommands: BotCommand[] = [{
       if (mode === 'mention' || mode === 'mencion' || mode === 'mención') {
         if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free mention on|off`)
         llmFreeChat.setRequireMention(mode2 === 'on')
-        await ctx.reply(`🧠 Mención requerida en grupos: *${mode2.toUpperCase()}*`)
+        await ctx.reply(`🧠 Mención en grupos: *${mode2.toUpperCase()}*`)
         return
       }
       if (mode === 'react' || mode === 'reacciones') {
         if (!['on', 'off'].includes(mode2)) throw new Error(`Uso: ${ctx.prefix}llm free react on|off`)
         llmFreeChat.setReactions(mode2 === 'on')
         await ctx.reply(`🧠 Reacciones: *${mode2.toUpperCase()}*`)
+        return
+      }
+      if (mode === 'cooldown' || mode === 'cd') {
+        if (mode2 === 'on' || mode2 === 'off') {
+          llmFreeChat.setCooldownEnabled(mode2 === 'on')
+          await ctx.reply(`🧠 Cooldown: *${mode2.toUpperCase()}*\n${llmFreeChat.statusLine()}`)
+          return
+        }
+        if (mode2 === 'set' || mode2 === 'ms') {
+          const ms = Number(mode3 || ctx.args[3])
+          if (!Number.isFinite(ms) || ms < 0) throw new Error(`Uso: ${ctx.prefix}llm free cooldown set <ms>  (0–120000)`)
+          const value = llmFreeChat.setCooldownMs(ms)
+          llmFreeChat.setCooldownEnabled(true)
+          await ctx.reply(`🧠 Cooldown = *${value} ms* (activado)\n${llmFreeChat.statusLine()}`)
+          return
+        }
+        if (mode2 === 'status' || mode2 === '') {
+          const s = llmFreeChat.getState()
+          await ctx.reply(`🧠 Cooldown: *${s.cooldownEnabled ? 'ON' : 'OFF'}* · ${s.cooldownMs} ms\nSpam: máx ${s.maxRepliesPerWindow} / ${Math.round(s.spamWindowMs / 1000)}s`)
+          return
+        }
+        throw new Error(`Uso: ${ctx.prefix}llm free cooldown on|off | set <ms>`)
+      }
+      if (mode === 'spam') {
+        const n = Number(mode2)
+        if (!Number.isFinite(n) || n < 1) throw new Error(`Uso: ${ctx.prefix}llm free spam <max> [ventana_segundos]`)
+        llmFreeChat.setMaxRepliesPerWindow(n)
+        if (mode3) {
+          const sec = Number(mode3)
+          if (Number.isFinite(sec) && sec >= 5) llmFreeChat.setSpamWindowMs(sec * 1000)
+        }
+        await ctx.reply(`🧠 Anti-spam actualizado\n${llmFreeChat.statusLine()}`)
         return
       }
       if (mode === 'group' || mode === 'grupo') {
@@ -138,7 +173,7 @@ export const miniLlmCommands: BotCommand[] = [{
         throw new Error(`Uso: ${ctx.prefix}llm free group add|remove|list|clear`)
       }
       if (!['on', 'off', 'status', ''].includes(mode)) {
-        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | react | group`)
+        throw new Error(`Uso: ${ctx.prefix}llm free on|off | global | mention | react | cooldown | spam | group`)
       }
       if (mode === 'status' || mode === '') {
         await ctx.reply(`🧠 Libre chat: *${llmFreeChat.isEnabled(ctx.chatId) ? 'ON' : 'OFF'}*\n${llmFreeChat.statusLine()}`)
