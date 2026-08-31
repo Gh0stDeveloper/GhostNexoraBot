@@ -13,9 +13,13 @@ type State = {
   learnAlways: boolean
   maxRepliesPerWindow: number
   spamWindowMs: number
+  /** si false, no aplica el tope de mensajes por ventana (útil para tests) */
+  antispamEnabled: boolean
   cooldownMs: number
   cooldownEnabled: boolean
   reactions: boolean
+  /** el bot puede contestar con groserías si le hablan pesado */
+  slangEnabled: boolean
 }
 
 const FILE = path.resolve(config.dataDir, 'llm', 'free-chat.json')
@@ -30,9 +34,11 @@ const DEFAULT: State = {
   learnAlways: true,
   maxRepliesPerWindow: 8,
   spamWindowMs: 60_000,
+  antispamEnabled: true,
   cooldownMs: 2800,
   cooldownEnabled: true,
   reactions: true,
+  slangEnabled: true,
 }
 
 function load(): State {
@@ -47,9 +53,11 @@ function load(): State {
       maxRepliesPerWindow:
         typeof parsed.maxRepliesPerWindow === 'number' ? parsed.maxRepliesPerWindow : DEFAULT.maxRepliesPerWindow,
       spamWindowMs: typeof parsed.spamWindowMs === 'number' ? parsed.spamWindowMs : DEFAULT.spamWindowMs,
+      antispamEnabled: parsed.antispamEnabled !== false,
       cooldownMs: typeof parsed.cooldownMs === 'number' ? parsed.cooldownMs : DEFAULT.cooldownMs,
       cooldownEnabled: parsed.cooldownEnabled !== false,
       reactions: parsed.reactions !== false,
+      slangEnabled: parsed.slangEnabled !== false,
     }
   } catch {
     return { ...DEFAULT, chats: {}, groupWhitelist: [] }
@@ -71,7 +79,6 @@ function looksLikeCommand(text: string, prefix: string) {
   return false
 }
 
-/** Respuestas basura / fallback → en modo libre = silencio total */
 function isLowValueReply(text: string) {
   const t = text.trim().toLowerCase()
   if (t.length < 2) return true
@@ -116,6 +123,7 @@ function isBotMentioned(message: WAMessage, socket: WASocket, text: string) {
 }
 
 function withinSpamLimit(chatId: string, state: State) {
+  if (!state.antispamEnabled) return true
   const now = Date.now()
   const hits = (windowHits.get(chatId) ?? []).filter((t) => now - t < state.spamWindowMs)
   if (hits.length >= state.maxRepliesPerWindow) {
@@ -127,17 +135,53 @@ function withinSpamLimit(chatId: string, state: State) {
 
 function commitRateLimit(chatId: string, state: State) {
   const now = Date.now()
-  const hits = (windowHits.get(chatId) ?? []).filter((t) => now - t < state.spamWindowMs)
-  hits.push(now)
-  windowHits.set(chatId, hits)
+  if (state.antispamEnabled) {
+    const hits = (windowHits.get(chatId) ?? []).filter((t) => now - t < state.spamWindowMs)
+    hits.push(now)
+    windowHits.set(chatId, hits)
+  }
   lastAt.set(chatId, now)
+}
+
+function pickOne(list: string[]) {
+  return list[Math.floor(Math.random() * list.length)] ?? list[0] ?? ''
+}
+
+/** Detecta tono pesado / groserías y contesta en el mismo registro */
+function slangReply(text: string): string | null {
+  const t = text.toLocaleLowerCase('es-MX').normalize('NFKC')
+  const heavy =
+    /\b(pendejo|pendeja|idiota|est[uú]pid[oa]|imb[eé]cil|culero|culera|cabr[oó]n|cabrona|puto|puta|pinche|verga|alv|nmms|nms|ctm|ctmr|chinga|chingado|mierda|basura|in[uú]til|joto|maric[oó]n|mam[oó]n|tarado|hocico)\b/i.test(
+      t,
+    ) ||
+    /vete a la verga|a la verga|a la chingada|chinga tu madre|no mames|vales verga|me caes mal|te odio|callate|c[aá]llate/i.test(
+      t,
+    )
+  if (!heavy) return null
+  return pickOne([
+    'Jajaja ok pendejo, ya desfogaste. ¿Qué quieres en serio?',
+    'Orale cabrón, con ese tono también se habla. Tira la duda.',
+    'Pinche energía la tuya. Igual te escucho, no mames.',
+    'Te la paso wey. Ahora sí: ¿qué ocupas?',
+    'A la verga, qué agresivo. Dime el punto y ya.',
+    'Nmms, relájate. Aquí sigo si quieres algo útil.',
+    'Puedes hablarme feo, no me apago. ¿Qué pedo entonces?',
+    'Jaja qué pendejada. Cuando termines, pregunta en serio.',
+    'Vales verga tú también por pelear con un bot. ¿Comando o qué?',
+    'Cállate un segundo y dime qué necesitas, cabrón.',
+    'No mames, qué drama. Suéltalo claro.',
+    'Pinche bot de tu servicio jaja. ¿Qué falló o qué quieres?',
+    'Alv ok. Sin tanto pedo: ¿qué buscas?',
+    'Me vale tu enojo wey. Tira la pregunta.',
+    'Chinga, ya entendí que estás enojado. ¿Y ahora?',
+  ])
 }
 
 function pickReaction(userText: string, answer: string): string | null {
   const t = `${userText} ${answer}`.toLowerCase()
   if (/hola|buenas|hey|holi/.test(t)) return '👋'
   if (/gracias|thank/.test(t)) return '🙏'
-  if (/jaja|lol|xd/.test(t)) return '😂'
+  if (/jaja|lol|xd|pendejo|verga|alv|nmms/.test(t)) return '😂'
   if (/triste|ánimo|animo|mal día/.test(t)) return '💪'
   if (/hora|fecha|día|dia/.test(t)) return '🕒'
   if (/fire|genial|excelente|órale|orale/.test(t)) return '🔥'
@@ -191,6 +235,12 @@ export const llmFreeChat = {
     save(state)
     return state.cooldownMs
   },
+  setAntispamEnabled(enabled: boolean) {
+    const state = load()
+    state.antispamEnabled = enabled
+    save(state)
+    return enabled
+  },
   setMaxRepliesPerWindow(n: number) {
     const state = load()
     state.maxRepliesPerWindow = Math.max(1, Math.min(60, Math.floor(n)))
@@ -202,6 +252,12 @@ export const llmFreeChat = {
     state.spamWindowMs = Math.max(5_000, Math.min(600_000, Math.floor(ms)))
     save(state)
     return state.spamWindowMs
+  },
+  setSlangEnabled(enabled: boolean) {
+    const state = load()
+    state.slangEnabled = enabled
+    save(state)
+    return enabled
   },
   addGroup(groupId: string) {
     const state = load()
@@ -226,7 +282,6 @@ export const llmFreeChat = {
     if (!state.groupWhitelist.length) return true
     return state.groupWhitelist.includes(chatId)
   },
-  /** Solo comprueba límites; no marca el contador hasta commitRespond */
   canRespond(chatId: string) {
     const state = load()
     const now = Date.now()
@@ -257,9 +312,13 @@ export const llmFreeChat = {
     if (!this.canRespond(chatId)) return false
     return true
   },
-  /** null = no enviar nada (silencio) */
   respond(text: string) {
     try {
+      const state = load()
+      if (state.slangEnabled) {
+        const slang = slangReply(text)
+        if (slang) return slang
+      }
       const answer = miniLLM.answer(text)
       if (!answer || isLowValueReply(answer)) return null
       return answer.slice(0, 900)
@@ -284,6 +343,7 @@ export const llmFreeChat = {
     const s = load()
     const chats = Object.keys(s.chats).length
     const cd = s.cooldownEnabled ? `${s.cooldownMs}ms` : 'OFF'
-    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam≤${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s · react=${s.reactions ? 'ON' : 'OFF'}`
+    const spam = s.antispamEnabled ? `≤${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s` : 'OFF'
+    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam=${spam} · slang=${s.slangEnabled ? 'ON' : 'OFF'} · react=${s.reactions ? 'ON' : 'OFF'}`
   },
 }
