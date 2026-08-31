@@ -43,4 +43,4 @@ jobs:
         run: npx tsx apps/bot/src/llm/smoke.ts
 
       - name: Validate shell scripts
-        run: bash -n scripts/install.sh scripts/update.sh
+        run: bash -n scripts/install.sh scripts/update.sh scripts/install-ollama.sh
