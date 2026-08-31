@@ -20,8 +20,7 @@ import { startAutomationScheduler } from './services/automation-v4.js'
 import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { autoChat } from './services/auto-chat.js'
-import { llmFreeChat, shouldLearnText } from './services/llm-free-chat.js'
-import { enqueueLiveMessage } from './llm/live-queue.js'
+import { llmFreeChat } from './services/llm-free-chat.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -137,7 +136,8 @@ async function routeMessage(
       chatId.endsWith('@g.us'),
       text.startsWith(settings.prefix),
     )
-    if (text.length >= 2 && !text.startsWith(settings.prefix) && shouldLearnText(text)) enqueueLiveMessage(text)
+    // La respuesta usa Ollama directamente; no se alimenta el pipeline de entrenamiento
+    // desde el flujo normal de mensajes para evitar trabajo extra y latencia.
     if (text.length >= 2 && !text.startsWith(settings.prefix)) llmFreeChat.rememberIncoming(chatId, text, pushName)
   }
 
