@@ -1,5 +1,5 @@
-const CODE_REQUEST_RE = /\b(c[oó]digo|code|script|programa|programar|typescript|javascript|python|python|bash|shell|sql|java|kotlin|php|c\+\+|c#|html|css|json|regex|comando|funci[oó]n|clase|api|endpoint|snippet)\b/i
-const CODE_MARKER_RE = /(```|\b(import|export|const|let|var|function|async\s+function|class|interface|type\s+\w+\s*=|def|SELECT\s+.+\s+FROM|#!/|npm\s+(?:install|run)|curl\s+-|git\s+(?:clone|pull|checkout)|<\/?[a-z][^>]*>)\b)/im
+const CODE_REQUEST_RE = /\b(c[oó]digo|code|script|programa|programar|typescript|javascript|python|bash|shell|sql|java|kotlin|php|c\+\+|c#|html|css|json|regex|comando|funci[oó]n|clase|api|endpoint|snippet)\b/i
+const CODE_MARKER_RE = /(```|\b(import|export|const|let|var|function|async\s+function|class|interface|type\s+\w+\s*=|def|SELECT\s+.+\s+FROM|#!\/|npm\s+(?:install|run)|curl\s+-|git\s+(?:clone|pull|checkout)|<\/?[a-z][^>]*>)\b)/im
 
 function inferLanguage(userText: string): string {
   const t = userText.toLowerCase()
@@ -28,7 +28,7 @@ function wrapBareCode(answer: string, language: string) {
   const codeLines = lines.filter((line) => {
     const s = line.trim()
     if (!s) return false
-    return /^(import\s|export\s|const\s|let\s|var\s|function\s|async\s+function\s|class\s|interface\s|type\s|def\s|return\s|if\s*\(|for\s*\(|while\s*\(|from\s+\S+\s+import|npm\s|curl\s|git\s|SELECT\s|INSERT\s|UPDATE\s|DELETE\s|#!/|<\/?[a-z][^>]*>|[{}[\];]=?$)/i.test(s)
+    return /^(import\s|export\s|const\s|let\s|var\s|function\s|async\s+function\s|class\s|interface\s|type\s|def\s|return\s|if\s*\(|for\s*\(|while\s*\(|from\s+\S+\s+import|npm\s|curl\s|git\s|SELECT\s|INSERT\s|UPDATE\s|DELETE\s|#!\/|<\/?[a-z][^>]*>|[{}[\];]=?$)/i.test(s)
   })
 
   if (codeLines.length < Math.ceil(lines.length * 0.55)) return answer
