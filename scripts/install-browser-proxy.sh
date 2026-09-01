@@ -59,11 +59,13 @@ chmod 0640 "${INSTALL_DIR}/.env" || true
 
 info "Configurando backend local ${DOMAIN}/proxy → 127.0.0.1:${PORT}"
 
-# Try to reuse an existing server block for this hostname (including TLS).
-MATCHES=()
-while IFS= read -r -d '' file; do
-  MATCHES+=("${file}")
-done < <(grep -RIlZF --include='*.conf' --include='*' "server_name[[:space:]].*${DOMAIN}" /etc/nginx/sites-enabled /etc/nginx/sites-available 2>/dev/null || true)
+# Find every nginx config file, including sites without a .conf suffix. This avoids
+# creating a second server block when the domain already exists in sites-enabled.
+mapfile -t MATCHES < <(
+  find /etc/nginx -type f -readable -print0 2>/dev/null \
+    | xargs -0 grep -IlE "^[[:space:]]*server_name[[:space:]]+[^;]*\\b${DOMAIN}\\b[^;]*;" 2>/dev/null \
+    | sort -u || true
+)
 
 inject_location() {
   local file="$1"
@@ -74,10 +76,12 @@ from pathlib import Path
 
 path, domain, port = sys.argv[1:]
 text = Path(path).read_text()
-location = f'''\n    # Ghost Nexora Browser Proxy\n    location = /proxy {{\n        proxy_pass http://127.0.0.1:{port}/proxy;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 10s;\n        proxy_send_timeout 30s;\n        proxy_read_timeout 30s;\n        proxy_buffering off;\n    }}\n\n    location = /proxy/ {{\n        proxy_pass http://127.0.0.1:{port}/proxy;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 10s;\n        proxy_send_timeout 30s;\n        proxy_read_timeout 30s;\n        proxy_buffering off;\n    }}\n'''
 
-if re.search(r'location\s*=\s*/proxy/?\s*\{', text):
-    print(f'UNCHANGED {path}')
+location = f'''\n    # Ghost Nexora Browser Proxy (managed)\n    location = /proxy {{\n        proxy_pass http://127.0.0.1:{port}/proxy;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 10s;\n        proxy_send_timeout 30s;\n        proxy_read_timeout 30s;\n        proxy_buffering off;\n    }}\n\n    location = /proxy/ {{\n        proxy_pass http://127.0.0.1:{port}/proxy;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 10s;\n        proxy_send_timeout 30s;\n        proxy_read_timeout 30s;\n        proxy_buffering off;\n    }}\n'''
+
+marker = 'Ghost Nexora Browser Proxy (managed)'
+if marker in text:
+    print(f'EXISTS {path}')
     raise SystemExit(0)
 
 server_re = re.compile(r'(?m)^\s*server\s*\{')
@@ -91,20 +95,27 @@ for match in list(server_re.finditer(text))[::-1]:
     while i < len(text):
         ch = text[i]
         if comment:
-            if ch == '\n': comment = False
+            if ch == '\n':
+                comment = False
         elif in_single:
-            if ch == "'": in_single = False
+            if ch == "'":
+                in_single = False
         elif in_double:
-            if ch == '"' and (i == 0 or text[i-1] != '\\'): in_double = False
+            if ch == '"' and (i == 0 or text[i - 1] != '\\'):
+                in_double = False
         else:
-            if ch == '#': comment = True
-            elif ch == "'": in_single = True
-            elif ch == '"': in_double = True
-            elif ch == '{': depth += 1
+            if ch == '#':
+                comment = True
+            elif ch == "'":
+                in_single = True
+            elif ch == '"':
+                in_double = True
+            elif ch == '{':
+                depth += 1
             elif ch == '}':
                 depth -= 1
                 if depth == 0:
-                    block = text[start:i+1]
+                    block = text[start:i + 1]
                     if re.search(r'(?m)^\s*server_name\s+[^;]*\b' + re.escape(domain) + r'\b[^;]*;', block):
                         new = text[:i] + location + text[i:]
                         Path(path).write_text(new)
@@ -120,6 +131,14 @@ for file in "${MATCHES[@]}"; do
   [[ -f "${file}" ]] || continue
   if inject_location "${file}"; then INJECTED=1; fi
 done
+
+# Remove only the previously-generated dedicated vhost if another existing
+# server block already owns the hostname. This prevents conflicting server_name
+# warnings after a previous broken installation.
+if (( INJECTED == 1 )) && [[ -L "${SITE_ENABLED}" || -f "${SITE_ENABLED}" ]]; then
+  rm -f "${SITE_ENABLED}" "${SITE_AVAILABLE}"
+  info 'Se eliminó el vhost dedicado anterior porque el dominio ya tiene un server existente.'
+fi
 
 if (( INJECTED == 0 )); then
   warn "No encontré un server_name=${DOMAIN}; se creará un vhost dedicado en HTTP."
