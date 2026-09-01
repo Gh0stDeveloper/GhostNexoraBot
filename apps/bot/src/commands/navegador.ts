@@ -13,7 +13,7 @@ const PUBLIC_PROXY =
   (config as { browserProxyPublicUrl?: string }).browserProxyPublicUrl ||
   'https://ghostnexorabot.duckdns.org/proxy'
 
-const TRUSTED = [
+const STATIC_TRUSTED = [
   'https://ghostnexorabot.duckdns.org',
   'https://www.google.com',
   'https://google.com',
@@ -23,9 +23,31 @@ const TRUSTED = [
   'https://www.wikipedia.org',
 ]
 
+function originOf(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl)
+    if (!['http:', 'https:'].includes(url.protocol)) return null
+    return url.origin
+  } catch {
+    return null
+  }
+}
+
+function trustedSourcesFor(startUrl: string) {
+  const targetOrigin = originOf(startUrl)
+  const proxyOrigin = originOf(PUBLIC_PROXY)
+  return [...new Set([
+    ...STATIC_TRUSTED,
+    proxyOrigin,
+    targetOrigin,
+  ].filter((value): value is string => Boolean(value)))]
+}
+
 function buildHtml(startUrl: string) {
   const safeStart = startUrl.replace(/"/g, '&quot;')
   const safeProxy = PUBLIC_PROXY.replace(/"/g, '&quot;')
+  const initialHref = `${PUBLIC_PROXY}?url=${encodeURIComponent(startUrl)}&format=html`
+  const safeInitialHref = initialHref.replace(/"/g, '&quot;')
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -56,8 +78,8 @@ function buildHtml(startUrl: string) {
     <span class="chip" data-u="https://es.wikipedia.org">Wikipedia</span>
     <span class="chip" data-u="https://news.ycombinator.com">HN</span>
   </div>
-  <div id="status">esperando…</div>
-  <iframe id="view" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+  <div id="status">Cargando…</div>
+  <iframe id="view" src="${safeInitialHref}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
 <script>
 const PROXY = "${safeProxy}";
 function norm(u){
@@ -66,31 +88,22 @@ function norm(u){
   if(!/^https?:\\/\\//i.test(u)) u = "https://" + u;
   return u;
 }
-async function buscar(force){
+function navigate(force){
   const input = document.getElementById("url");
   const status = document.getElementById("status");
   const view = document.getElementById("view");
   const url = norm(force || input.value);
   if(!url){ status.textContent = "Escribe una URL"; return; }
   input.value = url;
-  status.textContent = "⏳ Consultando…";
-  view.removeAttribute("srcdoc");
-  try {
-    const res = await fetch(PROXY + "?url=" + encodeURIComponent(url));
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
-    status.textContent = "HTTP " + data.status + " · " + data.bytes + " bytes · " + data.subrecursos + " subrecursos" + (data.finalUrl ? "\\n→ " + data.finalUrl : "");
-    view.srcdoc = data.html || "<p>Sin contenido</p>";
-  } catch(e) {
-    status.textContent = "❌ " + (e && e.message ? e.message : String(e));
-  }
+  status.textContent = "Cargando " + url + "…";
+  view.src = PROXY + "?url=" + encodeURIComponent(url) + "&format=html";
 }
-document.getElementById("btn").addEventListener("click", function(){ buscar(); });
-document.getElementById("url").addEventListener("keydown", function(e){ if(e.key==="Enter") buscar(); });
+document.getElementById("btn").addEventListener("click", function(){ navigate(); });
+document.getElementById("url").addEventListener("keydown", function(e){ if(e.key==="Enter") navigate(); });
 document.querySelectorAll(".chip").forEach(function(el){
-  el.addEventListener("click", function(){ buscar(el.getAttribute("data-u")); });
+  el.addEventListener("click", function(){ navigate(el.getAttribute("data-u")); });
 });
-buscar();
+document.getElementById("view").addEventListener("load", function(){ document.getElementById("status").textContent = "Página cargada"; });
 </script>
 </body>
 </html>`
@@ -115,7 +128,7 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
           primitive: {
             __typename: 'GenAIaeacdsnwHtmlPrimitive',
             payload: HTML,
-            trusted_sources: TRUSTED,
+            trusted_sources: trustedSourcesFor(startUrl),
           },
           __typename: 'GenAISingleLayoutViewModel',
         },
@@ -152,8 +165,6 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
     },
   }
 
-  // Baileys 7 requires userJid when constructing generated content.
-  // Use the authenticated bot JID; ctx.sender is only a defensive fallback.
   const userJid = ctx.socket.user?.id ?? ctx.sender
   if (!userJid) throw new Error('No se pudo determinar el JID del bot para generar el mensaje enriquecido.')
   const msg = generateWAMessageFromContent(ctx.chatId, slots as never, { userJid })
