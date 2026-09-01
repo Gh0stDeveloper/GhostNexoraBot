@@ -1,10 +1,12 @@
 /**
- * .nav | .navegador | .view — navegador embebido Ghost Nexora
+ * .nav | .navegador | .view
  *
- * WhatsApp NO navega bien iframes con src externo. Por eso:
- * 1) La página inicial se inyecta con srcdoc desde base64 (sin depender del proxy público).
- * 2) BUSCAR hace fetch al proxy (JSON) y aplica srcdoc (como el diseño original).
- * 3) No se envía mensaje de texto de confirmación.
+ * WhatsApp a menudo NO ejecuta <script> en GenAI HTML.
+ * Por eso la vista inicial va en:
+ *  - iframe srcdoc="..." (atributo HTML, sin JS)
+ *  - y un resumen de texto visible si el iframe falla
+ *
+ * BUSCAR solo funciona si el WebView ejecuta JS y el proxy público responde JSON.
  */
 import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent } from 'baileys'
@@ -18,18 +20,18 @@ const PUBLIC_PROXY =
   (config as { browserProxyPublicUrl?: string }).browserProxyPublicUrl ||
   'https://ghostnexorabot.duckdns.org/proxy'
 
-/** Límite seguro para el payload GenAI de WhatsApp */
-const MAX_INLINE_BYTES = 900_000
+/** Límite del atributo srcdoc dentro del mensaje GenAI */
+const MAX_SRCDOC_BYTES = 350_000
+const MAX_TEXT_CHARS = 12_000
 
 const STATIC_TRUSTED = [
   'https://ghostnexorabot.duckdns.org',
   'https://www.google.com',
   'https://google.com',
   'https://whatsapp.com',
+  'https://example.com',
   'https://es.wikipedia.org',
   'https://en.wikipedia.org',
-  'https://www.wikipedia.org',
-  'https://example.com',
 ]
 
 function originOf(rawUrl: string): string | null {
@@ -43,10 +45,10 @@ function originOf(rawUrl: string): string | null {
 }
 
 function trustedSourcesFor(startUrl: string) {
-  const targetOrigin = originOf(startUrl)
-  const proxyOrigin = originOf(PUBLIC_PROXY)
   return [...new Set(
-    [...STATIC_TRUSTED, proxyOrigin, targetOrigin].filter((v): v is string => Boolean(v)),
+    [...STATIC_TRUSTED, originOf(PUBLIC_PROXY), originOf(startUrl)].filter(
+      (v): v is string => Boolean(v),
+    ),
   )]
 }
 
@@ -59,20 +61,44 @@ function escapeAttribute(value: string) {
     .replace(/'/g, '&#39;')
 }
 
-/** Quita scripts pesados que rompen el sandbox del WebView de WhatsApp */
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+}
+
 function lightenHtml(html: string): string {
   return html
     .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, '')
     .replace(/\son\w+="[^"]*"/gi, '')
     .replace(/\son\w+='[^']*'/gi, '')
+    .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, '')
 }
 
-function buildHtml(startUrl: string, initialPageHtml: string) {
+function extractReadableText(html: string): string {
+  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+  let body = html.replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+  body = body.replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+  body = body.replace(/<[^>]+>/g, ' ')
+  body = body.replace(/&nbsp;/gi, ' ').replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>')
+  body = body.replace(/\s+/g, ' ').trim()
+  const text = [title ? `「 ${title} 」` : '', body].filter(Boolean).join('\n\n')
+  return text.slice(0, MAX_TEXT_CHARS)
+}
+
+function buildHtml(startUrl: string, pageHtml: string, readable: string) {
   const safeStart = escapeAttribute(startUrl)
   const safeProxy = escapeAttribute(PUBLIC_PROXY)
-  // base64 evita límites y escapes rotos del atributo srcdoc="..."
-  const b64 = Buffer.from(initialPageHtml || '', 'utf8').toString('base64')
-  const hasInitial = Boolean(initialPageHtml)
+  let srcdoc = lightenHtml(pageHtml)
+  if (Buffer.byteLength(srcdoc, 'utf8') > MAX_SRCDOC_BYTES) {
+    srcdoc = srcdoc.slice(0, MAX_SRCDOC_BYTES) + '\n<!-- truncated -->'
+  }
+  const safeSrcdoc = escapeAttribute(srcdoc)
+  const safeReadable = escapeHtml(readable || 'Sin texto extraído')
 
   return `<!DOCTYPE html>
 <html>
@@ -86,9 +112,10 @@ function buildHtml(startUrl: string, initialPageHtml: string) {
   .label{font-size:11px;color:#9aa0a6;min-width:28px}
   #url{flex:1;background:#1b1d22;border:1.5px solid #ffb300;color:#fff;padding:10px 12px;border-radius:10px;outline:none;font-size:13px}
   #btn{width:100%;margin-top:10px;background:linear-gradient(90deg,#7c5cff,#5a8bff);color:#fff;border:none;padding:12px;border-radius:12px;font-weight:700;font-size:14px}
-  #btn:active{opacity:.85}
   #status{font-size:11px;color:#9aa0a6;margin-top:8px;text-align:center;white-space:pre-wrap;word-break:break-word}
-  #view{width:100%;height:min(65vh,560px);border:none;background:#fff;border-radius:12px;margin-top:12px;display:block}
+  #view{width:100%;height:min(42vh,360px);border:none;background:#fff;border-radius:12px;margin-top:12px;display:block}
+  #text{margin-top:12px;padding:12px;background:#1b1d22;border-radius:12px;font-size:12px;line-height:1.45;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#e8eaed}
+  .hint{font-size:10px;color:#6b7280;margin-top:6px;text-align:center}
 </style>
 </head>
 <body>
@@ -97,72 +124,49 @@ function buildHtml(startUrl: string, initialPageHtml: string) {
     <input id="url" value="${safeStart}" inputmode="url" autocomplete="off" />
   </div>
   <button id="btn" type="button">BUSCAR</button>
-  <div id="status">${hasInitial ? 'Cargando vista…' : 'Sin precarga — usa BUSCAR'}</div>
-  <iframe id="view" sandbox="allow-same-origin allow-scripts allow-forms allow-popups" referrerpolicy="no-referrer"></iframe>
+  <div id="status">Vista precargada por el bot</div>
+  <iframe id="view" srcdoc="${safeSrcdoc}" sandbox="allow-same-origin allow-scripts allow-forms" referrerpolicy="no-referrer"></iframe>
+  <div class="hint">Si el marco sale en blanco, lee el texto debajo</div>
+  <div id="text">${safeReadable}</div>
 <script>
 (function(){
   var PROXY = "${safeProxy}";
-  var INITIAL_B64 = "${b64}";
   var statusEl = document.getElementById("status");
   var view = document.getElementById("view");
+  var textEl = document.getElementById("text");
   var input = document.getElementById("url");
-
-  function setStatus(t){ statusEl.textContent = t; }
-
-  function b64ToHtml(b64){
-    try {
-      var bin = atob(b64);
-      var bytes = new Uint8Array(bin.length);
-      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return new TextDecoder("utf-8").decode(bytes);
-    } catch (e) {
-      // fallback Latin1
-      try { return decodeURIComponent(escape(atob(b64))); } catch (e2) { return ""; }
-    }
-  }
-
-  function showHtml(html, label){
-    if (!html || html.length < 20) {
-      setStatus("Sin contenido HTML");
-      return;
-    }
-    view.removeAttribute("src");
-    view.srcdoc = html;
-    setStatus(label || ("OK · " + html.length + " chars"));
-  }
-
+  function setStatus(t){ if(statusEl) statusEl.textContent = t; }
   function norm(u){
-    u = (u || "").trim();
-    if (!u) return "";
-    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    u = (u||"").trim();
+    if(!u) return "";
+    if(!/^https?:\/\//i.test(u)) u = "https://" + u;
     return u;
   }
-
-  async function buscar(force){
-    var url = norm(force || input.value);
-    if (!url) { setStatus("Escribe una URL"); return; }
-    input.value = url;
-    setStatus("⏳ Consultando proxy…");
+  async function buscar(){
+    var url = norm(input && input.value);
+    if(!url){ setStatus("Escribe una URL"); return; }
+    if(input) input.value = url;
+    setStatus("⏳ Proxy…");
     try {
       var res = await fetch(PROXY + "?url=" + encodeURIComponent(url));
+      var ct = (res.headers.get("content-type")||"").toLowerCase();
+      if (ct.indexOf("application/json") === -1) {
+        throw new Error("Proxy público devuelve HTML de Next, no JSON. Arregla nginx → :3847");
+      }
       var data = await res.json();
-      if (data.error || data.ok === false) throw new Error(data.error || data.message || "error proxy");
+      if (data.error || data.ok === false) throw new Error(data.error || "error");
       var html = data.html || "";
-      if (!html) throw new Error("Proxy sin html");
-      showHtml(html, "HTTP " + (data.status || res.status) + " · " + (data.bytes || html.length) + " bytes · " + (data.subrecursos || 0) + " subrecursos");
-    } catch (e) {
+      if (!html) throw new Error("sin html");
+      view.srcdoc = html;
+      setStatus("HTTP " + (data.status||res.status) + " · " + (data.bytes||html.length) + " bytes");
+      textEl.textContent = (html.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()).slice(0, 8000);
+    } catch(e) {
       setStatus("❌ " + (e && e.message ? e.message : String(e)));
     }
   }
-
-  document.getElementById("btn").addEventListener("click", function(){ buscar(); });
-  input.addEventListener("keydown", function(e){ if (e.key === "Enter") buscar(); });
-
-  if (INITIAL_B64 && INITIAL_B64.length > 8) {
-    showHtml(b64ToHtml(INITIAL_B64), "Vista inicial");
-  } else {
-    setStatus("Listo — pulsa BUSCAR");
-  }
+  var btn = document.getElementById("btn");
+  if (btn) btn.addEventListener("click", buscar);
+  if (input) input.addEventListener("keydown", function(e){ if(e.key==="Enter") buscar(); });
 })();
 </script>
 </body>
@@ -171,35 +175,30 @@ function buildHtml(startUrl: string, initialPageHtml: string) {
 
 function resolveStartUrl(args: string[], argText: string): string {
   const q = (argText || args.join(' ')).trim()
-  if (!q) return 'https://www.google.com'
+  if (!q) return 'https://example.com'
   if (/^https?:\/\//i.test(q)) return q
   if (/\./.test(q) && !/\s/.test(q)) return `https://${q}`
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`
 }
 
 async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
-  let initialPageHtml = ''
+  let pageHtml = `<!doctype html><html><body style="font-family:system-ui;padding:16px"><p>Sin contenido</p></body></html>`
+  let readable = 'Sin contenido'
+
   try {
     const result = await fetchBrowserDocument(startUrl)
-    let html = lightenHtml(result.html)
-    if (Buffer.byteLength(html, 'utf8') > MAX_INLINE_BYTES) {
-      html = html.slice(0, MAX_INLINE_BYTES) + '\n<!-- truncated by Ghost Nexora -->'
-    }
-    initialPageHtml = html
-    logger.info(
-      { startUrl, bytes: Buffer.byteLength(html, 'utf8'), status: result.status },
-      'navegador initial page ready',
-    )
+    pageHtml = result.html
+    readable = extractReadableText(result.html)
+    logger.info({ startUrl, bytes: result.bytes, status: result.status }, 'navegador page fetched')
   } catch (error) {
-    logger.warn({ error, startUrl }, 'navegador initial fetch failed; UI still opens')
-    initialPageHtml = `<!doctype html><html><body style="font-family:system-ui;padding:16px;background:#111;color:#eee">
-      <p>No se pudo precargar <b>${escapeAttribute(startUrl)}</b>.</p>
-      <p>Pulsa <b>BUSCAR</b> (necesita proxy público OK).</p>
-    </body></html>`
+    const msg = error instanceof Error ? error.message : String(error)
+    logger.warn({ error: msg, startUrl }, 'navegador fetch failed')
+    pageHtml = `<!doctype html><html><body style="font-family:system-ui;padding:16px;background:#111;color:#eee"><h3>Error</h3><p>${escapeHtml(msg)}</p></body></html>`
+    readable = `Error al cargar ${startUrl}: ${msg}`
   }
 
   const msgId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
-  const HTML = buildHtml(startUrl, initialPageHtml)
+  const HTML = buildHtml(startUrl, pageHtml, readable)
   const payload = {
     response_id: msgId,
     sections: [
@@ -262,7 +261,6 @@ export const navegadorCommands: BotCommand[] = [
       const startUrl = resolveStartUrl(ctx.args, ctx.argText)
       try {
         await sendBrowserMessage(ctx, startUrl)
-        // sin mensaje de confirmación (solo el panel)
       } catch (error) {
         logger.warn({ error }, 'navegador send failed')
         const err = error instanceof Error ? error.message : String(error)
