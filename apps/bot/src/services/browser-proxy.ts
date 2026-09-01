@@ -21,6 +21,16 @@ function json(res: http.ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload))
 }
 
+function htmlResponse(res: http.ServerResponse, status: number, html: string) {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+    'x-content-type-options': 'nosniff',
+  })
+  res.end(html)
+}
+
 function isPrivateAddress(address: string) {
   if (net.isIPv4(address)) {
     const [a, b] = address.split('.').map(Number)
@@ -61,7 +71,7 @@ async function fetchDocument(startUrl: string) {
         redirect: 'manual',
         signal: controller.signal,
         headers: {
-          'user-agent': 'GhostNexoraBotBrowser/1.0',
+          'user-agent': 'GhostNexoraBotBrowser/1.1',
           accept: 'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.5',
         },
       })
@@ -121,6 +131,10 @@ async function fetchDocument(startUrl: string) {
   throw new Error('Se alcanzó el límite de redirecciones.')
 }
 
+export async function fetchBrowserDocument(startUrl: string) {
+  return fetchDocument(startUrl)
+}
+
 let server: http.Server | null = null
 
 export function startBrowserProxy() {
@@ -156,10 +170,18 @@ export function startBrowserProxy() {
 
     try {
       const result = await fetchDocument(target)
+      if (requestUrl.searchParams.get('format') === 'html') {
+        htmlResponse(res, 200, result.html)
+        return
+      }
       json(res, 200, { ok: true, ...result })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.warn({ error: message, target }, 'browser proxy request failed')
+      if (requestUrl.searchParams.get('format') === 'html') {
+        htmlResponse(res, 400, `<!doctype html><html><body style="font-family:system-ui;padding:24px"><h3>Ghost Nexora Browser</h3><p>${message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p></body></html>`)
+        return
+      }
       json(res, 400, { ok: false, error: message })
     }
   })
