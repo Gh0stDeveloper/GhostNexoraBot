@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent } from 'baileys'
 import type { BotCommand, CommandContext } from '../types.js'
 import { config } from '../config.js'
+import { fetchBrowserDocument } from '../services/browser-proxy.js'
 import { logger } from '../utils/logger.js'
 
 const PUBLIC_PROXY =
@@ -43,11 +44,27 @@ function trustedSourcesFor(startUrl: string) {
   ].filter((value): value is string => Boolean(value)))]
 }
 
-function buildHtml(startUrl: string) {
-  const safeStart = startUrl.replace(/"/g, '&quot;')
-  const safeProxy = PUBLIC_PROXY.replace(/"/g, '&quot;')
+function escapeAttribute(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;')
+}
+
+function buildHtml(startUrl: string, initialPageHtml = '') {
+  const safeStart = escapeAttribute(startUrl)
+  const safeProxy = escapeAttribute(PUBLIC_PROXY)
   const initialHref = `${PUBLIC_PROXY}?url=${encodeURIComponent(startUrl)}&format=html`
-  const safeInitialHref = initialHref.replace(/"/g, '&quot;')
+  const initialAttr = initialPageHtml
+    ? ` srcdoc="${escapeAttribute(initialPageHtml)}"`
+    : ` src="${escapeAttribute(initialHref)}"`
+  const statusText = initialPageHtml
+    ? 'Resultado cargado desde Ghost Nexora'
+    : 'Cargando página…'
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -62,9 +79,7 @@ function buildHtml(startUrl: string) {
   #btn{width:100%;margin-top:10px;background:linear-gradient(90deg,#7c5cff,#5a8bff);color:#fff;border:none;padding:12px;border-radius:12px;font-weight:700;font-size:14px;letter-spacing:.5px}
   #btn:active{opacity:.85}
   #status{font-size:11px;color:#9aa0a6;margin-top:8px;text-align:center;white-space:pre-wrap;word-break:break-word}
-  #view{width:100%;height:min(55vh,480px);border:none;background:#fff;border-radius:12px;margin-top:12px}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-  .chip{font-size:11px;background:#1b1d22;border:1px solid #333;color:#ccc;padding:6px 10px;border-radius:999px}
+  #view{width:100%;height:min(65vh,560px);border:none;background:#fff;border-radius:12px;margin-top:12px;display:block}
 </style>
 </head>
 <body>
@@ -73,13 +88,8 @@ function buildHtml(startUrl: string) {
     <input id="url" value="${safeStart}" inputmode="url" autocomplete="off" />
   </div>
   <button id="btn" type="button">BUSCAR</button>
-  <div class="chips">
-    <span class="chip" data-u="https://www.google.com">Google</span>
-    <span class="chip" data-u="https://es.wikipedia.org">Wikipedia</span>
-    <span class="chip" data-u="https://news.ycombinator.com">HN</span>
-  </div>
-  <div id="status">Cargando…</div>
-  <iframe id="view" src="${safeInitialHref}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
+  <div id="status">${statusText}</div>
+  <iframe id="view"${initialAttr} sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>
 <script>
 const PROXY = "${safeProxy}";
 function norm(u){
@@ -96,13 +106,11 @@ function navigate(force){
   if(!url){ status.textContent = "Escribe una URL"; return; }
   input.value = url;
   status.textContent = "Cargando " + url + "…";
+  view.removeAttribute("srcdoc");
   view.src = PROXY + "?url=" + encodeURIComponent(url) + "&format=html";
 }
 document.getElementById("btn").addEventListener("click", function(){ navigate(); });
 document.getElementById("url").addEventListener("keydown", function(e){ if(e.key==="Enter") navigate(); });
-document.querySelectorAll(".chip").forEach(function(el){
-  el.addEventListener("click", function(){ navigate(el.getAttribute("data-u")); });
-});
 document.getElementById("view").addEventListener("load", function(){ document.getElementById("status").textContent = "Página cargada"; });
 </script>
 </body>
@@ -118,8 +126,20 @@ function resolveStartUrl(args: string[], argText: string): string {
 }
 
 async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
+  let initialPageHtml = ''
+  try {
+    const result = await fetchBrowserDocument(startUrl)
+    // WhatsApp rich HTML messages are bounded in size; inline the initial page
+    // so the first render does not depend on WebView fetch/navigation support.
+    if (Buffer.byteLength(result.html, 'utf8') <= 1_500_000) {
+      initialPageHtml = result.html
+    }
+  } catch (error) {
+    logger.warn({ error, startUrl }, 'initial browser page fetch failed; using proxy navigation fallback')
+  }
+
   const msgId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
-  const HTML = buildHtml(startUrl)
+  const HTML = buildHtml(startUrl, initialPageHtml)
   const payload = {
     response_id: msgId,
     sections: [
