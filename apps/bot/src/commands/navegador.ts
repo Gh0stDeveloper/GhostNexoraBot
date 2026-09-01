@@ -1,11 +1,12 @@
 /**
  * .nav | .navegador | .view
  *
- * Estrategia "navegador real":
- * 1) Página interactiva en https://ghostnexorabot.duckdns.org/browser?url=...
- *    (JS completo + BUSCAR + iframe con HTML del proxy)
- * 2) En WhatsApp se embebe esa URL en un iframe del mensaje GenAI
- *    (mismo origen trusted) + enlace para abrir a pantalla completa.
+ * Mismo patrón que bots que muestran Google/WhatsApp en el GenAI:
+ *  - Shell: url + BUSCAR + status + iframe
+ *  - fetch(PROXY) → JSON { status, bytes, subrecursos, html }
+ *  - iframe.srcdoc = html (sin vaciar estilos)
+ *  - Status: "HTTP 200 - N bytes - M subrecursos"
+ *  - Precarga en el bot → base64 inicial (por si el WebView tarda)
  */
 import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent } from 'baileys'
@@ -15,26 +16,14 @@ import { fetchBrowserDocument } from '../services/browser-proxy.js'
 import { logger } from '../utils/logger.js'
 
 const PUBLIC_ORIGIN =
-  process.env.PUBLIC_WEB_URL?.replace(/\/$/, '') ||
-  'https://ghostnexorabot.duckdns.org'
+  (process.env.PUBLIC_WEB_URL || 'https://ghostnexorabot.duckdns.org').replace(/\/$/, '')
 
 const PUBLIC_PROXY =
   process.env.BROWSER_PROXY_PUBLIC_URL ||
   (config as { browserProxyPublicUrl?: string }).browserProxyPublicUrl ||
   `${PUBLIC_ORIGIN}/proxy`
 
-const MAX_TEXT_CHARS = 8_000
-
-const STATIC_TRUSTED = [
-  PUBLIC_ORIGIN,
-  'https://ghostnexorabot.duckdns.org',
-  'https://www.google.com',
-  'https://google.com',
-  'https://whatsapp.com',
-  'https://example.com',
-  'https://es.wikipedia.org',
-  'https://en.wikipedia.org',
-]
+const MAX_INLINE_BYTES = 1_200_000
 
 function originOf(rawUrl: string): string | null {
   try {
@@ -48,105 +37,162 @@ function originOf(rawUrl: string): string | null {
 
 function trustedSourcesFor(startUrl: string) {
   return [...new Set(
-    [...STATIC_TRUSTED, originOf(PUBLIC_PROXY), originOf(startUrl)].filter(
-      (v): v is string => Boolean(v),
-    ),
+    [
+      PUBLIC_ORIGIN,
+      'https://ghostnexorabot.duckdns.org',
+      'https://www.google.com',
+      'https://google.com',
+      'https://whatsapp.com',
+      'https://www.whatsapp.com',
+      'https://example.com',
+      originOf(PUBLIC_PROXY),
+      originOf(startUrl),
+    ].filter((v): v is string => Boolean(v)),
   )]
 }
 
-function escapeAttribute(value: string) {
+function escapeAttr(value: string) {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
     .replace(/'/g, '&#39;')
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
-
-function extractReadableText(html: string): string {
-  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '')
-    .replace(/<[^>]+>/g, '')
-    .trim()
-  let body = html.replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
-  body = body.replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
-  body = body.replace(/<[^>]+>/g, ' ')
-  body = body.replace(/&nbsp;/gi, ' ')
-  body = body.replace(/\s+/g, ' ').trim()
-  const text = [title ? `「 ${title} 」` : '', body].filter(Boolean).join('\n\n')
-  return text.slice(0, MAX_TEXT_CHARS)
-}
-
-function browserPageUrl(startUrl: string) {
-  return `${PUBLIC_ORIGIN}/browser?url=${encodeURIComponent(startUrl)}`
-}
-
-function proxyHtmlUrl(startUrl: string) {
-  return `${PUBLIC_PROXY}?url=${encodeURIComponent(startUrl)}&format=html`
-}
-
-function buildHtml(startUrl: string, readable: string) {
-  const safeStart = escapeAttribute(startUrl)
-  const pageUrl = escapeAttribute(browserPageUrl(startUrl))
-  const directHtml = escapeAttribute(proxyHtmlUrl(startUrl))
-  const safeReadable = escapeHtml(readable || '')
-
-  // iframe src = página /browser (JS real) + fallback iframe al HTML del proxy
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<style>
-  *{box-sizing:border-box}
-  body{margin:0;padding:10px;background:#0f1115;color:#fff;font-family:system-ui,-apple-system,Arial,sans-serif}
-  a.open{display:block;text-align:center;margin:0 0 10px;padding:12px;border-radius:12px;background:linear-gradient(90deg,#7c5cff,#5a8bff);color:#fff;text-decoration:none;font-weight:700;font-size:14px}
-  #view{width:100%;height:min(62vh,520px);border:none;background:#fff;border-radius:12px;display:block}
-  #text{margin-top:10px;padding:12px;background:#1b1d22;border-radius:12px;font-size:12px;line-height:1.45;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#e8eaed}
-  .hint{font-size:10px;color:#6b7280;margin:8px 0;text-align:center}
-  .url{font-size:11px;color:#9aa0a6;margin-bottom:8px;word-break:break-all}
-</style>
-</head>
-<body>
-  <a class="open" href="${pageUrl}" target="_blank" rel="noopener">🌐 Abrir navegador completo</a>
-  <div class="url">${safeStart}</div>
-  <iframe id="view" src="${pageUrl}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
-  <div class="hint">Si el marco sale en blanco, usa el botón de arriba o lee el resumen</div>
-  <div id="text">${safeReadable}</div>
-  <!-- fallback oculto: carga directa HTML del proxy si el WebView bloquea /browser -->
-  <iframe src="${directHtml}" style="display:none" title="fallback"></iframe>
-</body>
-</html>`
 }
 
 function resolveStartUrl(args: string[], argText: string): string {
   const q = (argText || args.join(' ')).trim()
-  if (!q) return 'https://example.com'
+  if (!q) return 'https://www.google.com'
   if (/^https?:\/\//i.test(q)) return q
   if (/\./.test(q) && !/\s/.test(q)) return `https://${q}`
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`
 }
 
+function buildShell(
+  startUrl: string,
+  initialHtml: string,
+  meta: { status: number; bytes: number; subrecursos: number },
+) {
+  const safeUrl = escapeAttr(startUrl)
+  const safeProxy = escapeAttr(PUBLIC_PROXY)
+  const b64 = Buffer.from(initialHtml || '', 'utf8').toString('base64')
+  const status0 = initialHtml
+    ? `HTTP ${meta.status} - ${meta.bytes} bytes - ${meta.subrecursos} subrecursos`
+    : 'esperando…'
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body{margin:0;padding:12px;background:#0f1115;color:white;font-family:Arial,sans-serif}
+  .top{display:flex;gap:6px;align-items:center}
+  .label{font-size:11px;color:#9aa0a6;min-width:25px}
+  #url{flex:1;background:#1b1d22;border:1.5px solid #ffb300;color:white;padding:10px 12px;border-radius:10px;outline:none;font-size:13px}
+  #btn{width:100%;margin-top:10px;background:linear-gradient(90deg,#7c5cff,#5a8bff);color:white;border:none;padding:12px;border-radius:12px;font-weight:bold;font-size:14px;letter-spacing:1px}
+  #status{font-size:11px;color:#9aa0a6;margin-top:8px;text-align:center;white-space:pre}
+  #view{width:100%;height:420px;border:none;background:white;border-radius:12px;margin-top:12px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="label">url</span>
+    <input id="url" value="${safeUrl}" />
+  </div>
+  <button id="btn" type="button">BUSCAR</button>
+  <div id="status">${escapeAttr(status0)}</div>
+  <iframe id="view" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>
+<script>
+(function(){
+  var PROXY = "${safeProxy}";
+  var INITIAL_B64 = "${b64}";
+
+  function b64ToHtml(b64){
+    try {
+      var bin = atob(b64);
+      if (typeof TextDecoder !== "undefined") {
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder("utf-8").decode(bytes);
+      }
+      return decodeURIComponent(escape(bin));
+    } catch (e) { return ""; }
+  }
+
+  function show(html, statusText){
+    var view = document.getElementById("view");
+    var st = document.getElementById("status");
+    if (st && statusText) st.textContent = statusText;
+    if (!view) return;
+    view.removeAttribute("src");
+    view.srcdoc = html || "";
+  }
+
+  function norm(u){
+    u = (u || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+
+  async function buscar(){
+    var input = document.getElementById("url");
+    var st = document.getElementById("status");
+    var url = norm(input && input.value);
+    if (!url) { if (st) st.textContent = "Escribe una URL"; return; }
+    if (input) input.value = url;
+    if (st) st.textContent = "Cargando…";
+    try {
+      var res = await fetch(PROXY + "?url=" + encodeURIComponent(url));
+      var data = await res.json();
+      if (data.error) throw new Error(data.error);
+      var html = data.html || "";
+      var line = "HTTP " + (data.status || res.status) + " - " + (data.bytes || html.length) + " bytes - " + (data.subrecursos || 0) + " subrecursos";
+      show(html, line);
+    } catch (e) {
+      if (st) st.textContent = "Error: " + (e && e.message ? e.message : e);
+    }
+  }
+
+  document.getElementById("btn").addEventListener("click", buscar);
+  document.getElementById("url").addEventListener("keydown", function(e){
+    if (e.key === "Enter") buscar();
+  });
+
+  if (INITIAL_B64 && INITIAL_B64.length > 16) {
+    show(b64ToHtml(INITIAL_B64), "${escapeAttr(status0)}");
+  }
+})();
+</script>
+</body>
+</html>`
+}
+
 async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
-  let readable = 'Cargando resumen…'
+  let initialHtml = ''
+  let meta = { status: 0, bytes: 0, subrecursos: 0 }
+
   try {
     const result = await fetchBrowserDocument(startUrl)
-    readable = extractReadableText(result.html)
-    logger.info({ startUrl, bytes: result.bytes, status: result.status }, 'navegador page fetched')
+    let html = result.html
+    if (Buffer.byteLength(html, 'utf8') > MAX_INLINE_BYTES) {
+      html = html.slice(0, MAX_INLINE_BYTES) + '\n<!-- truncated -->'
+    }
+    initialHtml = html
+    meta = {
+      status: result.status,
+      bytes: result.bytes,
+      subrecursos: result.subrecursos ?? 0,
+    }
+    logger.info({ startUrl, ...meta }, 'navegador initial ok')
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
-    logger.warn({ error: msg, startUrl }, 'navegador fetch failed')
-    readable = `No se pudo precargar el resumen.\nAbre: ${browserPageUrl(startUrl)}`
+    logger.warn({ error, startUrl }, 'navegador initial fetch failed')
   }
 
   const msgId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
-  const HTML = buildHtml(startUrl, readable)
+  const HTML = buildShell(startUrl, initialHtml, meta)
+
   const payload = {
     response_id: msgId,
     sections: [
@@ -174,7 +220,7 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
       message: {
         richResponseMessage: {
           messageType: 1,
-          submessages: [{ messageType: 2, messageText: '🌐 Navegador Ghost Nexora' }],
+          submessages: [{ messageType: 2, messageText: '🌐 Navegador' }],
           unifiedResponse: {
             data: Buffer.from(JSON.stringify(payload)).toString('base64'),
           },
@@ -203,7 +249,7 @@ export const navegadorCommands: BotCommand[] = [
     name: 'nav',
     aliases: ['navegador', 'view', 'browser', 'browse'],
     category: 'tools',
-    description: 'Navegador embebido (página real + BUSCAR en /browser).',
+    description: 'Navegador embebido (HTML real vía proxy).',
     usage: 'nav [url|búsqueda]',
     async handler(ctx) {
       const startUrl = resolveStartUrl(ctx.args, ctx.argText)
@@ -212,9 +258,7 @@ export const navegadorCommands: BotCommand[] = [
       } catch (error) {
         logger.warn({ error }, 'navegador send failed')
         const err = error instanceof Error ? error.message : String(error)
-        await ctx.reply(
-          `❌ No se pudo abrir el navegador.\n${err.slice(0, 180)}\n\nPrueba abrir:\n${browserPageUrl(startUrl)}`,
-        )
+        await ctx.reply(`❌ Navegador: ${err.slice(0, 200)}`)
       }
     },
   },
