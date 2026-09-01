@@ -1,12 +1,14 @@
 /**
  * .nav | .navegador | .view
  *
- * Mismo patrón que bots que muestran Google/WhatsApp en el GenAI:
- *  - Shell: url + BUSCAR + status + iframe
- *  - fetch(PROXY) → JSON { status, bytes, subrecursos, html }
- *  - iframe.srcdoc = html (sin vaciar estilos)
- *  - Status: "HTTP 200 - N bytes - M subrecursos"
- *  - Precarga en el bot → base64 inicial (por si el WebView tarda)
+ * El status se veía bien porque iba en HTML estático, pero el iframe
+ * quedaba en blanco: el HTML solo se inyectaba con JS y WhatsApp a menudo
+ * no ejecuta scripts en GenAI.
+ *
+ * Ahora:
+ *  1) iframe srcdoc="..." con el HTML ya escapado (sin JS)
+ *  2) fallback iframe src = proxy?format=html (si trusted_sources lo permite)
+ *  3) JS solo para BUSCAR (si el WebView lo permite)
  */
 import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent } from 'baileys'
@@ -23,7 +25,8 @@ const PUBLIC_PROXY =
   (config as { browserProxyPublicUrl?: string }).browserProxyPublicUrl ||
   `${PUBLIC_ORIGIN}/proxy`
 
-const MAX_INLINE_BYTES = 1_200_000
+/** srcdoc en atributo: páginas grandes se acortan; el resto va por src=proxy */
+const MAX_SRCDOC_BYTES = 400_000
 
 function originOf(rawUrl: string): string | null {
   try {
@@ -51,6 +54,7 @@ function trustedSourcesFor(startUrl: string) {
   )]
 }
 
+/** Escape real para atributos HTML (el anterior estaba roto y no escapaba). */
 function escapeAttr(value: string) {
   return value
     .replace(/&/g, '&')
@@ -75,10 +79,22 @@ function buildShell(
 ) {
   const safeUrl = escapeAttr(startUrl)
   const safeProxy = escapeAttr(PUBLIC_PROXY)
-  const b64 = Buffer.from(initialHtml || '', 'utf8').toString('base64')
+  const proxyHtml = `${PUBLIC_PROXY}?url=${encodeURIComponent(startUrl)}&format=html`
+  const safeProxyHtml = escapeAttr(proxyHtml)
+
   const status0 = initialHtml
     ? `HTTP ${meta.status} - ${meta.bytes} bytes - ${meta.subrecursos} subrecursos`
     : 'esperando…'
+
+  // Preferir srcdoc con HTML real (sin JS). Si es muy grande, solo src al proxy.
+  let iframeOpen: string
+  if (initialHtml && Buffer.byteLength(initialHtml, 'utf8') <= MAX_SRCDOC_BYTES) {
+    iframeOpen = `<iframe id="view" srcdoc="${escapeAttr(initialHtml)}" src="${safeProxyHtml}"`
+  } else if (initialHtml) {
+    iframeOpen = `<iframe id="view" src="${safeProxyHtml}"`
+  } else {
+    iframeOpen = `<iframe id="view" src="${safeProxyHtml}"`
+  }
 
   return `<!DOCTYPE html>
 <html>
@@ -102,24 +118,16 @@ function buildShell(
   </div>
   <button id="btn" type="button">BUSCAR</button>
   <div id="status">${escapeAttr(status0)}</div>
-  <iframe id="view" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>
+  ${iframeOpen} sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>
 <script>
 (function(){
   var PROXY = "${safeProxy}";
-  var INITIAL_B64 = "${b64}";
-
-  function b64ToHtml(b64){
-    try {
-      var bin = atob(b64);
-      if (typeof TextDecoder !== "undefined") {
-        var bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        return new TextDecoder("utf-8").decode(bytes);
-      }
-      return decodeURIComponent(escape(bin));
-    } catch (e) { return ""; }
+  function norm(u){
+    u = (u || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
   }
-
   function show(html, statusText){
     var view = document.getElementById("view");
     var st = document.getElementById("status");
@@ -128,14 +136,6 @@ function buildShell(
     view.removeAttribute("src");
     view.srcdoc = html || "";
   }
-
-  function norm(u){
-    u = (u || "").trim();
-    if (!u) return "";
-    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
-    return u;
-  }
-
   async function buscar(){
     var input = document.getElementById("url");
     var st = document.getElementById("status");
@@ -154,15 +154,10 @@ function buildShell(
       if (st) st.textContent = "Error: " + (e && e.message ? e.message : e);
     }
   }
-
-  document.getElementById("btn").addEventListener("click", buscar);
-  document.getElementById("url").addEventListener("keydown", function(e){
-    if (e.key === "Enter") buscar();
-  });
-
-  if (INITIAL_B64 && INITIAL_B64.length > 16) {
-    show(b64ToHtml(INITIAL_B64), "${escapeAttr(status0)}");
-  }
+  var btn = document.getElementById("btn");
+  if (btn) btn.addEventListener("click", buscar);
+  var input = document.getElementById("url");
+  if (input) input.addEventListener("keydown", function(e){ if (e.key === "Enter") buscar(); });
 })();
 </script>
 </body>
@@ -176,8 +171,9 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
   try {
     const result = await fetchBrowserDocument(startUrl)
     let html = result.html
-    if (Buffer.byteLength(html, 'utf8') > MAX_INLINE_BYTES) {
-      html = html.slice(0, MAX_INLINE_BYTES) + '\n<!-- truncated -->'
+    if (Buffer.byteLength(html, 'utf8') > MAX_SRCDOC_BYTES) {
+      // Sigue en el mensaje vía src=proxy; no forzar srcdoc gigante
+      logger.info({ startUrl, bytes: result.bytes }, 'navegador page large; using proxy src')
     }
     initialHtml = html
     meta = {
