@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
     "llm:train": "node dist/llm/train.js",
-    "llm:worker": "node dist/llm/llm-worker-supervisor.js"
+    "llm:worker": "node dist/llm/llm-worker-supervisor.js",
+    "playwright:install": "playwright install chromium"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
@@ -21,6 +22,7 @@
     "mammoth": "^1.12.1",
     "pdf-parse": "^2.4.5",
     "pino": "^9.9.0",
+    "playwright": "^1.55.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.35.3",

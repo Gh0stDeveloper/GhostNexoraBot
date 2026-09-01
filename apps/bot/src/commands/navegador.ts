@@ -1,20 +1,20 @@
 /**
  * .nav | .navegador | .view
  *
- * El status se veía bien porque iba en HTML estático, pero el iframe
- * quedaba en blanco: el HTML solo se inyectaba con JS y WhatsApp a menudo
- * no ejecuta scripts en GenAI.
- *
- * Ahora:
- *  1) iframe srcdoc="..." con el HTML ya escapado (sin JS)
- *  2) fallback iframe src = proxy?format=html (si trusted_sources lo permite)
- *  3) JS solo para BUSCAR (si el WebView lo permite)
+ * WhatsApp no pinta bien iframes/srcdoc en GenAI en muchos clientes.
+ * Estrategia "proyector":
+ *  1) El servidor abre la página con Chromium (Playwright), ejecuta JS y captura JPEG.
+ *  2) El mensaje GenAI muestra esa imagen (como un monitor).
+ *  3) BUSCAR: si el WebView ejecuta JS, pide /proxy y recarga; si no, el usuario
+ *     vuelve a mandar .view url
+ *  4) Además se envía la imagen como mensaje de foto (siempre visible).
  */
 import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent } from 'baileys'
 import type { BotCommand, CommandContext } from '../types.js'
 import { config } from '../config.js'
 import { fetchBrowserDocument } from '../services/browser-proxy.js'
+import { capturePageScreenshot } from '../services/browser-screenshot.js'
 import { logger } from '../utils/logger.js'
 
 const PUBLIC_ORIGIN =
@@ -24,9 +24,6 @@ const PUBLIC_PROXY =
   process.env.BROWSER_PROXY_PUBLIC_URL ||
   (config as { browserProxyPublicUrl?: string }).browserProxyPublicUrl ||
   `${PUBLIC_ORIGIN}/proxy`
-
-/** srcdoc en atributo: páginas grandes se acortan; el resto va por src=proxy */
-const MAX_SRCDOC_BYTES = 400_000
 
 function originOf(rawUrl: string): string | null {
   try {
@@ -46,21 +43,18 @@ function trustedSourcesFor(startUrl: string) {
       'https://www.google.com',
       'https://google.com',
       'https://whatsapp.com',
-      'https://www.whatsapp.com',
-      'https://example.com',
       originOf(PUBLIC_PROXY),
       originOf(startUrl),
     ].filter((v): v is string => Boolean(v)),
   )]
 }
 
-/** Escape real para atributos HTML (el anterior estaba roto y no escapaba). */
 function escapeAttr(value: string) {
   return value
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 }
 
@@ -72,29 +66,16 @@ function resolveStartUrl(args: string[], argText: string): string {
   return `https://www.google.com/search?q=${encodeURIComponent(q)}`
 }
 
-function buildShell(
-  startUrl: string,
-  initialHtml: string,
-  meta: { status: number; bytes: number; subrecursos: number },
-) {
-  const safeUrl = escapeAttr(startUrl)
+function buildShell(opts: {
+  startUrl: string
+  statusLine: string
+  /** data:image/jpeg;base64,... */
+  imageDataUrl: string
+}) {
+  const safeUrl = escapeAttr(opts.startUrl)
   const safeProxy = escapeAttr(PUBLIC_PROXY)
-  const proxyHtml = `${PUBLIC_PROXY}?url=${encodeURIComponent(startUrl)}&format=html`
-  const safeProxyHtml = escapeAttr(proxyHtml)
-
-  const status0 = initialHtml
-    ? `HTTP ${meta.status} - ${meta.bytes} bytes - ${meta.subrecursos} subrecursos`
-    : 'esperando…'
-
-  // Preferir srcdoc con HTML real (sin JS). Si es muy grande, solo src al proxy.
-  let iframeOpen: string
-  if (initialHtml && Buffer.byteLength(initialHtml, 'utf8') <= MAX_SRCDOC_BYTES) {
-    iframeOpen = `<iframe id="view" srcdoc="${escapeAttr(initialHtml)}" src="${safeProxyHtml}"`
-  } else if (initialHtml) {
-    iframeOpen = `<iframe id="view" src="${safeProxyHtml}"`
-  } else {
-    iframeOpen = `<iframe id="view" src="${safeProxyHtml}"`
-  }
+  const safeStatus = escapeAttr(opts.statusLine)
+  const safeImg = escapeAttr(opts.imageDataUrl)
 
   return `<!DOCTYPE html>
 <html>
@@ -107,8 +88,8 @@ function buildShell(
   .label{font-size:11px;color:#9aa0a6;min-width:25px}
   #url{flex:1;background:#1b1d22;border:1.5px solid #ffb300;color:white;padding:10px 12px;border-radius:10px;outline:none;font-size:13px}
   #btn{width:100%;margin-top:10px;background:linear-gradient(90deg,#7c5cff,#5a8bff);color:white;border:none;padding:12px;border-radius:12px;font-weight:bold;font-size:14px;letter-spacing:1px}
-  #status{font-size:11px;color:#9aa0a6;margin-top:8px;text-align:center;white-space:pre}
-  #view{width:100%;height:420px;border:none;background:white;border-radius:12px;margin-top:12px}
+  #status{font-size:11px;color:#9aa0a6;margin-top:8px;text-align:center;white-space:pre-wrap}
+  #shot{width:100%;margin-top:12px;border-radius:12px;background:#fff;display:block}
 </style>
 </head>
 <body>
@@ -117,8 +98,8 @@ function buildShell(
     <input id="url" value="${safeUrl}" />
   </div>
   <button id="btn" type="button">BUSCAR</button>
-  <div id="status">${escapeAttr(status0)}</div>
-  ${iframeOpen} sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer"></iframe>
+  <div id="status">${safeStatus}</div>
+  <img id="shot" alt="captura" src="${safeImg}" />
 <script>
 (function(){
   var PROXY = "${safeProxy}";
@@ -128,36 +109,25 @@ function buildShell(
     if (!/^https?:\/\//i.test(u)) u = "https://" + u;
     return u;
   }
-  function show(html, statusText){
-    var view = document.getElementById("view");
-    var st = document.getElementById("status");
-    if (st && statusText) st.textContent = statusText;
-    if (!view) return;
-    view.removeAttribute("src");
-    view.srcdoc = html || "";
-  }
   async function buscar(){
     var input = document.getElementById("url");
     var st = document.getElementById("status");
+    var shot = document.getElementById("shot");
     var url = norm(input && input.value);
     if (!url) { if (st) st.textContent = "Escribe una URL"; return; }
     if (input) input.value = url;
-    if (st) st.textContent = "Cargando…";
+    if (st) st.textContent = "Cargando… (usa .view url si no actualiza)";
     try {
       var res = await fetch(PROXY + "?url=" + encodeURIComponent(url));
       var data = await res.json();
       if (data.error) throw new Error(data.error);
-      var html = data.html || "";
-      var line = "HTTP " + (data.status || res.status) + " - " + (data.bytes || html.length) + " bytes - " + (data.subrecursos || 0) + " subrecursos";
-      show(html, line);
+      if (st) st.textContent = "HTTP " + (data.status||res.status) + " - " + (data.bytes||0) + " bytes - " + (data.subrecursos||0) + " subrecursos\n(Recarga con .view " + url + " para nueva captura)";
     } catch (e) {
       if (st) st.textContent = "Error: " + (e && e.message ? e.message : e);
     }
   }
   var btn = document.getElementById("btn");
   if (btn) btn.addEventListener("click", buscar);
-  var input = document.getElementById("url");
-  if (input) input.addEventListener("keydown", function(e){ if (e.key === "Enter") buscar(); });
 })();
 </script>
 </body>
@@ -165,30 +135,51 @@ function buildShell(
 }
 
 async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
-  let initialHtml = ''
+  let statusLine = 'Capturando página en el servidor…'
+  let imageDataUrl =
+    'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+  let jpeg: Buffer | null = null
   let meta = { status: 0, bytes: 0, subrecursos: 0 }
 
+  // 1) Metadata del proxy (bytes / subrecursos)
   try {
-    const result = await fetchBrowserDocument(startUrl)
-    let html = result.html
-    if (Buffer.byteLength(html, 'utf8') > MAX_SRCDOC_BYTES) {
-      // Sigue en el mensaje vía src=proxy; no forzar srcdoc gigante
-      logger.info({ startUrl, bytes: result.bytes }, 'navegador page large; using proxy src')
-    }
-    initialHtml = html
+    const doc = await fetchBrowserDocument(startUrl)
     meta = {
-      status: result.status,
-      bytes: result.bytes,
-      subrecursos: result.subrecursos ?? 0,
+      status: doc.status,
+      bytes: doc.bytes,
+      subrecursos: doc.subrecursos ?? 0,
     }
-    logger.info({ startUrl, ...meta }, 'navegador initial ok')
   } catch (error) {
-    logger.warn({ error, startUrl }, 'navegador initial fetch failed')
+    logger.warn({ error, startUrl }, 'navegador meta fetch failed')
   }
 
-  const msgId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
-  const HTML = buildShell(startUrl, initialHtml, meta)
+  // 2) Screenshot real en el servidor
+  try {
+    const shot = await capturePageScreenshot(startUrl)
+    jpeg = shot.jpeg
+    imageDataUrl = `data:image/jpeg;base64,${shot.jpeg.toString('base64')}`
+    statusLine = `HTTP ${meta.status || 200} - ${meta.bytes || shot.jpeg.length} bytes - ${meta.subrecursos} subrecursos · captura ${shot.width}x${shot.height}`
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    logger.warn({ error: msg, startUrl }, 'navegador screenshot failed')
+    statusLine = `Sin captura: ${msg.slice(0, 120)}`
+  }
 
+  // 3) Foto normal de WhatsApp (siempre se ve)
+  if (jpeg && jpeg.length > 500) {
+    try {
+      await ctx.socket.sendMessage(ctx.chatId, {
+        image: jpeg,
+        caption: `🌐 ${startUrl}\n${statusLine}`,
+      })
+    } catch (error) {
+      logger.warn({ error }, 'navegador send image failed')
+    }
+  }
+
+  // 4) Panel GenAI con la misma imagen (proyector)
+  const msgId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
+  const HTML = buildShell({ startUrl, statusLine, imageDataUrl })
   const payload = {
     response_id: msgId,
     sections: [
@@ -245,7 +236,7 @@ export const navegadorCommands: BotCommand[] = [
     name: 'nav',
     aliases: ['navegador', 'view', 'browser', 'browse'],
     category: 'tools',
-    description: 'Navegador embebido (HTML real vía proxy).',
+    description: 'Navegador: captura de página en el servidor (proyector).',
     usage: 'nav [url|búsqueda]',
     async handler(ctx) {
       const startUrl = resolveStartUrl(ctx.args, ctx.argText)
@@ -254,7 +245,7 @@ export const navegadorCommands: BotCommand[] = [
       } catch (error) {
         logger.warn({ error }, 'navegador send failed')
         const err = error instanceof Error ? error.message : String(error)
-        await ctx.reply(`❌ Navegador: ${err.slice(0, 200)}`)
+        await ctx.reply(`❌ Navegador: ${err.slice(0, 240)}`)
       }
     },
   },
