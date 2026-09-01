@@ -79,7 +79,7 @@ function buildHtml(startUrl: string) {
     <span class="chip" data-u="https://news.ycombinator.com">HN</span>
   </div>
   <div id="status">Cargando…</div>
-  <iframe id="view" src="${safeInitialHref}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+  <iframe id="view" src="${safeInitialHref}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
 <script>
 const PROXY = "${safeProxy}";
 function norm(u){
