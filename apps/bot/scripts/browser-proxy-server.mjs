@@ -2,7 +2,8 @@
 /**
  * Proxy de navegador para .nav / .navegador / .view
  * Puerto: 3847 (NO usa 3000)
- * Público: https://ghostnexorabot.duckdns.org/proxy → 127.0.0.1:3847
+ * Público preferido vía Next: https://ghostnexorabot.duckdns.org/proxy
+ * (apps/web/app/proxy/route.ts) — este proceso es backend opcional en :3847
  */
 import http from 'node:http'
 import { URL } from 'node:url'
@@ -30,15 +31,26 @@ function cors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 }
 
-function json(res, status, body) {
+function sendJson(res, status, body) {
   cors(res)
   const data = JSON.stringify(body)
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Content-Length': Buffer.byteLength(data),
+    'X-Ghost-Nexora-Proxy': 'standalone',
   })
   res.end(data)
+}
+
+function sendHtml(res, status, html) {
+  cors(res)
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Ghost-Nexora-Proxy': 'standalone',
+  })
+  res.end(html)
 }
 
 function isBlockedHost(hostname) {
@@ -50,7 +62,11 @@ function normalizeUrl(raw) {
   if (!u) return null
   if (!/^https?:\/\//i.test(u)) u = 'https://' + u
   let parsed
-  try { parsed = new URL(u) } catch { return null }
+  try {
+    parsed = new URL(u)
+  } catch {
+    return null
+  }
   if (!['http:', 'https:'].includes(parsed.protocol)) return null
   if (isBlockedHost(parsed.hostname)) return null
   return parsed
@@ -64,10 +80,14 @@ function rewriteRelative(html, baseUrl) {
       (m, attr, path) => {
         try {
           return `${attr}="${new URL(path, base).href}"`
-        } catch { return m }
+        } catch {
+          return m
+        }
       },
     )
-  } catch { return html }
+  } catch {
+    return html
+  }
 }
 
 function escapeHtml(s) {
@@ -82,7 +102,8 @@ async function fetchTarget(target) {
       signal: controller.signal,
       redirect: 'follow',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
       },
@@ -96,9 +117,22 @@ async function fetchTarget(target) {
     if (!/html|xml|text/i.test(ct) && !/^\s*</.test(html)) {
       html = `<pre style="white-space:pre-wrap;padding:12px;font-family:monospace">${escapeHtml(html.slice(0, 50000))}</pre>`
     }
+    if (!/<base\s/i.test(html)) {
+      html = html.replace(
+        /<head([^>]*)>/i,
+        `<head$1><base href="${(res.url || target.href).replace(/"/g, '&quot;')}">`,
+      )
+    }
     html = rewriteRelative(html, res.url || target.href)
     const subrecursos = (html.match(/<(img|script|link|iframe)\b/gi) || []).length
-    return { ok: true, status: res.status, bytes: buf.length, subrecursos, finalUrl: res.url || target.href, html }
+    return {
+      ok: true,
+      status: res.status,
+      bytes: buf.length,
+      subrecursos,
+      finalUrl: res.url || target.href,
+      html,
+    }
   } finally {
     clearTimeout(timer)
   }
@@ -111,31 +145,59 @@ const server = http.createServer(async (req, res) => {
     res.end()
     return
   }
+
   const u = new URL(req.url || '/', `http://${HOST}:${PORT}`)
+
   if (u.pathname === '/health' || u.pathname === '/proxy/health') {
-    json(res, 200, { ok: true, service: 'browser-proxy', port: PORT })
+    sendJson(res, 200, { ok: true, service: 'browser-proxy', port: PORT })
     return
   }
+
   if (u.pathname !== '/proxy' && u.pathname !== '/') {
-    json(res, 404, { error: 'Not found. Use /proxy?url=https://...' })
+    sendJson(res, 404, { error: 'Not found. Use /proxy?url=https://...' })
     return
   }
+
   if (req.method !== 'GET') {
-    json(res, 405, { error: 'Solo GET' })
+    sendJson(res, 405, { error: 'Solo GET' })
     return
   }
+
   const target = normalizeUrl(u.searchParams.get('url') || '')
+  const wantHtml = (u.searchParams.get('format') || '').toLowerCase() === 'html'
+
   if (!target) {
-    json(res, 400, { error: 'URL inválida o bloqueada. Usa ?url=https://...' })
+    if (wantHtml) {
+      sendHtml(
+        res,
+        400,
+        '<!doctype html><html><body style="font-family:system-ui;padding:24px"><h3>Ghost Nexora</h3><p>URL inválida</p></body></html>',
+      )
+      return
+    }
+    sendJson(res, 400, { error: 'URL inválida o bloqueada. Usa ?url=https://...' })
     return
   }
+
   try {
     const result = await fetchTarget(target)
     if (!result.ok) {
-      json(res, 502, { error: result.error, status: result.status })
+      if (wantHtml) {
+        sendHtml(
+          res,
+          502,
+          `<!doctype html><html><body style="font-family:system-ui;padding:24px"><h3>Error</h3><p>${escapeHtml(result.error || 'fail')}</p></body></html>`,
+        )
+        return
+      }
+      sendJson(res, 502, { error: result.error, status: result.status })
       return
     }
-    json(res, 200, {
+    if (wantHtml) {
+      sendHtml(res, 200, result.html)
+      return
+    }
+    sendJson(res, 200, {
       status: result.status,
       bytes: result.bytes,
       subrecursos: result.subrecursos,
@@ -144,11 +206,19 @@ const server = http.createServer(async (req, res) => {
     })
   } catch (e) {
     const msg = e?.name === 'AbortError' ? 'Timeout al cargar la URL' : String(e?.message || e)
-    json(res, 500, { error: msg })
+    if (wantHtml) {
+      sendHtml(
+        res,
+        500,
+        `<!doctype html><html><body style="font-family:system-ui;padding:24px"><h3>Error</h3><p>${escapeHtml(msg)}</p></body></html>`,
+      )
+      return
+    }
+    sendJson(res, 500, { error: msg })
   }
 })
 
 server.listen(PORT, HOST, () => {
   console.log(`✅ Browser proxy http://${HOST}:${PORT}/proxy`)
-  console.log(`   → https://ghostnexorabot.duckdns.org/proxy`)
+  console.log('   format=html → text/html | sin format → application/json')
 })
