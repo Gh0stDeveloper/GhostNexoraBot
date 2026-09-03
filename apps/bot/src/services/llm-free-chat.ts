@@ -65,7 +65,7 @@ function load(): State {
 
 function save(state: State) {
   fs.mkdirSync(path.dirname(FILE), { recursive: true })
-  const tmp = `${FILE}.tmp`
+  const tmp = FILE + '.tmp'
   fs.writeFileSync(tmp, JSON.stringify(state, null, 2))
   fs.renameSync(tmp, FILE)
 }
@@ -94,7 +94,7 @@ function botJids(socket: WASocket): string[] {
   const id = socket.user?.id
   if (!id) return []
   const base = id.split(':')[0] ?? id
-  return [id, base, `${base.split('@')[0]}@s.whatsapp.net`].filter(Boolean)
+  return [id, base, (base.split('@')[0] || '') + '@s.whatsapp.net'].filter(Boolean)
 }
 
 function isBotMentioned(message: WAMessage, socket: WASocket, text: string) {
@@ -105,7 +105,7 @@ function isBotMentioned(message: WAMessage, socket: WASocket, text: string) {
   const lower = text.toLowerCase()
   if (/\b(ghost\s*nexora|nexora\s*bot|@bot)\b/i.test(lower)) return true
   const digits = (socket.user?.id ?? '').split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? ''
-  if (digits && lower.includes(`@${digits}`)) return true
+  if (digits && lower.includes('@' + digits)) return true
   return false
 }
 
@@ -157,7 +157,7 @@ function slangReply(text: string): string | null {
 }
 
 function pickReaction(userText: string, answer: string): string | null {
-  const t = `${userText} ${answer}`.toLowerCase()
+  const t = (userText + ' ' + answer).toLowerCase()
   if (/hola|buenas|hey|holi/.test(t)) return '👋'
   if (/gracias|thank/.test(t)) return '🙏'
   if (/jaja|lol|xd|pendejo|verga|alv|nmms/.test(t)) return '😂'
@@ -273,7 +273,6 @@ export const llmFreeChat = {
     commitRateLimit(chatId, load())
   },
 
-  /** Guarda mensajes del grupo/chat aunque el bot no responda (contexto). */
   rememberIncoming(chatId: string, text: string, pushName?: string) {
     if (!this.isEnabled(chatId)) return
     if (!this.isGroupAllowed(chatId)) return
@@ -302,7 +301,6 @@ export const llmFreeChat = {
     return true
   },
 
-  /** Respuesta con contexto del chat y LLM generativo local cuando está habilitado. */
   async respond(text: string, chatId: string, pushName?: string) {
     try {
       conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
@@ -317,7 +315,8 @@ export const llmFreeChat = {
       const answer = await contextualAnswer(chatId, text)
       if (!answer) return null
       conversationMemory.pushBot(chatId, answer)
-      return answer.slice(0, 900)
+      // Hasta 4000 para no cortar explicación + código
+      return answer.slice(0, 4000)
     } catch {
       return null
     }
@@ -340,8 +339,28 @@ export const llmFreeChat = {
   statusLine() {
     const s = load()
     const chats = Object.keys(s.chats).length
-    const cd = s.cooldownEnabled ? `${s.cooldownMs}ms` : 'OFF'
-    const spam = s.antispamEnabled ? `≤${s.maxRepliesPerWindow}/${Math.round(s.spamWindowMs / 1000)}s` : 'OFF'
-    return `global=${s.global ? 'ON' : 'OFF'} · chats=${chats} · mention=${s.requireMention ? 'ON' : 'OFF'} · groups=${s.groupWhitelist.length || 'all'} · cd=${cd} · spam=${spam} · slang=${s.slangEnabled ? 'ON' : 'OFF'} · react=${s.reactions ? 'ON' : 'OFF'} · ctx=ON`
+    const cd = s.cooldownEnabled ? s.cooldownMs + 'ms' : 'OFF'
+    const spam = s.antispamEnabled
+      ? '≤' + s.maxRepliesPerWindow + '/' + Math.round(s.spamWindowMs / 1000) + 's'
+      : 'OFF'
+    return (
+      'global=' +
+      (s.global ? 'ON' : 'OFF') +
+      ' · chats=' +
+      chats +
+      ' · mention=' +
+      (s.requireMention ? 'ON' : 'OFF') +
+      ' · groups=' +
+      (s.groupWhitelist.length || 'all') +
+      ' · cd=' +
+      cd +
+      ' · spam=' +
+      spam +
+      ' · slang=' +
+      (s.slangEnabled ? 'ON' : 'OFF') +
+      ' · react=' +
+      (s.reactions ? 'ON' : 'OFF') +
+      ' · ctx=ON'
+    )
   },
 }
