@@ -19,10 +19,6 @@ function similar(a: string, b: string) {
   return na.includes(nb.slice(0, Math.min(40, nb.length))) || nb.includes(na.slice(0, Math.min(40, na.length)))
 }
 
-/**
- * MainBot-only generative chat (Ollama / Qwen, etc.).
- * Devuelve texto ya formateado; el envío rich lo hace index/sendAssistantReply.
- */
 export async function contextualAnswer(chatId: string, userText: string): Promise<string | null> {
   const text = userText.replace(/\s+/g, ' ').trim()
   if (text.length < 2) return null
@@ -49,13 +45,16 @@ export async function contextualAnswer(chatId: string, userText: string): Promis
       'Usa el contexto reciente del chat cuando sea relevante.',
       'No uses ni menciones el corpus, Mini-LLM, documentos de entrenamiento ni sistemas internos.',
       'No inventes datos y no repitas la pregunta.',
-      'Cuando el usuario pida código, entrega código en bloques Markdown de triple backtick y especifica el lenguaje (```javascript, ```python, ```bash, etc.).',
-      'Mantén las explicaciones normales fuera de los bloques de código.',
+      'Cuando el usuario pida código:',
+      '1) Escribe PRIMERO una explicación clara en prosa (qué hace y cómo usarlo).',
+      '2) DESPUÉS el código en un bloque Markdown con lenguaje explícito (```python, ```javascript, ```bash, etc.).',
+      '3) Opcionalmente un cierre corto después del código.',
+      'Nunca envíes solo el código sin explicación si el usuario pidió que expliques el funcionamiento.',
+      'Mantén las explicaciones fuera de los bloques de código.',
     ].join(' '),
   })
 
   if (!generated) return null
-  // Más espacio para código (antes 900)
   const sliced = generated.slice(0, 4000)
   if (lastBot && similar(sliced, lastBot)) return sliced
   return formatAssistantResponse(text, sliced)
