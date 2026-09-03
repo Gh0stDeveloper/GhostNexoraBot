@@ -1,13 +1,17 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { askAI, aiConfigured, getAIStatus } from '../services/ai.js'
 import { googleSearch, wikipediaSearch, type WebSearchResult } from '../services/web-search.js'
+import { formatAssistantResponse } from '../services/response-format.js'
+import { sendRichAiCodeMessage, shouldUseRichCode } from '../services/rich-code-message.js'
+import { logger } from '../utils/logger.js'
 
 const SYSTEM_PROMPT = [
-  'Eres el asistente de Ghost Nexora Bot. Responde en el idioma del usuario; si no es claro, usa español.',
+  'Eres el asistente de Ghost Nexora Bot (Ghost Developer). Responde en el idioma del usuario; si no es claro, usa español.',
   'Sé preciso, útil y directo. No inventes hechos, enlaces ni fuentes.',
   'Cuando incluyas código, SIEMPRE usa bloques Markdown con lenguaje explícito: ```python, ```typescript, ```bash, ```json, etc.',
   'No uses bloques ``` sin lenguaje. Mantén el formato compatible con WhatsApp.',
   'No reveles razonamiento interno ni cadenas de pensamiento; entrega conclusiones y explicaciones útiles.',
+  'Puedes firmar mentalmente como Ghost Nexora, pero no repitas el watermark en cada línea.',
 ].join(' ')
 
 function requirePrompt(value: string) {
@@ -72,12 +76,40 @@ function splitForWhatsApp(input: string, limit = 3500) {
   return chunks
 }
 
-async function sendAI(ctx: CommandContext, text: string, model?: string) {
+async function sendPlainChunks(ctx: CommandContext, text: string, model?: string) {
   const chunks = splitForWhatsApp(text)
   for (let index = 0; index < chunks.length; index += 1) {
-    const footer = index === chunks.length - 1 && model ? `\n\n_🤖 ${model}_` : ''
+    const footer =
+      index === chunks.length - 1
+        ? `\n\n_✧ Ghost Nexora Bot · Ghost Developer${model ? ` · ${model}` : ''} ✧_`
+        : ''
     await ctx.reply(`${chunks[index]}${footer}`)
   }
+}
+
+/** Preferir rich code; si falla, texto con fences. */
+async function sendAI(ctx: CommandContext, userPrompt: string, rawText: string, model?: string) {
+  const text = formatAssistantResponse(userPrompt, normalizeCodeFences(rawText))
+
+  if (shouldUseRichCode(text)) {
+    try {
+      await sendRichAiCodeMessage(
+        ctx.socket,
+        ctx.chatId,
+        {
+          title: 'Ghost Nexora · Asistente',
+          fullText: text,
+          model,
+        },
+        ctx.message,
+      )
+      return
+    } catch (error) {
+      logger.warn({ error }, 'rich AI code failed; fallback plain')
+    }
+  }
+
+  await sendPlainChunks(ctx, text, model)
 }
 
 function uniqueSources(results: WebSearchResult[]) {
@@ -105,7 +137,10 @@ async function researchSources(query: string) {
 
 export const aiCommands: BotCommand[] = [
   {
-    name: 'aistatus', aliases: ['iastatus'], category: 'general', staffOnly: true,
+    name: 'aistatus',
+    aliases: ['iastatus'],
+    category: 'general',
+    staffOnly: true,
     description: 'Diagnostica la configuración de IA sin mostrar la API key.',
     async handler(ctx) {
       const status = await getAIStatus()
@@ -118,55 +153,88 @@ export const aiCommands: BotCommand[] = [
         `┃ Formato key » *${status.keyFormat}*`,
         `┃ Autenticación » *${status.auth}*`,
         'httpStatus' in status ? `┃ HTTP » *${status.httpStatus}*` : '',
-        'freeTier' in status && status.freeTier !== undefined ? `┃ Free tier » *${status.freeTier ? 'SÍ' : 'NO'}*` : '',
-        'limitRemaining' in status && status.limitRemaining !== undefined && status.limitRemaining !== null ? `┃ Límite restante » *${status.limitRemaining}*` : '',
+        'freeTier' in status && status.freeTier !== undefined
+          ? `┃ Free tier » *${status.freeTier ? 'SÍ' : 'NO'}*`
+          : '',
+        'limitRemaining' in status &&
+        status.limitRemaining !== undefined &&
+        status.limitRemaining !== null
+          ? `┃ Límite restante » *${status.limitRemaining}*`
+          : '',
         'detail' in status && status.detail ? `┃ Detalle » ${status.detail}` : '',
         '╰━━━━━━━━━━━━━━━━╯',
+        '_Ghost Nexora Bot · Ghost Developer_',
       ].filter(Boolean)
       await ctx.reply(lines.join('\n'))
     },
   },
   {
-    name: 'ai', aliases: ['ia', 'ask', 'chat'], category: 'general',
-    description: 'Consulta el asistente de IA.', usage: 'ai <pregunta>',
+    name: 'ai',
+    aliases: ['ia', 'ask', 'chat'],
+    category: 'general',
+    description: 'Consulta el asistente de IA (código con resaltado rich).',
+    usage: 'ai <pregunta>',
     async handler(ctx) {
-      if (!aiConfigured()) throw new Error('La IA gratuita aún no está configurada. El owner debe añadir OPENROUTER_API_KEY en el .env del servidor.')
+      if (!aiConfigured()) {
+        throw new Error(
+          'La IA gratuita aún no está configurada. El owner debe añadir OPENROUTER_API_KEY en el .env del servidor.',
+        )
+      }
       const prompt = requirePrompt(ctx.argText)
       await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
-      const result = await askAI([
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ], 1800)
-      await sendAI(ctx, result.text, result.model)
+      const result = await askAI(
+        [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt },
+        ],
+        1800,
+      )
+      await sendAI(ctx, prompt, result.text, result.model)
     },
   },
   {
-    name: 'investiga', aliases: ['investigar', 'research'], category: 'general',
-    description: 'Investiga un tema con búsquedas web y síntesis de IA.', usage: 'investiga <tema>',
+    name: 'investiga',
+    aliases: ['investigar', 'research'],
+    category: 'general',
+    description: 'Investiga un tema con búsquedas web y síntesis de IA.',
+    usage: 'investiga <tema>',
     async handler(ctx) {
-      if (!aiConfigured()) throw new Error('La IA gratuita aún no está configurada. El owner debe añadir OPENROUTER_API_KEY en el .env del servidor.')
+      if (!aiConfigured()) {
+        throw new Error(
+          'La IA gratuita aún no está configurada. El owner debe añadir OPENROUTER_API_KEY en el .env del servidor.',
+        )
+      }
       const query = requirePrompt(ctx.argText)
       await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const sources = await researchSources(query)
       if (!sources.length) throw new Error('No pude obtener fuentes públicas para investigar ese tema.')
 
-      const sourceContext = sources.map((source, index) => [
-        `[${index + 1}] ${source.title}`,
-        `URL: ${source.url}`,
-        source.snippet ? `Resumen: ${source.snippet}` : '',
-      ].filter(Boolean).join('\n')).join('\n\n')
+      const sourceContext = sources
+        .map((source, index) =>
+          [
+            `[${index + 1}] ${source.title}`,
+            `URL: ${source.url}`,
+            source.snippet ? `Resumen: ${source.snippet}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        )
+        .join('\n\n')
 
-      const result = await askAI([
-        {
-          role: 'system',
-          content: `${SYSTEM_PROMPT} Para investigación, usa únicamente las fuentes entregadas como evidencia factual. Cita afirmaciones importantes con [1], [2], etc. Si las fuentes no permiten confirmar algo, dilo explícitamente. Termina con una sección "Fuentes" que conserve las URLs proporcionadas.`,
-        },
-        {
-          role: 'user',
-          content: `Tema de investigación: ${query}\n\nFuentes obtenidas:\n${sourceContext}\n\nElabora una síntesis clara, separa hechos de incertidumbres y cita las fuentes por número.`,
-        },
-      ], 2300)
-      await sendAI(ctx, result.text, result.model)
+      const result = await askAI(
+        [
+          {
+            role: 'system',
+            content: `${SYSTEM_PROMPT} Para investigación, usa únicamente las fuentes entregadas como evidencia factual. Cita afirmaciones importantes con [1], [2], etc. Si las fuentes no permiten confirmar algo, dilo explícitamente. Termina con una sección "Fuentes" que conserve las URLs proporcionadas.`,
+          },
+          {
+            role: 'user',
+            content: `Tema de investigación: ${query}\n\nFuentes obtenidas:\n${sourceContext}\n\nElabora una síntesis clara, separa hechos de incertidumbres y cita las fuentes por número.`,
+          },
+        ],
+        2300,
+      )
+      await sendAI(ctx, query, result.text, result.model)
     },
   },
 ]
