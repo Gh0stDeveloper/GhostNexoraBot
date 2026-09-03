@@ -4,7 +4,6 @@
  *
  * Créditos: Ghost Nexora Bot / Ghost Developer
  */
-import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent, type WAMessage, type WASocket } from 'baileys'
 import { logger } from '../utils/logger.js'
 
@@ -86,10 +85,7 @@ export function buildCodeBlocks(code: string): CodeBlock[] {
       /handler\./.test(trimmed)
     ) {
       nextType = 2
-    } else if (
-      !trimmed ||
-      /^(const|let|var|from)\b/.test(trimmed)
-    ) {
+    } else if (!trimmed || /^(const|let|var|from)\b/.test(trimmed)) {
       nextType = 1
     } else {
       nextType = 4
@@ -123,14 +119,9 @@ export type RichAiPayload = {
   code?: string
   language?: string
   model?: string
-  /** Respuesta completa de la IA (se parsean fences) */
   fullText?: string
 }
 
-/**
- * Envía texto + código con richResponseMessage.
- * Si falla, el caller debe hacer fallback a texto plano.
- */
 export async function sendRichAiCodeMessage(
   socket: WASocket,
   chatId: string,
@@ -140,9 +131,7 @@ export async function sendRichAiCodeMessage(
   const userJid = socket.user?.id
   if (!userJid) throw new Error('Sesión de WhatsApp no autenticada.')
 
-  const parts = payload.fullText
-    ? parseMarkdownParts(payload.fullText)
-    : []
+  const parts = payload.fullText ? parseMarkdownParts(payload.fullText) : []
 
   const textBits: string[] = []
   const codeSections: Array<{ language: string; code: string }> = []
@@ -160,7 +149,6 @@ export async function sendRichAiCodeMessage(
     else codeSections.push({ language: part.language, code: part.code })
   }
 
-  // Si fullText no tenía fences pero hay fullText, úsalo como cuerpo
   if (!parts.length && payload.fullText?.trim() && !payload.body) {
     textBits.push(payload.fullText.trim())
   }
@@ -168,10 +156,7 @@ export async function sendRichAiCodeMessage(
   const title = payload.title || 'Respuesta IA'
   const lines = textBits.join('\n\n').trim()
   const totalCode = codeSections.reduce((n, s) => n + s.code.length, 0)
-  const totalLines = codeSections.reduce(
-    (n, s) => n + s.code.split('\n').length,
-    0,
-  )
+  const totalLines = codeSections.reduce((n, s) => n + s.code.split('\n').length, 0)
   const sizeKb = (totalCode / 1024).toFixed(2)
 
   const headerLines = [
@@ -251,7 +236,7 @@ export async function sendRichAiCodeMessage(
   return msg
 }
 
-/** true si el texto parece contener código a resaltar */
 export function shouldUseRichCode(text: string) {
-  return /```[\s\S]*```/.test(text) || /\b(function|const|let|var|import|export|def |class |SELECT |#!/)\b/.test(text)
+  if (/```[\s\S]*```/.test(text)) return true
+  return /\b(function|const|let|var|import|export|class|def|SELECT)\b/.test(text)
 }
