@@ -13,6 +13,7 @@ import { requestTraining, trainingQueueStatus } from '../llm/training-queue.js'
 import { installSeedCorpus, getSeedSourceDir } from '../llm/seed-corpus.js'
 import { countVectors, ingestAllCorpusFiles } from '../llm/incremental-corpus.js'
 import { llmFreeChat } from '../services/llm-free-chat.js'
+import { sendAssistantReply } from '../services/assistant-reply.js'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -295,7 +296,27 @@ export const miniLlmCommands: BotCommand[] = [{
     if (sub === 'ask') {
       const query = ctx.args.slice(1).join(' ').trim()
       if (query.length < 2) throw new Error('llm ask <pregunta>')
-      await ctx.reply(miniLLM.answer(query))
+      // Preferir Ollama si está ON; si no, Mini-LLM local
+      let answer: string | null = null
+      let model = 'mini-llm'
+      if (ollama.isEnabled()) {
+        answer = await ollama.generate({
+          userText: query,
+          systemPrompt: [
+            'Eres Ghost Nexora Bot (Ghost Developer).',
+            'Responde en el idioma del usuario.',
+            'Si hay código, usa bloques Markdown con lenguaje (```javascript, ```python, etc.).',
+          ].join(' '),
+        })
+        model = ollama.getConfig().model || 'ollama'
+      }
+      if (!answer) answer = miniLLM.answer(query)
+      await sendAssistantReply(ctx.socket, ctx.chatId, answer, {
+        userPrompt: query,
+        model,
+        title: 'Ghost Nexora · LLM',
+        quoted: ctx.message,
+      })
       return
     }
     if (sub === 'search') {
