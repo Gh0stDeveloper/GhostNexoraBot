@@ -21,8 +21,8 @@ import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { autoChat } from './services/auto-chat.js'
 import { llmFreeChat } from './services/llm-free-chat.js'
-import { ollama } from './services/ollama.js'
 import { sendAssistantReply } from './services/assistant-reply.js'
+import { hasAudio, transcribeWhatsAppAudio } from './services/audio-transcribe.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -153,17 +153,55 @@ async function routeMessage(
   const handled = await router.handle(socket, message)
   if (handled) return
 
+  // Audio / nota de voz con modo libre: transcribir → Ollama responde
+  if (
+    chatId &&
+    !message.key.fromMe &&
+    hasAudio(message) &&
+    llmFreeChat.isEnabled(chatId) &&
+    llmFreeChat.isGroupAllowed(chatId) &&
+    llmFreeChat.canRespond(chatId)
+  ) {
+    const state = llmFreeChat.getState()
+    if (state.requireMention && chatId.endsWith('@g.us')) {
+      // en grupos con mención obligatoria, el audio solo responde si no hay texto de comando
+      // (audio no menciona; se permite si whitelist/global y no requiere mención)
+      // Si requireMention, no auto-responder audios en grupo sin mención.
+    } else {
+      const stopTyping = startTypingIndicator(socket, chatId)
+      try {
+        await socket.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => undefined)
+        const transcript = await transcribeWhatsAppAudio(message, false)
+        if (transcript.trim().length >= 2) {
+          llmFreeChat.commitRespond(chatId)
+          const response = await llmFreeChat.respond(transcript, chatId, pushName)
+          if (response) {
+            await sendAssistantReply(socket, chatId, response, {
+              userPrompt: transcript,
+              title: 'Ghost Nexora',
+              quoted: message,
+            })
+            await llmFreeChat.maybeReact(socket, message, transcript, response)
+          }
+        }
+      } catch (error) {
+        logger.warn({ error, chatId }, 'audio free-chat failed')
+      } finally {
+        stopTyping()
+      }
+      return
+    }
+  }
+
   if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
     const stopTyping = startTypingIndicator(socket, chatId)
     try {
       const response = await llmFreeChat.respond(text, chatId, pushName)
       if (!response) return
       llmFreeChat.commitRespond(chatId)
-      const modelLabel = ollama.getConfig().model || 'ollama'
       await sendAssistantReply(socket, chatId, response, {
         userPrompt: text,
-        model: modelLabel,
-        title: 'Ghost Nexora · Ollama',
+        title: 'Ghost Nexora',
         quoted: message,
       })
       await llmFreeChat.maybeReact(socket, message, text, response)
@@ -206,7 +244,7 @@ async function connect() {
     for (const message of messages) {
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
       const chatId = message.key.remoteJid
-      void withTimeout(routeMessage(socket, message, router), 120_000, `routeMessage ${chatId}`)
+      void withTimeout(routeMessage(socket, message, router), 120_000, 'routeMessage ' + chatId)
         .catch((error) => logger.error({ error, chatId }, 'mensaje colgado o falló'))
     }
   })
@@ -227,7 +265,7 @@ async function connect() {
       connectedAt = new Date()
       activeJid = socket.user?.id ?? null
       mainSocket = socket
-      logger.info({ jid: activeJid, prefix: settings.prefix }, `${config.botName} connected`)
+      logger.info({ jid: activeJid, prefix: settings.prefix }, config.botName + ' connected')
     }
     if (connection === 'close') {
       connected = false
