@@ -1,9 +1,7 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { askAI, aiConfigured, getAIStatus } from '../services/ai.js'
 import { googleSearch, wikipediaSearch, type WebSearchResult } from '../services/web-search.js'
-import { formatAssistantResponse } from '../services/response-format.js'
-import { sendRichAiCodeMessage, shouldUseRichCode } from '../services/rich-code-message.js'
-import { logger } from '../utils/logger.js'
+import { sendAssistantReply } from '../services/assistant-reply.js'
 
 const SYSTEM_PROMPT = [
   'Eres el asistente de Ghost Nexora Bot (Ghost Developer). Responde en el idioma del usuario; si no es claro, usa español.',
@@ -18,98 +16,6 @@ function requirePrompt(value: string) {
   const text = value.trim()
   if (!text) throw new Error('Escribe una pregunta o tema.')
   return text.slice(0, 6000)
-}
-
-function inferFenceLanguage(lines: string[]) {
-  const sample = lines.slice(0, 8).join('\n')
-  if (/^\s*(?:from\s+\S+\s+import|import\s+\S+|def\s+\w+\(|class\s+\w+[:(]|print\s*\()/m.test(sample)) return 'python'
-  if (/\b(?:const|let|var|function|interface|type)\s+\w+|=>|console\.log\(/.test(sample)) return /interface\s+\w+|type\s+\w+\s*=|:\s*(?:string|number|boolean)\b/.test(sample) ? 'typescript' : 'javascript'
-  if (/^\s*(?:sudo\s+|apt\s+|npm\s+|git\s+|curl\s+|systemctl\s+|journalctl\s+|#!\/bin\/(?:ba)?sh)/m.test(sample)) return 'bash'
-  if (/^\s*[\[{][\s\S]*[}\]]\s*$/.test(sample.trim())) return 'json'
-  if (/<(?:html|div|span|script|body|head|section)\b/i.test(sample)) return 'html'
-  if (/\bSELECT\b[\s\S]+\bFROM\b|\bCREATE\s+TABLE\b/i.test(sample)) return 'sql'
-  if (/^[.#]?[\w-]+\s*\{[^}]*:[^}]*\}/m.test(sample)) return 'css'
-  return 'text'
-}
-
-function normalizeCodeFences(input: string) {
-  const lines = input.replace(/\r\n/g, '\n').split('\n')
-  let inside = false
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]!
-    const match = /^```\s*([^\s`]*)\s*$/.exec(line)
-    if (!match) continue
-    if (inside) {
-      inside = false
-      lines[index] = '```'
-      continue
-    }
-    inside = true
-    if (!match[1]) lines[index] = `\`\`\`${inferFenceLanguage(lines.slice(index + 1, index + 9))}`
-  }
-  if (inside) lines.push('```')
-  return lines.join('\n').trim()
-}
-
-function splitForWhatsApp(input: string, limit = 3500) {
-  const text = normalizeCodeFences(input)
-  const lines = text.split('\n')
-  const chunks: string[] = []
-  let current = ''
-  let activeFence: string | null = null
-
-  const flush = () => {
-    const trimmed = current.trimEnd()
-    if (!trimmed) return
-    chunks.push(activeFence ? `${trimmed}\n\`\`\`` : trimmed)
-    current = activeFence ? `${activeFence}\n` : ''
-  }
-
-  for (const line of lines) {
-    const fence = /^```[^\s`]*\s*$/.exec(line)
-    const addition = `${current ? '\n' : ''}${line}`
-    if (current.length + addition.length > limit && current) flush()
-    current += `${current ? '\n' : ''}${line}`
-    if (fence) activeFence = activeFence ? null : line
-  }
-  if (current.trim()) chunks.push(current.trimEnd())
-  return chunks
-}
-
-async function sendPlainChunks(ctx: CommandContext, text: string, model?: string) {
-  const chunks = splitForWhatsApp(text)
-  for (let index = 0; index < chunks.length; index += 1) {
-    const footer =
-      index === chunks.length - 1
-        ? `\n\n_✧ Ghost Nexora Bot · Ghost Developer${model ? ` · ${model}` : ''} ✧_`
-        : ''
-    await ctx.reply(`${chunks[index]}${footer}`)
-  }
-}
-
-/** Preferir rich code; si falla, texto con fences. */
-async function sendAI(ctx: CommandContext, userPrompt: string, rawText: string, model?: string) {
-  const text = formatAssistantResponse(userPrompt, normalizeCodeFences(rawText))
-
-  if (shouldUseRichCode(text)) {
-    try {
-      await sendRichAiCodeMessage(
-        ctx.socket,
-        ctx.chatId,
-        {
-          title: 'Ghost Nexora · Asistente',
-          fullText: text,
-          model,
-        },
-        ctx.message,
-      )
-      return
-    } catch (error) {
-      logger.warn({ error }, 'rich AI code failed; fallback plain')
-    }
-  }
-
-  await sendPlainChunks(ctx, text, model)
 }
 
 function uniqueSources(results: WebSearchResult[]) {
@@ -189,7 +95,12 @@ export const aiCommands: BotCommand[] = [
         ],
         1800,
       )
-      await sendAI(ctx, prompt, result.text, result.model)
+      await sendAssistantReply(ctx.socket, ctx.chatId, result.text, {
+        userPrompt: prompt,
+        model: result.model,
+        title: 'Ghost Nexora · Asistente',
+        quoted: ctx.message,
+      })
     },
   },
   {
@@ -234,7 +145,12 @@ export const aiCommands: BotCommand[] = [
         ],
         2300,
       )
-      await sendAI(ctx, query, result.text, result.model)
+      await sendAssistantReply(ctx.socket, ctx.chatId, result.text, {
+        userPrompt: query,
+        model: result.model,
+        title: 'Ghost Nexora · Investigación',
+        quoted: ctx.message,
+      })
     },
   },
 ]

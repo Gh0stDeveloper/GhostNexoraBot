@@ -23,7 +23,7 @@ function abortAfter(ms: number) {
   return { controller, timer }
 }
 
-function clean(value: unknown, max = 1400) {
+function clean(value: unknown, max = 4000) {
   return typeof value === 'string' ? value.replace(/\u0000/g, '').trim().slice(0, max) : ''
 }
 
@@ -42,7 +42,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       const body = await response.text().catch(() => '')
       throw new Error(`Ollama HTTP ${response.status}${body ? `: ${body.slice(0, 240)}` : ''}`)
     }
-    return await response.json() as T
+    return (await response.json()) as T
   } finally {
     clearTimeout(timer)
   }
@@ -52,7 +52,7 @@ function historyToMessages(turns: ChatTurn[]) {
   return turns
     .slice(-config.ollamaMaxHistory)
     .map((turn) => ({
-      role: turn.role === 'bot' ? 'assistant' as const : 'user' as const,
+      role: (turn.role === 'bot' ? 'assistant' : 'user') as 'assistant' | 'user',
       content: clean(turn.role === 'user' ? `${turn.name}: ${turn.text}` : turn.text, 800),
     }))
     .filter((item) => item.content.length > 0)
@@ -138,7 +138,7 @@ export const ollama = {
           },
         }),
       })
-      const answer = clean(data.message?.content, 1200)
+      const answer = clean(data.message?.content, 4000)
       if (!answer) return null
       failedUntil = 0
       return answer
