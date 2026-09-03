@@ -21,6 +21,8 @@ import { handleV4Api } from './services/api-v4.js'
 import { startTelegramBridge } from './services/telegram-bridge-v7.js'
 import { autoChat } from './services/auto-chat.js'
 import { llmFreeChat } from './services/llm-free-chat.js'
+import { ollama } from './services/ollama.js'
+import { sendAssistantReply } from './services/assistant-reply.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -157,7 +159,13 @@ async function routeMessage(
       const response = await llmFreeChat.respond(text, chatId, pushName)
       if (!response) return
       llmFreeChat.commitRespond(chatId)
-      await socket.sendMessage(chatId, { text: response }, { quoted: message })
+      const modelLabel = ollama.getConfig().model || 'ollama'
+      await sendAssistantReply(socket, chatId, response, {
+        userPrompt: text,
+        model: modelLabel,
+        title: 'Ghost Nexora · Ollama',
+        quoted: message,
+      })
       await llmFreeChat.maybeReact(socket, message, text, response)
     } catch (error) {
       logger.warn({ error, chatId }, 'llm free-chat response failed')
@@ -172,7 +180,11 @@ async function routeMessage(
       const response = await autoChat.respond(chatId, text)
       if (!response) return
       await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
-      await socket.sendMessage(chatId, { text: response }, { quoted: message })
+      await sendAssistantReply(socket, chatId, response, {
+        userPrompt: text,
+        title: 'Ghost Nexora · Chat',
+        quoted: message,
+      })
       await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     } catch (error) {
       logger.warn({ error, chatId }, 'auto-chat response failed')
