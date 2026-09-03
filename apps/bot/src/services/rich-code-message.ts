@@ -1,7 +1,6 @@
 /**
- * Envía respuestas de IA con código usando richResponseMessage de WhatsApp
- * (messageType 5 + codeMetadata), al estilo de los bots que sí resaltan código.
- *
+ * Respuestas de IA con código (richResponseMessage + codeMetadata).
+ * Texto de explicación se envía aparte (los clientes a menudo solo muestran el bloque code).
  * Créditos: Ghost Nexora Bot / Ghost Developer
  */
 import { generateWAMessageFromContent, type WAMessage, type WASocket } from 'baileys'
@@ -31,7 +30,6 @@ function normalizeLang(raw: string) {
   return LANG_ALIASES[key] || key || 'text'
 }
 
-/** Divide texto Markdown en partes de prosa y bloques ```lang */
 export function parseMarkdownParts(input: string): Array<
   | { kind: 'text'; text: string }
   | { kind: 'code'; language: string; code: string }
@@ -60,7 +58,6 @@ export function parseMarkdownParts(input: string): Array<
   return parts
 }
 
-/** highlightType compatible con clientes que colorean codeMetadata */
 export function buildCodeBlocks(code: string): CodeBlock[] {
   const lines = code.replace(/\r\n/g, '\n').split('\n')
   const blocks: CodeBlock[] = []
@@ -98,7 +95,7 @@ export function buildCodeBlocks(code: string): CodeBlock[] {
       blockType = nextType
     }
 
-    current += `${line}\n`
+    current += line + '\n'
   }
   flush()
   return blocks.length ? blocks : [{ highlightType: 1, codeContent: code }]
@@ -118,8 +115,11 @@ export type RichAiPayload = {
   body?: string
   code?: string
   language?: string
+  /** Ya no se muestra en el mensaje (se ignora a propósito). */
   model?: string
   fullText?: string
+  /** Si true, no envía el texto plano previo (solo rich). */
+  skipPlainText?: boolean
 }
 
 export async function sendRichAiCodeMessage(
@@ -149,53 +149,59 @@ export async function sendRichAiCodeMessage(
     else codeSections.push({ language: part.language, code: part.code })
   }
 
-  if (!parts.length && payload.fullText?.trim() && !payload.body) {
+  if (!parts.length && payload.fullText?.trim() && !payload.body && !codeSections.length) {
     textBits.push(payload.fullText.trim())
   }
 
-  const title = payload.title || 'Respuesta IA'
-  const lines = textBits.join('\n\n').trim()
+  const title = payload.title || 'Ghost Nexora'
+  const explanation = textBits.join('\n\n').trim()
   const totalCode = codeSections.reduce((n, s) => n + s.code.length, 0)
   const totalLines = codeSections.reduce((n, s) => n + s.code.split('\n').length, 0)
   const sizeKb = (totalCode / 1024).toFixed(2)
 
+  // 1) Texto de explicación SIEMPRE en mensaje normal (así no se pierde)
+  if (explanation && !payload.skipPlainText) {
+    const plain = [
+      explanation,
+      '',
+      WATERMARK,
+    ].join('\n')
+    await socket.sendMessage(chatId, { text: plain }, { quoted })
+  }
+
+  // 2) Solo código → rich (si no hay código, no hace falta)
+  if (!codeSections.length) {
+    if (!explanation) {
+      await socket.sendMessage(chatId, { text: WATERMARK }, { quoted })
+    }
+    return null
+  }
+
   const headerLines = [
-    `🤖 *${title}*`,
-    codeSections.length
-      ? `📦 ${sizeKb} KB · 📝 ${totalLines} líneas · 💻 ${codeSections.map((c) => c.language).join(', ')}`
-      : null,
-    payload.model ? `⚙️ Modelo: ${payload.model}` : null,
+    '🤖 *' + title + '*',
+    '📦 ' + sizeKb + ' KB · 📝 ' + totalLines + ' líneas · 💻 ' + codeSections.map((c) => c.language).join(', '),
     WATERMARK,
-  ].filter(Boolean)
+  ]
 
   const submessages: Array<Record<string, unknown>> = [
     {
       messageType: 2,
-      messageText: `\n${headerLines.join('\n')}\n`,
+      messageText: '\n' + headerLines.join('\n') + '\n',
+    },
+    {
+      messageType: 2,
+      messageText: '\n💻 *Código:*\n',
     },
   ]
 
-  if (lines) {
+  for (const section of codeSections) {
     submessages.push({
-      messageType: 2,
-      messageText: `\n${lines}\n`,
+      messageType: 5,
+      codeMetadata: {
+        codeLanguage: section.language,
+        codeBlocks: buildCodeBlocks(section.code),
+      },
     })
-  }
-
-  if (codeSections.length) {
-    submessages.push({
-      messageType: 2,
-      messageText: '\n💻 *Código:*\n',
-    })
-    for (const section of codeSections) {
-      submessages.push({
-        messageType: 5,
-        codeMetadata: {
-          codeLanguage: section.language,
-          codeBlocks: buildCodeBlocks(section.code),
-        },
-      })
-    }
   }
 
   const richMessage = {
@@ -228,7 +234,7 @@ export async function sendRichAiCodeMessage(
       chatId,
       messageId: msg.key.id,
       codeSections: codeSections.length,
-      textLen: lines.length,
+      textLen: explanation.length,
     },
     'rich AI code message sent',
   )

@@ -1,7 +1,6 @@
 /**
- * Envío unificado de respuestas de asistente (OpenRouter/DeepSeek, Ollama/Qwen, etc.).
- * Si hay código → richResponseMessage (codeMetadata); si no → texto normal.
- * Créditos: Ghost Nexora Bot / Ghost Developer
+ * Envío unificado de respuestas de asistente.
+ * No muestra el nombre del modelo al usuario.
  */
 import type { WAMessage, WASocket } from 'baileys'
 import { formatAssistantResponse } from './response-format.js'
@@ -37,14 +36,14 @@ function splitChunks(input: string, limit = 3500) {
   const flush = () => {
     const trimmed = current.trimEnd()
     if (!trimmed) return
-    chunks.push(activeFence ? `${trimmed}\n\`\`\`` : trimmed)
-    current = activeFence ? `${activeFence}\n` : ''
+    chunks.push(activeFence ? trimmed + '\n```' : trimmed)
+    current = activeFence ? activeFence + '\n' : ''
   }
 
   for (const line of lines) {
     const fence = /^```[^\s`]*\s*$/.exec(line)
     if (current.length + line.length + 1 > limit && current) flush()
-    current += `${current ? '\n' : ''}${line}`
+    current += (current ? '\n' : '') + line
     if (fence) activeFence = activeFence ? null : line
   }
   if (current.trim()) chunks.push(current.trimEnd())
@@ -56,14 +55,9 @@ export type AssistantReplyOptions = {
   model?: string
   title?: string
   quoted?: WAMessage
-  /** Si false, no intenta rich (solo texto). Default true. */
   preferRich?: boolean
 }
 
-/**
- * Envía respuesta de cualquier modelo (Qwen/Ollama, DeepSeek/OpenRouter, etc.)
- * con el mismo formato que `.ai`.
- */
 export async function sendAssistantReply(
   socket: WASocket,
   chatId: string,
@@ -72,7 +66,6 @@ export async function sendAssistantReply(
 ) {
   const userPrompt = options.userPrompt || ''
   const text = formatAssistantResponse(userPrompt, normalizeCodeFences(rawText))
-  const model = options.model
   const title = options.title || 'Ghost Nexora · Asistente'
   const preferRich = options.preferRich !== false
 
@@ -84,7 +77,7 @@ export async function sendAssistantReply(
         {
           title,
           fullText: text,
-          model,
+          // model no se muestra
         },
         options.quoted,
       )
@@ -94,13 +87,10 @@ export async function sendAssistantReply(
     }
   }
 
-  const footer =
-    model
-      ? `\n\n_✧ Ghost Nexora Bot · Ghost Developer · ${model} ✧_`
-      : '\n\n_✧ Ghost Nexora Bot · Ghost Developer ✧_'
+  const footer = '\n\n_✧ Ghost Nexora Bot · Ghost Developer ✧_'
   const chunks = splitChunks(text)
   for (let i = 0; i < chunks.length; i++) {
-    const body = i === chunks.length - 1 ? `${chunks[i]}${footer}` : chunks[i]!
+    const body = i === chunks.length - 1 ? chunks[i] + footer : chunks[i]!
     await socket.sendMessage(chatId, { text: body }, { quoted: options.quoted })
   }
   return { mode: 'plain' as const }
