@@ -6,7 +6,7 @@ export const transcribeCommands: BotCommand[] = [
     name: 'transcribir',
     aliases: ['stt', 'whisper', 'audio2text', 'a2t'],
     category: 'tools',
-    description: 'Transcribe a texto un audio o nota de voz (responde al audio).',
+    description: 'Transcribe a texto un audio o nota de voz (local).',
     usage: 'transcribir (responde a un audio)',
     async handler(ctx) {
       if (!hasAudio(ctx.message)) {
@@ -15,15 +15,7 @@ export const transcribeCommands: BotCommand[] = [
       await ctx.react('🎧').catch(() => undefined)
       const text = await transcribeWhatsAppAudio(ctx.message, true)
       if (!text.trim()) throw new Error('No pude obtener texto del audio.')
-      await ctx.reply(
-        [
-          '🎧 *Transcripción*',
-          '',
-          text.trim(),
-          '',
-          '_✧ Ghost Nexora Bot · Ghost Developer ✧_',
-        ].join('\n'),
-      )
+      await ctx.reply(text.trim())
     },
   },
 ]

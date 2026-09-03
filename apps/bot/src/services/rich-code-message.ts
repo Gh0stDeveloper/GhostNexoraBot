@@ -1,7 +1,6 @@
 /**
- * Respuestas de IA con código (richResponseMessage + codeMetadata).
- * Texto de explicación se envía aparte (los clientes a menudo solo muestran el bloque code).
- * Créditos: Ghost Nexora Bot / Ghost Developer
+ * Respuestas con código (richResponseMessage + codeMetadata).
+ * Un solo mensaje: explicación + código. Sin créditos ni cabeceras extra.
  */
 import { generateWAMessageFromContent, type WAMessage, type WASocket } from 'baileys'
 import { logger } from '../utils/logger.js'
@@ -11,7 +10,6 @@ export type CodeBlock = {
   codeContent: string
 }
 
-const WATERMARK = '✧ Ghost Nexora Bot · Ghost Developer ✧'
 const AI_BOT_JID = '867051314767696@bot'
 
 const LANG_ALIASES: Record<string, string> = {
@@ -115,13 +113,11 @@ export type RichAiPayload = {
   body?: string
   code?: string
   language?: string
-  /** Ya no se muestra en el mensaje (se ignora a propósito). */
   model?: string
   fullText?: string
-  /** Si true, no envía el texto plano previo (solo rich). */
-  skipPlainText?: boolean
 }
 
+/** Un solo mensaje rich: texto + código, sin créditos ni metadatos de tamaño. */
 export async function sendRichAiCodeMessage(
   socket: WASocket,
   chatId: string,
@@ -153,46 +149,24 @@ export async function sendRichAiCodeMessage(
     textBits.push(payload.fullText.trim())
   }
 
-  const title = payload.title || 'Ghost Nexora'
   const explanation = textBits.join('\n\n').trim()
-  const totalCode = codeSections.reduce((n, s) => n + s.code.length, 0)
-  const totalLines = codeSections.reduce((n, s) => n + s.code.split('\n').length, 0)
-  const sizeKb = (totalCode / 1024).toFixed(2)
 
-  // 1) Texto de explicación SIEMPRE en mensaje normal (así no se pierde)
-  if (explanation && !payload.skipPlainText) {
-    const plain = [
-      explanation,
-      '',
-      WATERMARK,
-    ].join('\n')
-    await socket.sendMessage(chatId, { text: plain }, { quoted })
-  }
-
-  // 2) Solo código → rich (si no hay código, no hace falta)
+  // Sin código → texto plano simple (sin pie de créditos)
   if (!codeSections.length) {
-    if (!explanation) {
-      await socket.sendMessage(chatId, { text: WATERMARK }, { quoted })
+    if (explanation) {
+      await socket.sendMessage(chatId, { text: explanation }, { quoted })
     }
     return null
   }
 
-  const headerLines = [
-    '🤖 *' + title + '*',
-    '📦 ' + sizeKb + ' KB · 📝 ' + totalLines + ' líneas · 💻 ' + codeSections.map((c) => c.language).join(', '),
-    WATERMARK,
-  ]
+  const submessages: Array<Record<string, unknown>> = []
 
-  const submessages: Array<Record<string, unknown>> = [
-    {
+  if (explanation) {
+    submessages.push({
       messageType: 2,
-      messageText: '\n' + headerLines.join('\n') + '\n',
-    },
-    {
-      messageType: 2,
-      messageText: '\n💻 *Código:*\n',
-    },
-  ]
+      messageText: '\n' + explanation + '\n',
+    })
+  }
 
   for (const section of codeSections) {
     submessages.push({

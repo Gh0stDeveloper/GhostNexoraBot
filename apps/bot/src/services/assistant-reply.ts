@@ -1,6 +1,6 @@
 /**
  * Envío unificado de respuestas de asistente.
- * No muestra el nombre del modelo al usuario.
+ * Sin créditos / sin nombre de modelo.
  */
 import type { WAMessage, WASocket } from 'baileys'
 import { formatAssistantResponse } from './response-format.js'
@@ -66,7 +66,6 @@ export async function sendAssistantReply(
 ) {
   const userPrompt = options.userPrompt || ''
   const text = formatAssistantResponse(userPrompt, normalizeCodeFences(rawText))
-  const title = options.title || 'Ghost Nexora · Asistente'
   const preferRich = options.preferRich !== false
 
   if (preferRich && shouldUseRichCode(text)) {
@@ -74,11 +73,7 @@ export async function sendAssistantReply(
       await sendRichAiCodeMessage(
         socket,
         chatId,
-        {
-          title,
-          fullText: text,
-          // model no se muestra
-        },
+        { fullText: text },
         options.quoted,
       )
       return { mode: 'rich' as const }
@@ -87,11 +82,9 @@ export async function sendAssistantReply(
     }
   }
 
-  const footer = '\n\n_✧ Ghost Nexora Bot · Ghost Developer ✧_'
   const chunks = splitChunks(text)
-  for (let i = 0; i < chunks.length; i++) {
-    const body = i === chunks.length - 1 ? chunks[i] + footer : chunks[i]!
-    await socket.sendMessage(chatId, { text: body }, { quoted: options.quoted })
+  for (const chunk of chunks) {
+    await socket.sendMessage(chatId, { text: chunk }, { quoted: options.quoted })
   }
   return { mode: 'plain' as const }
 }

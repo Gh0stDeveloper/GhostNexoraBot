@@ -1,11 +1,11 @@
 /**
- * Transcripción de audio (nota de voz / audio adjunto).
- * Orden: OpenAI Whisper API (si hay key) → CLI whisper/faster-whisper → error claro.
+ * Transcripción de audio 100% local (sin APIs).
+ * Requiere: ffmpeg + openai-whisper (CLI) o faster-whisper.
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { downloadContentFromMessage, type proto, type WAMessage } from 'baileys'
 import { unwrapMessage, getContextInfo } from '../utils/message.js'
@@ -55,86 +55,200 @@ export async function downloadAudioFromMessage(
   }
 }
 
-async function convertToWav(inputPath: string, outputPath: string) {
-  await execFileAsync(
-    'ffmpeg',
-    ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outputPath],
-    { timeout: 60_000 },
-  )
-}
-
-async function transcribeOpenAI(filePath: string): Promise<string | null> {
-  const key = process.env.OPENAI_API_KEY?.trim()
-  if (!key) return null
-
-  const form = new FormData()
-  const blob = new Blob([fs.readFileSync(filePath)], { type: 'audio/wav' })
-  form.append('file', blob, 'audio.wav')
-  form.append('model', 'whisper-1')
-  form.append('language', 'es')
-
-  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { authorization: 'Bearer ' + key },
-    body: form,
-    signal: AbortSignal.timeout(90_000),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error('OpenAI Whisper HTTP ' + res.status + ': ' + body.slice(0, 200))
+async function which(cmd: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('which', [cmd])
+    const p = stdout.trim().split('\n')[0]
+    return p || null
+  } catch {
+    return null
   }
-  const data = (await res.json()) as { text?: string }
-  return (data.text || '').trim() || null
 }
 
-async function transcribeCli(wavPath: string): Promise<string | null> {
-  // faster-whisper / openai-whisper CLI
-  const candidates = [
-    ['whisper', [wavPath, '--model', 'base', '--language', 'es', '--output_format', 'txt', '--output_dir', path.dirname(wavPath)]],
-    ['whisper-ctranslate2', [wavPath, '--model', 'base', '--language', 'es', '--output_format', 'txt', '--output_dir', path.dirname(wavPath)]],
-  ] as const
+async function convertToWav(inputPath: string, outputPath: string) {
+  const ffmpeg = (await which('ffmpeg')) || 'ffmpeg'
+  await execFileAsync(
+    ffmpeg,
+    ['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outputPath],
+    { timeout: 90_000 },
+  )
+  if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 44) {
+    throw new Error('ffmpeg no generó WAV válido')
+  }
+}
 
-  for (const [bin, args] of candidates) {
-    try {
-      await execFileAsync(bin, args as unknown as string[], { timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })
-      const txtPath = wavPath.replace(/\.wav$/i, '.txt')
-      if (fs.existsSync(txtPath)) {
-        const text = fs.readFileSync(txtPath, 'utf8').trim()
-        if (text) return text
-      }
-    } catch {
-      // try next
+function runCapture(cmd: string, args: string[], timeoutMs = 240_000): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      reject(new Error('Timeout transcripción (' + timeoutMs + 'ms)'))
+    }, timeoutMs)
+    child.stdout.on('data', (d) => {
+      stdout += String(d)
+    })
+    child.stderr.on('data', (d) => {
+      stderr += String(d)
+    })
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve({ code: code ?? 1, stdout, stderr })
+    })
+  })
+}
+
+async function findWhisperTxt(dir: string, baseName: string): Promise<string | null> {
+  const candidates = [
+    path.join(dir, baseName + '.txt'),
+    path.join(dir, baseName + '.wav.txt'),
+    path.join(dir, 'audio.txt'),
+  ]
+  for (const c of candidates) {
+    if (fs.existsSync(c)) {
+      const t = fs.readFileSync(c, 'utf8').trim()
+      if (t) return t
     }
   }
+  // cualquier .txt generado
+  try {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.txt'))
+    for (const f of files) {
+      const t = fs.readFileSync(path.join(dir, f), 'utf8').trim()
+      if (t) return t
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+async function transcribeLocal(wavPath: string, workDir: string): Promise<string | null> {
+  const base = path.basename(wavPath, path.extname(wavPath))
+
+  // 1) python3 -m whisper (instalación típica con pip)
+  const pythons = ['python3', 'python']
+  for (const py of pythons) {
+    if (!(await which(py))) continue
+    try {
+      const result = await runCapture(py, [
+        '-m',
+        'whisper',
+        wavPath,
+        '--model',
+        process.env.WHISPER_MODEL || 'base',
+        '--language',
+        process.env.WHISPER_LANGUAGE || 'es',
+        '--output_format',
+        'txt',
+        '--output_dir',
+        workDir,
+        '--fp16',
+        'False',
+      ])
+      logger.info({ code: result.code, stderr: result.stderr.slice(-400) }, 'whisper python -m')
+      const text = await findWhisperTxt(workDir, base)
+      if (text) return text
+    } catch (error) {
+      logger.warn({ error }, 'python -m whisper failed')
+    }
+  }
+
+  // 2) binario whisper en PATH
+  const whisperBin = await which('whisper')
+  if (whisperBin) {
+    try {
+      const result = await runCapture(whisperBin, [
+        wavPath,
+        '--model',
+        process.env.WHISPER_MODEL || 'base',
+        '--language',
+        process.env.WHISPER_LANGUAGE || 'es',
+        '--output_format',
+        'txt',
+        '--output_dir',
+        workDir,
+        '--fp16',
+        'False',
+      ])
+      logger.info({ code: result.code, stderr: result.stderr.slice(-400) }, 'whisper bin')
+      const text = await findWhisperTxt(workDir, base)
+      if (text) return text
+    } catch (error) {
+      logger.warn({ error }, 'whisper bin failed')
+    }
+  }
+
+  // 3) faster-whisper CLI si existe
+  const fw = await which('whisper-ctranslate2')
+  if (fw) {
+    try {
+      const result = await runCapture(fw, [
+        wavPath,
+        '--model',
+        process.env.WHISPER_MODEL || 'base',
+        '--language',
+        process.env.WHISPER_LANGUAGE || 'es',
+        '--output_format',
+        'txt',
+        '--output_dir',
+        workDir,
+      ])
+      logger.info({ code: result.code }, 'faster-whisper')
+      const text = await findWhisperTxt(workDir, base)
+      if (text) return text
+    } catch (error) {
+      logger.warn({ error }, 'faster-whisper failed')
+    }
+  }
+
   return null
 }
 
 export async function transcribeAudioBuffer(audio: AudioSource): Promise<string> {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gnx-stt-'))
-  const ext = audio.mimetype?.includes('mp4') || audio.mimetype?.includes('m4a') ? '.m4a' : '.ogg'
+  const mime = (audio.mimetype || '').toLowerCase()
+  const ext =
+    mime.includes('mpeg') || mime.includes('mp3')
+      ? '.mp3'
+      : mime.includes('mp4') || mime.includes('m4a')
+        ? '.m4a'
+        : mime.includes('wav')
+          ? '.wav'
+          : '.ogg'
   const inPath = path.join(tmp, 'in' + ext)
   const wavPath = path.join(tmp, 'audio.wav')
 
   try {
     fs.writeFileSync(inPath, audio.buffer)
+    logger.info({ bytes: audio.buffer.length, mime: audio.mimetype, ext }, 'audio downloaded for STT')
+
     try {
       await convertToWav(inPath, wavPath)
     } catch (error) {
-      logger.warn({ error }, 'ffmpeg convert failed; using original')
-      fs.copyFileSync(inPath, wavPath)
+      logger.warn({ error }, 'ffmpeg convert failed')
+      throw new Error(
+        'Falta ffmpeg o falló la conversión. Instala: sudo apt install -y ffmpeg',
+      )
     }
 
-    const openai = await transcribeOpenAI(wavPath).catch((error) => {
-      logger.warn({ error }, 'openai whisper failed')
-      return null
-    })
-    if (openai) return openai
-
-    const cli = await transcribeCli(wavPath)
-    if (cli) return cli
+    const text = await transcribeLocal(wavPath, tmp)
+    if (text && text.trim()) return text.trim()
 
     throw new Error(
-      'No hay motor de transcripción. Opciones: 1) OPENAI_API_KEY en .env  2) instalar whisper CLI (pip install openai-whisper) y ffmpeg.',
+      [
+        'Transcripción local falló.',
+        'Comprueba en el servidor:',
+        '  which ffmpeg && ffmpeg -version',
+        '  python3 -m whisper --help',
+        '  pip install -U openai-whisper',
+        'Modelo por defecto: base (WHISPER_MODEL=tiny|base|small).',
+      ].join('\n'),
     )
   } finally {
     try {
