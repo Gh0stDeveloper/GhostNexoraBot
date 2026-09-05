@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { config } from '../config.js'
 import { expandVocab, ensureModelVocabularySize } from './incremental-training.js'
 
@@ -23,6 +24,10 @@ function clean(text: string) {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+function chunkDigest(text: string) {
+  return createHash('sha256').update(clean(text), 'utf8').digest('hex')
 }
 
 function splitChunks(text: string) {
@@ -92,6 +97,25 @@ function parseLegacyRecords(buffer: Buffer): VectorRecord[] {
   return out
 }
 
+function writeRecords(records: VectorRecord[]) {
+  const payload: Buffer[] = [MAGIC]
+  let id = 1
+  for (const item of records) {
+    const textBuffer = Buffer.from(item.text, 'utf8').subarray(0, 65535)
+    const header = Buffer.alloc(6)
+    header.writeUInt32LE(id++, 0)
+    header.writeUInt16LE(textBuffer.length, 4)
+    payload.push(
+      header,
+      Buffer.from(item.vector.buffer, item.vector.byteOffset, item.vector.byteLength),
+      textBuffer,
+    )
+  }
+  const tmp = `${VECTORS_FILE}.rewrite.tmp`
+  fs.writeFileSync(tmp, Buffer.concat(payload))
+  fs.renameSync(tmp, VECTORS_FILE)
+}
+
 export function migrateLegacyVectors() {
   fs.mkdirSync(ROOT, { recursive: true })
   if (!fs.existsSync(VECTORS_FILE)) {
@@ -106,21 +130,7 @@ export function migrateLegacyVectors() {
   try {
     if (buffer.subarray(0, MAGIC.length).equals(MAGIC)) return parseNewRecords(buffer).length
     const legacy = parseLegacyRecords(buffer)
-    const payload: Buffer[] = [MAGIC]
-    for (const item of legacy) {
-      const textBuffer = Buffer.from(item.text, 'utf8').subarray(0, 65535)
-      const header = Buffer.alloc(6)
-      header.writeUInt32LE(item.id, 0)
-      header.writeUInt16LE(textBuffer.length, 4)
-      payload.push(
-        header,
-        Buffer.from(item.vector.buffer, item.vector.byteOffset, item.vector.byteLength),
-        textBuffer,
-      )
-    }
-    const tmp = `${VECTORS_FILE}.migrate.tmp`
-    fs.writeFileSync(tmp, Buffer.concat(payload))
-    fs.renameSync(tmp, VECTORS_FILE)
+    writeRecords(legacy)
     return legacy.length
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -139,19 +149,52 @@ export function migrateLegacyVectors() {
   }
 }
 
-function nextVectorId() {
+/** Elimina duplicados históricos sin cambiar el formato del vector store. */
+export function dedupeVectorStore() {
   migrateLegacyVectors()
   const records = parseNewRecords(fs.readFileSync(VECTORS_FILE))
-  return records.length ? Math.max(...records.map((record) => record.id)) + 1 : 1
+  const seen = new Set<string>()
+  const unique: VectorRecord[] = []
+  let removed = 0
+  for (const record of records) {
+    const digest = chunkDigest(record.text)
+    if (seen.has(digest)) {
+      removed++
+      continue
+    }
+    seen.add(digest)
+    unique.push(record)
+  }
+  if (removed > 0) writeRecords(unique)
+  return { before: records.length, after: unique.length, removed }
 }
 
 function appendVectors(texts: string[]) {
   fs.mkdirSync(ROOT, { recursive: true })
   migrateLegacyVectors()
+  const records = parseNewRecords(fs.readFileSync(VECTORS_FILE))
+  const seen = new Set(records.map((record) => chunkDigest(record.text)))
+  const pending: string[] = []
+  let skipped = 0
+
+  for (const raw of texts) {
+    const text = clean(raw)
+    if (!text) continue
+    const digest = chunkDigest(text)
+    if (seen.has(digest)) {
+      skipped++
+      continue
+    }
+    seen.add(digest)
+    pending.push(text)
+  }
+
+  if (!pending.length) return { added: 0, skipped }
+
   const fd = fs.openSync(VECTORS_FILE, 'a')
-  let id = nextVectorId()
+  let id = records.length ? Math.max(...records.map((record) => record.id)) + 1 : 1
   try {
-    for (const text of texts) {
+    for (const text of pending) {
       const vector = hashVector(text)
       const textBuffer = Buffer.from(text, 'utf8').subarray(0, 65535)
       const header = Buffer.alloc(6)
@@ -164,7 +207,7 @@ function appendVectors(texts: string[]) {
   } finally {
     fs.closeSync(fd)
   }
-  return texts.length
+  return { added: pending.length, skipped }
 }
 
 export function countVectors() {
@@ -209,11 +252,12 @@ export async function ingestDocument(filePath: string) {
   if (!chunks.length) throw new Error('El documento no contiene texto utilizable.')
   const vocab = expandVocab(chunks)
   ensureModelVocabularySize(vocab.newSize)
-  const vectors = appendVectors(chunks)
+  const written = appendVectors(chunks)
   return {
     characters: text.length,
     chunks: chunks.length,
-    vectors,
+    vectors: written.added,
+    duplicatesSkipped: written.skipped,
     vocabAdded: vocab.added,
     vocabSize: vocab.newSize,
   }
@@ -221,15 +265,16 @@ export async function ingestDocument(filePath: string) {
 
 export function ingestLive(text: string) {
   const cleanText = clean(text)
-  if (!cleanText) return { chunks: 0, vectors: 0, vocabAdded: 0, vocabSize: 0 }
+  if (!cleanText) return { chunks: 0, vectors: 0, duplicatesSkipped: 0, vocabAdded: 0, vocabSize: 0 }
   const chunks = splitChunks(cleanText)
-  if (!chunks.length) return { chunks: 0, vectors: 0, vocabAdded: 0, vocabSize: 0 }
+  if (!chunks.length) return { chunks: 0, vectors: 0, duplicatesSkipped: 0, vocabAdded: 0, vocabSize: 0 }
   const vocab = expandVocab(chunks)
   ensureModelVocabularySize(vocab.newSize)
-  appendVectors(chunks)
+  const written = appendVectors(chunks)
   return {
     chunks: chunks.length,
-    vectors: chunks.length,
+    vectors: written.added,
+    duplicatesSkipped: written.skipped,
     vocabAdded: vocab.added,
     vocabSize: vocab.newSize,
   }
@@ -249,13 +294,15 @@ export function listCorpusFiles() {
   return files.sort()
 }
 
-/** Re-inyecta TODOS los documentos de corpus/ a la memoria vectorial (corpus.bin). */
+/** Re-inyecta documentos del corpus sin duplicar chunks ya existentes. */
 export async function ingestAllCorpusFiles() {
+  const dedupe = dedupeVectorStore()
   const files = listCorpusFiles()
   let ok = 0
   let failed = 0
   let chunks = 0
   let characters = 0
+  let duplicatesSkipped = dedupe.removed
   const errors: string[] = []
   for (const file of files) {
     try {
@@ -263,12 +310,22 @@ export async function ingestAllCorpusFiles() {
       ok++
       chunks += result.chunks
       characters += result.characters
+      duplicatesSkipped += result.duplicatesSkipped
     } catch (error) {
       failed++
       errors.push(`${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  return { files: files.length, ok, failed, chunks, characters, errors: errors.slice(0, 8), vectors: countVectors() }
+  return {
+    files: files.length,
+    ok,
+    failed,
+    chunks,
+    characters,
+    duplicatesSkipped,
+    errors: errors.slice(0, 8),
+    vectors: countVectors(),
+  }
 }
 
 export function countCorpusDocuments() {
