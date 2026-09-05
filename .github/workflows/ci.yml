@@ -3,8 +3,6 @@ name: CI
 on:
   push:
     branches: [main, "feature/**", "feat/**", "fix/**"]
-    paths-ignore:
-      - "apps/bot/assets/waifus-bundle/**"
   pull_request:
 
 permissions:
@@ -34,6 +32,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Local waifu assets smoke
+        run: node scripts/waifu-assets-smoke.mjs
 
       - name: Global wallet migration smoke
         run: node scripts/economy-global-smoke.mjs
