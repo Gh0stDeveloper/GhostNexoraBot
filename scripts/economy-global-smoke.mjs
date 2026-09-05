@@ -34,6 +34,7 @@ function seedLegacy(dir, wallet, bank) {
 function runEconomy(env, statement) {
   const source = `
     const { economy } = await import('./apps/bot/dist/services/economy.js');
+    await import('./apps/bot/dist/services/economy-wallet-reconcile.js');
     ${statement}
   `
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', source], {
@@ -78,26 +79,28 @@ try {
     `,
   )
 
-  // 1100 main + (600 sub - 250 starter duplicado) = 1450.
-  if (sub.before.total !== 1450 || sub.before.wallet !== 1250 || sub.before.bank !== 200) {
+  // Conserva exactamente los dos saldos históricos: 1100 main + 600 sub = 1700.
+  if (sub.before.total !== 1700 || sub.before.wallet !== 1500 || sub.before.bank !== 200) {
     throw new Error(`subbot merge mismatch: ${JSON.stringify(sub.before)}`)
   }
-  if (sub.after.total !== 1525 || sub.after.wallet !== 1325 || sub.after.bank !== 200) {
+  if (sub.after.total !== 1775 || sub.after.wallet !== 1575 || sub.after.bank !== 200) {
     throw new Error(`subbot shared mutation mismatch: ${JSON.stringify(sub.after)}`)
   }
 
   // Reiniciar MainBot no debe volver a sumar ninguna fuente ya migrada.
   const final = runEconomy({ DATA_DIR: mainDir }, `console.log(JSON.stringify(economy.balance('${user}')));`)
-  if (final.total !== 1525 || final.wallet !== 1325 || final.bank !== 200) {
+  if (final.total !== 1775 || final.wallet !== 1575 || final.bank !== 200) {
     throw new Error(`idempotency/global visibility mismatch: ${JSON.stringify(final)}`)
   }
 
   const db = new DatabaseSync(shared, { readOnly: true })
   const markers = db.prepare('SELECT source_id AS sourceId FROM wallet_migrations ORDER BY source_id').all()
+  const reconciled = db.prepare('SELECT source_id AS sourceId FROM wallet_fullsum_sources ORDER BY source_id').all()
   db.close()
   const ids = markers.map((row) => row.sourceId)
-  if (!ids.includes('main') || !ids.includes('subbot:1')) {
-    throw new Error(`migration markers missing: ${JSON.stringify(ids)}`)
+  const fullIds = reconciled.map((row) => row.sourceId)
+  if (!ids.includes('main') || !ids.includes('subbot:1') || !fullIds.includes('main') || !fullIds.includes('subbot:1')) {
+    throw new Error(`migration markers missing: ${JSON.stringify({ ids, fullIds })}`)
   }
 
   console.log('economy global wallet smoke: OK')
