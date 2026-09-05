@@ -36,6 +36,9 @@ jobs:
       - name: Optional Ollama command registry smoke
         run: node scripts/llm-optional-smoke.mjs
 
+      - name: Optional Web command registry smoke
+        run: node scripts/web-optional-smoke.mjs
+
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
 
