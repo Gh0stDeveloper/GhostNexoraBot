@@ -28,7 +28,7 @@ async function sendQr(ctx: CommandContext, instanceId: number, qr: string, reaso
 
 export const subbotCommands: BotCommand[] = [
   {
-    name: 'subbot', aliases: ['jadibot', 'serbot'], category: 'subbots', description: 'Gestiona tu subbot comprado con Nexora Coins.', usage: 'subbot status|pair|qr|portal',
+    name: 'subbot', aliases: ['jadibot', 'serbot'], category: 'subbots', description: 'Gestiona tu subbot comprado con Nexora Coins.', usage: config.isTermuxLite ? 'subbot status|pair|qr' : 'subbot status|pair|qr|portal',
     async handler(ctx) {
       const action = (ctx.args[0] ?? 'status').toLowerCase()
       const record = economy.getActiveSubbot(ctx.sender)
@@ -45,7 +45,7 @@ export const subbotCommands: BotCommand[] = [
           `📥 Tráfico: ${(record.downloadBytes / 1024 / 1024).toFixed(1)} MB`,
           '',
           record.phone
-            ? `Usa *${ctx.prefix}subbot portal* para generar un token de acceso web.`
+            ? (config.isTermuxLite ? 'Instancia vinculada y gestionada localmente por Ghost Nexora Lite.' : `Usa *${ctx.prefix}subbot portal* para generar un token de acceso web.`)
             : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*. Si el código falla, usa *${ctx.prefix}subbot qr*.`
         ].join('\n'))
         return
@@ -84,6 +84,7 @@ export const subbotCommands: BotCommand[] = [
         return
       }
       if (action === 'portal') {
+        if (config.isTermuxLite) throw new Error('El panel web no forma parte de Ghost Nexora Bot Termux Lite. Gestiona el subbot directamente con status, pair y qr.')
         if (!record) throw new Error('No tienes un subbot activo.')
         const token = economy.createPortalToken(ctx.sender, record.id)
         await ctx.reply([
@@ -102,7 +103,9 @@ export const subbotCommands: BotCommand[] = [
         ].join('\n'))
         return
       }
-      throw new Error(`Acción inválida. Usa ${ctx.prefix}subbot status, pair, qr o portal.`)
+      throw new Error(config.isTermuxLite
+        ? `Acción inválida. Usa ${ctx.prefix}subbot status, pair o qr.`
+        : `Acción inválida. Usa ${ctx.prefix}subbot status, pair, qr o portal.`)
     },
   },
   {
@@ -113,12 +116,16 @@ export const subbotCommands: BotCommand[] = [
       const totalMessages = rows.reduce((sum, row) => sum + row.messagesProcessed, 0)
       const totalBytes = rows.reduce((sum, row) => sum + row.downloadBytes, 0)
       const lines = rows.slice(0, 30).map((row) => `#${row.id} · ${row.status} · ${row.phone ?? 'sin número'}\nOwner: ${row.ownerJid.split('@')[0]} · vence ${fmtDate(row.expiresAt)}`)
-      await ctx.reply(`👑 *CENTRO DE SUBBOTS*\n\nInstancias: *${rows.length}*\nMensajes: *${totalMessages}*\nDescargas: *${(totalBytes / 1024 / 1024).toFixed(1)} MB*\n\n${lines.join('\n\n')}\n\nUsa *${ctx.prefix}adminpanel* en chat privado para abrir el dashboard web.`)
+      const footer = config.isTermuxLite
+        ? 'Gestión local Termux Lite: no se instala dashboard web.'
+        : `Usa *${ctx.prefix}adminpanel* en chat privado para abrir el dashboard web.`
+      await ctx.reply(`👑 *CENTRO DE SUBBOTS*\n\nInstancias: *${rows.length}*\nMensajes: *${totalMessages}*\nDescargas: *${(totalBytes / 1024 / 1024).toFixed(1)} MB*\n\n${lines.join('\n\n')}\n\n${footer}`)
     },
   },
   {
     name: 'adminpanel', aliases: ['dashboard'], category: 'owner', ownerOnly: true, description: 'Entrega el acceso al panel owner.',
     async handler(ctx) {
+      if (config.isTermuxLite) throw new Error('El dashboard web no está incluido en Ghost Nexora Bot Termux Lite.')
       if (ctx.chatId.endsWith('@g.us')) throw new Error('Por seguridad, solicita el panel desde el chat privado del bot.')
       await ctx.reply([
         '🔐 *OWNER DASHBOARD*',
