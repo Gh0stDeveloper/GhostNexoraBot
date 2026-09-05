@@ -43,8 +43,6 @@ section '2/7 · yt-dlp'
 if pkg install -y yt-dlp >/dev/null 2>&1; then
   ok "yt-dlp instalado desde Termux: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 else
-  # Termux Python instala scripts bajo $PREFIX/bin cuando no se usa --user,
-  # por lo que yt-dlp seguirá disponible en nuevas sesiones de la terminal.
   python -m pip install --upgrade yt-dlp >/dev/null
   command -v yt-dlp >/dev/null 2>&1 || fail 'yt-dlp se instaló con pip pero no quedó disponible en PATH.'
   ok "yt-dlp instalado con Python: $(yt-dlp --version 2>/dev/null || echo desconocido)"
@@ -94,14 +92,19 @@ fi
 chmod 600 .env
 ok '.env configurado para Termux Lite; la sesión y la base quedan fuera del árbol Git.'
 
-section '5/7 · Dependencias Node solo del bot'
+section '5/7 · Dependencias y build Lite'
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 npm install --workspace=@ghostnexora/bot --include=dev >/tmp/ghostnexora-termux-npm.log 2>&1 || {
   warn 'npm install falló. Últimas líneas:'
   tail -n 60 /tmp/ghostnexora-termux-npm.log >&2 || true
   exit 1
 }
-ok 'Dependencias del bot instaladas; el workspace web no se inicia ni se usa.'
+npm run build:termux --workspace=@ghostnexora/bot >/tmp/ghostnexora-termux-build.log 2>&1 || {
+  warn 'El build Termux Lite falló. Últimas líneas:'
+  tail -n 80 /tmp/ghostnexora-termux-build.log >&2 || true
+  exit 1
+}
+ok 'Runtime Lite compilado en apps/bot/dist-termux; el workspace web no se inicia ni se usa.'
 
 section '6/7 · Comando ghostnexora'
 install -m 0755 "${INSTALL_DIR}/scripts/termux/ghostnexora" "${PREFIX}/bin/ghostnexora"
@@ -140,6 +143,7 @@ printf ' Ghost Nexora Bot · Termux Lite listo\n'
 printf '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
 printf ' Tiempo: %ss\n' "${ELAPSED}"
 printf ' Perfil: termux-lite\n'
+printf ' Runtime: JavaScript compilado Lite\n'
 printf ' LLM/Ollama: desactivado\n'
 printf ' Subbots: habilitados\n'
 printf ' Panel web/Nginx/systemd: no incluidos\n\n'
