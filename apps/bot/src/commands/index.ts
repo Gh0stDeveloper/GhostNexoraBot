@@ -1,6 +1,7 @@
 import '../services/work-compat-v4.js'
 import '../services/economy-wallet-reconcile.js'
 import type { BotCommand } from '../types.js'
+import { config } from '../config.js'
 import { setMenuCommandProvider } from '../services/menu-registry.js'
 import { generalCommands } from './general.js'
 import { creditsCommands } from './credits.js'
@@ -89,6 +90,13 @@ import { shopStyleV13Commands } from './shop-style-v13.js'
 import { minershopStyleV13Commands } from './minershop-style-v13.js'
 import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.js'
 
+// El stack local LLM depende de Ollama. Si OLLAMA_ENABLED=false, el router y el
+// menú no registran .llm/.minillm/.localai ni el control de conversación libre.
+// La IA HTTP (.ai/.investiga) se mantiene independiente porque no usa Ollama.
+const localLlmCommands: BotCommand[] = config.ollamaEnabled
+  ? [...miniLlmCommands, ...autoChatCommands]
+  : []
+
 export const commands: BotCommand[] = [
   ...generalCommands,
   ...creditsCommands,
@@ -164,8 +172,7 @@ export const commands: BotCommand[] = [
   ...lempiApiCommands,
   ...mediaDownloadFixCommands,
   ...animeDownloadCommands,
-  ...miniLlmCommands,
-  ...autoChatCommands,
+  ...localLlmCommands,
   ...bankingV10Commands,
   ...minershopV10Commands,
   ...balanceV10Commands,
