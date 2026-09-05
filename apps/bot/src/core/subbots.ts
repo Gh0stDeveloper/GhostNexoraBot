@@ -45,7 +45,8 @@ function normalizePhone(raw: string) {
 }
 
 function workerPath() {
-  return fileURLToPath(new URL('../subbot-worker.js', import.meta.url))
+  const relative = config.isTermuxLite ? '../subbot-worker-termux.ts' : '../subbot-worker.js'
+  return fileURLToPath(new URL(relative, import.meta.url))
 }
 
 class SubbotManager {
@@ -108,6 +109,7 @@ class SubbotManager {
       cwd: config.workspaceRoot,
       env: {
         ...process.env,
+        NEXORA_RUNTIME_PROFILE: config.runtimeProfile,
         NEXORA_INSTANCE_ROLE: 'subbot',
         NEXORA_SUBBOT_ID: String(record.id),
         NEXORA_SUBBOT_OWNER_JID: record.ownerJid,
