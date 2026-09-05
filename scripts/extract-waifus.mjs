@@ -25,26 +25,38 @@ const base64Parts = readdirSync(bundleDir)
   .filter((name) => /^waifus-assets-v1\.b64\.part\d+$/i.test(name))
   .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
 
-function decodeOnePart(buffer) {
+function decodeMaybeBase64(buffer) {
   if (buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4b) return buffer
   const encoded = buffer.toString('utf8').replace(/\s+/g, '')
   if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) return buffer
   return Buffer.from(encoded, 'base64')
 }
 
-function decodeStagedParts(names) {
-  const rawParts = names.map((name) => readFileSync(path.join(bundleDir, name)))
-  // The GitHub connector stores each uploaded binary chunk as its own Base64
-  // string. Decode each chunk independently so per-part padding is respected,
-  // then reconstruct the original ZIP byte-for-byte.
-  return Buffer.concat(rawParts.map(decodeOnePart))
+function decodeBinaryParts(names) {
+  return Buffer.concat(names.map((name) => decodeMaybeBase64(readFileSync(path.join(bundleDir, name)))))
+}
+
+function decodeBase64Stream(names) {
+  // Los archivos .b64.partNNN son fragmentos consecutivos de UN único stream Base64.
+  // Deben concatenarse primero y decodificarse una sola vez; de lo contrario se
+  // rompen los límites de cuartetos Base64 y el ZIP queda truncado.
+  const encoded = names
+    .map((name) => readFileSync(path.join(bundleDir, name), 'utf8'))
+    .join('')
+    .replace(/\s+/g, '')
+  if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) {
+    throw new Error('El bundle Base64 local de waifus contiene datos inválidos.')
+  }
+  return Buffer.from(encoded, 'base64')
 }
 
 let zip
-if (binaryParts.length) {
-  zip = decodeStagedParts(binaryParts)
-} else if (base64Parts.length) {
-  zip = decodeStagedParts(base64Parts)
+// Preferimos el stream Base64 completo. Los .bin antiguos quedan solo como
+// compatibilidad y no pueden eclipsar un bundle Base64 completo más reciente.
+if (base64Parts.length) {
+  zip = decodeBase64Stream(base64Parts)
+} else if (binaryParts.length) {
+  zip = decodeBinaryParts(binaryParts)
 } else {
   console.log('[waifus] No hay partes del bundle; se omite extracción.')
   process.exit(0)
