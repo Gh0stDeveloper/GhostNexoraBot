@@ -94,7 +94,7 @@ ok '.env configurado para Termux Lite; la sesión y la base quedan fuera del ár
 
 section '5/7 · Dependencias y build Lite'
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-npm install --workspace=@ghostnexora/bot --include=dev >/tmp/ghostnexora-termux-npm.log 2>&1 || {
+npm install --workspace=@ghostnexora/bot --include=dev --omit=optional >/tmp/ghostnexora-termux-npm.log 2>&1 || {
   warn 'npm install falló. Últimas líneas:'
   tail -n 60 /tmp/ghostnexora-termux-npm.log >&2 || true
   exit 1
@@ -104,7 +104,7 @@ npm run build:termux --workspace=@ghostnexora/bot >/tmp/ghostnexora-termux-build
   tail -n 80 /tmp/ghostnexora-termux-build.log >&2 || true
   exit 1
 }
-ok 'Runtime Lite compilado en apps/bot/dist-termux; el workspace web no se inicia ni se usa.'
+ok 'Runtime Lite compilado sin Sharp/Playwright; el workspace web no se inicia ni se usa.'
 
 section '6/7 · Comando ghostnexora'
 install -m 0755 "${INSTALL_DIR}/scripts/termux/ghostnexora" "${PREFIX}/bin/ghostnexora"
@@ -131,7 +131,7 @@ if [[ "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
       NEXORA_RUNTIME_PROFILE=termux-lite \
       OLLAMA_ENABLED=false \
       PAIRING_NUMBER="${PHONE}" \
-      npm run termux:pair --workspace=@ghostnexora/bot || warn 'La vinculación no terminó. Repite con: ghostnexora pair 52XXXXXXXXXX'
+      node "${INSTALL_DIR}/apps/bot/dist-termux/pair.js" || warn 'La vinculación no terminó. Repite con: ghostnexora pair 52XXXXXXXXXX'
   fi
 fi
 
@@ -145,6 +145,7 @@ printf ' Tiempo: %ss\n' "${ELAPSED}"
 printf ' Perfil: termux-lite\n'
 printf ' Runtime: JavaScript compilado Lite\n'
 printf ' LLM/Ollama: desactivado\n'
+printf ' Sharp/Playwright: no instalados\n'
 printf ' Subbots: habilitados\n'
 printf ' Panel web/Nginx/systemd: no incluidos\n\n'
 printf ' Comandos:\n'
