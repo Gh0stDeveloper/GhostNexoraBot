@@ -244,7 +244,7 @@ async function connect() {
     for (const message of messages) {
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
       const chatId = message.key.remoteJid
-      void withTimeout(routeMessage(socket, message, router), 120_000, 'routeMessage ' + chatId)
+      void withTimeout(routeMessage(socket, message, router), config.botMessageTimeoutMs, 'routeMessage ' + chatId)
         .catch((error) => logger.error({ error, chatId }, 'mensaje colgado o falló'))
     }
   })
