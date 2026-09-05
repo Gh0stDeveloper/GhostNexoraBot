@@ -33,6 +33,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Termux Lite build
+        run: npm run build:termux --workspace=@ghostnexora/bot
+
       - name: Termux Lite profile smoke
         run: node scripts/termux-lite-smoke.mjs
 
