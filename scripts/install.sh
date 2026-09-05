@@ -85,6 +85,10 @@ set_env() {
   if grep -q "^${key}=" .env; then sed -i "s|^${key}=.*|${key}=${value}|" .env; else printf '%s=%s\n' "${key}" "${value}" >> .env; fi
 }
 
+env_truthy() {
+  case "${1,,}" in 1|true|yes|on|si|sí) return 0 ;; *) return 1 ;; esac
+}
+
 set_env NEXORA_RUNTIME_PROFILE "full"
 set_env SESSION_DIR "${STATE_DIR}/session"
 set_env DATA_DIR "${STATE_DIR}/data"
@@ -148,7 +152,7 @@ if [[ "${FIRST_INSTALL}" == true ]]; then
   fi
 else
   CURRENT_OLLAMA_ENABLED="$(grep '^OLLAMA_ENABLED=' .env | cut -d= -f2- | tr '[:upper:]' '[:lower:]' || true)"
-  if [[ "${CURRENT_OLLAMA_ENABLED}" =~ ^(1|true|yes|on)$ ]] && ! command -v ollama >/dev/null 2>&1; then
+  if env_truthy "${CURRENT_OLLAMA_ENABLED}" && ! command -v ollama >/dev/null 2>&1; then
     set_env OLLAMA_ENABLED "false"
     warn 'OLLAMA_ENABLED estaba activo pero Ollama no existe en el sistema; se desactivó para ocultar los comandos LLM locales.'
   else
@@ -169,7 +173,7 @@ npm run build >/tmp/ghost-nexora-build.log 2>&1
 ok 'Build de producción completado.'
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"
 
-section '8/10 · Systemd'
+section '8/10 · Systemd y worker LLM opcional'
 install -m 0644 systemd/ghost-nexora-bot.service /etc/systemd/system/ghost-nexora-bot.service
 install -m 0644 systemd/ghost-nexora-web.service /etc/systemd/system/ghost-nexora-web.service
 sed -i \
@@ -181,7 +185,24 @@ sed -i \
   /etc/systemd/system/ghost-nexora-bot.service \
   /etc/systemd/system/ghost-nexora-web.service
 systemctl daemon-reload
-ok 'Unidades systemd instaladas.'
+ok 'Unidades principales systemd instaladas.'
+
+OLLAMA_FINAL="$(grep '^OLLAMA_ENABLED=' .env | tail -n1 | cut -d= -f2- || echo false)"
+if env_truthy "${OLLAMA_FINAL}" && command -v ollama >/dev/null 2>&1; then
+  if [[ -f "${INSTALL_DIR}/scripts/install-llm-worker-service.sh" ]]; then
+    chmod +x "${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
+    INSTALL_DIR="${INSTALL_DIR}" SERVICE_USER="${SERVICE_USER}" bash "${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
+    ok 'Worker LLM instalado porque Ollama está habilitado.'
+  else
+    warn 'Ollama está habilitado, pero no se encontró install-llm-worker-service.sh.'
+  fi
+else
+  set_env OLLAMA_ENABLED 'false'
+  systemctl disable --now ghost-nexora-llm.service >/dev/null 2>&1 || true
+  ok 'Worker LLM omitido/deshabilitado. Los comandos Ollama/Mini-LLM/free-chat no se registrarán.'
+fi
+chown root:"${SERVICE_USER}" .env
+chmod 0640 .env
 
 section '9/10 · Vinculación WhatsApp'
 SESSION_CREDS="${STATE_DIR}/session/creds.json"
@@ -207,7 +228,7 @@ fi
 
 section '10/10 · Servicios, proxy y Nginx'
 systemctl enable --now ghost-nexora-bot.service ghost-nexora-web.service nginx
-ok 'Servicios habilitados y arrancados.'
+ok 'Servicios principales habilitados y arrancados.'
 
 if [[ -f "${INSTALL_DIR}/scripts/install-browser-proxy.sh" ]]; then
   chmod +x "${INSTALL_DIR}/scripts/install-browser-proxy.sh"
@@ -223,7 +244,7 @@ if [[ -n "${BOT_DOMAIN}" ]]; then
   certbot "${CERTBOT_ARGS[@]}" >/tmp/ghost-nexora-certbot-run.log 2>&1 || warn 'HTTPS no pudo emitirse automáticamente; comprueba DNS.'
 fi
 
-OLLAMA_FINAL="$(grep '^OLLAMA_ENABLED=' .env | cut -d= -f2- || echo false)"
+OLLAMA_FINAL="$(grep '^OLLAMA_ENABLED=' .env | tail -n1 | cut -d= -f2- || echo false)"
 printf '\nGhost Nexora Bot instalado. Código: %s\n' "$(git rev-parse --short HEAD)"
 printf 'Ollama/LLM local: %s\n' "${OLLAMA_FINAL}"
 printf 'Proxy: https://${BOT_DOMAIN:-ghostnexorabot.duckdns.org}/proxy\n'
