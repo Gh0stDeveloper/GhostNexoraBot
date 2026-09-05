@@ -1,0 +1,160 @@
+import type { BotCommand } from '../types.js'
+import { setMenuCommandProvider } from '../services/menu-registry.js'
+import { generalCommands } from './general.js'
+import { profileCommands } from './profile.js'
+import { reactionCommands } from './reactions.js'
+import { downloadCommands } from './downloads.js'
+import { lyricsCommands } from './lyrics.js'
+import { resourceCommands } from './resources.js'
+import { mangaDownloadCommands } from './manga-download.js'
+import { animeDownloadCommands } from './anime-download.js'
+import { webSearchCommands } from './web-search.js'
+import { minecraftCommands } from './minecraft.js'
+import { booruCommands } from './booru.js'
+import { groupCommands } from './groups.js'
+import { securityCommands } from './security.js'
+import { economyCommands } from './economy.js'
+import { advancedEconomyCommands } from './economy-advanced.js'
+import { gameCommands } from './games.js'
+import { pvpGameCommands } from './games-pvp.js'
+import { rpgCommands } from './rpg.js'
+import { waifuCommands } from './waifu.js'
+import { waifuExtendedCommands } from './waifu-extended.js'
+import { subbotCommands } from './subbots.js'
+import { adultCommands } from './adult.js'
+import { eromeCommands } from './erome.js'
+import { hentaiV9Commands } from './hentai-v9.js'
+import { privateAccessCommands } from './private-access.js'
+import { systemCommands } from './system.js'
+import { ownerCommands } from './owner.js'
+import { groupAdultModeCommands } from './group-adult-mode.js'
+import { v2Commands } from './v2.js'
+import { adultV2Commands } from './adult-v2.js'
+import { downloadProgressV2Commands } from './downloads-progress-v2.js'
+import { economyFixV2Commands } from './economy-fixes-v2.js'
+import { eromeProgressV2Commands } from './erome-progress-v2.js'
+import { youtubeV3Commands } from './youtube-v3.js'
+import { carouselCompatV3Commands } from './carousel-compat-v3.js'
+import { expansionV4Commands } from './expansion-v4.js'
+import { casinoGuardV4Commands } from './casino-guard-v4.js'
+import { downloadUiV5Commands } from './download-ui-v5.js'
+import { stickerAdminV5Commands } from './sticker-admin-v5.js'
+import { waifuV5Commands } from './waifu-v5.js'
+import { economyCareersV5Commands } from './economy-careers-v5.js'
+import { menuV5Commands } from './menu-v5.js'
+import { pvz2Commands } from './pvz2.js'
+import { officialApkV7Commands } from './official-apk-v7.js'
+import { sourceOverrideV7Commands } from './source-overrides-v7.js'
+import { channelV8Commands } from './channel-v8.js'
+import { economyCareersV8Commands } from './economy-careers-v8.js'
+import { versionV8Commands } from './version-v8.js'
+import { adultMediaV8Commands } from './adult-media-v8.js'
+import { adultRoleplayV8Commands } from './adult-roleplay-v8.js'
+import { reactionV8Commands } from './reactions-v8.js'
+import { happyModCommands } from './happymod.js'
+import { officialApkV9Commands } from './official-apk-v9.js'
+import { groupControlsV9Commands } from './group-controls-v9.js'
+import { lempiApiCommands } from './lempi-api.js'
+import { mediaDownloadFixCommands } from './media-download-fixes-v2.js'
+import { dinoCommands } from './dino.js'
+import { snakeCommands } from './snake.js'
+import { doomCommands } from './doom.js'
+import { ninjaCommands } from './ninja.js'
+import { spaceDodgeCommands } from './spacedodge.js'
+import { gatoCommands } from './gato.js'
+import { damasCommands } from './damas.js'
+import { bankingV10Commands } from './banking-v10.js'
+import { minershopV10Commands } from './minershop-v10.js'
+import { balanceV10Commands } from './balance-v10.js'
+import { minershopV11Commands } from './minershop-v11.js'
+import { adultMediaV11Commands } from './adult-media-v11.js'
+import { minecraftV12Commands } from './minecraft-v12.js'
+import { shopStyleV13Commands } from './shop-style-v13.js'
+import { minershopStyleV13Commands } from './minershop-style-v13.js'
+import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.js'
+
+// Termux Lite intentionally excludes:
+// - ai.ts / mini-llm.ts / auto-chat.ts / Ollama features
+// - navegador.ts / browser proxy and Playwright-driven features
+// - stickers.ts / Sharp-based media conversion
+// - Telegram bridge, web dashboard and server-oriented developer commands
+// - advanced visual personalization that requires native image processing
+const liteMenuCommands = menuV5Commands.filter((command) => command.name === 'menu')
+const liteSubbotCommands = subbotCommands.filter((command) => command.name !== 'adminpanel')
+
+export const termuxLiteCommands: BotCommand[] = [
+  ...generalCommands,
+  ...profileCommands,
+  ...reactionCommands,
+  ...downloadCommands,
+  ...lyricsCommands,
+  ...resourceCommands,
+  ...mangaDownloadCommands,
+  ...animeDownloadCommands,
+  ...webSearchCommands,
+  ...minecraftCommands,
+  ...booruCommands,
+  ...groupCommands,
+  ...securityCommands,
+  ...economyCommands,
+  ...advancedEconomyCommands,
+  ...gameCommands,
+  ...dinoCommands,
+  ...snakeCommands,
+  ...doomCommands,
+  ...ninjaCommands,
+  ...spaceDodgeCommands,
+  ...gatoCommands,
+  ...pvpGameCommands,
+  ...damasCommands,
+  ...rpgCommands,
+  ...waifuCommands,
+  ...waifuExtendedCommands,
+  ...liteSubbotCommands,
+  ...adultCommands,
+  ...eromeCommands,
+  ...hentaiV9Commands,
+  ...privateAccessCommands,
+  ...systemCommands,
+  ...ownerCommands,
+  ...groupAdultModeCommands,
+  ...v2Commands,
+  ...adultV2Commands,
+  ...downloadProgressV2Commands,
+  ...eromeProgressV2Commands,
+  ...economyFixV2Commands,
+  ...youtubeV3Commands,
+  ...carouselCompatV3Commands,
+  ...expansionV4Commands,
+  ...casinoGuardV4Commands,
+  ...downloadUiV5Commands,
+  ...stickerAdminV5Commands,
+  ...waifuV5Commands,
+  ...economyCareersV5Commands,
+  ...pvz2Commands,
+  ...liteMenuCommands,
+  ...officialApkV7Commands,
+  ...sourceOverrideV7Commands,
+  ...channelV8Commands,
+  ...economyCareersV8Commands,
+  ...versionV8Commands,
+  ...adultMediaV8Commands,
+  ...adultRoleplayV8Commands,
+  ...reactionV8Commands,
+  ...officialApkV9Commands,
+  ...happyModCommands,
+  ...groupControlsV9Commands,
+  ...lempiApiCommands,
+  ...mediaDownloadFixCommands,
+  ...bankingV10Commands,
+  ...minershopV10Commands,
+  ...balanceV10Commands,
+  ...minershopV11Commands,
+  ...adultMediaV11Commands,
+  ...minecraftV12Commands,
+  ...shopStyleV13Commands,
+  ...minershopStyleV13Commands,
+  ...adultRoleplayMessagesV14Commands,
+]
+
+setMenuCommandProvider(() => termuxLiteCommands)
