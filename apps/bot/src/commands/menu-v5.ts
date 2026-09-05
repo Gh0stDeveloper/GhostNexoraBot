@@ -9,7 +9,7 @@ import { isGroupAdministrator } from '../utils/target.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 
 const sectionOrder = [
-  'knowledge', 'youtube', 'downloads', 'general', 'profile', 'progress', 'economy', 'rpg', 'games', 'collection',
+  'knowledge', 'youtube', 'downloads', 'general', 'minecraft', 'profile', 'progress', 'economy', 'rpg', 'games', 'collection',
   'social', 'stickers', 'groups', 'automation', 'subbots', 'adult', 'personalization', 'support', 'staff', 'other',
 ] as const
 
@@ -17,7 +17,7 @@ type SectionId = typeof sectionOrder[number]
 
 const sectionTitles: Record<SectionId, string> = {
   knowledge: '🧠 *IA · BÚSQUEDA · CONOCIMIENTO*', youtube: '🎵 *DESCARGAS · YOUTUBE Y AUDIO*',
-  downloads: '📲 *DESCARGAS · REDES Y ARCHIVOS*', general: '🌐 *GENERAL*', profile: '👤 *PERFIL*',
+  downloads: '📲 *DESCARGAS · REDES Y ARCHIVOS*', general: '🌐 *GENERAL*', minecraft: '⛏️ *MINECRAFT · JAVA Y BEDROCK*', profile: '👤 *PERFIL*',
   progress: '🏆 *PROGRESO · TEMPORADAS · MUNDO*', economy: '🪙 *ECONOMÍA Y FINANZAS*',
   rpg: '📖 *RPG · CRAFTING · MASCOTAS*', games: '🎮 *JUEGOS Y APUESTAS NXC*', collection: '🌸 *GACHA Y COLECCIÓN*',
   social: '💞 *SOCIAL · REACCIONES · REPUTACIÓN*', stickers: '🎨 *STICKERS Y HERRAMIENTAS*',
@@ -38,6 +38,7 @@ const sets = {
 
 function sectionFor(command: BotCommand): SectionId {
   const name = command.name.toLowerCase()
+  if (name === 'mc' || name.startsWith('mc')) return 'minecraft'
   if (sets.knowledge.has(name)) return 'knowledge'
   if (sets.youtube.has(name)) return 'youtube'
   if (sets.progress.has(name)) return 'progress'
