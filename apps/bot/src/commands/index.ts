@@ -83,6 +83,9 @@ import { balanceV10Commands } from './balance-v10.js'
 import { minershopV11Commands } from './minershop-v11.js'
 import { adultMediaV11Commands } from './adult-media-v11.js'
 import { minecraftV12Commands } from './minecraft-v12.js'
+import { botStylesV13Commands } from './bot-styles-v13.js'
+import { shopStyleV13Commands } from './shop-style-v13.js'
+import { minershopStyleV13Commands } from './minershop-style-v13.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -166,6 +169,9 @@ export const commands: BotCommand[] = [
   ...minershopV11Commands,
   ...adultMediaV11Commands,
   ...minecraftV12Commands,
+  ...botStylesV13Commands,
+  ...shopStyleV13Commands,
+  ...minershopStyleV13Commands,
 ]
 
 setMenuCommandProvider(() => commands)
