@@ -234,6 +234,9 @@ process.on('message', (message: unknown) => {
   }
 })
 
+// fork() creates an IPC channel. When the MainBot exits/restarts, terminate the
+// tenant too so Android/Termux never accumulates orphan WhatsApp sockets.
+process.on('disconnect', () => process.exit(0))
 process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))
 
