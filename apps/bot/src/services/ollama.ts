@@ -23,10 +23,18 @@ type GenerationJob = {
   timer: NodeJS.Timeout
 }
 
-const MAX_GENERATION_QUEUE = 4
-const GENERATION_QUEUE_WAIT_MS = 30_000
+// Qwen 1.5B puede tardar bastante en CPU. Aunque una instalación antigua conserve
+// OLLAMA_TIMEOUT_MS=45000 en .env, no cortamos una generación local antes de 6 min.
+const MIN_GENERATION_TIMEOUT_MS = 360_000
+const STATUS_TIMEOUT_MS = 15_000
+const MAX_GENERATION_QUEUE = config.ollamaMaxQueue
+const GENERATION_QUEUE_WAIT_MS = Math.max(config.ollamaQueueWaitMs, MIN_GENERATION_TIMEOUT_MS)
 const generationQueue: GenerationJob[] = []
 let generationActive = false
+
+function generationTimeoutMs() {
+  return Math.max(config.ollamaTimeoutMs, MIN_GENERATION_TIMEOUT_MS)
+}
 
 function abortAfter(ms: number) {
   const controller = new AbortController()
@@ -42,8 +50,8 @@ function clean(value: unknown, max = 4000) {
 let runtimeEnabled = config.ollamaEnabled
 let failedUntil = 0
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const { controller, timer } = abortAfter(config.ollamaTimeoutMs)
+async function request<T>(path: string, init: RequestInit = {}, timeoutMs = generationTimeoutMs()): Promise<T> {
+  const { controller, timer } = abortAfter(timeoutMs)
   try {
     const response = await fetch(`${config.ollamaBaseUrl}${path}`, {
       ...init,
@@ -122,7 +130,10 @@ export const ollama = {
       configured: Boolean(config.ollamaBaseUrl && config.ollamaModel),
       model: config.ollamaModel,
       baseUrl: config.ollamaBaseUrl,
-      timeoutMs: config.ollamaTimeoutMs,
+      configuredTimeoutMs: config.ollamaTimeoutMs,
+      timeoutMs: generationTimeoutMs(),
+      keepAlive: config.ollamaKeepAlive,
+      numPredict: config.ollamaNumPredict,
     }
   },
 
@@ -137,7 +148,9 @@ export const ollama = {
 
   async status() {
     try {
-      const data = await request<TagsResponse>('/api/tags', { method: 'GET' })
+      // El diagnóstico debe fallar rápido si el daemon está caído; el timeout largo
+      // se reserva para /api/chat, donde Qwen realmente puede tardar en CPU.
+      const data = await request<TagsResponse>('/api/tags', { method: 'GET' }, STATUS_TIMEOUT_MS)
       const models = (data.models ?? []).map((model) => ({
         name: model.name ?? 'unknown',
         size: model.size ?? 0,
@@ -173,7 +186,7 @@ export const ollama = {
   }) {
     if (!runtimeEnabled || Date.now() < failedUntil) return null
 
-    const userText = clean(input.userText, 1400)
+    const userText = clean(input.userText, 2400)
     if (userText.length < 2) return null
 
     const messages: OllamaMessage[] = [
@@ -190,12 +203,14 @@ export const ollama = {
           model: config.ollamaModel,
           messages,
           stream: false,
+          keep_alive: config.ollamaKeepAlive,
           options: {
             temperature: config.ollamaTemperature,
             top_p: config.ollamaTopP,
+            num_predict: config.ollamaNumPredict,
           },
         }),
-      }))
+      }, generationTimeoutMs()))
       if (!data) return null
       const answer = clean(data.message?.content, 4000)
       if (!answer) return null
