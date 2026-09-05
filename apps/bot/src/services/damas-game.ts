@@ -3,28 +3,28 @@ export function buildDamasGameHtml(): string {
   return `<style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
 body{margin:0;background:transparent;font-family:Arial,sans-serif;color:#eee;touch-action:manipulation}
-#wrap{width:100%;max-width:620px;margin:auto}
-#game{position:relative;width:100%;aspect-ratio:16/9;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:16px;overflow:hidden}
+#wrap{width:100%;max-width:680px;margin:auto;padding:3px}
+#game{position:relative;width:100%;aspect-ratio:7/8;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:18px;overflow:hidden}
 #g{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-#head{position:absolute;top:6px;left:10px;pointer-events:none;text-shadow:0 1px 4px #000}
-#brand{font-size:9px;letter-spacing:1.5px;color:rgba(255,255,255,.65)}
-#title{font-size:13px;font-weight:bold;color:#fff}
-#meta{font-size:8px;margin-top:2px;color:rgba(255,255,255,.72)}
-#mute{position:absolute;top:7px;right:9px;width:34px;height:30px;border-radius:9px;border:1px solid rgba(255,255,255,.24);background:rgba(0,0,0,.34);color:#fff;font-size:15px;cursor:pointer;z-index:4;touch-action:none}
+#head{position:absolute;top:9px;left:14px;pointer-events:none;text-shadow:0 1px 4px #000}
+#brand{font-size:10px;letter-spacing:1.7px;color:rgba(255,255,255,.65)}
+#title{font-size:16px;font-weight:bold;color:#fff;margin-top:1px}
+#meta{font-size:10px;margin-top:3px;color:rgba(255,255,255,.75)}
+#mute{position:absolute;top:9px;right:11px;width:42px;height:38px;border-radius:11px;border:1px solid rgba(255,255,255,.24);background:rgba(0,0,0,.38);color:#fff;font-size:18px;cursor:pointer;z-index:4;touch-action:none}
 #mute:active{transform:scale(.96);background:rgba(255,255,255,.16)}
-#st{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:10px;color:rgba(255,255,255,.9);pointer-events:none;text-shadow:0 1px 4px #000}
+#st{position:absolute;bottom:9px;left:118px;right:118px;text-align:center;font-size:12px;font-weight:700;color:rgba(255,255,255,.94);pointer-events:none;text-shadow:0 1px 4px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 <body><div id="wrap"><div id="game">
-<canvas id="g" width="480" height="270"></canvas>
-<div id="head"><div id="brand">GHOST NEXORA</div><div id="title">Damas · vs IA estratégica</div><div id="meta">Tú: blancas · IA: negras</div></div>
+<canvas id="g" width="560" height="640"></canvas>
+<div id="head"><div id="brand">GHOST NEXORA</div><div id="title">Damas · vs IA estratégica</div><div id="meta">Tú: blancas · IA: negras · tablero táctil grande</div></div>
 <button id="mute" aria-label="Silenciar">🔊</button>
 <div id="st">Tú: blancas · Elige ficha y casilla</div>
 </div></div>
 <script>
 (function(){
 const c=document.getElementById('g'),x=c.getContext('2d'),st=document.getElementById('st'),muteB=document.getElementById('mute');
-const W=c.width,H=c.height,N=8;
-const S=Math.min(W,H)*0.9,OX=(W-S)/2,OY=(H-S)/2+4,CS=S/N;
+const W=c.width,H=c.height,N=8,BOARD_TOP=66,BOARD_BOTTOM=36;
+const S=Math.min(W-20,H-BOARD_TOP-BOARD_BOTTOM),OX=(W-S)/2,OY=BOARD_TOP,CS=S/N;
 let board,sel,forced,over,msg,turn,thinking=false;
 
 let AC=null,MUTED=false;
@@ -198,22 +198,23 @@ function draw(){
     const p=board[r][col];
     if(p){
       const cx=OX+col*CS+CS/2,cy=OY+r*CS+CS/2;
-      x.save();x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=4;x.shadowOffsetY=2;
-      x.beginPath();x.arc(cx,cy,CS*.34,0,Math.PI*2);x.fillStyle=p>0?'#f4f4f5':'#18181b';x.fill();
-      x.lineWidth=1.4;x.strokeStyle=p>0?'#b8b8bd':'#555';x.stroke();x.restore();
-      if(Math.abs(p)===2){x.strokeStyle=p>0?'#c9a227':'#e0b84a';x.lineWidth=2.2;x.beginPath();x.arc(cx,cy,CS*.19,0,Math.PI*2);x.stroke();x.fillStyle='#d9b43b';x.font='bold '+Math.max(9,CS*.25)+'px Arial';x.textAlign='center';x.textBaseline='middle';x.fillText('K',cx,cy);x.textAlign='left';x.textBaseline='alphabetic'}
+      x.save();x.shadowColor='rgba(0,0,0,.48)';x.shadowBlur=6;x.shadowOffsetY=3;
+      x.beginPath();x.arc(cx,cy,CS*.38,0,Math.PI*2);x.fillStyle=p>0?'#f4f4f5':'#18181b';x.fill();
+      x.lineWidth=2;x.strokeStyle=p>0?'#b8b8bd':'#555';x.stroke();x.restore();
+      if(Math.abs(p)===2){x.strokeStyle=p>0?'#c9a227':'#e0b84a';x.lineWidth=3;x.beginPath();x.arc(cx,cy,CS*.21,0,Math.PI*2);x.stroke();x.fillStyle='#d9b43b';x.font='bold '+Math.max(13,CS*.27)+'px Arial';x.textAlign='center';x.textBaseline='middle';x.fillText('K',cx,cy);x.textAlign='left';x.textBaseline='alphabetic'}
     }
-    if(sel&&sel.r===r&&sel.c===col){x.strokeStyle=forced?'#ffca55':'#6c9eff';x.lineWidth=3;x.strokeRect(OX+col*CS+2,OY+r*CS+2,CS-4,CS-4)}
+    if(sel&&sel.r===r&&sel.c===col){x.strokeStyle=forced?'#ffca55':'#6c9eff';x.lineWidth=4;x.strokeRect(OX+col*CS+3,OY+r*CS+3,CS-6,CS-6)}
   }
+  x.strokeStyle='rgba(255,255,255,.28)';x.lineWidth=2;x.strokeRect(OX,OY,S,S);
   const choices=turn===1&&!over?legalFirstSteps(1):[];
   if(sel){
-    x.fillStyle='rgba(108,158,255,.42)';
-    for(const m of choices.filter(q=>q.fr===sel.r&&q.fc===sel.c)){x.beginPath();x.arc(OX+m.c*CS+CS/2,OY+m.r*CS+CS/2,CS*.12,0,Math.PI*2);x.fill()}
+    x.fillStyle='rgba(108,158,255,.56)';
+    for(const m of choices.filter(q=>q.fr===sel.r&&q.fc===sel.c)){x.beginPath();x.arc(OX+m.c*CS+CS/2,OY+m.r*CS+CS/2,CS*.16,0,Math.PI*2);x.fill()}
   }
-  x.fillStyle='rgba(0,0,0,.38)';x.fillRect(8,H-27,91,18);x.fillRect(W-99,H-27,91,18);
-  x.font='bold 9px Arial';x.fillStyle='#fff';x.textAlign='left';x.fillText('TÚ  '+count(1),15,H-15);x.textAlign='right';x.fillText('IA  '+count(-1),W-15,H-15);x.textAlign='left';
-  if(thinking&&!over){x.fillStyle='rgba(0,0,0,.22)';x.fillRect(0,0,W,H)}
-  if(over){x.fillStyle='rgba(0,0,0,.62)';x.fillRect(0,0,W,H);x.fillStyle='#fff';x.textAlign='center';x.font='bold 19px Arial';x.fillText(msg,W/2,H/2-3);x.font='12px Arial';x.fillText('Toca el tablero para reiniciar',W/2,H/2+22);x.textAlign='left'}
+  x.fillStyle='rgba(0,0,0,.42)';x.fillRect(9,H-34,108,23);x.fillRect(W-117,H-34,108,23);
+  x.font='bold 12px Arial';x.fillStyle='#fff';x.textAlign='left';x.fillText('TÚ  '+count(1),18,H-18);x.textAlign='right';x.fillText('IA  '+count(-1),W-18,H-18);x.textAlign='left';
+  if(thinking&&!over){x.fillStyle='rgba(0,0,0,.20)';x.fillRect(OX,OY,S,S)}
+  if(over){x.fillStyle='rgba(0,0,0,.66)';x.fillRect(0,0,W,H);x.fillStyle='#fff';x.textAlign='center';x.font='bold 25px Arial';x.fillText(msg,W/2,H/2-8);x.font='15px Arial';x.fillText('Toca el tablero para reiniciar',W/2,H/2+24);x.textAlign='left'}
 }
 c.addEventListener('pointerdown',e=>{
   e.preventDefault();audio();
