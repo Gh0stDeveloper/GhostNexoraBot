@@ -45,6 +45,9 @@ jobs:
       - name: V5 compatibility smoke
         run: node scripts/v5-smoke.mjs
 
+      - name: Long Ollama response and checkers UI smoke
+        run: node scripts/llm-long-response-ui-smoke.mjs
+
       - name: Mini-LLM modular smoke
         run: npx tsx apps/bot/src/llm/smoke.ts
 
