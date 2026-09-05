@@ -1,178 +1,294 @@
-# 🪟 Instalar Ghost Nexora Bot en Windows (CMD)
+# 🪟 Ghost Nexora Bot · Instalación nativa en Windows
 
-Guía para correr el bot en **Windows 10/11** usando el **Símbolo del sistema (CMD)**.
+Ghost Nexora Bot dispone de un instalador PowerShell específico para **Windows 10/11**. No necesita WSL y mantiene el código, las sesiones y las bases persistentes en ubicaciones separadas.
 
-> [📖 Volver al README](../README.md) · [🐧 Instalación Linux/VPS](FIRST_INSTALL.md)
-
----
-
-## 1. Requisitos
-
-Instala esto **antes** (con instaladores oficiales):
-
-| Herramienta | Para qué | Descarga |
-|-------------|----------|----------|
-| **Node.js 24 LTS** (o 20+) | Runtime | https://nodejs.org/ |
-| **Git** | Clonar el repo | https://git-scm.com/download/win |
-| **FFmpeg** | Stickers / audio / video | https://ffmpeg.org/download.html |
-| **yt-dlp** (opcional) | Descargas | https://github.com/yt-dlp/yt-dlp |
-
-En el instalador de Node marca la opción de agregar Node al **PATH**.
-
-Comprueba en CMD:
-
-```bat
-node -v
-npm -v
-git --version
-ffmpeg -version
-```
-
-Si `ffmpeg` no se reconoce, añade la carpeta `bin` de FFmpeg al PATH de Windows.
+> [📖 README](../README.md) · [🐧 Linux/VPS](FIRST_INSTALL.md) · [📱 Termux Lite](TERMUX_LITE.md)
 
 ---
 
-## 2. Clonar el proyecto
+## ⚡ Instalación rápida
 
-Abre **CMD** y ejecuta:
+Abre **PowerShell** y ejecuta:
 
-```bat
-cd %USERPROFILE%\Documents
-git clone https://github.com/Gh0stDeveloper/GhostNexoraBot.git
-cd GhostNexoraBot
+```powershell
+irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 | iex
 ```
+
+El instalador utiliza **WinGet** para preparar automáticamente las herramientas necesarias.
+
+### Requisitos del sistema
+
+- Windows 10/11 x64.
+- PowerShell 5.1 o PowerShell 7+.
+- WinGet / App Installer.
+- Conexión a Internet.
+- Espacio suficiente para Node, dependencias y descargas.
+- Si eliges Ollama, espacio adicional para el modelo Qwen.
 
 ---
 
-## 3. Configurar entorno
+# 📦 Qué instala
 
-```bat
-copy .env.example .env
-notepad .env
-```
+El instalador comprueba e instala cuando falta:
 
-Edita al menos:
+| Componente | WinGet ID | Uso |
+|---|---|---|
+| Git | `Git.Git` | Código y actualizaciones |
+| Node.js LTS | `OpenJS.NodeJS.LTS` | Runtime Node 24+ |
+| FFmpeg | `Gyan.FFmpeg` | Audio, video y conversiones |
+| yt-dlp | `yt-dlp.yt-dlp` | Descargas multimedia |
+| Ollama | `Ollama.Ollama` | Solo si el usuario acepta LLM local |
 
-```env
-BOT_NAME=Ghost Nexora Bot
-PREFIX=.
-OWNER_NUMBERS=521XXXXXXXXXX
-SESSION_DIR=.\data\session
-DATA_DIR=.\data
-BOT_HEALTH_PORT=3001
-WEB_PORT=3000
-LOG_LEVEL=info
-```
+Después:
 
-`OWNER_NUMBERS` = tu número con código de país, solo dígitos.
-
-Guarda el archivo y cierra el Bloc de notas.
-
----
-
-## 4. Instalar dependencias y compilar
-
-Desde la carpeta del repo:
-
-```bat
-npm install
-npm run build
-```
-
-Si falla el build, revisa que la versión de Node sea 20+ (`node -v`).
+1. clona o actualiza `main`;
+2. crea el almacenamiento persistente;
+3. genera/configura `.env`;
+4. pregunta si deseas instalar **Ollama + Qwen** durante la primera instalación;
+5. ejecuta `npm install`;
+6. compila bot + dashboard;
+7. instala el gestor global `ghostnexora`;
+8. permite vincular WhatsApp mediante pairing code;
+9. inicia MainBot y, salvo que se omita, el dashboard local.
 
 ---
 
-## 5. Vincular WhatsApp (pairing)
+# 🧠 Ollama + Qwen es opcional
 
-```bat
-npm run pair
-```
-
-1. Escribe tu número internacional (ej. `521234567890`).
-2. En el teléfono: **WhatsApp → Dispositivos vinculados → Vincular con número**.
-3. Introduce el código de 8 dígitos que muestra la terminal.
-4. Espera el mensaje de conexión correcta.
-
----
-
-## 6. Arrancar el bot
-
-```bat
-npm run bot
-```
-
-O desde el workspace raíz (según `package.json` del monorepo):
-
-```bat
-npm run start --workspace=@ghostnexora/bot
-```
-
-Si el script es `bot` en la raíz:
-
-```bat
-npm run bot
-```
-
-Deja esa ventana abierta. Para parar: `Ctrl+C`.
-
-### Worker del Mini-LLM (opcional, otra ventana CMD)
-
-```bat
-cd %USERPROFILE%\Documents\GhostNexoraBot
-npm run llm:worker --workspace=@ghostnexora/bot
-```
-
-Eso procesa documentos de la cola y el entrenamiento en segundo plano.
-
----
-
-## 7. Probar en WhatsApp
+En una primera instalación aparece una pregunta similar a:
 
 ```text
-.ping
-.menu
-.llm status
-.llm memory
+Ollama NO es obligatorio.
+Activa LLM local, RAG y conversación libre, pero consume RAM, CPU y almacenamiento.
+Modelo recomendado: qwen2.5:1.5b
+¿Instalar Ollama + Qwen? [s/N]
 ```
 
-`.llm memory` carga los textos seed (identidad, saludos, comida, anime, programación) a la memoria vectorial.
+Si eliges **No**:
 
----
-
-## 8. Actualizar el bot
-
-```bat
-cd %USERPROFILE%\Documents\GhostNexoraBot
-git pull origin main
-npm install
-npm run build
+```env
+OLLAMA_ENABLED=false
 ```
 
-Luego vuelve a ejecutar `npm run bot`.
+El bot sigue funcionando normalmente y **no registra ni muestra** los comandos locales relacionados con:
 
-**No borres** la carpeta `data\` (sesión, SQLite, LLM).
+```text
+.llm
+.minillm
+.localai
+.corpus
+.llmcorpus
+.autochat
+```
 
----
+Tampoco se activa la conversación libre local basada en Ollama.
 
-## 9. Problemas frecuentes en Windows
+La IA HTTP `.ai` / `.investiga` es independiente y puede utilizarse si su proveedor está configurado.
 
-| Problema | Qué hacer |
-|----------|-----------|
-| `node` no se reconoce | Reinstala Node marcando PATH; cierra y abre CMD de nuevo |
-| `ffmpeg` no se reconoce | Añade FFmpeg al PATH del sistema |
-| Error de permisos en `data\` | Ejecuta CMD como administrador o mueve el repo a `Documents` |
-| Pairing no conecta | Borra `data\session` solo si hace falta y vuelve a `npm run pair` |
-| El LLM no usa textos | Ejecuta `.llm memory` y ten el worker activo |
+Si aceptas Ollama, el instalador usa el modelo predeterminado:
 
----
-
-## 10. Nota importante
-
-- Windows es válido para **desarrollo y pruebas**.
-- En producción se recomienda **Linux/VPS** (ver [FIRST_INSTALL.md](FIRST_INSTALL.md)).
-- No subas a GitHub tu `.env`, `data\session` ni bases SQLite.
+```text
+qwen2.5:1.5b
+```
 
 ---
 
-👻 Ghost Developer / Nexora
+# ⚙️ Instalación con parámetros
+
+Si necesitas controlar el instalador sin responder preguntas, descarga primero el script:
+
+```powershell
+$installer = "$env:TEMP\ghostnexora-install.ps1"
+irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 -OutFile $installer
+```
+
+### Instalar Ollama automáticamente
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File $installer -Ollama Yes
+```
+
+### No instalar Ollama
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File $installer -Ollama No
+```
+
+### Cambiar modelo
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File $installer -Ollama Yes -OllamaModel "qwen2.5:3b"
+```
+
+### Omitir pairing inicial
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File $installer -SkipPair
+```
+
+### Instalar sin arrancar procesos
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File $installer -NoStart
+```
+
+### No iniciar dashboard automáticamente
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File $installer -SkipWeb
+```
+
+---
+
+# 💾 Directorios
+
+Por defecto:
+
+```text
+%USERPROFILE%\GhostNexoraBot\
+└── código fuente + builds
+
+%LOCALAPPDATA%\GhostNexoraBot\
+├── session\
+├── data\
+│   └── subbots\
+├── logs\
+└── run\
+```
+
+Esto permite actualizar el checkout sin eliminar:
+
+- sesión principal;
+- economía SQLite;
+- configuración persistente;
+- subbots;
+- logs;
+- estado de runtime.
+
+---
+
+# 🛠️ Gestor `ghostnexora`
+
+El instalador crea un comando global para Windows:
+
+```powershell
+ghostnexora help
+```
+
+Comandos disponibles:
+
+| Comando | Acción |
+|---|---|
+| `ghostnexora start` | Inicia MainBot en segundo plano |
+| `ghostnexora stop` | Detiene MainBot |
+| `ghostnexora restart` | Reinicia MainBot |
+| `ghostnexora status` | Estado de procesos, WhatsApp, LLM y subbots |
+| `ghostnexora logs` | Sigue logs del MainBot |
+| `ghostnexora pair <numero>` | Vincula WhatsApp por pairing code |
+| `ghostnexora web-start` | Inicia dashboard local |
+| `ghostnexora web-stop` | Detiene dashboard local |
+| `ghostnexora update` | Actualiza `main`, dependencias y build |
+| `ghostnexora doctor` | Diagnóstico del entorno |
+
+Ejemplo México:
+
+```powershell
+ghostnexora pair 521XXXXXXXXXX
+```
+
+---
+
+# 🔄 Actualizar
+
+```powershell
+ghostnexora update
+```
+
+El actualizador integrado:
+
+1. detecta si MainBot/dashboard estaban activos;
+2. detiene los procesos necesarios;
+3. ejecuta `git fetch` + `git pull --ff-only`;
+4. ejecuta `npm install`;
+5. recompila el monorepo;
+6. conserva `.env`, sesión, bases y subbots;
+7. vuelve a iniciar únicamente lo que estaba activo.
+
+---
+
+# 🩺 Diagnóstico
+
+```powershell
+ghostnexora doctor
+```
+
+Comprueba:
+
+- Node.js;
+- npm;
+- Git;
+- FFmpeg;
+- yt-dlp;
+- Ollama;
+- configuración `OLLAMA_ENABLED`;
+- health endpoint del bot.
+
+Estado rápido:
+
+```powershell
+ghostnexora status
+```
+
+Logs:
+
+```powershell
+ghostnexora logs
+```
+
+---
+
+# 🌐 Servicios locales
+
+Por defecto:
+
+```text
+MainBot health : http://127.0.0.1:3001/health
+Dashboard      : http://127.0.0.1:3000
+Ollama API     : http://127.0.0.1:11434   (solo si fue instalado/habilitado)
+```
+
+El instalador de Windows no configura Nginx, Certbot ni systemd. Esos componentes pertenecen al despliegue Linux/VPS.
+
+---
+
+# 🔐 Seguridad
+
+No publiques ni sincronices accidentalmente:
+
+```text
+.env
+creds.json
+%LOCALAPPDATA%\GhostNexoraBot\data\
+%LOCALAPPDATA%\GhostNexoraBot\session\
+```
+
+El instalador genera un token administrativo cuando el `.env` conserva el valor predeterminado.
+
+---
+
+# 🧪 CI
+
+GitHub Actions incluye un job específico `windows-installer` que valida:
+
+- sintaxis de `scripts/install-windows.ps1`;
+- sintaxis de `scripts/windows/ghostnexora.ps1`;
+- ejecución básica de `ghostnexora.ps1 help` sobre `windows-latest`.
+
+El pipeline general también verifica que los comandos locales de LLM se registren únicamente cuando `OLLAMA_ENABLED=true`.
+
+---
+
+## Créditos
+
+**Ghost Developer / Nexora** — Owner · Lead Developer · Maintainer  
+**Lord-oscar** — Official Tester · Support
