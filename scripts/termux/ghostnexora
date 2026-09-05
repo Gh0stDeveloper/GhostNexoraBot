@@ -35,11 +35,15 @@ is_running() {
 require_install() {
   [[ -d "${INSTALL_DIR}/.git" ]] || fail "No encuentro Ghost Nexora Bot en ${INSTALL_DIR}. Ejecuta primero install-termux.sh."
   [[ -f "${ENV_FILE}" ]] || fail "Falta ${ENV_FILE}."
+}
+
+require_runtime() {
+  require_install
   [[ -f "${LITE_ENTRY}" ]] || fail 'Falta el runtime compilado de Termux Lite. Ejecuta: ghostnexora update'
 }
 
 start_bot() {
-  require_install
+  require_runtime
   if is_running; then
     ok "Ghost Nexora Lite ya está ejecutándose (PID $(pid_value))."
     return 0
@@ -100,6 +104,7 @@ status_bot() {
   else
     warn 'Ghost Nexora Lite: DETENIDO'
   fi
+  [[ -f "${LITE_ENTRY}" ]] || warn 'Runtime compilado ausente; ejecuta ghostnexora update.'
   if command -v curl >/dev/null 2>&1; then
     local port
     port="$(grep '^BOT_HEALTH_PORT=' "${ENV_FILE}" | tail -n1 | cut -d= -f2- || true)"
@@ -110,7 +115,7 @@ status_bot() {
 }
 
 pair_bot() {
-  require_install
+  require_runtime
   [[ -f "${PAIR_ENTRY}" ]] || fail 'Falta el runtime de pairing. Ejecuta: ghostnexora update'
   local phone="${1:-}"
   phone="$(printf '%s' "${phone}" | tr -cd '0-9')"
@@ -145,7 +150,7 @@ show_logs() {
 }
 
 foreground_bot() {
-  require_install
+  require_runtime
   if is_running; then fail 'Detén primero el proceso en segundo plano con: ghostnexora stop'; fi
   cd "${INSTALL_DIR}"
   exec env \
@@ -160,7 +165,7 @@ doctor() {
   printf 'Ghost Nexora Bot · Termux Lite\n'
   printf 'Instalación : %s\n' "${INSTALL_DIR}"
   printf 'Datos       : %s\n' "${STATE_DIR}"
-  printf 'Runtime     : %s\n' "${LITE_ENTRY}"
+  printf 'Runtime     : %s\n' "$([[ -f "${LITE_ENTRY}" ]] && printf 'OK · %s' "${LITE_ENTRY}" || printf 'FALTANTE')"
   printf 'Node        : %s\n' "$(node -v 2>/dev/null || echo NO INSTALADO)"
   printf 'npm         : %s\n' "$(npm -v 2>/dev/null || echo NO INSTALADO)"
   printf 'ffmpeg      : %s\n' "$(ffmpeg -version 2>/dev/null | head -n1 || echo NO INSTALADO)"
