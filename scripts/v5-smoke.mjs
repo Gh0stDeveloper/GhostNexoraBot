@@ -43,6 +43,7 @@ try {
     'mc', 'minecraft', 'mchelp', 'mcseed', 'mcstronghold', 'mcbioma', 'mcanchor', 'mcstruct',
     'mcskin', 'mccape', 'mcplayer', 'mcperfil', 'mcjugador', 'mcgamertag', 'mcserver', 'mccraft', 'mcalert', 'mcprice',
     'styles', 'estilos', 'themes', 'botstyles', 'waifustyles', 'style', 'estilo', 'theme', 'botstyle',
+    'mario', 'supermario', 'mariobros', 'mariogame',
   ]) {
     assert.equal(tokens.has(expected), true, `missing effective command token: ${expected}`)
   }
@@ -67,6 +68,18 @@ try {
   assert.equal(stylesOwner?.description.includes('AniList'), true, 'styles V13 command is not effective')
   const styleOwner = effective.find((row) => row.tokens.includes('style'))?.command
   assert.equal(styleOwner?.description.includes('staff'), true, 'style command must allow staff-managed visual styles')
+  const marioOwner = effective.find((row) => row.tokens.includes('mario'))?.command
+  assert.equal(marioOwner?.category, 'games', 'Mario must be listed in the games section')
+  assert.equal(marioOwner?.description.includes('español'), true, 'Mario command must be Spanish')
+
+  const { buildMarioGameHtml } = await import('../apps/bot/dist/services/mario-game.js')
+  const marioHtml = buildMarioGameHtml()
+  for (const label of ['PUNTOS', 'MONEDAS', 'VIDAS', 'IZQUIERDA', 'SALTAR', 'DERECHA', 'GHOST NEXORA BOT']) {
+    assert.equal(marioHtml.includes(label), true, `Mario HTML missing Spanish label: ${label}`)
+  }
+  assert.equal(marioHtml.includes('ANAS MODS'), false)
+  assert.equal(marioHtml.includes('النقاط'), false)
+  assert.ok(Buffer.byteLength(marioHtml, 'utf8') < 200_000, 'Mario HTML should stay compact for WhatsApp rich messages')
 
   const moderationSource = await readFile(new URL('../apps/bot/dist/services/moderation-v2.js', import.meta.url), 'utf8')
   assert.equal(moderationSource.includes('resolveBotVisualStyleAsset'), true, 'welcome must resolve the active waifu style')
