@@ -3,6 +3,8 @@ param(
   [string]$StateDir = (Join-Path $env:LOCALAPPDATA 'GhostNexoraBot'),
   [string]$Branch = 'main',
   [ValidateSet('Ask', 'Yes', 'No')]
+  [string]$Web = 'Ask',
+  [ValidateSet('Ask', 'Yes', 'No')]
   [string]$Ollama = 'Ask',
   [string]$OllamaModel = 'qwen2.5:1.5b',
   [switch]$SkipPair,
@@ -43,10 +45,7 @@ function Require-WinGet {
 }
 
 function Install-Package([string]$Id, [string]$Command, [string]$Label) {
-  if (Get-Command $Command -ErrorAction SilentlyContinue) {
-    Write-Ok "$Label ya está disponible."
-    return
-  }
+  if (Get-Command $Command -ErrorAction SilentlyContinue) { Write-Ok "$Label ya está disponible."; return }
   Write-Info "Instalando $Label ($Id)…"
   & winget.exe install --id $Id -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
   if ($LASTEXITCODE -ne 0) { throw "WinGet no pudo instalar $Label (exit $LASTEXITCODE)." }
@@ -64,12 +63,7 @@ function Set-EnvValue([string]$Key, [string]$Value) {
   $escapedKey = [regex]::Escape($Key)
   $found = $false
   $newLines = foreach ($line in $lines) {
-    if ($line -match ('^' + $escapedKey + '=')) {
-      $found = $true
-      "$Key=$Value"
-    } else {
-      $line
-    }
+    if ($line -match ('^' + $escapedKey + '=')) { $found = $true; "$Key=$Value" } else { $line }
   }
   if (-not $found) { $newLines += "$Key=$Value" }
   Set-Content -Path $envPath -Value $newLines -Encoding utf8
@@ -83,6 +77,8 @@ function Get-EnvValue([string]$Key) {
   return ($line -split '=', 2)[1]
 }
 
+function Test-Truthy([string]$Value) { return $Value.Trim().ToLowerInvariant() -match '^(1|true|yes|on|si|sí)$' }
+
 function New-SecureToken {
   $bytes = New-Object byte[] 24
   $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -91,12 +87,7 @@ function New-SecureToken {
 }
 
 function Test-OllamaApi {
-  try {
-    $null = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2
-    return $true
-  } catch {
-    return $false
-  }
+  try { $null = Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2; return $true } catch { return $false }
 }
 
 function Ensure-Ollama([string]$Model) {
@@ -106,21 +97,14 @@ function Ensure-Ollama([string]$Model) {
     if ($LASTEXITCODE -ne 0) { throw "Ollama no pudo instalarse (exit $LASTEXITCODE)." }
     Refresh-Path
   }
-  if (-not (Get-Command ollama.exe -ErrorAction SilentlyContinue)) {
-    throw 'Ollama fue instalado, pero ollama.exe todavía no está disponible en PATH.'
-  }
-
+  if (-not (Get-Command ollama.exe -ErrorAction SilentlyContinue)) { throw 'Ollama fue instalado, pero ollama.exe todavía no está disponible en PATH.' }
   if (-not (Test-OllamaApi)) {
     Write-Info 'Iniciando API local de Ollama…'
     Start-Process -FilePath 'ollama.exe' -ArgumentList @('serve') -WindowStyle Hidden | Out-Null
     $ready = $false
-    for ($i = 0; $i -lt 30; $i++) {
-      Start-Sleep -Seconds 1
-      if (Test-OllamaApi) { $ready = $true; break }
-    }
+    for ($i = 0; $i -lt 30; $i++) { Start-Sleep -Seconds 1; if (Test-OllamaApi) { $ready = $true; break } }
     if (-not $ready) { throw 'La API de Ollama no respondió en http://127.0.0.1:11434.' }
   }
-
   Write-Info "Descargando/verificando modelo $Model…"
   & ollama.exe pull $Model
   if ($LASTEXITCODE -ne 0) { throw "No se pudo descargar el modelo $Model." }
@@ -133,19 +117,14 @@ function Install-Manager {
   $managerSource = Join-Path $InstallDir 'scripts\windows\ghostnexora.ps1'
   $managerTarget = Join-Path $binDir 'ghostnexora.ps1'
   Copy-Item $managerSource $managerTarget -Force
-
   $cmdPath = Join-Path $binDir 'ghostnexora.cmd'
   $cmd = '@echo off' + [Environment]::NewLine + 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $managerTarget + '" %*'
   Set-Content -Path $cmdPath -Value $cmd -Encoding ascii
 
   $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
   $parts = @($userPath -split ';' | Where-Object { $_ })
-  if ($parts -notcontains $binDir) {
-    $newUserPath = (($parts + $binDir) -join ';')
-    [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
-  }
+  if ($parts -notcontains $binDir) { [Environment]::SetEnvironmentVariable('Path', (($parts + $binDir) -join ';'), 'User') }
   if ($env:Path -notlike "*$binDir*") { $env:Path += ';' + $binDir }
-
   [Environment]::SetEnvironmentVariable('GHOST_NEXORA_HOME', $InstallDir, 'User')
   [Environment]::SetEnvironmentVariable('GHOST_NEXORA_STATE', $StateDir, 'User')
   $env:GHOST_NEXORA_HOME = $InstallDir
@@ -163,17 +142,15 @@ try {
   Write-Info "Datos       : $StateDir"
   Write-Info ('Modo        : ' + $(if ($FirstInstall) { 'primera instalación' } else { 'actualización/reparación' }))
 
-  Write-Step '1/9' 'Herramientas del sistema'
+  Write-Step '1/10' 'Herramientas del sistema'
   Require-WinGet
   Install-Package 'Git.Git' 'git.exe' 'Git'
   Install-Package 'OpenJS.NodeJS.LTS' 'node.exe' 'Node.js LTS'
   Install-Package 'Gyan.FFmpeg' 'ffmpeg.exe' 'FFmpeg'
   Install-Package 'yt-dlp.yt-dlp' 'yt-dlp.exe' 'yt-dlp'
   Refresh-Path
-
   $nodeMajor = [int]((& node.exe -p "Number(process.versions.node.split('.')[0])").Trim())
   if ($nodeMajor -lt 24) {
-    Write-Info 'Node.js es anterior a 24; solicitando actualización LTS…'
     & winget.exe upgrade --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
     Refresh-Path
     $nodeMajor = [int]((& node.exe -p "Number(process.versions.node.split('.')[0])").Trim())
@@ -181,7 +158,7 @@ try {
   }
   Write-Ok ("Node.js " + (& node.exe --version) + ' · npm ' + (& npm.cmd --version))
 
-  Write-Step '2/9' 'Código fuente'
+  Write-Step '2/10' 'Código fuente'
   if (Test-Path (Join-Path $InstallDir '.git')) {
     & git.exe -C $InstallDir fetch origin $Branch
     if ($LASTEXITCODE -ne 0) { throw 'git fetch falló.' }
@@ -198,7 +175,7 @@ try {
     Write-Ok 'Repositorio clonado.'
   }
 
-  Write-Step '3/9' 'Persistencia y .env'
+  Write-Step '3/10' 'Persistencia y .env'
   New-Item -ItemType Directory -Force -Path $StateDir, (Join-Path $StateDir 'session'), (Join-Path $StateDir 'data'), (Join-Path $StateDir 'data\subbots'), (Join-Path $StateDir 'logs'), (Join-Path $StateDir 'run') | Out-Null
   $envPath = Join-Path $InstallDir '.env'
   if (-not (Test-Path $envPath)) { Copy-Item (Join-Path $InstallDir '.env.example') $envPath }
@@ -215,7 +192,31 @@ try {
   if (-not $adminToken -or $adminToken -eq 'change-this-admin-token') { Set-EnvValue 'ADMIN_WEB_TOKEN' (New-SecureToken) }
   Write-Ok 'Datos persistentes separados del checkout y .env preparado.'
 
-  Write-Step '4/9' 'Ollama + Qwen (opcional)'
+  Write-Step '4/10' 'Dashboard web (opcional)'
+  if ($FirstInstall) {
+    $webChoice = if ($SkipWeb) { 'No' } else { $Web }
+    if ($webChoice -eq 'Ask') {
+      Write-Host ''
+      Write-Host 'El dashboard web NO es obligatorio.' -ForegroundColor Yellow
+      Write-Host 'Sin web, el bot conserva WhatsApp, economía, juegos, descargas y subbots; se omite Next.js/portal.' -ForegroundColor DarkGray
+      $answer = Read-Host '¿Instalar dashboard web + portal de subbots? [s/N]'
+      if ($answer -match '^(s|si|sí|y|yes)$') { $webChoice = 'Yes' } else { $webChoice = 'No' }
+    }
+    Set-EnvValue 'WEB_ENABLED' $(if ($webChoice -eq 'Yes') { 'true' } else { 'false' })
+  } else {
+    $existingWeb = Get-EnvValue 'WEB_ENABLED'
+    if (-not $existingWeb) {
+      $legacyWeb = Test-Path (Join-Path $InstallDir 'apps\web\.next')
+      Set-EnvValue 'WEB_ENABLED' $(if ($legacyWeb) { 'true' } else { 'false' })
+      Write-Info ('Instalación heredada: WEB_ENABLED=' + $(if ($legacyWeb) { 'true preservado por build existente' } else { 'false' }))
+    } else {
+      Write-Info "Instalación existente: se conserva WEB_ENABLED=$existingWeb."
+    }
+  }
+  $webEnabled = Test-Truthy (Get-EnvValue 'WEB_ENABLED')
+  Write-Ok ('Dashboard web: ' + $(if ($webEnabled) { 'HABILITADO' } else { 'DESHABILITADO' }))
+
+  Write-Step '5/10' 'Ollama + Qwen (opcional)'
   if ($FirstInstall) {
     $choice = $Ollama
     if ($choice -eq 'Ask') {
@@ -250,88 +251,87 @@ try {
     }
   }
 
-  Write-Step '5/9' 'Dependencias Node'
+  Write-Step '6/10' 'Dependencias Node'
   Push-Location $InstallDir
   try {
-    & npm.cmd install
-    if ($LASTEXITCODE -ne 0) { throw 'npm install falló.' }
+    if ($webEnabled) {
+      & npm.cmd install
+      if ($LASTEXITCODE -ne 0) { throw 'npm install falló.' }
+    } else {
+      & npm.cmd install --workspace=@ghostnexora/bot --include=dev
+      if ($LASTEXITCODE -ne 0) { throw 'npm install del bot falló.' }
+    }
   } finally { Pop-Location }
-  Write-Ok 'Dependencias instaladas.'
+  Write-Ok ('Dependencias instaladas: ' + $(if ($webEnabled) { 'Bot + Web' } else { 'solo Bot' }))
 
-  Write-Step '6/9' 'Build de producción'
+  Write-Step '7/10' 'Build de producción'
   Push-Location $InstallDir
   try {
-    & npm.cmd run build
-    if ($LASTEXITCODE -ne 0) { throw 'npm run build falló.' }
+    if ($webEnabled) {
+      & npm.cmd run build
+      if ($LASTEXITCODE -ne 0) { throw 'npm run build falló.' }
+    } else {
+      & npm.cmd run assets:waifus
+      if ($LASTEXITCODE -ne 0) { throw 'assets:waifus falló.' }
+      & npm.cmd run build --workspace=@ghostnexora/bot
+      if ($LASTEXITCODE -ne 0) { throw 'build del bot falló.' }
+    }
   } finally { Pop-Location }
-  Write-Ok 'Bot y dashboard compilados.'
+  Write-Ok ('Build completado: ' + $(if ($webEnabled) { 'Bot + Dashboard' } else { 'solo Bot' }))
 
-  Write-Step '7/9' 'Gestor de Windows'
+  Write-Step '8/10' 'Gestor de Windows'
   $managerPath = Install-Manager
 
-  Write-Step '8/9' 'Vinculación de WhatsApp'
+  Write-Step '9/10' 'Vinculación de WhatsApp'
   $credsPath = Join-Path $StateDir 'session\creds.json'
   $registered = $false
   if (Test-Path $credsPath) {
     try { $registered = [bool]((Get-Content $credsPath -Raw | ConvertFrom-Json).registered) } catch { $registered = $false }
   }
   if ($registered) {
-    Write-Ok 'Sesión existente detectada; no se vuelve a vincular.'
-  } elseif ($SkipPair) {
-    Write-Warn 'Pairing omitido por parámetro. Usa después: ghostnexora pair 521XXXXXXXXXX'
-  } else {
-    $phone = Read-Host 'Número principal de WhatsApp en formato internacional (Enter para omitir)'
+    Write-Ok 'Sesión WhatsApp existente detectada; no se volvió a vincular.'
+  } elseif (-not $SkipPair) {
+    $phone = Read-Host 'Número internacional de WhatsApp (Enter para omitir)'
     $phone = ($phone -replace '\D', '')
     if ($phone) {
       if (-not (Get-EnvValue 'OWNER_NUMBERS')) { Set-EnvValue 'OWNER_NUMBERS' $phone }
       $oldEnvFile = $env:ENV_FILE
-      $oldPair = $env:PAIRING_NUMBER
+      $oldPairing = $env:PAIRING_NUMBER
       try {
         $env:ENV_FILE = $envPath
         $env:PAIRING_NUMBER = $phone
         & node.exe (Join-Path $InstallDir 'apps\bot\dist\pair.js')
-        if ($LASTEXITCODE -ne 0) { Write-Warn "Pairing terminó con código $LASTEXITCODE. Puedes repetirlo con ghostnexora pair." }
-      } finally {
-        $env:ENV_FILE = $oldEnvFile
-        $env:PAIRING_NUMBER = $oldPair
-      }
+        if ($LASTEXITCODE -ne 0) { Write-Warn 'El pairing no terminó correctamente; puedes repetirlo con ghostnexora pair <numero>.' }
+      } finally { $env:ENV_FILE = $oldEnvFile; $env:PAIRING_NUMBER = $oldPairing }
     } else {
       Write-Warn 'Pairing omitido. Puedes hacerlo después con ghostnexora pair <numero>.'
     }
   }
 
-  Write-Step '9/9' 'Arranque y resumen'
+  Write-Step '10/10' 'Arranque y resumen'
   if (-not $NoStart) {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $managerPath start
-    if (-not $SkipWeb) {
+    if ($webEnabled) {
       try { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $managerPath web-start } catch { Write-Warn 'El dashboard no pudo iniciarse automáticamente.' }
     }
-  } else {
-    Write-Info 'Arranque automático omitido.'
   }
 
-  $elapsed = [math]::Round(((Get-Date) - $StartedAt).TotalSeconds)
-  $ollamaFinal = Get-EnvValue 'OLLAMA_ENABLED'
+  $elapsed = [math]::Round(((Get-Date) - $StartedAt).TotalSeconds, 1)
   Write-Header 'INSTALACIÓN COMPLETADA'
-  Write-Host ("Código      : $InstallDir")
-  Write-Host ("Datos       : $StateDir")
-  Write-Host ("Ollama/LLM  : $ollamaFinal")
-  Write-Host 'Health      : http://127.0.0.1:3001/health'
-  Write-Host 'Dashboard   : http://127.0.0.1:3000'
-  Write-Host ("Duración     : ${elapsed}s")
+  Write-Ok "Ghost Nexora Bot listo en $elapsed s."
+  Write-Host (' Código    : ' + $InstallDir)
+  Write-Host (' Datos     : ' + $StateDir)
+  Write-Host (' Web       : ' + $(if ($webEnabled) { 'ENABLED · http://127.0.0.1:3000' } else { 'DISABLED' }))
+  Write-Host (' Ollama    : ' + (Get-EnvValue 'OLLAMA_ENABLED'))
   Write-Host ''
   Write-Host 'Comandos:' -ForegroundColor Cyan
   Write-Host '  ghostnexora status'
   Write-Host '  ghostnexora logs'
-  Write-Host '  ghostnexora restart'
   Write-Host '  ghostnexora pair 521XXXXXXXXXX'
   Write-Host '  ghostnexora update'
   Write-Host '  ghostnexora doctor'
-  Write-Host ''
-  Write-Ok 'Ghost Nexora Bot está listo para Windows.'
+  if ($webEnabled) { Write-Host '  ghostnexora web-start / web-stop' }
 } catch {
-  Write-Host ''
   Write-Fail $_.Exception.Message
-  Write-Host 'La sesión y los datos persistentes no se eliminan al repetir el instalador.' -ForegroundColor DarkGray
   exit 1
 }
