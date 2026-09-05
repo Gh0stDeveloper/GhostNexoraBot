@@ -11,3 +11,4 @@ data/
 coverage/
 apps/*/.next/
 apps/*/dist/
+apps/bot/assets/waifus/
