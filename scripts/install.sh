@@ -10,6 +10,7 @@ BOT_DOMAIN="${BOT_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 WEB_PORT="${WEB_PORT:-3000}"
 BOT_HEALTH_PORT="${BOT_HEALTH_PORT:-3001}"
+INSTALL_WEB="${INSTALL_WEB:-ask}"
 INSTALL_OLLAMA="${INSTALL_OLLAMA:-ask}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:1.5b}"
 START_TS=$(date +%s)
@@ -27,6 +28,18 @@ trap finish EXIT
 
 if [[ "${EUID}" -ne 0 ]]; then fail 'Este instalador debe ejecutarse con sudo/root.'; exit 1; fi
 
+normalize_choice() {
+  case "${1,,}" in
+    y|yes|s|si|sí|true|1|on) printf 'yes' ;;
+    n|no|false|0|off) printf 'no' ;;
+    *) printf 'ask' ;;
+  esac
+}
+
+env_truthy() {
+  case "${1,,}" in 1|true|yes|on|si|sí) return 0 ;; *) return 1 ;; esac
+}
+
 section 'Ghost Nexora Bot · INSTALACIÓN'
 info "Repositorio: ${REPO_URL}"
 info "Rama: ${BRANCH}"
@@ -42,12 +55,12 @@ done
 
 export DEBIAN_FRONTEND=noninteractive
 
-section '1/10 · Dependencias del sistema'
+section '1/11 · Dependencias del sistema'
 apt-get update >/tmp/ghost-nexora-apt-update.log
 apt-get install -y ca-certificates curl git ffmpeg webp zip build-essential util-linux nginx unzip python3 >/tmp/ghost-nexora-apt-install.log
 ok 'Dependencias base instaladas.'
 
-section '2/10 · Node.js y yt-dlp'
+section '2/11 · Node.js y yt-dlp'
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 24 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash - >/tmp/ghost-nexora-node.log
   apt-get install -y nodejs >>/tmp/ghost-nexora-node.log
@@ -62,14 +75,14 @@ else
 fi
 ok "yt-dlp disponible: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 
-section '3/10 · Usuario y almacenamiento persistente'
+section '3/11 · Usuario y almacenamiento persistente'
 if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
   useradd --system --home-dir "${STATE_DIR}" --create-home --shell /usr/sbin/nologin "${SERVICE_USER}"
 fi
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${STATE_DIR}" "${STATE_DIR}/session" "${STATE_DIR}/data" "${STATE_DIR}/data/subbots"
 ok 'Almacenamiento persistente preparado.'
 
-section '4/10 · Código y configuración'
+section '4/11 · Código y configuración base'
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
   git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
   git -C "${INSTALL_DIR}" checkout "${BRANCH}"
@@ -83,10 +96,6 @@ cd "${INSTALL_DIR}"
 set_env() {
   local key="$1" value="$2"
   if grep -q "^${key}=" .env; then sed -i "s|^${key}=.*|${key}=${value}|" .env; else printf '%s=%s\n' "${key}" "${value}" >> .env; fi
-}
-
-env_truthy() {
-  case "${1,,}" in 1|true|yes|on|si|sí) return 0 ;; *) return 1 ;; esac
 }
 
 set_env NEXORA_RUNTIME_PROFILE "full"
@@ -104,19 +113,49 @@ CURRENT_ADMIN_TOKEN="$(grep '^ADMIN_WEB_TOKEN=' .env | cut -d= -f2- || true)"
 if [[ -z "${CURRENT_ADMIN_TOKEN}" || "${CURRENT_ADMIN_TOKEN}" == "change-this-admin-token" ]]; then
   set_env ADMIN_WEB_TOKEN "$(node -e "process.stdout.write(require('crypto').randomBytes(24).toString('hex'))")"
 fi
-
 if [[ -n "${BOT_DOMAIN}" ]]; then set_env PUBLIC_WEB_URL "https://${BOT_DOMAIN}"; else set_env PUBLIC_WEB_URL "http://127.0.0.1:${WEB_PORT}"; fi
 ok '.env base configurado.'
 
-section '5/10 · Ollama + Qwen opcional'
-normalize_choice() {
-  case "${1,,}" in
-    y|yes|s|si|sí|true|1|on) printf 'yes' ;;
-    n|no|false|0|off) printf 'no' ;;
-    *) printf 'ask' ;;
-  esac
-}
+section '5/11 · Dashboard web opcional'
+WEB_CHOICE="$(normalize_choice "${INSTALL_WEB}")"
+if [[ "${FIRST_INSTALL}" == true ]]; then
+  if [[ "${WEB_CHOICE}" == "ask" ]]; then
+    if [[ -r /dev/tty ]]; then
+      printf '\nEl dashboard web es OPCIONAL. El bot funciona sin Next.js ni panel administrativo.\n' >/dev/tty
+      printf '¿Instalar y activar dashboard web + portal de subbots? [s/N]: ' >/dev/tty
+      ANSWER=''
+      IFS= read -r ANSWER </dev/tty || true
+      WEB_CHOICE="$(normalize_choice "${ANSWER}")"
+      [[ "${WEB_CHOICE}" == "ask" ]] && WEB_CHOICE='no'
+    else
+      WEB_CHOICE='no'
+      warn 'Terminal interactiva no disponible; se instalará solo el bot. La web puede habilitarse después.'
+    fi
+  fi
+  if [[ "${WEB_CHOICE}" == 'yes' ]]; then
+    set_env WEB_ENABLED 'true'
+    ok 'Dashboard web habilitado para esta instalación.'
+  else
+    set_env WEB_ENABLED 'false'
+    ok 'Dashboard web omitido. Se instalará el bot sin Next.js/portal.'
+  fi
+else
+  CURRENT_WEB_ENABLED="$(grep '^WEB_ENABLED=' .env | tail -n1 | cut -d= -f2- || true)"
+  if [[ -z "${CURRENT_WEB_ENABLED}" ]]; then
+    if systemctl is-active --quiet ghost-nexora-web.service 2>/dev/null || systemctl is-enabled --quiet ghost-nexora-web.service 2>/dev/null || [[ -d "${INSTALL_DIR}/apps/web/.next" ]]; then
+      set_env WEB_ENABLED 'true'
+      info 'Instalación heredada con web detectada: WEB_ENABLED=true preservado automáticamente.'
+    else
+      set_env WEB_ENABLED 'false'
+      info 'Instalación heredada sin web activa detectada: WEB_ENABLED=false.'
+    fi
+  else
+    info "Instalación existente: se conserva WEB_ENABLED=${CURRENT_WEB_ENABLED}."
+  fi
+fi
+WEB_FINAL="$(grep '^WEB_ENABLED=' .env | tail -n1 | cut -d= -f2- || echo false)"
 
+section '6/11 · Ollama + Qwen opcional'
 OLLAMA_CHOICE="$(normalize_choice "${INSTALL_OLLAMA}")"
 if [[ "${FIRST_INSTALL}" == true ]]; then
   if [[ "${OLLAMA_CHOICE}" == "ask" ]]; then
@@ -164,28 +203,52 @@ chown root:"${SERVICE_USER}" .env
 chmod 0640 .env
 ok '.env protegido.'
 
-section '6/10 · Dependencias Node'
-npm install >/tmp/ghost-nexora-npm-install.log 2>&1
-ok 'Dependencias Node instaladas.'
+section '7/11 · Dependencias Node'
+if env_truthy "${WEB_FINAL}"; then
+  npm install >/tmp/ghost-nexora-npm-install.log 2>&1
+  ok 'Dependencias Bot + Web instaladas.'
+else
+  npm install --workspace=@ghostnexora/bot --include=dev >/tmp/ghost-nexora-npm-install.log 2>&1
+  ok 'Dependencias del Bot instaladas; dependencias Web omitidas.'
+fi
 
-section '7/10 · Build de producción'
-npm run build >/tmp/ghost-nexora-build.log 2>&1
-ok 'Build de producción completado.'
-install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"
+section '8/11 · Build de producción'
+if env_truthy "${WEB_FINAL}"; then
+  npm run build >/tmp/ghost-nexora-build.log 2>&1
+  install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"
+  ok 'Build Bot + Web completado.'
+else
+  npm run assets:waifus >/tmp/ghost-nexora-assets.log 2>&1
+  npm run build --workspace=@ghostnexora/bot >/tmp/ghost-nexora-build.log 2>&1
+  ok 'Build del Bot completado; Next.js no fue compilado.'
+fi
 
-section '8/10 · Systemd y worker LLM opcional'
+section '9/11 · Systemd y componentes opcionales'
 install -m 0644 systemd/ghost-nexora-bot.service /etc/systemd/system/ghost-nexora-bot.service
-install -m 0644 systemd/ghost-nexora-web.service /etc/systemd/system/ghost-nexora-web.service
 sed -i \
   -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
   -e "s|__STATE_DIR__|${STATE_DIR}|g" \
   -e "s|__SERVICE_USER__|${SERVICE_USER}|g" \
   -e "s|__WEB_PORT__|${WEB_PORT}|g" \
   -e "s|__BOT_HEALTH_PORT__|${BOT_HEALTH_PORT}|g" \
-  /etc/systemd/system/ghost-nexora-bot.service \
-  /etc/systemd/system/ghost-nexora-web.service
+  /etc/systemd/system/ghost-nexora-bot.service
+
+if env_truthy "${WEB_FINAL}"; then
+  install -m 0644 systemd/ghost-nexora-web.service /etc/systemd/system/ghost-nexora-web.service
+  sed -i \
+    -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
+    -e "s|__STATE_DIR__|${STATE_DIR}|g" \
+    -e "s|__SERVICE_USER__|${SERVICE_USER}|g" \
+    -e "s|__WEB_PORT__|${WEB_PORT}|g" \
+    -e "s|__BOT_HEALTH_PORT__|${BOT_HEALTH_PORT}|g" \
+    /etc/systemd/system/ghost-nexora-web.service
+  ok 'Servicio Web preparado.'
+else
+  systemctl disable --now ghost-nexora-web.service >/dev/null 2>&1 || true
+  ok 'Servicio Web omitido/deshabilitado.'
+fi
 systemctl daemon-reload
-ok 'Unidades principales systemd instaladas.'
+ok 'Servicio principal systemd preparado.'
 
 OLLAMA_FINAL="$(grep '^OLLAMA_ENABLED=' .env | tail -n1 | cut -d= -f2- || echo false)"
 if env_truthy "${OLLAMA_FINAL}" && command -v ollama >/dev/null 2>&1; then
@@ -204,7 +267,7 @@ fi
 chown root:"${SERVICE_USER}" .env
 chmod 0640 .env
 
-section '9/10 · Vinculación WhatsApp'
+section '10/11 · Vinculación WhatsApp'
 SESSION_CREDS="${STATE_DIR}/session/creds.json"
 REGISTERED="false"
 if [[ -f "${SESSION_CREDS}" ]]; then REGISTERED="$(node -e "try{const x=require('${SESSION_CREDS}');process.stdout.write(String(Boolean(x.registered)))}catch{process.stdout.write('false')}" 2>/dev/null || echo false)"; fi
@@ -226,9 +289,14 @@ else
   ok 'Sesión WhatsApp existente detectada; no se volvió a vincular.'
 fi
 
-section '10/10 · Servicios, proxy y Nginx'
-systemctl enable --now ghost-nexora-bot.service ghost-nexora-web.service nginx
-ok 'Servicios principales habilitados y arrancados.'
+section '11/11 · Servicios, proxy y Nginx'
+systemctl enable --now ghost-nexora-bot.service nginx
+if env_truthy "${WEB_FINAL}"; then
+  systemctl enable --now ghost-nexora-web.service
+  ok 'MainBot + Web habilitados y arrancados.'
+else
+  ok 'MainBot habilitado y arrancado; Web deshabilitada por configuración.'
+fi
 
 if [[ -f "${INSTALL_DIR}/scripts/install-browser-proxy.sh" ]]; then
   chmod +x "${INSTALL_DIR}/scripts/install-browser-proxy.sh"
@@ -245,7 +313,9 @@ if [[ -n "${BOT_DOMAIN}" ]]; then
 fi
 
 OLLAMA_FINAL="$(grep '^OLLAMA_ENABLED=' .env | tail -n1 | cut -d= -f2- || echo false)"
+WEB_FINAL="$(grep '^WEB_ENABLED=' .env | tail -n1 | cut -d= -f2- || echo false)"
 printf '\nGhost Nexora Bot instalado. Código: %s\n' "$(git rev-parse --short HEAD)"
+printf 'Dashboard web: %s\n' "${WEB_FINAL}"
 printf 'Ollama/LLM local: %s\n' "${OLLAMA_FINAL}"
-printf 'Proxy: https://${BOT_DOMAIN:-ghostnexorabot.duckdns.org}/proxy\n'
+printf 'Proxy navegador: https://${BOT_DOMAIN:-ghostnexorabot.duckdns.org}/proxy\n'
 printf 'Health: http://127.0.0.1:${BOT_HEALTH_PORT}/health\n'
