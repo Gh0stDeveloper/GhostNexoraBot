@@ -61,17 +61,29 @@ try {
   assert.equal(mcPlayerOwner?.description.includes('Bedrock/Xbox'), true, 'Minecraft V12 profile override is not effective')
   const stylesOwner = effective.find((row) => row.tokens.includes('styles'))?.command
   assert.equal(stylesOwner?.description.includes('AniList'), true, 'styles V13 command is not effective')
+  const styleOwner = effective.find((row) => row.tokens.includes('style'))?.command
+  assert.equal(styleOwner?.description.includes('staff'), true, 'style command must allow staff-managed visual styles')
 
   const { normalizeMinecraftPlayerQuery } = await import('../apps/bot/dist/services/minecraft-profile-v12.js')
   assert.equal(normalizeMinecraftPlayerQuery('  JULIAN   AGZ  '), 'JULIAN AGZ')
   assert.equal(normalizeMinecraftPlayerQuery('Java_Player'), 'Java_Player')
 
-  const { listBotVisualStyles, getCurrentBotVisualStyle, setCurrentBotVisualStyle } = await import('../apps/bot/dist/services/bot-styles-v13.js')
+  const {
+    listBotVisualStyles,
+    getBotVisualStyle,
+    getCurrentBotVisualStyle,
+    setCurrentBotVisualStyle,
+  } = await import('../apps/bot/dist/services/bot-styles-v13.js')
   const styles = listBotVisualStyles()
-  assert.equal(styles.length, 12)
+  assert.equal(styles.length, 24)
+  assert.equal(styles.length % 6, 0)
   assert.equal(getCurrentBotVisualStyle().id, 'default')
-  assert.equal(setCurrentBotVisualStyle('sakura', 'ci@s.whatsapp.net').id, 'sakura')
-  assert.equal(getCurrentBotVisualStyle().id, 'sakura')
+  assert.equal(getBotVisualStyle('megumi')?.id, 'megumin')
+  assert.equal(getBotVisualStyle('tsukasa yusaki')?.id, 'tsukasa')
+  assert.equal(getBotVisualStyle('zero 2')?.id, 'zerotwo')
+  assert.equal(getBotVisualStyle('sakura')?.id, 'marin')
+  assert.equal(setCurrentBotVisualStyle('megumi', 'ci@s.whatsapp.net').id, 'megumin')
+  assert.equal(getCurrentBotVisualStyle().id, 'megumin')
   assert.equal(setCurrentBotVisualStyle('default', 'ci@s.whatsapp.net').id, 'default')
 
   assert.ok(commands.length > 100)
