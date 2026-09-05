@@ -45,7 +45,9 @@ function normalizePhone(raw: string) {
 }
 
 function workerPath() {
-  const relative = config.isTermuxLite ? '../subbot-worker-termux.ts' : '../subbot-worker.js'
+  if (!config.isTermuxLite) return fileURLToPath(new URL('../subbot-worker.js', import.meta.url))
+  const runningFromTypescript = import.meta.url.endsWith('.ts')
+  const relative = runningFromTypescript ? '../subbot-worker-termux.ts' : '../subbot-worker-termux.js'
   return fileURLToPath(new URL(relative, import.meta.url))
 }
 
