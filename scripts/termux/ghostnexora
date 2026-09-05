@@ -8,6 +8,8 @@ LOG_DIR="${STATE_DIR}/logs"
 PID_FILE="${RUN_DIR}/bot.pid"
 LOG_FILE="${LOG_DIR}/bot.log"
 ENV_FILE="${INSTALL_DIR}/.env"
+LITE_ENTRY="${INSTALL_DIR}/apps/bot/dist-termux/termux-lite.js"
+PAIR_ENTRY="${INSTALL_DIR}/apps/bot/dist-termux/pair.js"
 
 mkdir -p "${RUN_DIR}" "${LOG_DIR}"
 
@@ -33,6 +35,7 @@ is_running() {
 require_install() {
   [[ -d "${INSTALL_DIR}/.git" ]] || fail "No encuentro Ghost Nexora Bot en ${INSTALL_DIR}. Ejecuta primero install-termux.sh."
   [[ -f "${ENV_FILE}" ]] || fail "Falta ${ENV_FILE}."
+  [[ -f "${LITE_ENTRY}" ]] || fail 'Falta el runtime compilado de Termux Lite. Ejecuta: ghostnexora update'
 }
 
 start_bot() {
@@ -50,7 +53,7 @@ start_bot() {
       ENV_FILE="${ENV_FILE}" \
       NEXORA_RUNTIME_PROFILE=termux-lite \
       OLLAMA_ENABLED=false \
-      npm run termux:start --workspace=@ghostnexora/bot \
+      node "${LITE_ENTRY}" \
       >>"${LOG_FILE}" 2>&1 &
     echo $! >"${PID_FILE}"
   )
@@ -108,6 +111,7 @@ status_bot() {
 
 pair_bot() {
   require_install
+  [[ -f "${PAIR_ENTRY}" ]] || fail 'Falta el runtime de pairing. Ejecuta: ghostnexora update'
   local phone="${1:-}"
   phone="$(printf '%s' "${phone}" | tr -cd '0-9')"
   if [[ -z "${phone}" && -r /dev/tty ]]; then
@@ -127,7 +131,7 @@ pair_bot() {
       NEXORA_RUNTIME_PROFILE=termux-lite \
       OLLAMA_ENABLED=false \
       PAIRING_NUMBER="${phone}" \
-      npm run termux:pair --workspace=@ghostnexora/bot
+      node "${PAIR_ENTRY}"
   )
   local result=$?
   if [[ "${restart}" -eq 1 && "${result}" -eq 0 ]]; then start_bot; fi
@@ -148,7 +152,7 @@ foreground_bot() {
     ENV_FILE="${ENV_FILE}" \
     NEXORA_RUNTIME_PROFILE=termux-lite \
     OLLAMA_ENABLED=false \
-    npm run termux:start --workspace=@ghostnexora/bot
+    node "${LITE_ENTRY}"
 }
 
 doctor() {
@@ -156,6 +160,7 @@ doctor() {
   printf 'Ghost Nexora Bot · Termux Lite\n'
   printf 'Instalación : %s\n' "${INSTALL_DIR}"
   printf 'Datos       : %s\n' "${STATE_DIR}"
+  printf 'Runtime     : %s\n' "${LITE_ENTRY}"
   printf 'Node        : %s\n' "$(node -v 2>/dev/null || echo NO INSTALADO)"
   printf 'npm         : %s\n' "$(npm -v 2>/dev/null || echo NO INSTALADO)"
   printf 'ffmpeg      : %s\n' "$(ffmpeg -version 2>/dev/null | head -n1 || echo NO INSTALADO)"
