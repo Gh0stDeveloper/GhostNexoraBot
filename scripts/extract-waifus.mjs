@@ -18,17 +18,24 @@ if (!existsSync(bundleDir)) {
   process.exit(0)
 }
 
-const parts = readdirSync(bundleDir)
+const binaryParts = readdirSync(bundleDir)
+  .filter((name) => /^waifus-assets-v1\.part\d+\.bin$/i.test(name))
+  .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+const base64Parts = readdirSync(bundleDir)
   .filter((name) => /^waifus-assets-v1\.b64\.part\d+$/i.test(name))
   .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
 
-if (!parts.length) {
+let zip
+if (binaryParts.length) {
+  zip = Buffer.concat(binaryParts.map((name) => readFileSync(path.join(bundleDir, name))))
+} else if (base64Parts.length) {
+  const base64 = base64Parts.map((name) => readFileSync(path.join(bundleDir, name), 'utf8').trim()).join('')
+  zip = Buffer.from(base64, 'base64')
+} else {
   console.log('[waifus] No hay partes del bundle; se omite extracción.')
   process.exit(0)
 }
 
-const base64 = parts.map((name) => readFileSync(path.join(bundleDir, name), 'utf8').trim()).join('')
-const zip = Buffer.from(base64, 'base64')
 if (zip.length < 4 || zip[0] !== 0x50 || zip[1] !== 0x4b) {
   throw new Error('El bundle local de waifus no es un ZIP válido.')
 }
@@ -56,10 +63,19 @@ mkdirSync(extractedRoot, { recursive: true })
 writeFileSync(zipPath, zip)
 
 try {
+  execFileSync('unzip', ['-tq', zipPath], { stdio: 'ignore' })
   execFileSync('unzip', ['-oq', zipPath, '-d', extractedRoot], { stdio: 'ignore' })
   const extractedWaifus = path.join(extractedRoot, 'waifus')
   if (!existsSync(path.join(extractedWaifus, 'manifest.json'))) {
     throw new Error('El bundle no contiene waifus/manifest.json.')
+  }
+
+  const manifest = JSON.parse(readFileSync(path.join(extractedWaifus, 'manifest.json'), 'utf8'))
+  if (Number(manifest.count) !== 270 || Object.keys(manifest.styles ?? {}).length !== 23) {
+    throw new Error(`Bundle de waifus incompleto: ${manifest.count ?? '?'} imágenes / ${Object.keys(manifest.styles ?? {}).length} estilos.`)
+  }
+  if (Number(manifest.styles?.megumin) !== 12) {
+    throw new Error('El bundle no contiene correctamente el mapeo megumi → megumin.')
   }
 
   rmSync(targetDir, { recursive: true, force: true })
@@ -67,8 +83,7 @@ try {
   renameSync(extractedWaifus, targetDir)
   writeFileSync(markerPath, `${digest}\n`, 'utf8')
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  console.log(`[waifus] Extraídas ${manifest.count ?? '?'} imágenes locales · ${Object.keys(manifest.styles ?? {}).length} waifus · bundle ${digest.slice(0, 12)}`)
+  console.log(`[waifus] Extraídas ${manifest.count} imágenes locales · ${Object.keys(manifest.styles).length} waifus · bundle ${digest.slice(0, 12)}`)
 } finally {
   rmSync(workDir, { recursive: true, force: true })
 }
