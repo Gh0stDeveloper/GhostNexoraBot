@@ -25,12 +25,23 @@ const base64Parts = readdirSync(bundleDir)
   .filter((name) => /^waifus-assets-v1\.b64\.part\d+$/i.test(name))
   .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
 
+function decodeStagedParts(names) {
+  const chunks = names.map((name) => readFileSync(path.join(bundleDir, name)))
+  const raw = Buffer.concat(chunks)
+  if (raw.length >= 2 && raw[0] === 0x50 && raw[1] === 0x4b) return raw
+
+  // GitHub's text-oriented connector may store a binary upload as Base64 text.
+  // Detect that representation and decode the concatenated stream back to ZIP bytes.
+  const encoded = raw.toString('utf8').replace(/\s+/g, '')
+  if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) return raw
+  return Buffer.from(encoded, 'base64')
+}
+
 let zip
 if (binaryParts.length) {
-  zip = Buffer.concat(binaryParts.map((name) => readFileSync(path.join(bundleDir, name))))
+  zip = decodeStagedParts(binaryParts)
 } else if (base64Parts.length) {
-  const base64 = base64Parts.map((name) => readFileSync(path.join(bundleDir, name), 'utf8').trim()).join('')
-  zip = Buffer.from(base64, 'base64')
+  zip = decodeStagedParts(base64Parts)
 } else {
   console.log('[waifus] No hay partes del bundle; se omite extracción.')
   process.exit(0)
