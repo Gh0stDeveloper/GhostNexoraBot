@@ -1,4 +1,5 @@
 import '../services/work-compat-v4.js'
+import '../services/economy-wallet-reconcile.js'
 import type { BotCommand } from '../types.js'
 import { setMenuCommandProvider } from '../services/menu-registry.js'
 import { generalCommands } from './general.js'
