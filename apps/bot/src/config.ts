@@ -29,6 +29,9 @@ const schema = z.object({
   BOT_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   BOT_MESSAGE_TIMEOUT_MS: z.coerce.number().int().min(120_000).max(3_600_000).default(900_000),
   LOG_LEVEL: z.string().default('info'),
+  // Legacy installations did not have WEB_ENABLED. Default true preserves their
+  // existing dashboard until the operator explicitly disables it.
+  WEB_ENABLED: z.string().default('true'),
   PUBLIC_WEB_URL: z.string().default('http://127.0.0.1:3000'),
   ADMIN_WEB_TOKEN: z.string().min(12).default('change-this-admin-token'),
   ADULT_PRIVATE_ENABLED: z.string().default('true'),
@@ -103,6 +106,7 @@ function executableAvailable(command: string) {
 const ollamaRequested = !isTermuxLite && truthy(raw.OLLAMA_ENABLED)
 const ollamaExecutable = process.platform === 'win32' ? 'ollama.exe' : 'ollama'
 const ollamaInstalled = ollamaRequested && executableAvailable(ollamaExecutable)
+const webEnabled = !isTermuxLite && truthy(raw.WEB_ENABLED)
 
 export const config = {
   runtimeProfile: raw.NEXORA_RUNTIME_PROFILE,
@@ -118,6 +122,7 @@ export const config = {
   healthPort: raw.BOT_HEALTH_PORT,
   botMessageTimeoutMs: raw.BOT_MESSAGE_TIMEOUT_MS,
   logLevel: raw.LOG_LEVEL,
+  webEnabled,
   publicWebUrl: raw.PUBLIC_WEB_URL,
   adminWebToken: raw.ADMIN_WEB_TOKEN,
   adultPrivateEnabled: truthy(raw.ADULT_PRIVATE_ENABLED),
