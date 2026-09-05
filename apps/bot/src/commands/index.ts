@@ -97,6 +97,13 @@ const localLlmCommands: BotCommand[] = config.ollamaEnabled
   ? [...miniLlmCommands, ...autoChatCommands]
   : []
 
+// subbots.ts es la implementación canónica. v2.ts conserva un handler heredado
+// con el mismo nombre; se excluye para evitar que sobrescriba la política web actual.
+const registeredV2Commands = v2Commands.filter((command) => command.name !== 'subbot')
+const registeredSubbotCommands = config.webEnabled
+  ? subbotCommands
+  : subbotCommands.filter((command) => command.name !== 'adminpanel')
+
 export const commands: BotCommand[] = [
   ...generalCommands,
   ...creditsCommands,
@@ -129,7 +136,7 @@ export const commands: BotCommand[] = [
   ...rpgCommands,
   ...waifuCommands,
   ...waifuExtendedCommands,
-  ...subbotCommands,
+  ...registeredSubbotCommands,
   ...adultCommands,
   ...eromeCommands,
   ...hentaiV9Commands,
@@ -139,7 +146,7 @@ export const commands: BotCommand[] = [
   ...ownerCommands,
   ...apkMultisourceCommands,
   ...groupAdultModeCommands,
-  ...v2Commands,
+  ...registeredV2Commands,
   ...adultV2Commands,
   ...downloadProgressV2Commands,
   ...eromeProgressV2Commands,
