@@ -50,8 +50,8 @@ function nativeButton(button: InteractiveButton) {
         rows: section.rows.map((row) => ({
           id: row.id,
           title: row.title,
-          description: row.description ?? '',
-          header: row.header ?? '',
+          ...(row.description ? { description: row.description } : {}),
+          ...(row.header ? { header: row.header } : {}),
         })),
       })),
     }),
