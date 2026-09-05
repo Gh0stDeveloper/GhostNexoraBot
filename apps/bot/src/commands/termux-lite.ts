@@ -82,6 +82,9 @@ import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.
 // - advanced visual personalization that requires native image processing
 const liteMenuCommands = menuV5Commands.filter((command) => command.name === 'menu')
 const liteSubbotCommands = subbotCommands.filter((command) => command.name !== 'adminpanel')
+// v2.ts contiene un .subbot heredado; se excluye para no sobrescribir el handler
+// Lite que bloquea portal/dashboard correctamente.
+const liteV2Commands = v2Commands.filter((command) => command.name !== 'subbot')
 
 export const termuxLiteCommands: BotCommand[] = [
   ...generalCommands,
@@ -120,7 +123,7 @@ export const termuxLiteCommands: BotCommand[] = [
   ...systemCommands,
   ...ownerCommands,
   ...groupAdultModeCommands,
-  ...v2Commands,
+  ...liteV2Commands,
   ...adultV2Commands,
   ...downloadProgressV2Commands,
   ...eromeProgressV2Commands,
