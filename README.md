@@ -2,90 +2,214 @@
 
 # 👻 Ghost Nexora Bot
 
-### Bot modular y extensible para WhatsApp Multi-Device
+### WhatsApp Multi-Device Bot · Full VPS + Termux Lite
 
-**Baileys 7 · Node.js 24 · TypeScript · SQLite · Next.js · Termux Lite · Subbots · Economía · Juegos · Descargas · Moderación**
+**Automatización · Comunidad · Economía · Juegos · RPG · Descargas · Subbots · Moderación · IA opcional**
+
+<br>
 
 [![CI](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions/workflows/ci.yml/badge.svg)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions/workflows/ci.yml)
-[![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Baileys](https://img.shields.io/badge/Baileys-7.0.0--rc14-25D366?logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](https://react.dev/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.1.0-8A2BE2?style=flat-square)](https://github.com/Gh0stDeveloper/GhostNexoraBot)
+[![License](https://img.shields.io/badge/license-MIT-22C55E?style=flat-square)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![npm](https://img.shields.io/badge/npm-11%2B-CB3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Baileys](https://img.shields.io/badge/Baileys-7.0.0--rc14-25D366?style=flat-square&logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys)
+[![Termux](https://img.shields.io/badge/Termux-Lite-000000?style=flat-square&logo=termux&logoColor=white)](https://termux.dev/)
 
-**Desarrollado por Ghost Developer / Nexora**
+[![GitHub stars](https://img.shields.io/github/stars/Gh0stDeveloper/GhostNexoraBot?style=flat-square&logo=github)](https://github.com/Gh0stDeveloper/GhostNexoraBot/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Gh0stDeveloper/GhostNexoraBot?style=flat-square&logo=github)](https://github.com/Gh0stDeveloper/GhostNexoraBot/forks)
+[![GitHub last commit](https://img.shields.io/github/last-commit/Gh0stDeveloper/GhostNexoraBot?style=flat-square&logo=github)](https://github.com/Gh0stDeveloper/GhostNexoraBot/commits/main)
+[![GitHub repo size](https://img.shields.io/github/repo-size/Gh0stDeveloper/GhostNexoraBot?style=flat-square&logo=github)](https://github.com/Gh0stDeveloper/GhostNexoraBot)
 
-[📢 Canal oficial](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i) · [📦 Repositorio](https://github.com/Gh0stDeveloper/GhostNexoraBot) · [🧪 GitHub Actions](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions) · [📚 Documentación](docs/)
+<br>
+
+**Desarrollado y mantenido por [Ghost Developer](https://github.com/Gh0stDeveloper) / Nexora**  
+**Official Tester & Support: [Lord-oscar](https://github.com/Lord-oscar)**
+
+<br>
+
+[![WhatsApp Channel](https://img.shields.io/badge/Canal_oficial-WhatsApp-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i)
+[![Repository](https://img.shields.io/badge/Código-GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Gh0stDeveloper/GhostNexoraBot)
+[![Actions](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
 
 </div>
 
 ---
 
-## 📖 Acerca de Ghost Nexora Bot
+## 📖 Acerca del proyecto
 
-**Ghost Nexora Bot** es una plataforma de automatización para **WhatsApp Multi-Device** construida sobre Baileys y diseñada como un monorepo modular. No se limita a responder comandos: incorpora administración de grupos, economía persistente, banco, juegos, RPG, colecciones, subbots aislados, descargas multimedia, personalización, herramientas para comunidades y una edición ligera especialmente preparada para **Android + Termux**.
+**Ghost Nexora Bot** es una plataforma modular de automatización para **WhatsApp Multi-Device** desarrollada con Node.js, TypeScript y Baileys. El proyecto está organizado como un monorepo y combina bot, dashboard, persistencia, herramientas multimedia, economía, juegos, RPG, subbots y automatización de comunidades.
 
-El proyecto dispone actualmente de dos perfiles de ejecución:
+No es únicamente un bot de comandos. Su arquitectura separa el transporte de WhatsApp, el router de comandos, persistencia, workers de subbots, servicios multimedia, seguridad, web y los perfiles de ejecución.
 
-- 🖥️ **VPS / Full** — edición completa para servidores Linux, con servicios persistentes, panel web, proxy, automatización e integraciones avanzadas.
-- 📱 **Termux Lite** — edición optimizada para Android, sin Ollama/LLM, navegador pesado, panel web, Nginx ni systemd, pero conservando WhatsApp, economía, juegos, grupos, descargas compatibles y **subbots**.
+Actualmente existen dos ediciones oficiales dentro del mismo repositorio:
 
-El menú del bot se genera desde el registro real de comandos activos, por lo que cada edición muestra únicamente las funciones disponibles en ese entorno.
+| Edición | Objetivo | Entorno recomendado |
+|---|---|---|
+| 🖥️ **VPS / Full** | Todas las capacidades del proyecto, dashboard y servicios avanzados | Ubuntu / Debian VPS |
+| 📱 **Termux Lite** | Runtime ligero sin LLM/Ollama, navegador pesado ni panel web | Android + Termux |
 
 > [!IMPORTANT]
-> Ghost Nexora Bot es un proyecto no oficial y no está afiliado con WhatsApp, Meta ni las plataformas externas compatibles. Utiliza cada módulo respetando las condiciones de uso, licencias, derechos de autor y legislación aplicable.
+> **Termux Lite no es un fork.** Utiliza el mismo código fuente y un build dedicado mediante `NEXORA_RUNTIME_PROFILE=termux-lite`, reduciendo dependencias y procesos sin duplicar el proyecto.
+
+> [!WARNING]
+> Ghost Nexora Bot es un proyecto independiente y no oficial. No está afiliado con WhatsApp, Meta ni con los servicios externos utilizados por algunos módulos.
 
 ---
 
-## 🧭 Contenido
+## 🧭 Navegación
 
-- [Características principales](#-características-principales)
-- [VPS Full vs Termux Lite](#-vps--full-vs-termux-lite)
-- [Instalación rápida](#-instalación-rápida)
-- [Instalación en Termux](#-ghost-nexora-bot--termux-lite)
-- [Comandos de administración de Termux](#-gestor-ghostnexora-para-termux)
-- [WhatsApp Multi-Device](#-whatsapp-multi-device)
-- [Sistema de comandos](#-ecosistema-de-comandos)
-- [Economía y banco](#-nexora-economy--banco)
-- [Juegos y RPG](#-juegos-rpg-y-colecciones)
+<details open>
+<summary><strong>Índice del README</strong></summary>
+
+- [Stack visual](#-stack-visual)
+- [Características](#-características-principales)
+- [Full vs Termux Lite](#-vps--full-vs-termux-lite)
+- [Instalación VPS](#-instalación-vps--full)
+- [Instalación Termux](#-instalación-termux-lite)
+- [Gestor de Termux](#-gestor-ghostnexora)
+- [WhatsApp y Baileys](#-whatsapp-multi-device)
+- [Comandos y módulos](#-módulos-y-comandos)
 - [Subbots](#-subbots)
-- [Administración de grupos](#-grupos-seguridad-y-moderación)
-- [Descargas](#-descargas-y-multimedia)
-- [IA y automatización](#-ia-automatización-y-servicios-full)
-- [Stack tecnológico](#-stack-tecnológico)
-- [Arquitectura](#-arquitectura-del-proyecto)
+- [Stack detallado](#-librerías-frameworks-y-herramientas)
+- [Arquitectura](#-arquitectura)
 - [Persistencia y seguridad](#-persistencia-y-seguridad)
-- [Variables de entorno](#-configuración-por-variables-de-entorno)
-- [CI/CD](#-cicd-y-validación)
-- [Desarrollo](#-desarrollo-local)
-- [Documentación](#-documentación)
+- [Variables de entorno](#-variables-de-entorno)
+- [CI/CD](#-cicd)
+- [Desarrollo](#-desarrollo)
+- [Equipo y créditos](#-equipo-y-créditos)
 - [Licencia](#-licencia)
+
+</details>
+
+---
+
+# 🧰 Stack visual
+
+<div align="center">
+
+### Core
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![npm](https://img.shields.io/badge/npm-Workspaces-CB3837?style=for-the-badge&logo=npm&logoColor=white)](https://docs.npmjs.com/cli/using-npm/workspaces)
+[![Baileys](https://img.shields.io/badge/Baileys-WhatsApp_MD-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys)
+[![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+
+### Web
+
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=111111)](https://react.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Lucide](https://img.shields.io/badge/Lucide-React-F56565?style=for-the-badge&logo=lucide&logoColor=white)](https://lucide.dev/)
+
+### Multimedia y automatización
+
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-Multimedia-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+[![yt-dlp](https://img.shields.io/badge/yt--dlp-Downloader-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp)
+[![Playwright](https://img.shields.io/badge/Playwright-Optional-2EAD33?style=for-the-badge&logo=playwright&logoColor=white)](https://playwright.dev/)
+[![Sharp](https://img.shields.io/badge/Sharp-Optional-99CC00?style=for-the-badge&logo=sharp&logoColor=white)](https://sharp.pixelplumbing.com/)
+
+### Infraestructura
+
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/features/actions)
+[![Linux](https://img.shields.io/badge/Linux-VPS-FCC624?style=for-the-badge&logo=linux&logoColor=111111)](https://www.kernel.org/)
+[![Nginx](https://img.shields.io/badge/Nginx-Reverse_Proxy-009639?style=for-the-badge&logo=nginx&logoColor=white)](https://nginx.org/)
+[![Let's Encrypt](https://img.shields.io/badge/Let's_Encrypt-HTTPS-003A70?style=for-the-badge&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
+[![Termux](https://img.shields.io/badge/Termux-Android-000000?style=for-the-badge&logo=termux&logoColor=white)](https://termux.dev/)
+
+</div>
 
 ---
 
 # ✨ Características principales
 
-| Área | Capacidades |
-|---|---|
-| 🔗 WhatsApp | Multi-Device, pairing code, QR fallback, PN/LID, reconexión automática |
-| 🧩 Comandos | Registro modular, aliases, categorías, permisos, menú dinámico |
-| 👥 Grupos | Moderación, administración, bienvenida/despedida, controles y seguridad |
-| 🪙 Economía | Nexora Coins, wallet, banco, trabajos, transferencias, tienda y mercado |
-| 🏆 Progreso | XP, reputación, temporadas, títulos, logros y rankings |
-| 📖 RPG | Inventario, recursos, crafting, profesiones, mascotas, quests y raids |
-| 🎮 Juegos | Juegos clásicos, PvP, apuestas NXC y minijuegos interactivos |
-| 🌸 Colecciones | Waifus, rarezas, claims, harem, mercado y personalización visual |
-| 🤖 Subbots | Instancias independientes, pairing/QR, owner por instancia y expiración |
-| 🎵 Multimedia | YouTube, audio, video, letras y SoundCloud |
-| 📲 Descargas | Redes, archivos, APK, MediaFire, Google Drive, GitHub y fuentes compatibles |
-| ⛏️ Minecraft | Herramientas y consultas para Java/Bedrock |
-| 🎨 Stickers | Creación, conversión, efectos y administración de stickers |
-| 🔍 Búsqueda | Web, wiki, anime, manga y recursos externos |
-| 🧠 IA | Integraciones AI/LLM configurables en edición Full |
-| 🌐 Web | Dashboard Next.js y APIs de control en edición Full |
-| 📱 Termux | Runtime Lite compilado, gestor propio y almacenamiento persistente |
-| 🧪 Calidad | Typecheck, builds, smoke tests, auditoría y validación Bash en Actions |
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🔗 WhatsApp
+
+- Multi-Device mediante Baileys 7
+- Pairing code por número
+- QR como fallback
+- PN/LID
+- Reconexión automática
+- Sesión persistente
+- MainBot y subbots
+
+</td>
+<td width="50%" valign="top">
+
+### 👥 Comunidad
+
+- Administración de grupos
+- Antilink y antispam
+- Bienvenida y despedida
+- Staff global
+- Roles y permisos
+- Actividad y automatizaciones
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🪙 Economía y progreso
+
+- Nexora Coins `NXC`
+- Wallet y banco
+- Trabajo y profesiones
+- Créditos y score
+- Tiendas y mercado
+- Rankings
+- Propiedades y progresión
+
+</td>
+<td valign="top">
+
+### 🎮 Entretenimiento
+
+- Juegos clásicos
+- PvP
+- Casino/apuestas NXC
+- RPG y crafting
+- Mascotas
+- Quests y raids
+- Waifu Collection
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📲 Multimedia
+
+- YouTube
+- Audio y video
+- Letras
+- Redes sociales
+- MediaFire / Drive / GitHub
+- APK y recursos
+- FFmpeg + yt-dlp
+
+</td>
+<td valign="top">
+
+### 🤖 Plataforma
+
+- Subbots aislados por proceso
+- Dashboard web en Full
+- Health local
+- Instaladores automáticos
+- Actualizadores seguros
+- Termux Lite
+- GitHub Actions CI/CD
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -95,191 +219,184 @@ El menú del bot se genera desde el registro real de comandos activos, por lo qu
 |---|:---:|:---:|
 | WhatsApp / Baileys | ✅ | ✅ |
 | Pairing code + QR | ✅ | ✅ |
-| Reconexión automática | ✅ | ✅ |
 | Economía / banco | ✅ | ✅ |
-| Juegos / RPG / colecciones | ✅ | ✅ |
-| Administración de grupos | ✅ | ✅ |
+| Juegos / RPG / Waifus | ✅ | ✅ |
+| Grupos y moderación | ✅ | ✅ |
 | Descargas compatibles | ✅ | ✅ |
-| Subbots aislados | ✅ | ✅ |
+| Subbots | ✅ | ✅ |
 | Health local | ✅ | ✅ |
-| Ollama / LLM | ✅ Configurable | ❌ |
+| Ollama / LLM | ✅ Opcional | ❌ |
 | Mini-LLM / entrenamiento | ✅ | ❌ |
-| Auto-chat basado en IA | ✅ | ❌ |
-| Browser / Playwright | ✅ | ❌ |
+| Auto-chat IA | ✅ | ❌ |
+| Playwright / navegador | ✅ Opcional | ❌ |
 | Sharp avanzado | ✅ Opcional | ❌ Omitido |
 | Dashboard Next.js | ✅ | ❌ |
 | Portal web de subbots | ✅ | ❌ |
-| Telegram bridge | ✅ | ❌ |
+| Telegram bridge | ✅ Opcional | ❌ |
 | Nginx / HTTPS | ✅ | ❌ |
 | systemd | ✅ | ❌ |
-| Gestor `ghostnexora` | No necesario | ✅ |
-| Runtime específico compilado | `dist/` | `dist-termux/` |
-
-La edición Lite no es un fork. Forma parte del mismo código fuente y utiliza `NEXORA_RUNTIME_PROFILE=termux-lite`, evitando que ambas ediciones diverjan con el tiempo.
+| Gestor `ghostnexora` | — | ✅ |
+| Build | `dist/` | `dist-termux/` |
 
 ---
 
-# 🚀 Instalación rápida
+# 🚀 Instalación VPS / Full
 
-## 🖥️ Ubuntu / Debian VPS — edición Full
+### Sistemas recomendados
 
-Ejecuta como usuario con privilegios `sudo`:
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%2F24.04-E95420?style=flat-square&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
+[![Debian](https://img.shields.io/badge/Debian-Compatible-A81D33?style=flat-square&logo=debian&logoColor=white)](https://www.debian.org/)
+
+Ejecuta:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo bash
 ```
 
-El instalador prepara las dependencias, Node.js, `yt-dlp`, almacenamiento persistente, build de producción, servicios systemd, vinculación de WhatsApp y componentes de servidor necesarios.
+El instalador prepara el runtime, dependencias, build, almacenamiento persistente y servicios de producción.
 
-### Con dominio y HTTPS
+### VPS con dominio + HTTPS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | \
   sudo env BOT_DOMAIN=bot.example.com LETSENCRYPT_EMAIL=admin@example.com bash
 ```
 
-> [!TIP]
-> Si no necesitas panel web, Nginx ni componentes pesados y quieres ejecutar el bot desde Android, utiliza directamente **Termux Lite**.
-
-### Actualizar VPS / Full
+### Actualizar
 
 ```bash
 sudo /opt/ghost-nexora-bot/scripts/update.sh
 ```
 
-### Estado y logs en VPS
+### Estado
 
 ```bash
 sudo systemctl status ghost-nexora-bot --no-pager
+```
+
+### Logs
+
+```bash
 sudo journalctl -u ghost-nexora-bot -f
 ```
 
-Consulta [`docs/FIRST_INSTALL.md`](docs/FIRST_INSTALL.md) y [`docs/UPDATING.md`](docs/UPDATING.md) para el procedimiento completo.
+> [!TIP]
+> Consulta [`docs/FIRST_INSTALL.md`](docs/FIRST_INSTALL.md) y [`docs/UPDATING.md`](docs/UPDATING.md) para instalación, pairing, firewall, HTTPS, mantenimiento y rollback.
 
 ---
 
-# 📱 Ghost Nexora Bot · Termux Lite
+# 📱 Instalación Termux Lite
 
-Termux Lite está diseñado para utilizar un teléfono Android como host del bot con una huella más pequeña. El runtime mantiene las funciones sociales y de comunidad importantes, pero elimina procesos y dependencias que no son apropiados para un dispositivo móvil.
+<div align="center">
 
-## ⚡ Instalación de Termux en un comando
+[![Android](https://img.shields.io/badge/Android-Termux_Lite-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com/)
+[![Termux](https://img.shields.io/badge/Termux-No_Root-000000?style=for-the-badge&logo=termux&logoColor=white)](https://termux.dev/)
 
-Ejecuta dentro de **Termux normal, sin root y sin `sudo`**:
+</div>
+
+Termux Lite está diseñado para ejecutar Ghost Nexora Bot directamente desde Android con menor consumo de almacenamiento, RAM y procesos.
+
+> [!IMPORTANT]
+> Ejecuta el instalador dentro de **Termux**, sin `root` y sin `sudo`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-termux.sh | bash
 ```
 
-El instalador realiza automáticamente:
+### El instalador Lite configura
 
-1. 📦 instalación de Git, Node.js, FFmpeg, Python, curl y herramientas base;
-2. 🎬 instalación de `yt-dlp`, con fallback mediante Python;
-3. 📥 clonación/actualización del repositorio;
-4. 💾 creación del almacenamiento persistente en `$HOME/.ghostnexora`;
-5. ⚙️ activación de `NEXORA_RUNTIME_PROFILE=termux-lite`;
-6. 🚫 desactivación forzada de Ollama/LLM y servicios Full;
-7. 🪶 instalación del workspace del bot omitiendo dependencias opcionales pesadas;
-8. 🏗️ compilación del target `apps/bot/dist-termux`;
-9. 🔐 vinculación opcional con WhatsApp;
-10. ▶️ instalación del gestor `ghostnexora` y arranque del bot.
+1. Git, Node.js, FFmpeg, Python, curl y utilidades base.
+2. `yt-dlp` con fallback mediante Python.
+3. Clonado/actualización del repositorio.
+4. Datos persistentes en `$HOME/.ghostnexora`.
+5. `NEXORA_RUNTIME_PROFILE=termux-lite`.
+6. Ollama y LLM forzados a `false`.
+7. Instalación sin dependencias opcionales pesadas.
+8. Build dedicado `dist-termux/`.
+9. Pairing de WhatsApp.
+10. Gestor global `ghostnexora`.
 
-## 🪶 Qué se elimina de Termux Lite
+### No se carga en Lite
 
-Termux Lite no carga ni ofrece:
+- Ollama
+- LLM / Mini-LLM
+- entrenamiento local
+- auto-chat IA
+- Playwright / Chromium
+- browser proxy
+- Sharp opcional
+- dashboard Next.js
+- portal web de subbots
+- Telegram bridge
+- Nginx / Certbot
+- systemd
 
-- Ollama;
-- LLM local;
-- Mini-LLM y entrenamiento;
-- chat automático basado en LLM;
-- procesamiento de voz hacia LLM;
-- Playwright / Chromium;
-- browser proxy;
-- Sharp como dependencia nativa opcional;
-- dashboard Next.js;
-- portal web de subbots;
-- Telegram bridge;
-- Nginx;
-- Certbot;
-- systemd.
-
-Aunque un `.env` antiguo contenga `OLLAMA_ENABLED=true`, el perfil Lite fuerza esa función a `false` desde el runtime.
-
-## 💾 Directorios de Termux
+### Datos persistentes
 
 ```text
-$HOME/GhostNexoraBot/
-└── código fuente y runtime compilado
+$HOME/GhostNexoraBot/          código y runtime
 
 $HOME/.ghostnexora/
-├── session/              sesión principal de WhatsApp
-├── data/                 economía y persistencia
-│   └── subbots/          datos y sesiones de subbots
-├── logs/                 logs del runtime
-└── run/                  PID del proceso principal
+├── session/                   sesión principal
+├── data/                      persistencia y SQLite
+│   └── subbots/               datos/sesiones de subbots
+├── logs/                      logs
+└── run/                       PID
 ```
 
-La sesión y los datos quedan fuera del árbol Git. Una actualización no elimina la cuenta vinculada, economía, configuraciones ni sesiones de subbot.
+Guía completa: [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md).
 
 ---
 
-# 🛠️ Gestor `ghostnexora` para Termux
+# 🛠️ Gestor `ghostnexora`
 
-Después de instalar la edición Lite se dispone de un comando global:
-
-```bash
-ghostnexora help
-```
-
-| Comando | Función |
+| Comando | Acción |
 |---|---|
-| `ghostnexora start` | Inicia el MainBot en segundo plano |
-| `ghostnexora stop` | Detiene el proceso Node real |
-| `ghostnexora restart` | Reinicia MainBot y workers asociados |
-| `ghostnexora status` | Muestra PID y health local |
-| `ghostnexora logs` | Sigue el log en tiempo real |
-| `ghostnexora pair <numero>` | Vincula WhatsApp con pairing code |
-| `ghostnexora foreground` | Ejecuta el runtime en primer plano |
-| `ghostnexora update` | Actualiza sin borrar sesiones/datos |
-| `ghostnexora doctor` | Comprueba Node, npm, FFmpeg, yt-dlp y perfil |
-| `ghostnexora wakelock on` | Evita suspensión con Termux:API |
-| `ghostnexora wakelock off` | Libera el wake lock |
+| `ghostnexora start` | Inicia el bot en segundo plano |
+| `ghostnexora stop` | Detiene el MainBot |
+| `ghostnexora restart` | Reinicia MainBot y workers |
+| `ghostnexora status` | Estado + health local |
+| `ghostnexora logs` | Logs en tiempo real |
+| `ghostnexora pair <numero>` | Nuevo pairing code |
+| `ghostnexora foreground` | Runtime en primer plano |
+| `ghostnexora update` | Actualiza preservando datos |
+| `ghostnexora doctor` | Diagnóstico de dependencias |
+| `ghostnexora wakelock on` | Mantiene Android despierto |
+| `ghostnexora wakelock off` | Libera wake lock |
+| `ghostnexora help` | Ayuda |
 
-Ejemplo para México:
+Ejemplo:
 
 ```bash
 ghostnexora pair 521XXXXXXXXXX
 ```
 
-### Mantener el proceso activo en Android
-
-Android puede suspender procesos de fondo. Si tienes Termux:API:
+Para Termux:API:
 
 ```bash
 pkg install termux-api
 ghostnexora wakelock on
 ```
 
-También es recomendable excluir Termux de la optimización agresiva de batería del fabricante cuando el teléfono vaya a funcionar como host permanente.
-
-Guía específica: [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md).
-
 ---
 
 # 🔗 WhatsApp Multi-Device
 
-La capa de conexión utiliza **Baileys 7** y contempla identificadores modernos **PN/LID**.
+[![Baileys](https://img.shields.io/badge/Baileys-7.0.0--rc14-25D366?style=flat-square&logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys)
 
-### Capacidades de sesión
+La conexión utiliza **Baileys 7** y soporta la arquitectura Multi-Device moderna.
 
-- 🔐 pairing mediante número de teléfono;
-- 📷 QR como fallback cuando el código numérico no está disponible;
-- 💾 credenciales persistentes;
-- 🔄 reconexión automática;
-- 👑 reconocimiento del owner principal;
-- 🆔 resolución PN/LID para usuarios y administradores;
-- 🤖 sesiones separadas para subbots;
-- ⚡ routing con timeout para impedir mensajes colgados;
-- ❤️ reacciones de estado durante ejecución de comandos.
+### Capacidades
+
+- pairing por número;
+- QR fallback;
+- sesiones persistentes;
+- reconexión automática;
+- PN/LID;
+- resolución de identidad;
+- owner/staff/admin;
+- workers independientes para subbots;
+- timeout y errores públicos controlados.
 
 Prefijo predeterminado:
 
@@ -287,148 +404,69 @@ Prefijo predeterminado:
 .
 ```
 
-Ejemplo:
+Menú:
 
 ```text
 .menu
 ```
 
-El menú se construye a partir del catálogo de comandos realmente registrado por la instancia.
+El menú moderno se genera a partir del **registro efectivo de comandos**, por lo que Full y Lite muestran únicamente lo que realmente está habilitado.
 
 ---
 
-# 🧩 Ecosistema de comandos
+# 🧩 Módulos y comandos
 
-Ghost Nexora Bot organiza sus comandos por dominios funcionales. El catálogo evoluciona continuamente y `.menu` es la fuente definitiva para la instancia que se está ejecutando.
-
-## 🌐 General y perfil
+<details open>
+<summary><strong>🌐 General</strong></summary>
 
 ```text
 .menu
-.help
-.profile
-.bot
+.ping
+.info
 .channel
-.version
+.profile
+.credits
 ```
 
-Incluye perfil del usuario, información de instancia, acceso privado, estado y utilidades generales.
+`.credits`, `.creditos`, `.colaboradores` y `.team` muestran el equipo oficial del proyecto.
 
-## 🔍 Búsqueda y conocimiento
+</details>
 
-En edición Full pueden existir comandos para:
-
-```text
-.google
-.wiki
-.anime
-.manga
-.mangachapters
-.mangadl
-.investiga
-```
-
-También existen integraciones de búsqueda multimedia y recursos externos.
-
-## ⛏️ Minecraft
-
-El bot mantiene módulos dedicados a **Minecraft Java y Bedrock**, consultas de servidor y herramientas relacionadas. Los comandos disponibles se muestran en la sección Minecraft de `.menu`.
-
-## 🎨 Personalización
-
-El sistema admite personalización persistente de identidad y apariencia, incluyendo nombre del bot, recursos visuales, banners y estilos según el perfil de ejecución.
-
----
-
-# 🪙 Nexora Economy + Banco
-
-La economía utiliza **Nexora Coins (`NXC`)** como moneda virtual interna.
-
-> [!NOTE]
-> NXC no representa dinero real, criptomoneda ni activo financiero. Es una unidad de economía interna del bot.
-
-## 💰 Operaciones principales
+<details>
+<summary><strong>🪙 Nexora Economy</strong></summary>
 
 ```text
 .balance
+.daily
 .work
+.job
 .deposit
 .withdraw
-.transfer
+.pay
 .rob
-.top
 .shop
 .buy
+.bank
+.creditscore
 ```
 
-El sistema incluye:
+Incluye wallet, banco, score crediticio, profesiones, minería, tienda, préstamos, inversiones, propiedades y progresión.
 
-- 👛 wallet persistente;
-- 🏦 banco separado de la cartera;
-- 💸 transferencias;
-- 👷 trabajo y profesiones;
-- 🛒 tienda;
-- ⛏️ tienda de minería;
-- 📊 rankings;
-- 🏷️ mercado/listados;
-- 🏠 propiedades;
-- 🚗 vehículos;
-- 🎁 recompensas y progresión;
-- 🔐 suscripciones de acceso privado;
-- 🤖 compra/extensión de subbots.
+> NXC es una moneda virtual interna; no representa dinero real ni criptomoneda.
 
-Los fondos almacenados en el banco están separados de las mecánicas que afectan la cartera.
+</details>
 
-## 💎 Planes de acceso
+<details>
+<summary><strong>🎮 Juegos y RPG</strong></summary>
 
-Los productos de economía incluyen planes temporales para chat privado y subbots. Consulta siempre:
+El proyecto incorpora juegos y experiencias como Dino, Snake, Doom-style, Ninja, Space Dodge, gato/tres en raya, damas, PVZ2-style, PvP y juegos económicos.
 
-```text
-.shop
-```
+El RPG incorpora inventario, gathering, crafting, mascotas, quests y raids.
 
-para ver la configuración efectiva del servidor.
+</details>
 
----
-
-# 🎮 Juegos, RPG y colecciones
-
-Ghost Nexora Bot dispone de una sección amplia de entretenimiento conectada con economía y progresión.
-
-## 🕹️ Juegos
-
-Entre los módulos actuales se encuentran juegos y minijuegos como:
-
-- 🦖 Dino;
-- 🐍 Snake;
-- 👾 Doom-style;
-- 🥷 Ninja;
-- 🚀 Space Dodge;
-- 🐱 Gato / tres en raya;
-- ⚫ Damas;
-- 🌱 PVZ2-style;
-- ⚔️ juegos PvP;
-- 🎰 juegos y apuestas con NXC.
-
-Algunos juegos utilizan experiencias interactivas compatibles con las capacidades de WhatsApp disponibles en la instancia.
-
-## 📖 RPG
-
-```text
-.inventory
-.pet
-.gather
-.craft
-.quests
-.quest
-.raid
-```
-
-El ecosistema RPG contempla recursos, inventario, crafting, profesiones, mascotas, misiones y raids.
-
-## 🌸 Nexora Waifu Collection
-
-Sistema coleccionable persistente con personajes, rareza, propiedad y economía.
+<details>
+<summary><strong>🌸 Nexora Waifu Collection</strong></summary>
 
 ```text
 .waifu
@@ -442,69 +480,34 @@ Sistema coleccionable persistente con personajes, rareza, propiedad y economía.
 .wtop
 ```
 
-Rarezas utilizadas por el sistema:
+Colección persistente con personajes, rareza, propiedad, mercado y economía NXC.
+
+</details>
+
+<details>
+<summary><strong>🎵 Descargas y multimedia</strong></summary>
 
 ```text
-⚪ Common
-🟢 Uncommon
-🔵 Rare
-🟣 Epic
-🟠 Legendary
-🔴 Mythic
+.yts <texto>
+.play <texto|url>
+.playvideo <texto>
+.ytmp3 <url>
+.ytmp4 <url> [calidad]
+.ytformats <url>
+.lyrics <canción>
+.soundcloud <url|texto>
+.mediafire <url>
+.gdrive <url>
+.gitclone <url>
+.apk <app>
 ```
 
-La colección se integra con NXC, mercado, perfil y personalización visual del bot.
+El stack puede utilizar `yt-dlp`, FFmpeg, resolvers HTTP y carruseles interactivos.
 
----
+</details>
 
-# 🤖 Subbots
-
-Los subbots son instancias aisladas de WhatsApp asociadas a un owner y una suscripción activa.
-
-Cada instancia mantiene:
-
-- 🔐 sesión propia;
-- 📱 número independiente;
-- 👤 owner asociado;
-- ⏳ fecha de expiración;
-- 🟢 estado online/offline/pairing;
-- 📊 métricas básicas;
-- 💾 directorio de datos aislado;
-- ⚙️ personalización propia;
-- 🧩 catálogo de comandos permitido para esa instancia.
-
-## Usuario
-
-```text
-.subbot status
-.subbot pair 521XXXXXXXXXX
-.subbot qr
-```
-
-### En VPS / Full
-
-La edición completa también puede ofrecer portal web de subbot, según la configuración desplegada.
-
-### En Termux Lite
-
-Los subbots **sí están habilitados**, pero utilizan el mismo perfil Lite del MainBot:
-
-- sin Ollama/LLM;
-- sin dashboard;
-- sin portal web;
-- sin browser pesado;
-- con comandos compatibles con Lite;
-- con cierre automático de workers cuando termina el MainBot.
-
-Esto evita procesos huérfanos durante `ghostnexora stop`, `restart` y `update`.
-
----
-
-# 👥 Grupos, seguridad y moderación
-
-Ghost Nexora Bot incorpora controles persistentes por grupo y un router con permisos diferenciados.
-
-### Administración
+<details>
+<summary><strong>👥 Grupos y seguridad</strong></summary>
 
 ```text
 .tagall
@@ -515,260 +518,50 @@ Ghost Nexora Bot incorpora controles persistentes por grupo y un router con perm
 .kick
 .promote
 .demote
-```
-
-### Protecciones y automatización
-
-```text
 .enable welcome
 .enable antilink
 .enable antispam
-.disable welcome
-.disable antilink
-.disable antispam
 ```
 
-El sistema distingue entre:
+El router distingue owner, staff, administradores, owners de subbot y usuarios normales.
 
-- 👑 owner principal;
-- 🛡️ staff global;
-- 👥 administradores de grupo;
-- 🤖 owner de una instancia de subbot;
-- 👤 usuarios normales.
+</details>
 
-El router valida restricciones `ownerOnly`, `staffOnly`, `groupOnly`, `adminOnly` y permisos del propio bot antes de ejecutar operaciones sensibles.
+<details>
+<summary><strong>🔞 Módulos opt-in</strong></summary>
 
-También existen módulos de controles avanzados, anti-view-once, moderación de mensajes, actividad de comunidad, reputación, anuncios, encuestas y automatizaciones.
+El repositorio incluye módulos para adultos que requieren configuración y controles de acceso. Estos módulos deben utilizarse únicamente de forma legal por adultos y rechazan solicitudes que indiquen contenido sexual relacionado con menores.
+
+</details>
 
 ---
 
-# 📲 Descargas y multimedia
+# 🤖 Subbots
 
-El bot implementa múltiples estrategias y fallbacks para resolver contenido multimedia.
+Los subbots mantienen sesiones de WhatsApp independientes y se ejecutan en workers Node separados.
 
-## 🎵 YouTube y audio
+### Usuario
 
 ```text
-.yts <búsqueda>
-.play <búsqueda>
-.playvideo <búsqueda>
-.ytmp3 <url>
-.ytmp4 <url> [calidad]
-.ytformats <url>
-.lyrics <canción>
-.soundcloud <url|búsqueda>
+.subbot status
+.subbot pair 521XXXXXXXXXX
+.subbot qr
 ```
 
-El stack de descarga puede combinar:
+### Full
 
-- `yt-dlp`;
-- FFmpeg;
-- proveedores HTTP configurables;
-- resolvers externos;
-- carruseles y selectores interactivos.
+Puede habilitar portal web y administración desde dashboard.
 
-Cuando un error interno de YouTube no es apropiado para mostrarse al usuario, el router evita filtrar logs o detalles internos y responde con un mensaje público genérico.
+### Termux Lite
 
-## 📦 Archivos, aplicaciones y recursos
+Los subbots siguen disponibles, pero heredan el perfil Lite:
 
-El proyecto contiene soporte y resolvers para diferentes fuentes, entre ellas:
-
-```text
-.mediafire
-.gdrive
-.gitclone
-.apk
-.apkdl
-```
-
-También existen módulos para redes sociales, archivos, recursos Android, anime/manga y otras fuentes compatibles con el servidor.
-
-> [!WARNING]
-> La disponibilidad de un proveedor puede cambiar externamente. Un comando presente no implica que un servicio de terceros vaya a permanecer disponible permanentemente.
-
-## 📏 Límites
-
-La edición Full utiliza un límite configurable mediante:
-
-```env
-MAX_DOWNLOAD_MB=1900
-```
-
-Termux Lite utiliza por defecto un límite inferior para evitar consumo excesivo de RAM, almacenamiento y batería en Android.
-
----
-
-# 🎨 Stickers y herramientas multimedia
-
-Comandos típicos:
-
-```text
-.sticker
-.s
-.stickereffects
-.toimg
-```
-
-La edición Full puede utilizar **Sharp + FFmpeg** para efectos y conversiones avanzadas. Sharp se mantiene como dependencia opcional y se omite en la instalación Termux Lite para reducir tamaño y problemas con módulos nativos.
-
-El bot también contiene una biblioteca global de stickers y acciones administrables por staff.
-
----
-
-# 🧠 IA, automatización y servicios Full
-
-La edición VPS / Full puede habilitar componentes adicionales de IA y automatización.
-
-Dependiendo de la configuración:
-
-- 🧠 proveedores AI HTTP;
-- 🤖 Ollama;
-- 🧪 Mini-LLM;
-- 📚 corpus y entrenamiento;
-- 💬 chat libre basado en LLM;
-- 🎙️ transcripción/entrada de audio;
-- 🔍 investigación y búsqueda;
-- 🌐 navegador automatizado mediante Playwright;
-- 📣 Telegram bridge;
-- 📊 scheduler y automatizaciones.
-
-Estas funciones **no forman parte de Termux Lite** y tampoco aparecen en su menú.
-
-Documentación LLM: [`README-LLM.md`](README-LLM.md).
-
----
-
-# 🔞 Módulos opt-in para adultos
-
-El proyecto incluye módulos de contenido adulto que deben permanecer sujetos a configuración, permisos y controles de grupo/usuario.
-
-La administración dispone de mecanismos de activación, allowlist y aceptación individual. Los módulos deben utilizarse únicamente por adultos y respetando legislación, condiciones de servicio y derechos de terceros.
-
-El bot rechaza solicitudes que indiquen contenido sexual relacionado con menores.
-
----
-
-# 🌐 Dashboard Web — edición Full
-
-La interfaz web es un workspace independiente construido con:
-
-- ⚫ Next.js 16;
-- ⚛️ React 19;
-- 🎨 Tailwind CSS 4;
-- 🧩 Lucide React;
-- 📝 Highlight.js;
-- 🗃️ acceso al estado persistente mediante SQLite nativo de Node.
-
-En despliegues Full puede utilizarse para administración y flujos web asociados a las instancias. Termux Lite no inicia ni instala este servicio como runtime.
-
----
-
-# 🧱 Stack tecnológico
-
-| Capa | Tecnología |
-|---|---|
-| Runtime | Node.js 24+ |
-| Package manager | npm 11+ / workspaces |
-| Lenguaje | TypeScript 5.9 |
-| WhatsApp | Baileys 7 |
-| Persistencia | `node:sqlite` / SQLite |
-| Logging | Pino |
-| Validación | Zod |
-| Procesos | Node child processes / IPC |
-| Multimedia | FFmpeg, yt-dlp, Execa |
-| Imágenes Full | Sharp opcional |
-| Browser Full | Playwright opcional |
-| Web | Next.js 16 |
-| UI web | React 19 + Tailwind CSS 4 |
-| CI/CD | GitHub Actions |
-| VPS | systemd + Nginx + Certbot |
-| Android | Termux + runtime `dist-termux` |
-
----
-
-# 🏗️ Arquitectura del proyecto
-
-Ghost Nexora utiliza un **monorepo npm Workspaces** con separación clara entre bot, web, infraestructura, documentación y pruebas.
-
-```text
-GhostNexoraBot/
-├── apps/
-│   ├── bot/
-│   │   ├── src/
-│   │   │   ├── commands/           comandos por dominio
-│   │   │   ├── core/               router, sesiones y subbots
-│   │   │   ├── services/           economía, grupos, multimedia, IA, etc.
-│   │   │   ├── utils/              utilidades compartidas
-│   │   │   ├── index.ts            MainBot Full
-│   │   │   ├── termux-lite.ts      MainBot Termux Lite
-│   │   │   ├── subbot-worker.ts    worker Full
-│   │   │   └── subbot-worker-termux.ts
-│   │   ├── dist/                    build Full
-│   │   ├── dist-termux/             build Lite
-│   │   ├── tsconfig.json
-│   │   └── tsconfig.termux.json
-│   │
-│   └── web/
-│       ├── app/                     Next.js App Router
-│       ├── lib/
-│       └── package.json
-│
-├── docs/
-│   ├── FIRST_INSTALL.md
-│   ├── UPDATING.md
-│   └── TERMUX_LITE.md
-│
-├── scripts/
-│   ├── install.sh                   instalador VPS
-│   ├── update.sh                    actualizador VPS
-│   ├── install-termux.sh            instalador Android/Termux
-│   ├── update-termux.sh             actualizador Termux
-│   ├── termux/
-│   │   └── ghostnexora              gestor Termux
-│   └── *-smoke.mjs                  validaciones de integración
-│
-├── systemd/                         servicios VPS
-├── .github/workflows/               CI/CD
-├── .env.example
-├── README-LLM.md
-├── README.md
-├── LICENSE
-└── package.json
-```
-
-## 🔄 Flujo de mensajes
-
-```text
-WhatsApp
-   │
-   ▼
-Baileys Socket
-   │
-   ▼
-Identity / Moderation / Security
-   │
-   ▼
-CommandRouter
-   │
-   ├── permisos
-   ├── aliases
-   ├── contexto de grupo
-   ├── acceso privado
-   └── timeout / error público
-   │
-   ▼
-Command Handler
-   │
-   ├── Economy / SQLite
-   ├── Downloads / FFmpeg / yt-dlp
-   ├── Groups / Community
-   ├── Games / RPG
-   ├── Collections
-   ├── External APIs
-   └── Subbot Manager
-```
-
-## 🤖 Arquitectura de subbots
+- sin Ollama/LLM;
+- sin dashboard;
+- sin portal web;
+- sin Playwright;
+- con comandos compatibles con Lite;
+- cierre del worker cuando desaparece el proceso padre.
 
 ```text
 MainBot
@@ -780,15 +573,148 @@ MainBot
          └── Worker #N ── Session #N
 ```
 
-La comunicación entre el MainBot y los workers utiliza procesos Node independientes e IPC. Cada subbot tiene un directorio de sesión separado.
+---
+
+# 📚 Librerías, frameworks y herramientas
+
+## Core del bot
+
+| Tecnología | Uso |
+|---|---|
+| [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) | Lenguaje principal y tipado estático |
+| [![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/) | Runtime principal |
+| [![Baileys](https://img.shields.io/badge/Baileys-7.0.0--rc14-25D366?logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys) | WhatsApp Multi-Device |
+| [![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/) | Persistencia integrada |
+| [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/) | Validación de datos/configuración |
+| [![Pino](https://img.shields.io/badge/Pino-9-687634?logo=nodedotjs&logoColor=white)](https://getpino.io/) | Logging estructurado |
+| [![Cheerio](https://img.shields.io/badge/Cheerio-1-E88C1F?logo=javascript&logoColor=white)](https://cheerio.js.org/) | Parsing HTML |
+| [![Execa](https://img.shields.io/badge/Execa-9-5A29E4?logo=gnubash&logoColor=white)](https://github.com/sindresorhus/execa) | Ejecución segura de procesos externos |
+| [![QRCode](https://img.shields.io/badge/QRCode-1.5-111111?logo=qrcode&logoColor=white)](https://www.npmjs.com/package/qrcode) | QR de vinculación y utilidades |
+| [![yt-search](https://img.shields.io/badge/yt--search-2.13-FF0000?logo=youtube&logoColor=white)](https://www.npmjs.com/package/yt-search) | Búsqueda de contenido YouTube |
+| [![Mammoth](https://img.shields.io/badge/Mammoth-DOCX-2B579A?logo=microsoftword&logoColor=white)](https://www.npmjs.com/package/mammoth) | Extracción de documentos DOCX |
+| [![pdf-parse](https://img.shields.io/badge/pdf--parse-PDF-B30B00?logo=adobeacrobatreader&logoColor=white)](https://www.npmjs.com/package/pdf-parse) | Procesamiento de PDF |
+
+## Multimedia
+
+| Tecnología | Uso |
+|---|---|
+| [![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/) | Audio, video y conversiones |
+| [![yt-dlp](https://img.shields.io/badge/yt--dlp-FF0000?logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp) | Descargas multimedia |
+| [![Sharp](https://img.shields.io/badge/Sharp-optional-99CC00?logo=sharp&logoColor=white)](https://sharp.pixelplumbing.com/) | Imágenes y stickers en Full |
+| [![Playwright](https://img.shields.io/badge/Playwright-optional-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/) | Navegador automatizado en Full |
+
+## Web
+
+| Tecnología | Uso |
+|---|---|
+| [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org/) | Dashboard y App Router |
+| [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](https://react.dev/) | UI del dashboard |
+| [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/) | Diseño web |
+| [![Lucide](https://img.shields.io/badge/Lucide_React-icons-F56565?logo=lucide&logoColor=white)](https://lucide.dev/) | Iconografía |
+| [![Highlight.js](https://img.shields.io/badge/Highlight.js-11-F7DF1E?logo=javascript&logoColor=111)](https://highlightjs.org/) | Resaltado de código |
+
+## Infraestructura
+
+| Tecnología | Uso |
+|---|---|
+| [![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions) | CI/CD y smoke tests |
+| [![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)](https://nginx.org/) | Reverse proxy en Full |
+| [![Let's Encrypt](https://img.shields.io/badge/Let's_Encrypt-003A70?logo=letsencrypt&logoColor=white)](https://letsencrypt.org/) | TLS/HTTPS |
+| [![systemd](https://img.shields.io/badge/systemd-services-111111?logo=linux&logoColor=white)](https://systemd.io/) | Servicios persistentes en VPS |
+| [![Termux](https://img.shields.io/badge/Termux-Lite-000000?logo=termux&logoColor=white)](https://termux.dev/) | Runtime Android |
+| [![Ollama](https://img.shields.io/badge/Ollama-optional-000000?logo=ollama&logoColor=white)](https://ollama.com/) | LLM local opcional en Full |
+
+> [!NOTE]
+> `sharp` y `playwright` son `optionalDependencies`. La instalación de Termux Lite usa `--omit=optional`, por lo que no arrastra esos componentes.
+
+---
+
+# 🏗️ Arquitectura
+
+Ghost Nexora Bot utiliza **npm Workspaces** para separar bot y web manteniendo un único repositorio.
+
+```text
+GhostNexoraBot/
+├── apps/
+│   ├── bot/
+│   │   ├── src/
+│   │   │   ├── commands/               comandos por dominio
+│   │   │   ├── core/                   router, sesiones y subbots
+│   │   │   ├── services/               economía, grupos, multimedia, IA
+│   │   │   ├── utils/                  utilidades
+│   │   │   ├── index.ts                MainBot Full
+│   │   │   ├── termux-lite.ts          MainBot Lite
+│   │   │   ├── subbot-worker.ts        worker Full
+│   │   │   └── subbot-worker-termux.ts worker Lite
+│   │   ├── dist/                        build Full
+│   │   ├── dist-termux/                 build Lite
+│   │   └── package.json
+│   │
+│   └── web/
+│       ├── app/                         Next.js App Router
+│       ├── lib/
+│       └── package.json
+│
+├── docs/
+│   ├── FIRST_INSTALL.md
+│   ├── UPDATING.md
+│   ├── TERMUX_LITE.md
+│   └── WINDOWS_INSTALL.md
+│
+├── scripts/
+│   ├── install.sh
+│   ├── update.sh
+│   ├── install-termux.sh
+│   ├── update-termux.sh
+│   ├── termux/ghostnexora
+│   └── *-smoke.mjs
+│
+├── systemd/
+├── .github/workflows/
+├── .env.example
+├── README-LLM.md
+├── README.md
+├── LICENSE
+└── package.json
+```
+
+### Flujo principal
+
+```text
+WhatsApp
+   │
+   ▼
+Baileys Socket
+   │
+   ▼
+Identity / Security / Moderation
+   │
+   ▼
+Command Router
+   │
+   ├── permisos
+   ├── aliases
+   ├── contexto
+   ├── timeouts
+   └── errores públicos
+   │
+   ▼
+Command Handler
+   │
+   ├── SQLite / Economy
+   ├── Downloads / FFmpeg / yt-dlp
+   ├── Groups / Community
+   ├── Games / RPG
+   ├── Collections
+   ├── External APIs
+   └── Subbot Manager
+```
 
 ---
 
 # 💾 Persistencia y seguridad
 
-## VPS / Full
-
-Los datos persistentes se separan del checkout del repositorio:
+### VPS
 
 ```text
 /var/lib/ghost-nexora-bot/
@@ -796,7 +722,7 @@ Los datos persistentes se separan del checkout del repositorio:
 └── data/
 ```
 
-## Termux Lite
+### Termux
 
 ```text
 $HOME/.ghostnexora/
@@ -806,29 +732,29 @@ $HOME/.ghostnexora/
 └── run/
 ```
 
-### 🔐 Principios aplicados
+### Principios
 
 - sesiones fuera del repositorio;
-- `.env` protegido y excluido de Git;
-- tokens administrativos generados aleatoriamente cuando corresponde;
-- control granular owner/staff/admin/subbot-owner;
-- aislamiento de sesiones de subbot;
-- errores internos sensibles no expuestos al usuario;
-- APIs locales protegidas cuando requieren token;
-- datos de economía persistentes en SQLite;
-- actualizaciones que preservan estado y credenciales;
-- CI con auditoría de dependencias de producción.
+- `.env` excluido de Git;
+- aislamiento de subbots;
+- permisos owner/staff/admin;
+- SQLite persistente;
+- actualizadores que conservan estado;
+- errores internos sensibles no expuestos al chat;
+- tokens aleatorios para componentes administrativos;
+- CI con validaciones de producción.
 
 > [!CAUTION]
-> Nunca publiques `creds.json`, `.env`, bases SQLite, cookies de descarga, tokens administrativos, claves API ni tokens de portal.
+> Nunca publiques `.env`, `creds.json`, bases SQLite, cookies, API keys, tokens de administración o credenciales de WhatsApp.
 
 ---
 
-# ⚙️ Configuración por variables de entorno
+# ⚙️ Variables de entorno
 
-Base mínima:
+Ejemplo base:
 
 ```env
+NEXORA_RUNTIME_PROFILE=full
 BOT_NAME=Ghost Nexora Bot
 PREFIX=.
 OWNER_NUMBERS=5210000000000
@@ -845,11 +771,14 @@ WEB_PORT=3000
 PUBLIC_WEB_URL=https://bot.example.com
 ADMIN_WEB_TOKEN=
 
+OLLAMA_ENABLED=false
 OFFICIAL_CHANNEL_URL=https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i
 LOG_LEVEL=info
 ```
 
-## 📱 Perfil Termux
+Referencia completa: [`.env.example`](.env.example).
+
+### Termux Lite
 
 El instalador configura automáticamente:
 
@@ -858,49 +787,24 @@ NEXORA_RUNTIME_PROFILE=termux-lite
 OLLAMA_ENABLED=false
 ```
 
-y redefine `SESSION_DIR`, `DATA_DIR` y límites para almacenamiento privado de Termux.
-
-## 🌐 Proveedores opcionales
-
-`.env.example` documenta integraciones configurables como:
-
-- proveedores de descargas;
-- Lempi API;
-- Cobalt;
-- cookies de `yt-dlp`;
-- proveedores de IA;
-- Telegram;
-- servicios externos de contenido.
-
-Utiliza siempre [`.env.example`](.env.example) como referencia actual.
-
 ---
 
 # ❤️ Health y observabilidad
 
-El MainBot expone un endpoint de health local:
+Endpoint local:
 
 ```text
 http://127.0.0.1:3001/health
 ```
 
-Incluye información como:
-
-- conexión del bot;
-- uptime;
-- instancia activa;
-- JID conectado;
-- cantidad de subbots;
-- subbots online.
-
-En Termux:
+Termux:
 
 ```bash
 ghostnexora status
 ghostnexora doctor
 ```
 
-En VPS:
+VPS:
 
 ```bash
 curl http://127.0.0.1:3001/health
@@ -908,79 +812,62 @@ curl http://127.0.0.1:3001/health
 
 ---
 
-# 🧪 CI/CD y validación
+# 🧪 CI/CD
 
-GitHub Actions valida continuamente el proyecto.
+<div align="center">
 
-El pipeline incluye, entre otras comprobaciones:
+[![GitHub Actions](https://img.shields.io/badge/Continuous_Integration-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
 
-- 📦 instalación de dependencias;
-- 🔐 `npm audit --omit=dev --audit-level=high`;
-- 🧠 TypeScript typecheck;
-- 🏗️ build completo del monorepo;
-- 📱 build dedicado de Termux Lite;
-- 🧪 `termux-lite-smoke`;
-- 🌸 smoke tests de assets/colecciones;
-- 🪙 pruebas de migración de wallet/economía;
-- 🏦 smoke tests del banco;
-- 🎵 pruebas de flujos YouTube;
-- 🤖 pruebas LLM de la edición Full;
-- 🐚 validación `bash -n` de instaladores y actualizadores.
+</div>
 
-La prueba específica de Termux comprueba que:
+El workflow principal valida:
 
-- el runtime se identifique como `termux-lite`;
-- Ollama quede forzado a `false`;
-- comandos AI/LLM/browser/dashboard no se filtren al menú Lite;
-- `.menu` continúe disponible;
-- los comandos de subbot continúen disponibles;
-- el portal web no sea anunciado en Lite;
-- exista el output compilado dedicado.
+- instalación de dependencias;
+- `npm audit` de producción;
+- TypeScript typecheck;
+- build completo;
+- build dedicado Termux Lite;
+- smoke test `termux-lite`;
+- economía y migraciones;
+- banco;
+- colecciones/assets;
+- YouTube;
+- LLM Full;
+- scripts Bash;
+- instaladores y actualizadores.
 
-[🧪 Ver ejecuciones de GitHub Actions](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
+La prueba Lite verifica además que Ollama permanezca deshabilitado y que comandos de IA/browser/dashboard no entren al registro de Termux.
+
+[![Open Actions](https://img.shields.io/badge/Ver_ejecuciones-Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
 
 ---
 
 # 🔄 Actualización
 
-## VPS / Full
+### VPS
 
 ```bash
 sudo /opt/ghost-nexora-bot/scripts/update.sh
 ```
 
-El actualizador preserva el estado persistente y gestiona los servicios correspondientes.
-
-## Termux Lite
+### Termux
 
 ```bash
 ghostnexora update
 ```
 
-El actualizador Lite:
-
-1. detecta si el bot estaba ejecutándose;
-2. lo detiene de forma controlada;
-3. actualiza `main` mediante Git;
-4. mantiene el perfil Lite;
-5. sincroniza dependencias sin opcionales pesados;
-6. recompila `dist-termux`;
-7. actualiza `yt-dlp`;
-8. reinstala el gestor `ghostnexora`;
-9. restaura el estado de ejecución anterior;
-10. conserva sesión, economía y subbots.
+Ambos flujos están diseñados para preservar el estado persistente. El actualizador Lite conserva sesión principal, economía y subbots.
 
 ---
 
-# 💻 Desarrollo local
+# 💻 Desarrollo
 
-## Requisitos
+### Requisitos
 
-- Node.js **24+**;
-- npm **11+**;
-- FFmpeg;
-- `yt-dlp` para funcionalidades de descarga;
-- Git.
+[![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![npm](https://img.shields.io/badge/npm-11%2B-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-required-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+[![Git](https://img.shields.io/badge/Git-required-F05032?logo=git&logoColor=white)](https://git-scm.com/)
 
 ### Clonar
 
@@ -996,13 +883,13 @@ npm install
 npm run typecheck
 ```
 
-### Build completo
+### Build Full
 
 ```bash
 npm run build
 ```
 
-### Build específico de Termux
+### Build Termux Lite
 
 ```bash
 npm run build:termux --workspace=@ghostnexora/bot
@@ -1028,15 +915,17 @@ npm run dev --workspace=@ghostnexora/web
 |---|---|
 | [`docs/FIRST_INSTALL.md`](docs/FIRST_INSTALL.md) | Instalación inicial en VPS |
 | [`docs/UPDATING.md`](docs/UPDATING.md) | Actualización y mantenimiento |
-| [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md) | Instalación y operación en Android/Termux |
-| [`README-LLM.md`](README-LLM.md) | Componentes LLM de la edición Full |
-| [`.env.example`](.env.example) | Variables y proveedores configurables |
+| [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md) | Android / Termux Lite |
+| [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md) | Desarrollo/pruebas en Windows |
+| [`README-LLM.md`](README-LLM.md) | IA/LLM de la edición Full |
+| [`.env.example`](.env.example) | Variables configurables |
 
 ---
 
-# 🧰 Solución rápida de problemas
+# 🧰 Diagnóstico rápido
 
-## Termux
+<details>
+<summary><strong>Termux</strong></summary>
 
 ```bash
 ghostnexora doctor
@@ -1050,26 +939,27 @@ Reiniciar:
 ghostnexora restart
 ```
 
-Reparar runtime/dependencias mediante actualización:
+Actualizar/reparar:
 
 ```bash
 ghostnexora update
 ```
 
-## VPS
+</details>
+
+<details>
+<summary><strong>VPS</strong></summary>
 
 ```bash
 sudo systemctl status ghost-nexora-bot --no-pager -l
 sudo journalctl -u ghost-nexora-bot -n 120 --no-pager
 ```
 
-Si la sesión dejó de estar vinculada, utiliza nuevamente el flujo de pairing documentado para el entorno correspondiente.
+</details>
 
 ---
 
 # 🤝 Contribución
-
-Las contribuciones deben mantener la arquitectura modular del proyecto y evitar introducir secretos o dependencias innecesarias.
 
 Antes de enviar cambios:
 
@@ -1078,65 +968,114 @@ npm run typecheck
 npm run build
 ```
 
-Para cambios relacionados con Termux, verifica también:
+Para Termux:
 
 ```bash
 npm run build:termux --workspace=@ghostnexora/bot
 node scripts/termux-lite-smoke.mjs
 ```
 
-Se recomienda utilizar commits descriptivos, por ejemplo:
+Convención recomendada:
 
 ```text
-feat: add new command
-fix: repair downloader fallback
-perf: reduce Termux runtime overhead
-docs: update installation guide
-test: add smoke coverage
+feat: nueva función
+fix: corrección
+perf: optimización
+docs: documentación
+test: pruebas
+refactor: reorganización
 ```
 
 ---
 
-# ⚠️ Aviso legal y uso responsable
+# 👥 Equipo y créditos
 
-Ghost Nexora Bot es software independiente para automatización y experimentación con WhatsApp Multi-Device.
+<div align="center">
 
-El usuario que despliega una instancia es responsable de:
+<table>
+<tr>
+<td align="center" width="240">
+<a href="https://github.com/Gh0stDeveloper">
+<img src="https://github.com/Gh0stDeveloper.png?size=128" width="110" height="110" alt="Ghost Developer" />
+</a>
+<br><br>
+<strong>Ghost Developer</strong>
+<br>
+<sub>Owner · Lead Developer · Maintainer</sub>
+<br><br>
+<a href="https://github.com/Gh0stDeveloper">GitHub</a>
+</td>
+<td align="center" width="240">
+<a href="https://github.com/Lord-oscar">
+<img src="https://github.com/Lord-oscar.png?size=128" width="110" height="110" alt="Lord-oscar" />
+</a>
+<br><br>
+<strong>Lord-oscar</strong>
+<br>
+<sub>Official Tester · Support</sub>
+<br><br>
+<a href="https://github.com/Lord-oscar">GitHub</a>
+</td>
+</tr>
+</table>
 
-- cumplir las condiciones de las plataformas utilizadas;
-- no utilizar el bot para spam, acoso o abuso;
-- respetar privacidad y derechos de autor;
+### Créditos dentro del bot
+
+```text
+.credits
+.creditos
+.colaboradores
+.team
+```
+
+El comando muestra los créditos oficiales de **Ghost Nexora Bot** tanto en **Full** como en **Termux Lite**.
+
+</div>
+
+---
+
+# ⚠️ Uso responsable
+
+El operador de cada instancia es responsable de:
+
+- respetar las condiciones de las plataformas utilizadas;
+- evitar spam, abuso y acoso;
 - proteger credenciales y sesiones;
-- aplicar controles apropiados en grupos;
-- utilizar módulos para adultos únicamente de forma legal y apropiada;
-- revisar las políticas de WhatsApp/Meta antes de operar una instancia pública.
+- respetar privacidad y derechos de autor;
+- configurar adecuadamente grupos y permisos;
+- utilizar módulos restringidos únicamente cuando sea legal y apropiado.
 
-WhatsApp y otras marcas mencionadas pertenecen a sus respectivos propietarios.
+WhatsApp, Meta y las demás marcas mencionadas pertenecen a sus respectivos propietarios.
 
 ---
 
 # 📄 Licencia
 
-Este proyecto se distribuye bajo la licencia **MIT**. Consulta [`LICENSE`](LICENSE).
+Este proyecto se distribuye bajo la licencia **MIT**.
+
+[![MIT License](https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge)](LICENSE)
 
 ---
 
 <div align="center">
 
-## 👻 Ghost Developer / Nexora
+## 👻 Ghost Nexora Bot
 
-**Ghost Nexora Bot** — WhatsApp Bot · Baileys · Node.js · TypeScript · Termux · Subbots · Next.js
+**Construido con TypeScript · Node.js · Baileys · SQLite · Next.js · React · Termux**
 
-[📢 Canal oficial de WhatsApp](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i) · [📦 Código fuente](https://github.com/Gh0stDeveloper/GhostNexoraBot) · [🧪 CI](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
+[![Ghost Developer](https://img.shields.io/badge/Developer-Ghost_Developer-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Gh0stDeveloper)
+[![Lord-oscar](https://img.shields.io/badge/Tester_%26_Support-Lord--oscar-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Lord-oscar)
 
-Si el proyecto te resulta útil, puedes marcar el repositorio con una ⭐ para seguir su evolución.
+[Canal oficial](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i) · [Repositorio](https://github.com/Gh0stDeveloper/GhostNexoraBot) · [Actions](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
+
+**⭐ Si Ghost Nexora Bot te resulta útil, puedes marcar el repositorio con una estrella.**
 
 </div>
 
 <!--
 SEO / discoverability:
-Ghost Nexora Bot, WhatsApp bot, WhatsApp Multi-Device bot, Baileys bot, Node.js WhatsApp bot,
-TypeScript WhatsApp bot, Termux WhatsApp bot, Android Termux bot, WhatsApp subbots,
-WhatsApp economy bot, WhatsApp games bot, WhatsApp downloader, Next.js bot dashboard,
-Baileys 7, Ghost Developer, Nexora, GhostNexoraBot.
+Ghost Nexora Bot, WhatsApp bot, WhatsApp Multi-Device bot, Baileys bot, Baileys 7,
+Node.js WhatsApp bot, TypeScript WhatsApp bot, Termux WhatsApp bot, Android Termux bot,
+WhatsApp subbots, WhatsApp economy bot, WhatsApp games bot, WhatsApp downloader,
+Next.js bot dashboard, Ghost Developer, Lord-oscar, Nexora, GhostNexoraBot.
 -->
