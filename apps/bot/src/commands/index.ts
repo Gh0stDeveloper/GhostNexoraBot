@@ -86,6 +86,7 @@ import { minecraftV12Commands } from './minecraft-v12.js'
 import { botStylesV13Commands } from './bot-styles-v13.js'
 import { shopStyleV13Commands } from './shop-style-v13.js'
 import { minershopStyleV13Commands } from './minershop-style-v13.js'
+import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -172,6 +173,7 @@ export const commands: BotCommand[] = [
   ...botStylesV13Commands,
   ...shopStyleV13Commands,
   ...minershopStyleV13Commands,
+  ...adultRoleplayMessagesV14Commands,
 ]
 
 setMenuCommandProvider(() => commands)
