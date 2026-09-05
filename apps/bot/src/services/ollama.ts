@@ -16,6 +16,18 @@ type TagsResponse = {
   models?: Array<{ name?: string; size?: number; modified_at?: string }>
 }
 
+type GenerationJob = {
+  run: () => Promise<ChatResponse>
+  resolve: (value: ChatResponse | null) => void
+  reject: (error: unknown) => void
+  timer: NodeJS.Timeout
+}
+
+const MAX_GENERATION_QUEUE = 4
+const GENERATION_QUEUE_WAIT_MS = 30_000
+const generationQueue: GenerationJob[] = []
+let generationActive = false
+
 function abortAfter(ms: number) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
@@ -48,6 +60,41 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 }
 
+function drainGenerationQueue() {
+  if (generationActive) return
+  const job = generationQueue.shift()
+  if (!job) return
+
+  clearTimeout(job.timer)
+  generationActive = true
+  void job.run()
+    .then(job.resolve, job.reject)
+    .finally(() => {
+      generationActive = false
+      drainGenerationQueue()
+    })
+}
+
+function enqueueGeneration(run: () => Promise<ChatResponse>): Promise<ChatResponse | null> {
+  if (generationQueue.length >= MAX_GENERATION_QUEUE) return Promise.resolve(null)
+
+  return new Promise<ChatResponse | null>((resolve, reject) => {
+    const job = {} as GenerationJob
+    job.run = run
+    job.resolve = resolve
+    job.reject = reject
+    job.timer = setTimeout(() => {
+      const index = generationQueue.indexOf(job)
+      if (index < 0) return
+      generationQueue.splice(index, 1)
+      resolve(null)
+    }, GENERATION_QUEUE_WAIT_MS)
+    job.timer.unref?.()
+    generationQueue.push(job)
+    drainGenerationQueue()
+  })
+}
+
 function historyToMessages(turns: ChatTurn[]) {
   return turns
     .slice(-config.ollamaMaxHistory)
@@ -76,6 +123,15 @@ export const ollama = {
       model: config.ollamaModel,
       baseUrl: config.ollamaBaseUrl,
       timeoutMs: config.ollamaTimeoutMs,
+    }
+  },
+
+  getQueueStats() {
+    return {
+      active: generationActive ? 1 : 0,
+      queued: generationQueue.length,
+      maxQueued: MAX_GENERATION_QUEUE,
+      waitTimeoutMs: GENERATION_QUEUE_WAIT_MS,
     }
   },
 
@@ -113,6 +169,7 @@ export const ollama = {
     userText: string
     history?: ChatTurn[]
     systemPrompt?: string
+    contextText?: string
   }) {
     if (!runtimeEnabled || Date.now() < failedUntil) return null
 
@@ -121,12 +178,13 @@ export const ollama = {
 
     const messages: OllamaMessage[] = [
       { role: 'system', content: clean(input.systemPrompt || config.ollamaSystemPrompt, 3000) },
-      ...historyToMessages(input.history ?? []),
-      { role: 'user', content: userText },
     ]
+    const contextText = clean(input.contextText, 2400)
+    if (contextText) messages.push({ role: 'system', content: contextText })
+    messages.push(...historyToMessages(input.history ?? []), { role: 'user', content: userText })
 
     try {
-      const data = await request<ChatResponse>('/api/chat', {
+      const data = await enqueueGeneration(() => request<ChatResponse>('/api/chat', {
         method: 'POST',
         body: JSON.stringify({
           model: config.ollamaModel,
@@ -137,7 +195,8 @@ export const ollama = {
             top_p: config.ollamaTopP,
           },
         }),
-      })
+      }))
+      if (!data) return null
       const answer = clean(data.message?.content, 4000)
       if (!answer) return null
       failedUntil = 0
