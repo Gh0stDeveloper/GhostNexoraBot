@@ -33,6 +33,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Termux Lite profile smoke
+        run: node scripts/termux-lite-smoke.mjs
+
       - name: Local waifu assets smoke
         run: node scripts/waifu-assets-smoke.mjs
 
@@ -58,4 +61,4 @@ jobs:
         run: npx tsx apps/bot/src/llm/smoke.ts
 
       - name: Validate shell scripts
-        run: bash -n scripts/install.sh scripts/update.sh scripts/install-ollama.sh
+        run: bash -n scripts/install.sh scripts/update.sh scripts/install-ollama.sh scripts/install-termux.sh scripts/update-termux.sh scripts/termux/ghostnexora
