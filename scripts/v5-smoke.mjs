@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -49,6 +49,7 @@ try {
 
   const menuOwner = effective.find((row) => row.tokens.includes('menu'))?.command
   assert.equal(menuOwner?.description.includes('todos los comandos'), true)
+  assert.equal(menuOwner?.description.includes('avatar/waifu'), true, 'menu must expose active visual avatar/waifu')
   const waifuOwner = effective.find((row) => row.tokens.includes('rw'))?.command
   assert.equal(waifuOwner?.description.includes('AniList'), true)
   const minerShopOwner = effective.find((row) => row.tokens.includes('minershop'))?.command
@@ -66,6 +67,12 @@ try {
   assert.equal(stylesOwner?.description.includes('AniList'), true, 'styles V13 command is not effective')
   const styleOwner = effective.find((row) => row.tokens.includes('style'))?.command
   assert.equal(styleOwner?.description.includes('staff'), true, 'style command must allow staff-managed visual styles')
+
+  const moderationSource = await readFile(new URL('../apps/bot/dist/services/moderation-v2.js', import.meta.url), 'utf8')
+  assert.equal(moderationSource.includes('resolveBotVisualStyleAsset'), true, 'welcome must resolve the active waifu style')
+  assert.equal(moderationSource.includes('currentVisualIdentity'), true, 'welcome must use the bot visual identity')
+  assert.equal(moderationSource.includes('profilePicture(socket, participant)'), false, 'welcome must never use participant profile photos')
+  assert.equal(moderationSource.includes('config.welcomeImageUrl'), false, 'welcome image must come from active bot identity, not legacy user/banner fallback')
 
   const { normalizeMinecraftPlayerQuery } = await import('../apps/bot/dist/services/minecraft-profile-v12.js')
   assert.equal(normalizeMinecraftPlayerQuery('  JULIAN   AGZ  '), 'JULIAN AGZ')
