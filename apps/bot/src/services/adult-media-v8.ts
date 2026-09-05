@@ -9,6 +9,7 @@ const MAX_PER_COMMAND = 25
 const MAX_IMPORT_BYTES = 12 * 1024 * 1024
 const allowedCommands = new Set([
   'fuck', 'preñar', 'prenar', 'cum', 'room', 'finishrp',
+  'dick', 'pene', 'cock',
   'flirt', 'tease', 'seduce', 'kiss18', 'cuddle18',
   'global', 'hentai',
 ])
@@ -46,10 +47,10 @@ export async function addAdultReactionMedia(
 ) {
   const target = cleanCommand(command)
   if (!adultMediaCommandAllowed(target)) {
-    throw new Error(`Comando no permitido para medios de reacción. Usa uno de: ${[...allowedCommands].join(', ')}`)
+    throw new Error('Comando no permitido para medios de reacción. Usa uno de: ' + [...allowedCommands].join(', '))
   }
   if (data.length > MAX_IMPORT_BYTES) {
-    throw new Error(`El archivo supera el límite de ${(MAX_IMPORT_BYTES / 1024 / 1024).toFixed(0)} MB por medio.`)
+    throw new Error('El archivo supera el límite de ' + (MAX_IMPORT_BYTES / 1024 / 1024).toFixed(0) + ' MB por medio.')
   }
   if (prohibitedMedia.test(label || '')) {
     throw new Error('Etiqueta bloqueada por el filtro de seguridad.')
@@ -59,13 +60,13 @@ export async function addAdultReactionMedia(
     (db.prepare('SELECT COUNT(*) as count FROM adult_reaction_media WHERE command_name = ?').get(target) as { count: number }).count,
   )
   if (count >= MAX_PER_COMMAND) {
-    throw new Error(`Ese comando ya tiene ${MAX_PER_COMMAND} medios. Elimina uno antes de añadir otro.`)
+    throw new Error('Ese comando ya tiene ' + MAX_PER_COMMAND + ' medios. Elimina uno antes de añadir otro.')
   }
 
   await mkdir(root, { recursive: true })
   const id = Number((db.prepare('SELECT COALESCE(MAX(id),0)+1 as id FROM adult_reaction_media').get() as { id: number }).id)
   const ext = /gif/i.test(mimeType) ? 'gif' : /webm/i.test(mimeType) ? 'webm' : /png|jpe?g|webp/i.test(mimeType) ? 'img' : 'mp4'
-  const filePath = path.join(root, `${target}-${id}.${ext === 'img' ? 'bin' : ext}`)
+  const filePath = path.join(root, target + '-' + id + '.' + (ext === 'img' ? 'bin' : ext))
   await writeFile(filePath, data, { mode: 0o600 })
   db.prepare(
     'INSERT INTO adult_reaction_media(command_name,file_path,mime_type,label,created_by,created_at) VALUES(?,?,?,?,?,?)',
@@ -80,7 +81,7 @@ export async function importAdultReactionMediaFromUrl(
 ) {
   const target = cleanCommand(command)
   if (!adultMediaCommandAllowed(target)) {
-    throw new Error(`Comando no permitido. Usa uno de: ${[...allowedCommands].join(', ')}`)
+    throw new Error('Comando no permitido. Usa uno de: ' + [...allowedCommands].join(', '))
   }
   if (prohibitedMedia.test(url)) {
     throw new Error('URL bloqueada por el filtro de seguridad.')
@@ -90,7 +91,7 @@ export async function importAdultReactionMediaFromUrl(
   try {
     parsed = new URL(url)
   } catch {
-    throw new Error(`URL inválida: ${url}`)
+    throw new Error('URL inválida: ' + url)
   }
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('Solo se permiten URLs HTTP/HTTPS.')
@@ -104,22 +105,22 @@ export async function importAdultReactionMediaFromUrl(
     },
     signal: AbortSignal.timeout(45_000),
   })
-  if (!response.ok) throw new Error(`No se pudo descargar (${response.status}): ${url}`)
+  if (!response.ok) throw new Error('No se pudo descargar (' + response.status + '): ' + url)
 
   const mime = (response.headers.get('content-type') || '').split(';')[0]?.trim() || 'application/octet-stream'
   if (!/^(image\/(gif|png|jpe?g|webp)|video\/(mp4|webm|gif)|application\/octet-stream)/i.test(mime)) {
-    throw new Error(`Tipo no permitido (${mime}). Usa GIF, MP4, WEBM o imagen.`)
+    throw new Error('Tipo no permitido (' + mime + '). Usa GIF, MP4, WEBM o imagen.')
   }
 
   const declared = Number(response.headers.get('content-length') ?? 0)
   if (declared > MAX_IMPORT_BYTES) {
-    throw new Error(`El archivo remoto supera ${(MAX_IMPORT_BYTES / 1024 / 1024).toFixed(0)} MB.`)
+    throw new Error('El archivo remoto supera ' + (MAX_IMPORT_BYTES / 1024 / 1024).toFixed(0) + ' MB.')
   }
 
   const buffer = Buffer.from(await response.arrayBuffer())
   if (buffer.length < 32) throw new Error('Archivo remoto vacío o demasiado pequeño.')
   if (buffer.length > MAX_IMPORT_BYTES) {
-    throw new Error(`El archivo supera ${(MAX_IMPORT_BYTES / 1024 / 1024).toFixed(0)} MB.`)
+    throw new Error('El archivo supera ' + (MAX_IMPORT_BYTES / 1024 / 1024).toFixed(0) + ' MB.')
   }
 
   const label = parsed.pathname.split('/').pop()?.slice(0, 60) || 'import'
@@ -162,10 +163,16 @@ export function clearAdultReactionMedia(command: string) {
 /** Prefer command-specific pool, then global/hentai shared pool. */
 export async function pickAdultReactionMedia(command: string) {
   const target = cleanCommand(command)
-  const pools = [target]
-  if (target !== 'global' && target !== 'hentai') pools.push('global', 'hentai')
+  // aliases de dick → pool dick
+  const canonical =
+    target === 'pene' || target === 'cock' ? 'dick' : target
+  const pools = [canonical, target]
+  if (canonical !== 'global' && canonical !== 'hentai') pools.push('global', 'hentai')
 
+  const seen = new Set<string>()
   for (const pool of pools) {
+    if (seen.has(pool)) continue
+    seen.add(pool)
     const rows = db
       .prepare(
         'SELECT id,file_path as filePath,mime_type as mimeType,label FROM adult_reaction_media WHERE command_name = ? ORDER BY id',

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from '../config.js'
 
-export type AdultRoleplayMessageKey = 'fuck' | 'preñar' | 'cum'
+export type AdultRoleplayMessageKey = 'fuck' | 'preñar' | 'cum' | 'dick'
 
 type StoredTemplates = Partial<Record<AdultRoleplayMessageKey, string>>
 
@@ -17,12 +17,16 @@ const aliases: Record<string, AdultRoleplayMessageKey> = {
   prenar: 'preñar',
   cum: 'cum',
   finishrp: 'cum',
+  dick: 'dick',
+  pene: 'dick',
+  cock: 'dick',
 }
 
 export const DEFAULT_ADULT_ROLEPLAY_MESSAGES: Record<AdultRoleplayMessageKey, string> = {
   fuck: '{sender} inició una escena privada de roleplay consensuado con {target}',
-  'preñar': '{sender} inició un roleplay consensuado de pareja/familia con {target}',
+  preñar: '{sender} inició un roleplay consensuado de pareja/familia con {target}',
   cum: '{sender} dio por terminada su escena de roleplay consensuado con {target}',
+  dick: '{sender} le mostró el dick a {target} en un roleplay consensuado',
 }
 
 function normalizeCommand(value: string) {
@@ -41,15 +45,15 @@ function readTemplates(): StoredTemplates {
 
 function writeTemplates(templates: StoredTemplates) {
   fs.mkdirSync(config.dataDir, { recursive: true })
-  const temp = `${FILE}.${process.pid}.tmp`
-  fs.writeFileSync(temp, `${JSON.stringify(templates, null, 2)}\n`, 'utf8')
+  const temp = FILE + '.' + process.pid + '.tmp'
+  fs.writeFileSync(temp, JSON.stringify(templates, null, 2) + '\n', 'utf8')
   fs.renameSync(temp, FILE)
 }
 
 function validateTemplate(input: string) {
   const template = input.replace(/\\n/g, '\n').trim()
   if (template.length < 5) throw new Error('El mensaje es demasiado corto.')
-  if (template.length > MAX_LENGTH) throw new Error(`El mensaje no puede superar ${MAX_LENGTH} caracteres.`)
+  if (template.length > MAX_LENGTH) throw new Error('El mensaje no puede superar ' + MAX_LENGTH + ' caracteres.')
   if (!template.includes('{sender}') || !template.includes('{target}')) {
     throw new Error('El mensaje debe incluir los marcadores {sender} y {target}.')
   }
@@ -85,7 +89,7 @@ export function getAdultRoleplayMessage(command: string) {
 
 export function setAdultRoleplayMessage(command: string, template: string) {
   const canonical = normalizeCommand(command)
-  if (!canonical) throw new Error('Comando +18 no soportado. Usa fuck, preñar o cum.')
+  if (!canonical) throw new Error('Comando +18 no soportado. Usa fuck, preñar, cum o dick.')
   const validated = validateTemplate(template)
   const current = readTemplates()
   current[canonical] = validated
@@ -95,7 +99,7 @@ export function setAdultRoleplayMessage(command: string, template: string) {
 
 export function resetAdultRoleplayMessage(command: string) {
   const canonical = normalizeCommand(command)
-  if (!canonical) throw new Error('Comando +18 no soportado. Usa fuck, preñar o cum.')
+  if (!canonical) throw new Error('Comando +18 no soportado. Usa fuck, preñar, cum o dick.')
   const current = readTemplates()
   delete current[canonical]
   writeTemplates(current)
@@ -109,8 +113,8 @@ export function resetAllAdultRoleplayMessages() {
 export function renderAdultRoleplayMessage(command: string, senderJid: string, targetJid: string) {
   const entry = getAdultRoleplayMessage(command)
   const template = entry?.template ?? '{sender} interactuó con {target}'
-  const sender = `@${senderJid.split('@')[0]}`
-  const target = `@${targetJid.split('@')[0]}`
+  const sender = '@' + senderJid.split('@')[0]
+  const target = '@' + targetJid.split('@')[0]
   return template
     .replaceAll('{sender}', sender)
     .replaceAll('{target}', target)

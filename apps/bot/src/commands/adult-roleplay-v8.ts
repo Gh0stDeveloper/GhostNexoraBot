@@ -6,7 +6,12 @@ import { economy } from '../services/economy.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 import { digitsFromJid, getContextInfo } from '../utils/message.js'
 import { pickAdultReactionMedia } from '../services/adult-media-v8.js'
-import { renderAdultRoleplayMessage } from '../services/adult-roleplay-messages-v14.js'
+import {
+  listAdultRoleplayMessages,
+  renderAdultRoleplayMessage,
+  resetAdultRoleplayMessage,
+  setAdultRoleplayMessage,
+} from '../services/adult-roleplay-messages-v14.js'
 
 const prohibited = /\b(child|children|underage|minor|preteen|pre-teen|niñ[oa]s?|menor(?:es)?)\b/i
 
@@ -19,12 +24,13 @@ function normalizeJid(value?: string | null) {
   }
 }
 
-/** Same gate as erome / xvideos / pornhub (adult.ts). */
 function assertAdultAccess(ctx: CommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
       throw new Error(
-        `Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ${ctx.prefix}adultmode on.`,
+        'Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ' +
+          ctx.prefix +
+          'adultmode on.',
       )
     }
   } else if (!settings.adultEnabled || !config.adultPrivateEnabled) {
@@ -33,7 +39,7 @@ function assertAdultAccess(ctx: CommandContext) {
 
   if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) {
     throw new Error(
-      `Antes debes confirmar que eres mayor de edad con ${ctx.prefix}adult18 accept.`,
+      'Antes debes confirmar que eres mayor de edad con ' + ctx.prefix + 'adult18 accept.',
     )
   }
 }
@@ -43,11 +49,10 @@ async function resolveTargetJid(ctx: CommandContext): Promise<string> {
   const mention = info?.mentionedJid?.[0]
   const quotedParticipant = info?.participant
   const raw = mention || quotedParticipant
-  if (!raw) throw new Error(`Menciona o responde a otro usuario. Ejemplo: ${ctx.prefix}fuck @usuario`)
+  if (!raw) throw new Error('Menciona o responde a otro usuario. Ejemplo: ' + ctx.prefix + 'dick @usuario')
 
   let candidates = [normalizeJid(raw), raw].filter(Boolean)
 
-  // In groups, map LID → phone JID when WhatsApp only exposes @lid in mentions.
   if (ctx.isGroup) {
     try {
       const metadata = await ctx.socket.groupMetadata(ctx.chatId)
@@ -57,10 +62,16 @@ async function resolveTargetJid(ctx: CommandContext): Promise<string> {
       })
       if (match) {
         const preferred =
-          normalizeJid(match.phoneNumber)
-          || normalizeJid(match.id)
-          || normalizeJid(match.lid)
-        if (preferred) candidates = [preferred, ...candidates, normalizeJid(match.id), normalizeJid(match.lid), normalizeJid(match.phoneNumber)].filter(Boolean)
+          normalizeJid(match.phoneNumber) || normalizeJid(match.id) || normalizeJid(match.lid)
+        if (preferred) {
+          candidates = [
+            preferred,
+            ...candidates,
+            normalizeJid(match.id),
+            normalizeJid(match.lid),
+            normalizeJid(match.phoneNumber),
+          ].filter(Boolean)
+        }
       }
     } catch {
       // best-effort
@@ -105,11 +116,18 @@ const defs: Def[] = [
     title: 'FIN DE ESCENA',
     nsfwTags: ['waifu', 'neko'],
   },
+  {
+    name: 'dick',
+    aliases: ['pene', 'cock'],
+    category: 'wink',
+    title: 'ROLEPLAY · DICK',
+    nsfwTags: ['waifu', 'neko', 'blowjob'],
+  },
 ]
 
 async function fetchNsfwAnimeGif(tags: string[]): Promise<string | null> {
   const endpoints = [
-    ...tags.map((tag) => `https://api.waifu.pics/nsfw/${encodeURIComponent(tag)}`),
+    ...tags.map((tag) => 'https://api.waifu.pics/nsfw/' + encodeURIComponent(tag)),
     'https://api.waifu.pics/nsfw/waifu',
   ]
 
@@ -161,22 +179,16 @@ async function run(def: Def, ctx: CommandContext) {
     throw new Error('Este roleplay requiere otro participante.')
   }
 
-  // Target may appear as LID while consent was stored under phone JID.
   if (!hasAdultConsent(other, [other])) {
     throw new Error(
-      `El destinatario también debe confirmar mayoría de edad con ${ctx.prefix}adult18 accept.`,
+      'El destinatario también debe confirmar mayoría de edad con ' + ctx.prefix + 'adult18 accept.',
     )
   }
 
   const roleplayText = renderAdultRoleplayMessage(def.name, ctx.sender, other)
-  const caption = [
-    `🔞 *${def.title}*`,
-    '━━━━━━━━━━━━━━',
-    roleplayText,
-  ].join('\n')
+  const caption = ['🔞 *' + def.title + '*', '━━━━━━━━━━━━━━', roleplayText].join('\n')
   const mentions = [ctx.sender, other]
 
-  // 1) Local / global staff media
   const local = await pickAdultReactionMedia(def.name)
   if (local) {
     const isVideo = /video|gif|webm/i.test(local.mimeType)
@@ -198,7 +210,6 @@ async function run(def: Def, ctx: CommandContext) {
     return
   }
 
-  // 2) External NSFW anime GIF
   try {
     const nsfwUrl = await fetchNsfwAnimeGif(def.nsfwTags)
     if (nsfwUrl) {
@@ -210,7 +221,6 @@ async function run(def: Def, ctx: CommandContext) {
     // continue
   }
 
-  // 3) SFW fallback
   try {
     const reaction = await getReactionGif(def.category)
     const video = await reactionGifToMp4(reaction.url)
@@ -220,11 +230,76 @@ async function run(def: Def, ctx: CommandContext) {
   }
 }
 
-export const adultRoleplayV8Commands: BotCommand[] = defs.map((def) => ({
-  name: def.name,
-  aliases: def.aliases,
-  category: 'adult',
-  description: `Roleplay 18+ con consentimiento mutuo: ${def.name}. Mensaje personalizable por staff y medios locales adultgif.`,
-  usage: `${def.name} @usuario`,
-  handler: (ctx) => run(def, ctx),
-}))
+function requireStaff(ctx: CommandContext) {
+  if (!ctx.isBotStaff && !ctx.isOwner && !ctx.isSubbotOwner) {
+    throw new Error('Solo staff, owner o dueño del subbot puede editar textos de roleplay.')
+  }
+}
+
+export const adultRoleplayV8Commands: BotCommand[] = [
+  ...defs.map((def) => ({
+    name: def.name,
+    aliases: def.aliases,
+    category: 'adult' as const,
+    description:
+      'Roleplay 18+ con consentimiento mutuo: ' +
+      def.name +
+      '. Mensaje personalizable y medios con adultgif/adulttext.',
+    usage: def.name + ' @usuario',
+    handler: (ctx: CommandContext) => run(def, ctx),
+  })),
+  {
+    name: 'adulttext',
+    aliases: ['rptext', 'roleplaytext'],
+    category: 'adult',
+    staffOnly: true,
+    description: 'Personaliza el texto de roleplay 18+ ({sender} {target}).',
+    usage: 'adulttext list | set <comando> <texto> | reset <comando>',
+    async handler(ctx) {
+      requireStaff(ctx)
+      const action = (ctx.args[0] || 'list').toLowerCase()
+      if (action === 'list') {
+        const rows = listAdultRoleplayMessages()
+        await ctx.reply(
+          [
+            '📝 *TEXTOS ROLEPLAY 18+*',
+            '━━━━━━━━━━━━━━',
+            ...rows.map(
+              (r) =>
+                '• *' +
+                r.command +
+                '*' +
+                (r.customized ? ' (custom)' : '') +
+                '\n  ' +
+                r.template,
+            ),
+            '',
+            'Marcadores: {sender} {target}',
+            ctx.prefix + 'adulttext set dick {sender} le mostró a {target}...',
+          ].join('\n'),
+        )
+        return
+      }
+      if (action === 'set') {
+        const command = ctx.args[1]
+        const template = ctx.args.slice(2).join(' ')
+        if (!command || !template) {
+          throw new Error(
+            'Uso: ' + ctx.prefix + 'adulttext set <fuck|preñar|cum|dick> <texto con {sender} y {target}>',
+          )
+        }
+        const saved = setAdultRoleplayMessage(command, template)
+        await ctx.reply('✅ Texto de *' + saved.command + '* guardado.\n' + saved.template)
+        return
+      }
+      if (action === 'reset') {
+        const command = ctx.args[1]
+        if (!command) throw new Error('Uso: ' + ctx.prefix + 'adulttext reset <comando>')
+        const saved = resetAdultRoleplayMessage(command)
+        await ctx.reply('♻️ Texto de *' + saved.command + '* restablecido.\n' + saved.template)
+        return
+      }
+      throw new Error('Uso: ' + ctx.prefix + 'adulttext list|set|reset')
+    },
+  },
+]
