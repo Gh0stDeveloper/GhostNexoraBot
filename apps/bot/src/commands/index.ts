@@ -77,6 +77,8 @@ import { ninjaCommands } from './ninja.js'
 import { spaceDodgeCommands } from './spacedodge.js'
 import { gatoCommands } from './gato.js'
 import { damasCommands } from './damas.js'
+import { bankingV10Commands } from './banking-v10.js'
+import { minershopV10Commands } from './minershop-v10.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -154,6 +156,8 @@ export const commands: BotCommand[] = [
   ...animeDownloadCommands,
   ...miniLlmCommands,
   ...autoChatCommands,
+  ...bankingV10Commands,
+  ...minershopV10Commands,
 ]
 
 setMenuCommandProvider(() => commands)
