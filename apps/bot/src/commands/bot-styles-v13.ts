@@ -16,9 +16,13 @@ async function currentAvatar(ctx: CommandContext) {
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-function requireStyleOwner(ctx: CommandContext) {
-  if (ctx.isOwner || ctx.isSubbotOwner) return
-  throw new Error('Solo el owner del MainBot o el owner de este subbot puede cambiar su estilo visual.')
+function requireStyleManager(ctx: CommandContext) {
+  if (ctx.isOwner || ctx.isSubbotOwner || ctx.isBotStaff) return
+  throw new Error('Solo el owner, el owner de este subbot o el staff del bot puede cambiar su estilo visual.')
+}
+
+function styleIdFromArgs(ctx: CommandContext, startAt = 1) {
+  return ctx.args.slice(startAt).join(' ').trim()
 }
 
 async function stylesCarousel(ctx: CommandContext) {
@@ -71,7 +75,7 @@ async function stylesCarousel(ctx: CommandContext) {
     if (page < totalPages) buttons.push({ type: 'reply', text: '➡️ Siguiente chunk', id: `${ctx.prefix}styles ${page + 1}` })
     cards.push({
       title: '📚 Navegación de estilos',
-      body: `Mostrando ${visible.length} estilos · chunk ${page}/${totalPages}.\nLos estilos se cargan dinámicamente desde AniList.`,
+      body: `Mostrando ${visible.length} estilos · chunk ${page}/${totalPages}.\nLas imágenes de las waifus se cargan dinámicamente desde AniList.`,
       imageUrl: fallback,
       footer: 'Ghost Nexora Styles',
       buttons,
@@ -79,11 +83,12 @@ async function stylesCarousel(ctx: CommandContext) {
   }
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '🎨 GHOST NEXORA · ESTILOS',
+    title: '🎨 GHOST NEXORA · WAIFU STYLES',
     body: [
       `Estilo actual: ${active.icon} ${active.name}`,
       `Chunk ${page}/${totalPages} · ${PAGE_SIZE} estilos por página.`,
-      'Desliza para ver las waifus disponibles.',
+      'Desliza para ver personajes femeninos de anime disponibles.',
+      'Owner, owner del subbot y staff pueden aplicar estilos.',
     ].join('\n'),
     footer: 'Imágenes dinámicas desde AniList · Ghost Nexora Bot',
     cards,
@@ -135,7 +140,7 @@ async function styleCommand(ctx: CommandContext) {
   }
 
   if (action === 'preview' || action === 'ver') {
-    const id = (ctx.args[1] ?? '').toLowerCase()
+    const id = styleIdFromArgs(ctx)
     const style = getBotVisualStyle(id)
     if (!style) throw new Error(`Estilo no encontrado. Usa ${ctx.prefix}styles.`)
     const fallback = await currentAvatar(ctx)
@@ -160,9 +165,9 @@ async function styleCommand(ctx: CommandContext) {
   }
 
   if (action === 'set' || action === 'usar' || action === 'apply') {
-    requireStyleOwner(ctx)
-    const id = (ctx.args[1] ?? '').toLowerCase()
-    if (!id) throw new Error(`Uso: ${ctx.prefix}style set <id>`)
+    requireStyleManager(ctx)
+    const id = styleIdFromArgs(ctx)
+    if (!id) throw new Error(`Uso: ${ctx.prefix}style set <id|nombre>`)
     const style = setCurrentBotVisualStyle(id, ctx.sender)
     const fallback = await currentAvatar(ctx)
     let imageUrl = fallback
@@ -184,7 +189,7 @@ async function styleCommand(ctx: CommandContext) {
       `🆔 ${style.id}`,
       '',
       'Se aplicará a las imágenes visuales de esta instancia, incluyendo .shop y .minershop.',
-      style.id === 'default' ? 'El estilo Default vuelve a usar la foto actual del bot.' : 'Las imágenes se obtienen desde AniList y tienen fallback a la foto actual.',
+      style.id === 'default' ? 'El estilo Default vuelve a usar la foto actual del bot.' : 'La imagen se obtiene desde AniList y tiene fallback a la foto actual.',
     ].filter(Boolean).join('\n')
     if (imageUrl) await ctx.socket.sendMessage(ctx.chatId, { image: { url: imageUrl }, caption }, { quoted: ctx.message })
     else await ctx.reply(caption)
@@ -192,13 +197,13 @@ async function styleCommand(ctx: CommandContext) {
   }
 
   if (action === 'reset' || action === 'default') {
-    requireStyleOwner(ctx)
+    requireStyleManager(ctx)
     const style = setCurrentBotVisualStyle('default', ctx.sender)
     await ctx.reply(`✅ Estilo restaurado a *${style.name}*. Las tiendas volverán a usar la foto actual de esta cuenta de WhatsApp.`)
     return
   }
 
-  throw new Error(`Uso: ${ctx.prefix}style <current|set|preview|reset> [id]`)
+  throw new Error(`Uso: ${ctx.prefix}style <current|set|preview|reset> [id|nombre]`)
 }
 
 export const botStylesV13Commands: BotCommand[] = [
@@ -206,7 +211,7 @@ export const botStylesV13Commands: BotCommand[] = [
     name: 'styles',
     aliases: ['estilos', 'themes', 'botstyles', 'waifustyles'],
     category: 'general',
-    description: 'Carrusel de estilos visuales del bot, 6 por chunk, con imágenes dinámicas de AniList.',
+    description: 'Carrusel de waifus populares, 6 por chunk, con imágenes dinámicas de AniList.',
     usage: 'styles [pagina]',
     handler: stylesCarousel,
   },
@@ -214,8 +219,8 @@ export const botStylesV13Commands: BotCommand[] = [
     name: 'style',
     aliases: ['estilo', 'theme', 'botstyle'],
     category: 'general',
-    description: 'Consulta o cambia el estilo visual de esta instancia del bot.',
-    usage: 'style <current|set|preview|reset> [id]',
+    description: 'Consulta o cambia la waifu visual de esta instancia; owner, subbot owner y staff pueden aplicarla.',
+    usage: 'style <current|set|preview|reset> [id|nombre]',
     subbotOwnerAllowed: true,
     handler: styleCommand,
   },
