@@ -39,6 +39,7 @@ try {
     'menu', 'help', 'comandos', 'privategift', 'privategrant', 'botsticker', 'kicksticker',
     'waifu', 'rw', 'wsearch', 'winfo', 'wimage', 'ainfo', 'alist', 'ytmp3', 'ytmp4', 'facebook',
     'minershop', 'minertienda', 'minerbuy', 'comprarminero', 'joblicense', 'comprartitulo', 'jobrequirements',
+    'adultgif', 'reactiongif', 'adultmedia',
   ]) {
     assert.equal(tokens.has(expected), true, `missing effective command token: ${expected}`)
   }
@@ -47,6 +48,10 @@ try {
   assert.equal(menuOwner?.description.includes('todos los comandos'), true)
   const waifuOwner = effective.find((row) => row.tokens.includes('rw'))?.command
   assert.equal(waifuOwner?.description.includes('AniList'), true)
+  const minerShopOwner = effective.find((row) => row.tokens.includes('minershop'))?.command
+  assert.equal(minerShopOwner?.description.includes('carrusel estable'), true, 'minershop V11 override is not effective')
+  const adultGifOwner = effective.find((row) => row.tokens.includes('adultgif'))?.command
+  assert.equal(adultGifOwner?.description.includes('carga/reproducción'), true, 'adultgif V11 override is not effective')
   assert.ok(commands.length > 100)
 
   // Suscripciones mineras: tres planes simultáneos deben contar como tres mineros activos.
