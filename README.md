@@ -2,9 +2,9 @@
 
 # 👻 Ghost Nexora Bot
 
-### WhatsApp Multi-Device Bot · VPS Full · Windows · Termux Lite
+### WhatsApp Multi-Device Bot · Linux VPS · Windows · Termux Lite
 
-**Automatización · Comunidad · Economía · Juegos · RPG · Descargas · Subbots · Moderación · IA opcional**
+**Automatización · Comunidad · Economía · Juegos · RPG · Descargas · Subbots · Moderación · Web opcional · IA opcional**
 
 <br>
 
@@ -40,23 +40,15 @@
 
 ## 📖 Acerca del proyecto
 
-**Ghost Nexora Bot** es una plataforma modular de automatización para **WhatsApp Multi-Device** desarrollada con Node.js, TypeScript y Baileys. El proyecto está organizado como un monorepo y combina bot, dashboard, persistencia, herramientas multimedia, economía, juegos, RPG, subbots y automatización de comunidades.
+**Ghost Nexora Bot** es una plataforma modular de automatización para **WhatsApp Multi-Device** desarrollada con Node.js, TypeScript y Baileys. Combina mensajería, administración de grupos, economía, juegos, RPG, colecciones, descargas, subbots, automatización, un dashboard web opcional y un stack LLM local opcional.
 
-No es únicamente un bot de comandos. Su arquitectura separa el transporte de WhatsApp, el router de comandos, persistencia, workers de subbots, servicios multimedia, seguridad, web y perfiles de ejecución.
-
-### Entornos oficiales
-
-| Entorno | Perfil | Objetivo |
-|---|---|---|
-| 🖥️ **Linux VPS / Full** | `full` | Producción completa con systemd, dashboard, proxy, HTTPS e IA opcional |
-| 🪟 **Windows 10/11 / Full** | `full` | Ejecución nativa con PowerShell, WinGet y gestor `ghostnexora` |
-| 📱 **Android / Termux Lite** | `termux-lite` | Runtime ligero sin Ollama/LLM, browser pesado ni dashboard |
+El proyecto utiliza un único monorepo, pero no obliga a instalar todos sus componentes. En Linux y Windows puedes ejecutar desde un **MainBot mínimo** hasta el despliegue completo con **Web + Ollama/Qwen**.
 
 > [!IMPORTANT]
-> **Ollama no es obligatorio.** En VPS y Windows el instalador pregunta en la primera instalación si deseas instalar **Ollama + Qwen**. Si respondes que no, el resto del bot funciona normalmente y los comandos locales LLM/Ollama/free-chat no se registran ni aparecen en `.menu`.
+> **Web y Ollama son independientes y opcionales.** Puedes instalar solo el bot, bot + web, bot + Ollama o el stack completo.
 
 > [!IMPORTANT]
-> **Termux Lite no es un fork.** Utiliza el mismo código fuente y un build dedicado mediante `NEXORA_RUNTIME_PROFILE=termux-lite`, reduciendo dependencias y procesos sin duplicar el proyecto.
+> Las actualizaciones preservan la configuración existente. Una VPS anterior que ya tenga `ghost-nexora-web.service` activo y Ollama configurado seguirá utilizando ambos componentes después de actualizar.
 
 > [!WARNING]
 > Ghost Nexora Bot es un proyecto independiente y no oficial. No está afiliado con WhatsApp, Meta ni con los servicios externos utilizados por algunos módulos.
@@ -66,25 +58,26 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 ## 🧭 Navegación
 
 <details open>
-<summary><strong>Índice del README</strong></summary>
+<summary><strong>Índice</strong></summary>
 
 - [Stack visual](#-stack-visual)
 - [Características](#-características-principales)
-- [Entornos](#-entornos-y-capacidades)
-- [Instalación VPS](#-instalación-vps--full)
+- [Perfiles de instalación](#-perfiles-de-instalación)
+- [Web opcional](#-dashboard-web-opcional)
+- [Ollama opcional](#-ollama--qwen-opcional)
+- [Instalación VPS](#-instalación-linux-vps)
 - [Instalación Windows](#-instalación-windows-1011)
 - [Instalación Termux](#-instalación-termux-lite)
-- [Ollama opcional](#-ollama--qwen-opcional)
-- [WhatsApp y Baileys](#-whatsapp-multi-device)
-- [Comandos y módulos](#-módulos-y-comandos)
+- [Actualizaciones](#-actualizaciones-seguras)
+- [WhatsApp / Baileys](#-whatsapp-multi-device)
+- [Módulos](#-módulos-principales)
 - [Subbots](#-subbots)
-- [Stack detallado](#-librerías-frameworks-y-herramientas)
+- [Librerías](#-librerías-frameworks-y-herramientas)
 - [Arquitectura](#-arquitectura)
-- [Persistencia y seguridad](#-persistencia-y-seguridad)
-- [Variables de entorno](#-variables-de-entorno)
+- [Persistencia](#-persistencia-y-seguridad)
+- [Variables](#-variables-de-entorno)
 - [CI/CD](#-cicd)
-- [Desarrollo](#-desarrollo)
-- [Equipo y créditos](#-equipo-y-créditos)
+- [Equipo](#-equipo-y-créditos)
 - [Licencia](#-licencia)
 
 </details>
@@ -103,14 +96,14 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 [![Baileys](https://img.shields.io/badge/Baileys-WhatsApp_MD-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys)
 [![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 
-### Web
+### Web opcional
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=111111)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Lucide](https://img.shields.io/badge/Lucide-React-F56565?style=for-the-badge&logo=lucide&logoColor=white)](https://lucide.dev/)
 
-### Multimedia y automatización
+### Multimedia e IA
 
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-Multimedia-007808?style=for-the-badge&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![yt-dlp](https://img.shields.io/badge/yt--dlp-Downloader-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp)
@@ -123,9 +116,8 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 [![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/features/actions)
 [![Linux](https://img.shields.io/badge/Linux-VPS-FCC624?style=for-the-badge&logo=linux&logoColor=111111)](https://www.kernel.org/)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](docs/WINDOWS_INSTALL.md)
-[![PowerShell](https://img.shields.io/badge/PowerShell-Installer-5391FE?style=for-the-badge&logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/)
+[![PowerShell](https://img.shields.io/badge/PowerShell-Native-5391FE?style=for-the-badge&logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/)
 [![Nginx](https://img.shields.io/badge/Nginx-Reverse_Proxy-009639?style=for-the-badge&logo=nginx&logoColor=white)](https://nginx.org/)
-[![Let's Encrypt](https://img.shields.io/badge/Let's_Encrypt-HTTPS-003A70?style=for-the-badge&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
 [![Termux](https://img.shields.io/badge/Termux-Android-000000?style=for-the-badge&logo=termux&logoColor=white)](https://termux.dev/)
 
 </div>
@@ -141,8 +133,7 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 ### 🔗 WhatsApp
 
 - Multi-Device mediante Baileys 7
-- Pairing code por número
-- QR como fallback
+- Pairing code y QR fallback
 - PN/LID
 - Reconexión automática
 - Sesión persistente
@@ -158,34 +149,31 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 - Bienvenida y despedida
 - Staff global
 - Roles y permisos
-- Actividad y automatizaciones
+- Automatizaciones
 
 </td>
 </tr>
 <tr>
 <td valign="top">
 
-### 🪙 Economía y progreso
+### 🪙 Economía
 
 - Nexora Coins `NXC`
 - Wallet y banco
 - Trabajo y profesiones
 - Créditos y score
 - Tiendas y mercado
-- Rankings
-- Propiedades y progresión
+- Rankings y propiedades
 
 </td>
 <td valign="top">
 
 ### 🎮 Entretenimiento
 
-- Juegos clásicos
-- PvP
-- Casino/apuestas NXC
+- Juegos clásicos y PvP
+- Casino NXC
 - RPG y crafting
-- Mascotas
-- Quests y raids
+- Mascotas, quests y raids
 - Waifu Collection
 
 </td>
@@ -206,14 +194,14 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 </td>
 <td valign="top">
 
-### 🤖 Plataforma
+### ⚙️ Plataforma
 
 - Subbots aislados por proceso
-- Dashboard web en Full
+- Dashboard opcional
+- Ollama/Qwen opcional
 - Health local
 - Instaladores automáticos
-- Actualizadores seguros
-- VPS, Windows y Termux Lite
+- Actualizadores compatibles
 - GitHub Actions CI/CD
 
 </td>
@@ -222,90 +210,191 @@ No es únicamente un bot de comandos. Su arquitectura separa el transporte de Wh
 
 ---
 
-# ⚖️ Entornos y capacidades
+# 🧩 Perfiles de instalación
 
-| Componente | 🖥️ Linux Full | 🪟 Windows Full | 📱 Termux Lite |
+| Perfil | Bot | Web | Ollama/Qwen | Uso recomendado |
+|---|:---:|:---:|:---:|---|
+| **Bot Only** | ✅ | ❌ | ❌ | VPS/PC ligero, solo funciones WhatsApp |
+| **Bot + Web** | ✅ | ✅ | ❌ | Dashboard y portal sin LLM local |
+| **Bot + Ollama** | ✅ | ❌ | ✅ | IA local sin dashboard |
+| **Full** | ✅ | ✅ | ✅ | Todas las funciones del despliegue Full |
+| **Termux Lite** | ✅ | ❌ | ❌ | Android, consumo reducido |
+
+### Compatibilidad por sistema
+
+| Componente | 🖥️ Linux VPS | 🪟 Windows | 📱 Termux Lite |
 |---|:---:|:---:|:---:|
 | WhatsApp / Baileys | ✅ | ✅ | ✅ |
-| Pairing code + QR | ✅ | ✅ | ✅ |
 | Economía / banco | ✅ | ✅ | ✅ |
 | Juegos / RPG / Waifus | ✅ | ✅ | ✅ |
 | Grupos y moderación | ✅ | ✅ | ✅ |
 | Descargas compatibles | ✅ | ✅ | ✅ |
 | Subbots | ✅ | ✅ | ✅ |
-| Health local | ✅ | ✅ | ✅ |
+| Dashboard Next.js | ✅ Opcional | ✅ Opcional | ❌ |
+| Portal web de subbots | ✅ Con Web | ✅ Con Web | ❌ |
 | Ollama / Qwen | ✅ Opcional | ✅ Opcional | ❌ |
 | Mini-LLM / RAG / free-chat | ✅ Con Ollama | ✅ Con Ollama | ❌ |
 | IA HTTP `.ai` / `.investiga` | ✅ Configurable | ✅ Configurable | ❌ Lite |
-| Playwright / navegador | ✅ Opcional | ✅ Opcional | ❌ |
-| Sharp avanzado | ✅ Opcional | ✅ Opcional | ❌ Omitido |
-| Dashboard Next.js | ✅ | ✅ Local | ❌ |
-| Portal web de subbots | ✅ | ✅ Local | ❌ |
-| Telegram bridge | ✅ Opcional | ✅ Configurable | ❌ |
 | Nginx / HTTPS | ✅ | — | ❌ |
 | systemd | ✅ | — | ❌ |
 | Gestor `ghostnexora` | — | ✅ | ✅ |
-| Build | `dist/` | `dist/` | `dist-termux/` |
+| Build principal | `dist/` | `dist/` | `dist-termux/` |
 
 ---
 
-# 🚀 Instalación VPS / Full
+# 🌐 Dashboard web opcional
+
+El dashboard se controla mediante:
+
+```env
+WEB_ENABLED=true
+```
+
+o:
+
+```env
+WEB_ENABLED=false
+```
+
+Cuando está **deshabilitado**:
+
+- el MainBot sigue funcionando;
+- no se necesita Next.js en ejecución;
+- el instalador puede omitir dependencias y build web;
+- Linux no habilita `ghost-nexora-web.service`;
+- Windows no inicia el proceso del dashboard;
+- `.adminpanel` / `.dashboard` no se registran;
+- `.subbot portal` deja de anunciar enlaces inexistentes;
+- subbots siguen disponibles mediante `status`, `pair` y `qr`.
+
+Cuando está **habilitado**:
+
+- se compila `apps/web`;
+- se habilita el dashboard;
+- se habilita el portal de subbots;
+- `.adminpanel` aparece para el owner.
+
+> [!IMPORTANT]
+> Las instalaciones antiguas no tenían `WEB_ENABLED`. El actualizador detecta automáticamente un `ghost-nexora-web.service` activo/habilitado o un build `.next` existente y guarda `WEB_ENABLED=true`. Esto evita apagar accidentalmente una web que ya estaba en producción.
+
+---
+
+# 🧠 Ollama + Qwen opcional
+
+[![Ollama](https://img.shields.io/badge/Ollama-Optional-000000?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.com/)
+[![Qwen](https://img.shields.io/badge/Qwen-qwen2.5%3A1.5b-615CED?style=for-the-badge)](https://ollama.com/library/qwen2.5)
+
+El LLM local requiere:
+
+```text
+OLLAMA_ENABLED=true
+          +
+ejecutable ollama disponible
+```
+
+Si falta alguna condición, el runtime deshabilita el stack local y no registra:
+
+```text
+.llm
+.minillm
+.localai
+.corpus
+.llmcorpus
+.autochat
+```
+
+`.ai` e `.investiga` pertenecen a la IA HTTP externa y son independientes de Ollama.
+
+Documentación: [`docs/OLLAMA.md`](docs/OLLAMA.md).
+
+---
+
+# 🚀 Instalación Linux VPS
 
 ### Sistemas recomendados
 
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%2F24.04-E95420?style=flat-square&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
 [![Debian](https://img.shields.io/badge/Debian-Compatible-A81D33?style=flat-square&logo=debian&logoColor=white)](https://www.debian.org/)
 
-Ejecuta:
+## Instalación interactiva recomendada
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo bash
 ```
 
-En una primera instalación el script pregunta si quieres instalar **Ollama + Qwen**. La opción predeterminada es **No**.
+En una primera instalación pregunta por separado:
 
 ```text
-Ollama es OPCIONAL y consume RAM, almacenamiento y CPU.
-Modelo recomendado: qwen2.5:1.5b
+¿Instalar y activar dashboard web + portal de subbots? [s/N]:
 ¿Instalar Ollama + Qwen para LLM local? [s/N]:
 ```
 
-### Instalación VPS sin Ollama, no interactiva
+Ambos son opcionales y la opción predeterminada es **No**.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo env INSTALL_OLLAMA=no bash
-```
-
-### Instalación VPS con Ollama + Qwen
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | sudo env INSTALL_OLLAMA=yes OLLAMA_MODEL=qwen2.5:1.5b bash
-```
-
-### VPS con dominio + HTTPS
+## Solo Bot
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | \
-  sudo env BOT_DOMAIN=bot.example.com LETSENCRYPT_EMAIL=admin@example.com bash
+  sudo env INSTALL_WEB=no INSTALL_OLLAMA=no bash
 ```
 
-### Actualizar
+## Bot + Web
 
 ```bash
-sudo /opt/ghost-nexora-bot/scripts/update.sh
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | \
+  sudo env INSTALL_WEB=yes INSTALL_OLLAMA=no bash
 ```
 
-El actualizador respeta la decisión sobre Ollama. Si el LLM local está deshabilitado, no crea ni arranca su worker; si encuentra un worker antiguo, lo detiene y deshabilita.
+## Bot + Ollama/Qwen
 
-### Estado y logs
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | \
+  sudo env INSTALL_WEB=no INSTALL_OLLAMA=yes OLLAMA_MODEL=qwen2.5:1.5b bash
+```
+
+## Full: Bot + Web + Ollama/Qwen
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | \
+  sudo env INSTALL_WEB=yes INSTALL_OLLAMA=yes OLLAMA_MODEL=qwen2.5:1.5b bash
+```
+
+## Web + dominio + HTTPS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install.sh | \
+  sudo env \
+    INSTALL_WEB=yes \
+    INSTALL_OLLAMA=no \
+    BOT_DOMAIN=bot.example.com \
+    LETSENCRYPT_EMAIL=admin@example.com \
+    bash
+```
+
+## Estado
 
 ```bash
 sudo systemctl status ghost-nexora-bot --no-pager
-sudo journalctl -u ghost-nexora-bot -f
 ```
 
-> [!TIP]
-> Consulta [`docs/FIRST_INSTALL.md`](docs/FIRST_INSTALL.md), [`docs/UPDATING.md`](docs/UPDATING.md) y [`docs/OLLAMA.md`](docs/OLLAMA.md).
+Si Web está habilitada:
+
+```bash
+sudo systemctl status ghost-nexora-web --no-pager
+```
+
+Si Ollama está habilitado:
+
+```bash
+sudo systemctl status ollama ghost-nexora-llm --no-pager
+ollama list
+```
+
+## Logs
+
+```bash
+sudo journalctl -u ghost-nexora-bot -f
+```
 
 ---
 
@@ -319,32 +408,95 @@ sudo journalctl -u ghost-nexora-bot -f
 
 </div>
 
-Ghost Nexora Bot puede instalarse de forma **nativa, sin WSL**.
+Ghost Nexora Bot funciona de forma **nativa, sin WSL**.
 
-Abre PowerShell y ejecuta:
+## Instalación interactiva recomendada
 
 ```powershell
 irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 | iex
 ```
 
-El instalador:
+La primera instalación pregunta por separado:
 
-1. comprueba Windows y WinGet;
-2. instala Git, Node.js 24+, FFmpeg y yt-dlp cuando falten;
-3. clona/actualiza `main`;
-4. separa código y persistencia;
-5. genera/configura `.env` y token administrativo;
-6. pregunta si quieres **Ollama + Qwen**;
-7. compila bot + dashboard;
-8. instala el comando global `ghostnexora`;
-9. permite hacer pairing de WhatsApp;
-10. inicia MainBot y dashboard local.
+```text
+¿Instalar dashboard web + portal de subbots? [s/N]
+¿Instalar Ollama + Qwen? [s/N]
+```
 
-### Datos de Windows
+## Instalación parametrizada
+
+Descarga el instalador:
+
+```powershell
+$installer = "$env:TEMP\ghostnexora-install.ps1"
+irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 -OutFile $installer
+```
+
+### Solo Bot
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No
+```
+
+### Bot + Web
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -Ollama No
+```
+
+### Bot + Ollama/Qwen
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama Yes -OllamaModel "qwen2.5:1.5b"
+```
+
+### Full
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -Ollama Yes -OllamaModel "qwen2.5:1.5b"
+```
+
+### Sin pairing inicial
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No -SkipPair
+```
+
+### Instalar sin arrancar automáticamente
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No -NoStart
+```
+
+`-SkipWeb` se conserva como alias de compatibilidad para una primera instalación sin dashboard.
+
+## Gestor Windows
+
+```powershell
+ghostnexora start
+ghostnexora stop
+ghostnexora restart
+ghostnexora status
+ghostnexora logs
+ghostnexora pair 521XXXXXXXXXX
+ghostnexora update
+ghostnexora doctor
+```
+
+Con Web habilitada:
+
+```powershell
+ghostnexora web-start
+ghostnexora web-stop
+```
+
+Si `WEB_ENABLED=false`, `ghostnexora web-start` no provoca un fallo del bot: informa que el dashboard está deshabilitado y termina limpiamente.
+
+### Datos Windows
 
 ```text
 %USERPROFILE%\GhostNexoraBot\
-└── código + builds
+└── código y builds
 
 %LOCALAPPDATA%\GhostNexoraBot\
 ├── session\
@@ -354,72 +506,27 @@ El instalador:
 └── run\
 ```
 
-### Gestor de Windows
-
-```powershell
-ghostnexora start
-ghostnexora stop
-ghostnexora restart
-ghostnexora status
-ghostnexora logs
-ghostnexora pair 521XXXXXXXXXX
-ghostnexora web-start
-ghostnexora web-stop
-ghostnexora update
-ghostnexora doctor
-```
-
-Guía completa: [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md).
+Guía: [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md).
 
 ---
 
 # 📱 Instalación Termux Lite
 
-<div align="center">
+Termux Lite siempre utiliza:
 
-[![Android](https://img.shields.io/badge/Android-Termux_Lite-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com/)
-[![Termux](https://img.shields.io/badge/Termux-No_Root-000000?style=for-the-badge&logo=termux&logoColor=white)](https://termux.dev/)
+```env
+NEXORA_RUNTIME_PROFILE=termux-lite
+WEB_ENABLED=false
+OLLAMA_ENABLED=false
+```
 
-</div>
-
-Termux Lite está diseñado para ejecutar Ghost Nexora Bot directamente desde Android con menor consumo de almacenamiento, RAM y procesos.
-
-> [!IMPORTANT]
-> Ejecuta el instalador dentro de **Termux**, sin `root` y sin `sudo`.
+Instalación:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-termux.sh | bash
 ```
 
-### El instalador Lite configura
-
-1. Git, Node.js, FFmpeg, Python, curl y utilidades base.
-2. `yt-dlp` con fallback mediante Python.
-3. Clonado/actualización del repositorio.
-4. Datos persistentes en `$HOME/.ghostnexora`.
-5. `NEXORA_RUNTIME_PROFILE=termux-lite`.
-6. Ollama y LLM forzados a `false`.
-7. Instalación sin dependencias opcionales pesadas.
-8. Build dedicado `dist-termux/`.
-9. Pairing de WhatsApp.
-10. Gestor global `ghostnexora`.
-
-### No se carga en Lite
-
-- Ollama
-- LLM / Mini-LLM
-- entrenamiento local
-- auto-chat IA
-- Playwright / Chromium
-- browser proxy
-- Sharp opcional
-- dashboard Next.js
-- portal web de subbots
-- Telegram bridge
-- Nginx / Certbot
-- systemd
-
-### Gestor Termux
+Gestor:
 
 ```bash
 ghostnexora start
@@ -435,55 +542,63 @@ ghostnexora wakelock on
 ghostnexora wakelock off
 ```
 
-### Datos persistentes
+Termux Lite omite Ollama, LLM local, dashboard, portal web, Playwright/browser pesado, Sharp opcional, Nginx y systemd.
 
-```text
-$HOME/GhostNexoraBot/          código y runtime
-
-$HOME/.ghostnexora/
-├── session/                   sesión principal
-├── data/                      persistencia y SQLite
-│   └── subbots/               datos/sesiones de subbots
-├── logs/                      logs
-└── run/                       PID
-```
-
-Guía completa: [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md).
+Guía: [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md).
 
 ---
 
-# 🧠 Ollama + Qwen opcional
+# 🔄 Actualizaciones seguras
 
-[![Ollama](https://img.shields.io/badge/Ollama-Optional-000000?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.com/)
-[![Qwen](https://img.shields.io/badge/Qwen-qwen2.5%3A1.5b-615CED?style=for-the-badge)](https://ollama.com/library/qwen2.5)
+## Linux VPS
 
-El LLM local solo se habilita cuando se cumplen **ambas** condiciones:
-
-```text
-OLLAMA_ENABLED=true
-          +
-ejecutable ollama presente
+```bash
+sudo /opt/ghost-nexora-bot/scripts/update.sh
 ```
 
-Si falta cualquiera de las dos, el runtime considera el LLM local deshabilitado.
+El actualizador detecta y conserva:
 
-### Comandos que desaparecen cuando Ollama no está disponible
+- sesión de WhatsApp;
+- SQLite/economía;
+- subbots;
+- `WEB_ENABLED`;
+- `OLLAMA_ENABLED`;
+- entrenamiento LLM en progreso;
+- servicios existentes.
+
+### Compatibilidad con una VPS antigua
+
+Si `.env` todavía no contiene `WEB_ENABLED`, se comprueba:
 
 ```text
-.llm
-.minillm
-.localai
-.corpus
-.llmcorpus
-.autochat
+ghost-nexora-web.service activo
+        o
+ghost-nexora-web.service habilitado
+        o
+apps/web/.next existente
 ```
 
-También desaparecen sus aliases y no se ejecuta el modo de conversación libre local ni la ruta de voz hacia Ollama.
+Si se detecta cualquiera de ellos:
 
-> [!NOTE]
-> `.ai` y `.investiga` pertenecen a la IA HTTP externa configurable y son independientes de Ollama.
+```env
+WEB_ENABLED=true
+```
 
-Documentación detallada: [`docs/OLLAMA.md`](docs/OLLAMA.md).
+se guarda automáticamente antes del build y reinicio. Por tanto, una VPS que ya tiene **Bot + Ollama + Web** no pierde ninguna de esas funciones al usar el nuevo actualizador.
+
+## Windows
+
+```powershell
+ghostnexora update
+```
+
+El gestor lee `WEB_ENABLED` y solo instala/compila Next.js cuando corresponde. Las instalaciones Windows heredadas con `.next` existente se consideran Web habilitada.
+
+## Termux
+
+```bash
+ghostnexora update
+```
 
 ---
 
@@ -491,11 +606,9 @@ Documentación detallada: [`docs/OLLAMA.md`](docs/OLLAMA.md).
 
 [![Baileys](https://img.shields.io/badge/Baileys-7.0.0--rc14-25D366?style=flat-square&logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys)
 
-La conexión utiliza **Baileys 7** y soporta la arquitectura Multi-Device moderna.
+Capacidades principales:
 
-### Capacidades
-
-- pairing por número;
+- pairing code por número;
 - QR fallback;
 - sesiones persistentes;
 - reconexión automática;
@@ -503,7 +616,7 @@ La conexión utiliza **Baileys 7** y soporta la arquitectura Multi-Device modern
 - resolución de identidad;
 - owner/staff/admin;
 - workers independientes para subbots;
-- timeout y errores públicos controlados.
+- timeouts y errores públicos controlados.
 
 Prefijo predeterminado:
 
@@ -517,11 +630,11 @@ Menú:
 .menu
 ```
 
-El menú moderno se genera a partir del **registro efectivo de comandos**, por lo que cada entorno muestra únicamente lo que realmente está habilitado.
+El menú se genera desde el **registro efectivo de comandos**, por lo que no muestra funciones pertenecientes a componentes deshabilitados.
 
 ---
 
-# 🧩 Módulos y comandos
+# 🧩 Módulos principales
 
 <details open>
 <summary><strong>🌐 General</strong></summary>
@@ -534,8 +647,6 @@ El menú moderno se genera a partir del **registro efectivo de comandos**, por l
 .profile
 .credits
 ```
-
-`.credits`, `.creditos`, `.colaboradores` y `.team` muestran el equipo oficial del proyecto.
 
 </details>
 
@@ -559,35 +670,12 @@ El menú moderno se genera a partir del **registro efectivo de comandos**, por l
 
 Incluye wallet, banco, score crediticio, profesiones, minería, tienda, préstamos, inversiones, propiedades y progresión.
 
-> NXC es una moneda virtual interna; no representa dinero real ni criptomoneda.
-
 </details>
 
 <details>
-<summary><strong>🎮 Juegos y RPG</strong></summary>
+<summary><strong>🎮 Juegos, RPG y colección</strong></summary>
 
-El proyecto incorpora juegos y experiencias como Dino, Snake, Doom-style, Ninja, Space Dodge, gato/tres en raya, damas, PVZ2-style, PvP y juegos económicos.
-
-El RPG incorpora inventario, gathering, crafting, mascotas, quests y raids.
-
-</details>
-
-<details>
-<summary><strong>🌸 Nexora Waifu Collection</strong></summary>
-
-```text
-.waifu
-.rw
-.claim
-.harem
-.wsearch
-.winfo
-.wgive
-.wsell
-.wtop
-```
-
-Colección persistente con personajes, rareza, propiedad, mercado y economía NXC.
+Incluye Dino, Snake, Doom-style, Ninja, Space Dodge, gato, damas, PVZ2-style, PvP, casino NXC, crafting, mascotas, quests, raids y Waifu Collection.
 
 </details>
 
@@ -609,8 +697,6 @@ Colección persistente con personajes, rareza, propiedad, mercado y economía NX
 .apk <app>
 ```
 
-El stack puede utilizar `yt-dlp`, FFmpeg, resolvers HTTP y carruseles interactivos.
-
 </details>
 
 <details>
@@ -630,24 +716,13 @@ El stack puede utilizar `yt-dlp`, FFmpeg, resolvers HTTP y carruseles interactiv
 .enable antispam
 ```
 
-El router distingue owner, staff, administradores, owners de subbot y usuarios normales.
-
-</details>
-
-<details>
-<summary><strong>🔞 Módulos opt-in</strong></summary>
-
-El repositorio incluye módulos para adultos que requieren configuración y controles de acceso. Estos módulos deben utilizarse únicamente de forma legal por adultos y rechazan solicitudes que indiquen contenido sexual relacionado con menores.
-
 </details>
 
 ---
 
 # 🤖 Subbots
 
-Los subbots mantienen sesiones de WhatsApp independientes y se ejecutan en workers Node separados.
-
-### Usuario
+Los subbots mantienen sesiones independientes y se ejecutan en procesos Node aislados.
 
 ```text
 .subbot status
@@ -655,26 +730,19 @@ Los subbots mantienen sesiones de WhatsApp independientes y se ejecutan en worke
 .subbot qr
 ```
 
-### Full — Linux / Windows
+Con Web habilitada:
 
-Puede habilitar portal web y administración desde dashboard según el despliegue.
+```text
+.subbot portal
+.adminpanel
+```
 
-### Termux Lite
-
-Los subbots siguen disponibles, pero heredan el perfil Lite:
-
-- sin Ollama/LLM;
-- sin dashboard;
-- sin portal web;
-- sin Playwright;
-- con comandos compatibles con Lite;
-- cierre del worker cuando desaparece el proceso padre.
+Con Web deshabilitada, `portal/adminpanel` no se anuncian y la gestión continúa desde WhatsApp.
 
 ```text
 MainBot
    │
    └── SubbotManager
-         │
          ├── Worker #1 ── Session #1
          ├── Worker #2 ── Session #2
          └── Worker #N ── Session #N
@@ -688,112 +756,73 @@ MainBot
 
 | Tecnología | Uso |
 |---|---|
-| [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) | Lenguaje principal y tipado estático |
-| [![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/) | Runtime principal |
+| [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/) | Lenguaje principal |
+| [![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/) | Runtime |
 | [![Baileys](https://img.shields.io/badge/Baileys-7.0.0--rc14-25D366?logo=whatsapp&logoColor=white)](https://github.com/WhiskeySockets/Baileys) | WhatsApp Multi-Device |
-| [![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/) | Persistencia integrada |
-| [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/) | Validación de datos/configuración |
-| [![Pino](https://img.shields.io/badge/Pino-9-687634?logo=nodedotjs&logoColor=white)](https://getpino.io/) | Logging estructurado |
+| [![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/) | Persistencia |
+| [![Zod](https://img.shields.io/badge/Zod-4-3E67B1?logo=zod&logoColor=white)](https://zod.dev/) | Validación |
+| [![Pino](https://img.shields.io/badge/Pino-9-687634?logo=nodedotjs&logoColor=white)](https://getpino.io/) | Logging |
 | [![Cheerio](https://img.shields.io/badge/Cheerio-1-E88C1F?logo=javascript&logoColor=white)](https://cheerio.js.org/) | Parsing HTML |
-| [![Execa](https://img.shields.io/badge/Execa-9-5A29E4?logo=gnubash&logoColor=white)](https://github.com/sindresorhus/execa) | Ejecución segura de procesos externos |
-| [![QRCode](https://img.shields.io/badge/QRCode-1.5-111111?logo=qrcode&logoColor=white)](https://www.npmjs.com/package/qrcode) | QR de vinculación y utilidades |
-| [![yt-search](https://img.shields.io/badge/yt--search-2.13-FF0000?logo=youtube&logoColor=white)](https://www.npmjs.com/package/yt-search) | Búsqueda de contenido YouTube |
-| [![Mammoth](https://img.shields.io/badge/Mammoth-DOCX-2B579A?logo=microsoftword&logoColor=white)](https://www.npmjs.com/package/mammoth) | Extracción de documentos DOCX |
-| [![pdf-parse](https://img.shields.io/badge/pdf--parse-PDF-B30B00?logo=adobeacrobatreader&logoColor=white)](https://www.npmjs.com/package/pdf-parse) | Procesamiento de PDF |
+| [![Execa](https://img.shields.io/badge/Execa-9-5A29E4?logo=gnubash&logoColor=white)](https://github.com/sindresorhus/execa) | Procesos externos |
+| [![QRCode](https://img.shields.io/badge/QRCode-1.5-111111?logo=qrcode&logoColor=white)](https://www.npmjs.com/package/qrcode) | QR |
+| [![Mammoth](https://img.shields.io/badge/Mammoth-DOCX-2B579A?logo=microsoftword&logoColor=white)](https://www.npmjs.com/package/mammoth) | DOCX |
+| [![pdf-parse](https://img.shields.io/badge/pdf--parse-PDF-B30B00?logo=adobeacrobatreader&logoColor=white)](https://www.npmjs.com/package/pdf-parse) | PDF |
 
 ## Multimedia
 
 | Tecnología | Uso |
 |---|---|
-| [![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/) | Audio, video y conversiones |
-| [![yt-dlp](https://img.shields.io/badge/yt--dlp-FF0000?logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp) | Descargas multimedia |
-| [![Sharp](https://img.shields.io/badge/Sharp-optional-99CC00?logo=sharp&logoColor=white)](https://sharp.pixelplumbing.com/) | Imágenes y stickers en Full |
-| [![Playwright](https://img.shields.io/badge/Playwright-optional-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/) | Navegador automatizado en Full |
+| [![FFmpeg](https://img.shields.io/badge/FFmpeg-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/) | Audio/video |
+| [![yt-dlp](https://img.shields.io/badge/yt--dlp-FF0000?logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp) | Descargas |
+| [![Sharp](https://img.shields.io/badge/Sharp-optional-99CC00?logo=sharp&logoColor=white)](https://sharp.pixelplumbing.com/) | Imágenes/stickers |
+| [![Playwright](https://img.shields.io/badge/Playwright-optional-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/) | Automatización navegador |
 
-## Web
-
-| Tecnología | Uso |
-|---|---|
-| [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org/) | Dashboard y App Router |
-| [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](https://react.dev/) | UI del dashboard |
-| [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/) | Diseño web |
-| [![Lucide](https://img.shields.io/badge/Lucide_React-icons-F56565?logo=lucide&logoColor=white)](https://lucide.dev/) | Iconografía |
-| [![Highlight.js](https://img.shields.io/badge/Highlight.js-11-F7DF1E?logo=javascript&logoColor=111)](https://highlightjs.org/) | Resaltado de código |
-
-## Infraestructura
+## Web opcional
 
 | Tecnología | Uso |
 |---|---|
-| [![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions) | CI/CD y smoke tests |
-| [![Linux](https://img.shields.io/badge/Linux-VPS-FCC624?logo=linux&logoColor=111)](https://www.kernel.org/) | Producción Full |
-| [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows11&logoColor=white)](docs/WINDOWS_INSTALL.md) | Runtime Full nativo |
-| [![PowerShell](https://img.shields.io/badge/PowerShell-5391FE?logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/) | Instalador y gestor Windows |
-| [![Nginx](https://img.shields.io/badge/Nginx-009639?logo=nginx&logoColor=white)](https://nginx.org/) | Reverse proxy en Linux Full |
-| [![Let's Encrypt](https://img.shields.io/badge/Let's_Encrypt-003A70?logo=letsencrypt&logoColor=white)](https://letsencrypt.org/) | TLS/HTTPS |
-| [![systemd](https://img.shields.io/badge/systemd-services-111111?logo=linux&logoColor=white)](https://systemd.io/) | Servicios persistentes en VPS |
-| [![Termux](https://img.shields.io/badge/Termux-Lite-000000?logo=termux&logoColor=white)](https://termux.dev/) | Runtime Android |
-| [![Ollama](https://img.shields.io/badge/Ollama-optional-000000?logo=ollama&logoColor=white)](https://ollama.com/) | LLM local opcional en Full |
-
-> [!NOTE]
-> `sharp` y `playwright` son `optionalDependencies`. La instalación de Termux Lite usa `--omit=optional`, por lo que no arrastra esos componentes.
+| [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org/) | Dashboard |
+| [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](https://react.dev/) | UI |
+| [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/) | Estilos |
+| [![Lucide](https://img.shields.io/badge/Lucide_React-icons-F56565?logo=lucide&logoColor=white)](https://lucide.dev/) | Iconos |
 
 ---
 
 # 🏗️ Arquitectura
-
-Ghost Nexora Bot utiliza **npm Workspaces** para separar bot y web manteniendo un único repositorio.
 
 ```text
 GhostNexoraBot/
 ├── apps/
 │   ├── bot/
 │   │   ├── src/
-│   │   │   ├── commands/               comandos por dominio
-│   │   │   ├── core/                   router, sesiones y subbots
-│   │   │   ├── services/               economía, grupos, multimedia, IA
-│   │   │   ├── utils/                  utilidades
-│   │   │   ├── index.ts                MainBot Full
-│   │   │   ├── termux-lite.ts          MainBot Lite
-│   │   │   ├── subbot-worker.ts        worker Full
-│   │   │   └── subbot-worker-termux.ts worker Lite
-│   │   ├── dist/                        build Full
-│   │   ├── dist-termux/                 build Lite
-│   │   └── package.json
-│   │
-│   └── web/
-│       ├── app/                         Next.js App Router
-│       ├── lib/
-│       └── package.json
-│
+│   │   │   ├── commands/
+│   │   │   ├── core/
+│   │   │   ├── services/
+│   │   │   ├── index.ts
+│   │   │   ├── termux-lite.ts
+│   │   │   ├── subbot-worker.ts
+│   │   │   └── subbot-worker-termux.ts
+│   │   ├── dist/
+│   │   └── dist-termux/
+│   └── web/                     opcional
+│       ├── app/
+│       └── lib/
 ├── docs/
-│   ├── FIRST_INSTALL.md
-│   ├── UPDATING.md
-│   ├── OLLAMA.md
-│   ├── WINDOWS_INSTALL.md
-│   └── TERMUX_LITE.md
-│
 ├── scripts/
-│   ├── install.sh                       instalador VPS
-│   ├── update.sh                        actualizador VPS
-│   ├── install-ollama.sh                Ollama/Qwen opcional
-│   ├── install-llm-worker-service.sh    worker LLM opcional
-│   ├── install-windows.ps1              instalador Windows
-│   ├── windows/ghostnexora.ps1          gestor Windows
-│   ├── install-termux.sh                instalador Termux
-│   ├── update-termux.sh                 actualizador Termux
-│   ├── termux/ghostnexora               gestor Termux
-│   └── *-smoke.mjs                      pruebas de integración
-│
+│   ├── install.sh
+│   ├── update.sh
+│   ├── install-windows.ps1
+│   ├── windows/ghostnexora.ps1
+│   ├── install-termux.sh
+│   ├── update-termux.sh
+│   └── *-smoke.mjs
 ├── systemd/
 ├── .github/workflows/
 ├── .env.example
-├── README-LLM.md
-├── README.md
-├── LICENSE
-└── package.json
+└── README.md
 ```
 
-### Flujo principal
+### Flujo del bot
 
 ```text
 WhatsApp
@@ -809,20 +838,18 @@ Command Router
    │
    ├── permisos
    ├── aliases
-   ├── contexto
-   ├── timeouts
+   ├── componentes opcionales
    └── errores públicos
    │
    ▼
-Command Handler
-   │
+Servicios
    ├── SQLite / Economy
    ├── Downloads / FFmpeg / yt-dlp
    ├── Groups / Community
    ├── Games / RPG
-   ├── Collections
-   ├── External APIs
-   └── Subbot Manager
+   ├── Subbots
+   ├── Web [opcional]
+   └── Ollama [opcional]
 ```
 
 ---
@@ -857,47 +884,34 @@ $HOME/.ghostnexora/
 └── run/
 ```
 
-### Principios
-
-- sesiones fuera del repositorio;
-- `.env` excluido de Git;
-- aislamiento de subbots;
-- permisos owner/staff/admin;
-- SQLite persistente;
-- actualizadores que conservan estado;
-- errores internos sensibles no expuestos al chat;
-- tokens aleatorios para componentes administrativos;
-- CI con validaciones Linux y Windows.
-
 > [!CAUTION]
-> Nunca publiques `.env`, `creds.json`, bases SQLite, cookies, API keys, tokens de administración o credenciales de WhatsApp.
+> Nunca publiques `.env`, `creds.json`, bases SQLite, cookies, API keys, tokens administrativos ni credenciales de WhatsApp.
 
 ---
 
 # ⚙️ Variables de entorno
-
-Ejemplo base:
 
 ```env
 NEXORA_RUNTIME_PROFILE=full
 BOT_NAME=Ghost Nexora Bot
 PREFIX=.
 OWNER_NUMBERS=5210000000000
-AUTO_REACT=true
 
 SESSION_DIR=./data/session
 DATA_DIR=./data
-MAX_DOWNLOAD_MB=1900
-
 BOT_HEALTH_PORT=3001
-BOT_HEALTH_URL=http://127.0.0.1:3001/health
 
+# Web opcional
+WEB_ENABLED=true
 WEB_PORT=3000
 PUBLIC_WEB_URL=https://bot.example.com
 ADMIN_WEB_TOKEN=
 
+# Ollama opcional
 OLLAMA_ENABLED=false
 OLLAMA_MODEL=qwen2.5:1.5b
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+
 OFFICIAL_CHANNEL_URL=https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i
 LOG_LEVEL=info
 ```
@@ -905,131 +919,31 @@ LOG_LEVEL=info
 Referencia completa: [`.env.example`](.env.example).
 
 > [!NOTE]
-> `OLLAMA_ENABLED=true` es una solicitud de activación. El runtime además verifica que el ejecutable `ollama` exista antes de considerar disponible el LLM local.
-
----
-
-# ❤️ Health y observabilidad
-
-Endpoint local:
-
-```text
-http://127.0.0.1:3001/health
-```
-
-Incluye conectividad, uptime, subbots y estado del LLM local.
-
-### Windows / Termux
-
-```text
-ghostnexora status
-ghostnexora doctor
-```
-
-### VPS
-
-```bash
-curl http://127.0.0.1:3001/health
-```
+> Para compatibilidad, una instalación Full antigua sin `WEB_ENABLED` se interpreta como Web habilitada en runtime; los instaladores/actualizadores además migran explícitamente el valor cuando detectan una web previa.
 
 ---
 
 # 🧪 CI/CD
 
-<div align="center">
+El workflow de GitHub Actions valida:
 
-[![GitHub Actions](https://img.shields.io/badge/Continuous_Integration-GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
-
-</div>
-
-El workflow principal valida:
-
-- instalación y auditoría de dependencias;
+- `npm audit`;
 - TypeScript typecheck;
 - build completo;
-- registro condicional Ollama/LLM;
-- caso `OLLAMA_ENABLED=false`;
-- caso flag activo con binario Ollama ausente;
-- caso flag activo con Ollama disponible;
-- build dedicado Termux Lite;
-- smoke `termux-lite`;
-- economía, migraciones y banco;
-- colecciones/assets;
-- YouTube;
-- LLM Full;
-- scripts Bash;
-- sintaxis de los instaladores PowerShell en `windows-latest`;
-- smoke del gestor Windows.
+- Ollama ON/OFF;
+- Web ON/OFF;
+- ocultamiento de `.adminpanel/.dashboard` sin Web;
+- `subbot portal` solo con Web;
+- Termux Lite;
+- economía y banco;
+- assets;
+- descargas;
+- LLM;
+- sintaxis Bash;
+- sintaxis PowerShell en `windows-latest`;
+- gestor Windows.
 
 [![Open Actions](https://img.shields.io/badge/Ver_ejecuciones-Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
-
----
-
-# 🔄 Actualización
-
-### Linux VPS
-
-```bash
-sudo /opt/ghost-nexora-bot/scripts/update.sh
-```
-
-### Windows
-
-```powershell
-ghostnexora update
-```
-
-### Termux
-
-```bash
-ghostnexora update
-```
-
-Los tres flujos preservan la persistencia del entorno. Linux y Windows conservan la decisión previa sobre Ollama; Termux Lite siempre lo mantiene deshabilitado.
-
----
-
-# 💻 Desarrollo
-
-### Requisitos
-
-[![Node.js](https://img.shields.io/badge/Node.js-24%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![npm](https://img.shields.io/badge/npm-11%2B-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/)
-[![FFmpeg](https://img.shields.io/badge/FFmpeg-required-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
-[![Git](https://img.shields.io/badge/Git-required-F05032?logo=git&logoColor=white)](https://git-scm.com/)
-
-### Clonar
-
-```bash
-git clone https://github.com/Gh0stDeveloper/GhostNexoraBot.git
-cd GhostNexoraBot
-npm install
-```
-
-### Validar
-
-```bash
-npm run typecheck
-npm run build
-```
-
-### Build Termux Lite
-
-```bash
-npm run build:termux --workspace=@ghostnexora/bot
-```
-
-### Desarrollo del bot
-
-```bash
-npm run dev --workspace=@ghostnexora/bot
-```
-
-### Desarrollo web
-
-```bash
-npm run dev --workspace=@ghostnexora/web
-```
 
 ---
 
@@ -1037,85 +951,13 @@ npm run dev --workspace=@ghostnexora/web
 
 | Documento | Contenido |
 |---|---|
-| [`docs/FIRST_INSTALL.md`](docs/FIRST_INSTALL.md) | Instalación inicial Linux/VPS |
+| [`docs/FIRST_INSTALL.md`](docs/FIRST_INSTALL.md) | Instalación Linux/VPS |
 | [`docs/UPDATING.md`](docs/UPDATING.md) | Actualización y mantenimiento |
-| [`docs/OLLAMA.md`](docs/OLLAMA.md) | Ollama/Qwen, Mini-LLM y política opcional |
-| [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md) | Instalación nativa Windows 10/11 |
+| [`docs/OLLAMA.md`](docs/OLLAMA.md) | Ollama/Qwen opcional |
+| [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md) | Windows 10/11 |
 | [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md) | Android / Termux Lite |
-| [`README-LLM.md`](README-LLM.md) | Arquitectura IA/LLM de Full |
+| [`README-LLM.md`](README-LLM.md) | Arquitectura LLM |
 | [`.env.example`](.env.example) | Variables configurables |
-
----
-
-# 🧰 Diagnóstico rápido
-
-<details>
-<summary><strong>Linux VPS</strong></summary>
-
-```bash
-sudo systemctl status ghost-nexora-bot --no-pager -l
-sudo journalctl -u ghost-nexora-bot -n 120 --no-pager
-```
-
-Si Ollama está habilitado:
-
-```bash
-systemctl status ollama ghost-nexora-llm --no-pager
-ollama list
-```
-
-</details>
-
-<details>
-<summary><strong>Windows</strong></summary>
-
-```powershell
-ghostnexora doctor
-ghostnexora status
-ghostnexora logs
-```
-
-</details>
-
-<details>
-<summary><strong>Termux</strong></summary>
-
-```bash
-ghostnexora doctor
-ghostnexora status
-ghostnexora logs
-```
-
-</details>
-
----
-
-# 🤝 Contribución
-
-Antes de enviar cambios:
-
-```bash
-npm run typecheck
-npm run build
-```
-
-Para Termux:
-
-```bash
-npm run build:termux --workspace=@ghostnexora/bot
-node scripts/termux-lite-smoke.mjs
-```
-
-Convención recomendada:
-
-```text
-feat: nueva función
-fix: corrección
-perf: optimización
-docs: documentación
-test: pruebas
-refactor: reorganización
-```
 
 ---
 
@@ -1159,22 +1001,13 @@ refactor: reorganización
 .team
 ```
 
-El comando muestra los créditos oficiales de **Ghost Nexora Bot** tanto en **Full** como en **Termux Lite**.
-
 </div>
 
 ---
 
 # ⚠️ Uso responsable
 
-El operador de cada instancia es responsable de:
-
-- respetar las condiciones de las plataformas utilizadas;
-- evitar spam, abuso y acoso;
-- proteger credenciales y sesiones;
-- respetar privacidad y derechos de autor;
-- configurar adecuadamente grupos y permisos;
-- utilizar módulos restringidos únicamente cuando sea legal y apropiado.
+El operador de cada instancia es responsable de proteger credenciales, evitar spam/abuso, respetar privacidad, derechos de autor y condiciones de las plataformas utilizadas.
 
 WhatsApp, Meta y las demás marcas mencionadas pertenecen a sus respectivos propietarios.
 
@@ -1192,7 +1025,7 @@ Este proyecto se distribuye bajo la licencia **MIT**.
 
 ## 👻 Ghost Nexora Bot
 
-**Construido con TypeScript · Node.js · Baileys · SQLite · Next.js · React · Linux · Windows · Termux**
+**TypeScript · Node.js · Baileys · SQLite · Next.js opcional · Ollama opcional · Linux · Windows · Termux**
 
 [![Ghost Developer](https://img.shields.io/badge/Developer-Ghost_Developer-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Gh0stDeveloper)
 [![Lord-oscar](https://img.shields.io/badge/Tester_%26_Support-Lord--oscar-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Lord-oscar)
@@ -1207,7 +1040,7 @@ Este proyecto se distribuye bajo la licencia **MIT**.
 SEO / discoverability:
 Ghost Nexora Bot, WhatsApp bot, WhatsApp Multi-Device bot, Baileys bot, Baileys 7,
 Node.js WhatsApp bot, TypeScript WhatsApp bot, Windows WhatsApp bot, PowerShell WhatsApp bot,
-Termux WhatsApp bot, Android Termux bot, WhatsApp subbots, WhatsApp economy bot,
-WhatsApp games bot, WhatsApp downloader, Next.js bot dashboard, Ollama Qwen WhatsApp bot,
+Termux WhatsApp bot, WhatsApp subbots, WhatsApp economy bot, WhatsApp games bot,
+WhatsApp downloader, optional Next.js dashboard, Ollama Qwen WhatsApp bot,
 Ghost Developer, Lord-oscar, Nexora, GhostNexoraBot.
 -->
