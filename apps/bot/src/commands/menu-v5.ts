@@ -6,6 +6,7 @@ import { privateAccessStatus } from '../services/private-access.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
+import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 
 const sectionOrder = [
@@ -89,11 +90,40 @@ async function roleLabel(ctx: CommandContext) {
   return 'Usuario'
 }
 
+async function currentBotAvatar(ctx: CommandContext) {
+  const jid = ctx.socket.user?.id
+  if (!jid) return undefined
+  return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
+}
+
+async function currentVisualIdentity(ctx: CommandContext) {
+  const style = getCurrentBotVisualStyle()
+  const fallback = await currentBotAvatar(ctx)
+  if (style.id === 'default') {
+    return { style, imageUrl: fallback, displayName: 'Ghost Nexora Bot' }
+  }
+  try {
+    const asset = await resolveBotVisualStyleAsset(style)
+    return {
+      style,
+      imageUrl: asset.imageUrl || fallback,
+      displayName: asset.characterName || style.characterQuery || style.name.split('·')[0]!.trim(),
+    }
+  } catch {
+    return {
+      style,
+      imageUrl: fallback,
+      displayName: style.characterQuery || style.name.split('·')[0]!.trim(),
+    }
+  }
+}
+
 async function menu(ctx: CommandContext) {
   const profession = professionsV2.get(ctx.sender)
   const role = await roleLabel(ctx)
   const privateAccess = Boolean(privateAccessStatus(ctx.sender)) || ctx.isOwner || ctx.isBotStaff
   const instance = ctx.instanceId ? `Subbot #${ctx.instanceId}` : 'MainBot'
+  const visual = await currentVisualIdentity(ctx)
   const grouped = new Map<SectionId, string[]>()
   for (const id of sectionOrder) grouped.set(id, [])
   for (const row of effectiveCommands()) if (visible(ctx, row.command)) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx.prefix, row.command, row.tokens))
@@ -105,19 +135,29 @@ async function menu(ctx: CommandContext) {
     return [`╭─〔 ${sectionTitles[id]} 〕`, ...rows, '╰────────────────', '']
   })
 
+  const visualHeader = visual.style.id === 'default'
+    ? '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮'
+    : `╭━━━〔 ${visual.style.icon} *${visual.displayName.toUpperCase()}* 〕━━━╮`
+
   const body = [
-    '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮',
+    visualHeader,
+    visual.style.id !== 'default' ? `┃ 🌸 Waifu activa » *${visual.displayName}*` : '',
     `┃ ⚙️ Instancia » *${instance}*`, `┃ 👤 Usuario » *${ctx.pushName}*`, `┃ ⌨️ Prefijo » *${ctx.prefix}*`,
     `┃ ⏱️ Uptime » *${formatUptime()}*`, `┃ 🪙 Moneda » *${COIN_NAME} (${COIN_SYMBOL})*`,
     `┃ 💼 Profesión » *${profession.emoji} ${profession.label}*`, `┃ 🏷️ Rol » *${role}*`,
     `┃ 🔐 Privado » *${privateAccess ? 'HABILITADO' : 'NO HABILITADO'}*`, '╰━━━━━━━━━━━━━━━━━━━━╯', '',
-    ...sections, `📚 *Total de comandos efectivos: ${effectiveCommands().filter((row) => visible(ctx, row.command)).length}*`, '', '*Ghost Developer / Nexora*',
-  ].join('\n')
+    ...sections,
+    `📚 *Total de comandos efectivos: ${effectiveCommands().filter((row) => visible(ctx, row.command)).length}*`,
+    '',
+    visual.style.id !== 'default' ? `${visual.style.icon} Apariencia: *${visual.displayName}*` : '',
+    '*Ghost Nexora Bot*',
+  ].filter(Boolean).join('\n')
 
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: '👻 Ghost Nexora Bot · MENÚ',
+    title: visual.style.id === 'default' ? '👻 Ghost Nexora Bot · MENÚ' : `${visual.style.icon} ${visual.displayName} · MENÚ`,
     body,
-    footer: 'Ghost Developer / Nexora',
+    imageUrl: visual.imageUrl,
+    footer: 'Ghost Nexora Bot',
     buttons: [
       { type: 'url', text: 'Ver canal', url: config.officialChannelUrl },
       { type: 'reply', text: 'Perfil', id: `${ctx.prefix}profile` },
@@ -128,5 +168,5 @@ async function menu(ctx: CommandContext) {
 
 export const menuV5Commands: BotCommand[] = [
   ...mediaDevV6Commands,
-  { name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos.', handler: menu },
+  { name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos con avatar/waifu visual de la instancia.', handler: menu },
 ]
