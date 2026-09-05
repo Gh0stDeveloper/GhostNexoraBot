@@ -80,6 +80,8 @@ import { damasCommands } from './damas.js'
 import { bankingV10Commands } from './banking-v10.js'
 import { minershopV10Commands } from './minershop-v10.js'
 import { balanceV10Commands } from './balance-v10.js'
+import { minershopV11Commands } from './minershop-v11.js'
+import { adultMediaV11Commands } from './adult-media-v11.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -160,6 +162,8 @@ export const commands: BotCommand[] = [
   ...bankingV10Commands,
   ...minershopV10Commands,
   ...balanceV10Commands,
+  ...minershopV11Commands,
+  ...adultMediaV11Commands,
 ]
 
 setMenuCommandProvider(() => commands)
