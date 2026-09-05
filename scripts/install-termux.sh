@@ -43,8 +43,10 @@ section '2/7 · yt-dlp'
 if pkg install -y yt-dlp >/dev/null 2>&1; then
   ok "yt-dlp instalado desde Termux: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 else
-  python -m pip install --user --upgrade yt-dlp >/dev/null
-  export PATH="$HOME/.local/bin:$PATH"
+  # Termux Python instala scripts bajo $PREFIX/bin cuando no se usa --user,
+  # por lo que yt-dlp seguirá disponible en nuevas sesiones de la terminal.
+  python -m pip install --upgrade yt-dlp >/dev/null
+  command -v yt-dlp >/dev/null 2>&1 || fail 'yt-dlp se instaló con pip pero no quedó disponible en PATH.'
   ok "yt-dlp instalado con Python: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 fi
 
