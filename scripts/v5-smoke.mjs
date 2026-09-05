@@ -43,6 +43,7 @@ try {
     'mc', 'minecraft', 'mchelp', 'mcseed', 'mcstronghold', 'mcbioma', 'mcanchor', 'mcstruct',
     'mcskin', 'mccape', 'mcplayer', 'mcperfil', 'mcjugador', 'mcgamertag', 'mcserver', 'mccraft', 'mcalert', 'mcprice',
     'styles', 'estilos', 'themes', 'botstyles', 'waifustyles', 'style', 'estilo', 'theme', 'botstyle',
+    'styleimg', 'waifuimg', 'styleimage', 'imagenwaifu',
     'mario', 'supermario', 'mariobros', 'mariogame',
   ]) {
     assert.equal(tokens.has(expected), true, `missing effective command token: ${expected}`)
@@ -52,7 +53,7 @@ try {
   assert.equal(menuOwner?.description.includes('todos los comandos'), true)
   assert.equal(menuOwner?.description.includes('avatar/waifu'), true, 'menu must expose active visual avatar/waifu')
   const waifuOwner = effective.find((row) => row.tokens.includes('rw'))?.command
-  assert.equal(waifuOwner?.description.includes('AniList'), true)
+  assert.equal(waifuOwner?.description.includes('AniList'), true, '.waifu must remain backed by AniList')
   const minerShopOwner = effective.find((row) => row.tokens.includes('minershop'))?.command
   assert.equal(minerShopOwner?.description.includes('estilo visual activo'), true, 'minershop V13 style override is not effective')
   const shopOwner = effective.find((row) => row.tokens.includes('shop'))?.command
@@ -65,9 +66,13 @@ try {
   const mcPlayerOwner = effective.find((row) => row.tokens.includes('mcplayer'))?.command
   assert.equal(mcPlayerOwner?.description.includes('Bedrock/Xbox'), true, 'Minecraft V12 profile override is not effective')
   const stylesOwner = effective.find((row) => row.tokens.includes('styles'))?.command
-  assert.equal(stylesOwner?.description.includes('AniList'), true, 'styles V13 command is not effective')
+  assert.equal(stylesOwner?.description.includes('imágenes locales'), true, 'styles must expose local visual assets')
+  assert.equal(stylesOwner?.description.includes('AniList'), false, 'visual styles must no longer depend on AniList')
   const styleOwner = effective.find((row) => row.tokens.includes('style'))?.command
   assert.equal(styleOwner?.description.includes('staff'), true, 'style command must allow staff-managed visual styles')
+  assert.equal(styleOwner?.description.includes('local'), true, 'style command must use local assets')
+  const styleImageOwner = effective.find((row) => row.tokens.includes('styleimg'))?.command
+  assert.equal(styleImageOwner?.description.includes('imagen local concreta'), true, 'styleimg must expose per-waifu local image selection')
   const marioOwner = effective.find((row) => row.tokens.includes('mario'))?.command
   assert.equal(marioOwner?.category, 'games', 'Mario must be listed in the games section')
   assert.equal(marioOwner?.description.includes('español'), true, 'Mario command must be Spanish')
@@ -107,10 +112,27 @@ try {
   assert.equal(normalizeMinecraftPlayerQuery('  JULIAN   AGZ  '), 'JULIAN AGZ')
   assert.equal(normalizeMinecraftPlayerQuery('Java_Player'), 'Java_Player')
 
+  // El bundle debe haberse extraído durante npm run build y ser completamente local.
+  const localManifest = JSON.parse(await readFile(new URL('../apps/bot/assets/waifus/manifest.json', import.meta.url), 'utf8'))
+  assert.equal(localManifest.count, 270, 'local waifu bundle must contain all 270 images')
+  assert.equal(Object.keys(localManifest.styles ?? {}).length, 23, 'local waifu bundle must contain all 23 waifus')
+  assert.equal(localManifest.styles.megumin, 12, 'megumi source folder must map to megumin with 12 images')
+  assert.equal(localManifest.styles.rem, 12)
+  assert.equal(localManifest.styles.rias, 10)
+
+  const botStylesSource = await readFile(new URL('../apps/bot/dist/services/bot-styles-v13.js', import.meta.url), 'utf8')
+  assert.equal(botStylesSource.includes('searchAniListCharacters'), false, 'visual style service must not query AniList')
+  assert.equal(botStylesSource.includes('anilist-waifu-v5'), false, 'visual style service must not import AniList')
+  assert.equal(botStylesSource.includes("assets', 'waifus"), true, 'visual style service must resolve local waifu assets')
+
   const {
     listBotVisualStyles,
+    listBotVisualStyleImages,
     getBotVisualStyle,
+    getBotVisualStyleImageSelection,
     getCurrentBotVisualStyle,
+    resolveBotVisualStyleAsset,
+    setBotVisualStyleImage,
     setCurrentBotVisualStyle,
   } = await import('../apps/bot/dist/services/bot-styles-v13.js')
   const styles = listBotVisualStyles()
@@ -121,6 +143,19 @@ try {
   assert.equal(getBotVisualStyle('tsukasa yusaki')?.id, 'tsukasa')
   assert.equal(getBotVisualStyle('zero 2')?.id, 'zerotwo')
   assert.equal(getBotVisualStyle('sakura')?.id, 'marin')
+  assert.equal(listBotVisualStyleImages('rem').length, 12)
+  assert.equal(listBotVisualStyleImages('rias').length, 10)
+  assert.equal(listBotVisualStyleImages('megumi').length, 12)
+  const remVariant = setBotVisualStyleImage('rem', 2, 'ci@s.whatsapp.net', true)
+  assert.equal(remVariant.style.id, 'rem')
+  assert.equal(remVariant.image.index, 2)
+  assert.equal(remVariant.imageCount, 12)
+  assert.equal(getCurrentBotVisualStyle().id, 'rem')
+  assert.equal(getBotVisualStyleImageSelection('rem')?.image.index, 2)
+  const remAsset = await resolveBotVisualStyleAsset('rem')
+  assert.equal(remAsset.imageIndex, 2)
+  assert.equal(remAsset.imageCount, 12)
+  assert.equal(remAsset.imageUrl?.includes(`${path.sep}assets${path.sep}waifus${path.sep}rem${path.sep}`), true)
   assert.equal(setCurrentBotVisualStyle('megumi', 'ci@s.whatsapp.net').id, 'megumin')
   assert.equal(getCurrentBotVisualStyle().id, 'megumin')
   assert.equal(setCurrentBotVisualStyle('default', 'ci@s.whatsapp.net').id, 'default')
