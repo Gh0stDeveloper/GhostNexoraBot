@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-termux"
+  },
+  "include": [],
+  "files": [
+    "src/termux-lite.ts",
+    "src/pair.ts",
+    "src/subbot-worker-termux.ts"
+  ]
+}
