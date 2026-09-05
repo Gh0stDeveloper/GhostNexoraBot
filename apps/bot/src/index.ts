@@ -100,6 +100,10 @@ function startHealthServer() {
       startedAt: startedAt.toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       activeJid,
+      llm: {
+        localEnabled: config.ollamaEnabled,
+        model: config.ollamaEnabled ? config.ollamaModel : null,
+      },
       subbots: {
         total: subbots.length,
         online: subbots.filter((item) => item.status === 'online').length,
@@ -139,7 +143,9 @@ async function routeMessage(
       chatId.endsWith('@g.us'),
       text.startsWith(settings.prefix),
     )
-    if (text.length >= 2 && !text.startsWith(settings.prefix)) llmFreeChat.rememberIncoming(chatId, text, pushName)
+    if (config.ollamaEnabled && text.length >= 2 && !text.startsWith(settings.prefix)) {
+      llmFreeChat.rememberIncoming(chatId, text, pushName)
+    }
   }
 
   if (await handleAntiViewOnce(socket, message).catch((error) => {
@@ -153,8 +159,9 @@ async function routeMessage(
   const handled = await router.handle(socket, message)
   if (handled) return
 
-  // Audio / nota de voz con modo libre: transcribir → Ollama responde
+  // Audio / nota de voz con modo libre: solo existe cuando Ollama está habilitado.
   if (
+    config.ollamaEnabled &&
     chatId &&
     !message.key.fromMe &&
     hasAudio(message) &&
@@ -164,9 +171,7 @@ async function routeMessage(
   ) {
     const state = llmFreeChat.getState()
     if (state.requireMention && chatId.endsWith('@g.us')) {
-      // en grupos con mención obligatoria, el audio solo responde si no hay texto de comando
-      // (audio no menciona; se permite si whitelist/global y no requiere mención)
-      // Si requireMention, no auto-responder audios en grupo sin mención.
+      // No responder audios de grupo sin mención cuando esa política está activa.
     } else {
       const stopTyping = startTypingIndicator(socket, chatId)
       try {
@@ -193,7 +198,11 @@ async function routeMessage(
     }
   }
 
-  if (chatId && llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })) {
+  if (
+    config.ollamaEnabled &&
+    chatId &&
+    llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })
+  ) {
     const stopTyping = startTypingIndicator(socket, chatId)
     try {
       const response = await llmFreeChat.respond(text, chatId, pushName)
@@ -213,7 +222,14 @@ async function routeMessage(
     return
   }
 
-  if (chatId && text.length >= 2 && !text.startsWith(settings.prefix) && autoChat.isEnabled(chatId) && autoChat.canRespond(chatId)) {
+  if (
+    config.ollamaEnabled &&
+    chatId &&
+    text.length >= 2 &&
+    !text.startsWith(settings.prefix) &&
+    autoChat.isEnabled(chatId) &&
+    autoChat.canRespond(chatId)
+  ) {
     try {
       const response = await autoChat.respond(chatId, text)
       if (!response) return
@@ -295,6 +311,12 @@ startAutomationScheduler(() => mainSocket)
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
+
+if (config.ollamaEnabled) {
+  logger.info({ model: config.ollamaModel }, 'local LLM commands and free-chat enabled')
+} else {
+  logger.info('local LLM disabled; Ollama/LLM/free-chat commands are not registered')
+}
 
 await subbotManager.startActive()
 await connect()
