@@ -1,0 +1,215 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -Eeuo pipefail
+
+INSTALL_DIR="${GHOSTNEXORA_HOME:-$HOME/GhostNexoraBot}"
+STATE_DIR="${GHOSTNEXORA_STATE:-$HOME/.ghostnexora}"
+RUN_DIR="${STATE_DIR}/run"
+LOG_DIR="${STATE_DIR}/logs"
+PID_FILE="${RUN_DIR}/bot.pid"
+LOG_FILE="${LOG_DIR}/bot.log"
+ENV_FILE="${INSTALL_DIR}/.env"
+
+mkdir -p "${RUN_DIR}" "${LOG_DIR}"
+
+info() { printf '[INFO] %s\n' "$*"; }
+ok() { printf '[ OK ] %s\n' "$*"; }
+warn() { printf '[WARN] %s\n' "$*" >&2; }
+fail() { printf '[FAIL] %s\n' "$*" >&2; exit 1; }
+
+pid_value() {
+  [[ -f "${PID_FILE}" ]] || return 1
+  local pid
+  pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "${pid}"
+}
+
+is_running() {
+  local pid
+  pid="$(pid_value 2>/dev/null || true)"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+require_install() {
+  [[ -d "${INSTALL_DIR}/.git" ]] || fail "No encuentro Ghost Nexora Bot en ${INSTALL_DIR}. Ejecuta primero install-termux.sh."
+  [[ -f "${ENV_FILE}" ]] || fail "Falta ${ENV_FILE}."
+}
+
+start_bot() {
+  require_install
+  if is_running; then
+    ok "Ghost Nexora Lite ya está ejecutándose (PID $(pid_value))."
+    return 0
+  fi
+  rm -f "${PID_FILE}"
+  touch "${LOG_FILE}"
+  info 'Iniciando Ghost Nexora Bot · Termux Lite...'
+  (
+    cd "${INSTALL_DIR}"
+    nohup env \
+      ENV_FILE="${ENV_FILE}" \
+      NEXORA_RUNTIME_PROFILE=termux-lite \
+      OLLAMA_ENABLED=false \
+      npm run termux:start --workspace=@ghostnexora/bot \
+      >>"${LOG_FILE}" 2>&1 &
+    echo $! >"${PID_FILE}"
+  )
+  sleep 2
+  if is_running; then
+    ok "Bot iniciado (PID $(pid_value))."
+    info "Log: ${LOG_FILE}"
+  else
+    rm -f "${PID_FILE}"
+    warn 'El proceso terminó durante el arranque. Últimas líneas:'
+    tail -n 40 "${LOG_FILE}" 2>/dev/null || true
+    return 1
+  fi
+}
+
+stop_bot() {
+  if ! is_running; then
+    rm -f "${PID_FILE}"
+    info 'Ghost Nexora Lite ya estaba detenido.'
+    return 0
+  fi
+  local pid
+  pid="$(pid_value)"
+  info "Deteniendo PID ${pid}..."
+  kill -TERM "${pid}" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      rm -f "${PID_FILE}"
+      ok 'Bot detenido.'
+      return 0
+    fi
+    sleep 0.25
+  done
+  warn 'El proceso no respondió a SIGTERM; cerrando por fuerza.'
+  kill -KILL "${pid}" 2>/dev/null || true
+  rm -f "${PID_FILE}"
+  ok 'Bot detenido.'
+}
+
+status_bot() {
+  require_install
+  if is_running; then
+    ok "Ghost Nexora Lite: ACTIVO · PID $(pid_value)"
+  else
+    warn 'Ghost Nexora Lite: DETENIDO'
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    local port
+    port="$(grep '^BOT_HEALTH_PORT=' "${ENV_FILE}" | tail -n1 | cut -d= -f2- || true)"
+    port="${port:-3001}"
+    curl -fsS --max-time 2 "http://127.0.0.1:${port}/health" 2>/dev/null || true
+    printf '\n'
+  fi
+}
+
+pair_bot() {
+  require_install
+  local phone="${1:-}"
+  phone="$(printf '%s' "${phone}" | tr -cd '0-9')"
+  if [[ -z "${phone}" && -r /dev/tty ]]; then
+    printf 'Número de WhatsApp con código de país: ' >/dev/tty
+    IFS= read -r phone </dev/tty || true
+    phone="$(printf '%s' "${phone}" | tr -cd '0-9')"
+  fi
+  [[ ${#phone} -ge 8 && ${#phone} -le 15 ]] || fail 'Número inválido. Ejemplo México: 521XXXXXXXXXX.'
+
+  local restart=0
+  if is_running; then restart=1; stop_bot; fi
+  info "Solicitando código para ${phone}..."
+  (
+    cd "${INSTALL_DIR}"
+    env \
+      ENV_FILE="${ENV_FILE}" \
+      NEXORA_RUNTIME_PROFILE=termux-lite \
+      OLLAMA_ENABLED=false \
+      PAIRING_NUMBER="${phone}" \
+      npm run termux:pair --workspace=@ghostnexora/bot
+  )
+  local result=$?
+  if [[ "${restart}" -eq 1 && "${result}" -eq 0 ]]; then start_bot; fi
+  return "${result}"
+}
+
+show_logs() {
+  mkdir -p "${LOG_DIR}"
+  touch "${LOG_FILE}"
+  tail -n 120 -f "${LOG_FILE}"
+}
+
+foreground_bot() {
+  require_install
+  if is_running; then fail 'Detén primero el proceso en segundo plano con: ghostnexora stop'; fi
+  cd "${INSTALL_DIR}"
+  exec env \
+    ENV_FILE="${ENV_FILE}" \
+    NEXORA_RUNTIME_PROFILE=termux-lite \
+    OLLAMA_ENABLED=false \
+    npm run termux:start --workspace=@ghostnexora/bot
+}
+
+doctor() {
+  require_install
+  printf 'Ghost Nexora Bot · Termux Lite\n'
+  printf 'Instalación : %s\n' "${INSTALL_DIR}"
+  printf 'Datos       : %s\n' "${STATE_DIR}"
+  printf 'Node        : %s\n' "$(node -v 2>/dev/null || echo NO INSTALADO)"
+  printf 'npm         : %s\n' "$(npm -v 2>/dev/null || echo NO INSTALADO)"
+  printf 'ffmpeg      : %s\n' "$(ffmpeg -version 2>/dev/null | head -n1 || echo NO INSTALADO)"
+  printf 'yt-dlp      : %s\n' "$(yt-dlp --version 2>/dev/null || echo NO INSTALADO)"
+  printf 'Perfil      : %s\n' "$(grep '^NEXORA_RUNTIME_PROFILE=' "${ENV_FILE}" | cut -d= -f2- || echo termux-lite)"
+  printf 'Ollama      : DESACTIVADO EN LITE\n'
+  printf 'Panel web   : NO INCLUIDO\n'
+  printf 'Subbots     : HABILITADOS\n'
+  status_bot
+}
+
+wake_lock() {
+  local action="${1:-on}"
+  if ! command -v termux-wake-lock >/dev/null 2>&1; then
+    fail 'termux-wake-lock no está disponible. Instala Termux:API y ejecuta: pkg install termux-api'
+  fi
+  case "${action}" in
+    on|start|enable) termux-wake-lock; ok 'Wake lock activado.' ;;
+    off|stop|disable) termux-wake-unlock; ok 'Wake lock desactivado.' ;;
+    *) fail 'Uso: ghostnexora wakelock on|off' ;;
+  esac
+}
+
+usage() {
+  cat <<'EOF'
+Ghost Nexora Bot · Termux Lite
+
+Uso: ghostnexora <comando>
+
+  start                 Inicia el bot en segundo plano
+  stop                  Detiene el bot
+  restart               Reinicia el bot
+  status                Estado + health local
+  logs                  Sigue el log en tiempo real
+  pair <numero>         Vincula WhatsApp por código
+  foreground            Ejecuta el bot en primer plano
+  update                Actualiza sin borrar sesión ni datos
+  doctor                Diagnóstico de Termux Lite
+  wakelock on|off       Evita suspensión si tienes Termux:API
+  help                  Muestra esta ayuda
+EOF
+}
+
+case "${1:-help}" in
+  start) start_bot ;;
+  stop) stop_bot ;;
+  restart) stop_bot; start_bot ;;
+  status) status_bot ;;
+  logs|log) show_logs ;;
+  pair|link) shift; pair_bot "${1:-}" ;;
+  foreground|fg) foreground_bot ;;
+  update|upgrade) require_install; exec bash "${INSTALL_DIR}/scripts/update-termux.sh" ;;
+  doctor|check) doctor ;;
+  wakelock) shift; wake_lock "${1:-on}" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac
