@@ -23,13 +23,13 @@ for (const expected of [
   'Audio como documento',
   'VIDEO NORMAL',
   'VIDEO COMO DOCUMENTO',
-  'Video 144p',
-  'Video 240p',
-  'Video 360p',
-  'Video 720p',
   'document: { url: result.filePath }',
+  'Video ${quality.value}p',
 ]) {
   assert.equal(youtubeSource.includes(expected), true, `YouTube select flow missing: ${expected}`)
+}
+for (const quality of [144, 240, 360, 720]) {
+  assert.equal(youtubeSource.includes(`value: ${quality}`), true, `YouTube select menu missing ${quality}p quality`)
 }
 assert.equal(youtubeSource.includes("text: '🎵 Audio'"), false, 'search carousel must not expose a separate Audio button')
 assert.equal(youtubeSource.includes("text: '🎬 Video 720p'"), false, 'search carousel must not expose a separate Video button')
