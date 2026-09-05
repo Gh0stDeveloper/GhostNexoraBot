@@ -66,11 +66,13 @@ npm install --workspace=@ghostnexora/bot --include=dev >/tmp/ghostnexora-termux-
 ok 'Dependencias Lite sincronizadas.'
 
 if command -v yt-dlp >/dev/null 2>&1; then
-  if command -v pkg >/dev/null 2>&1 && pkg list-installed 2>/dev/null | grep -q '^yt-dlp/'; then
+  if pkg list-installed 2>/dev/null | grep -q '^yt-dlp/'; then
     pkg upgrade -y yt-dlp >/dev/null 2>&1 || true
   else
-    python -m pip install --user --upgrade yt-dlp >/dev/null 2>&1 || true
+    python -m pip install --upgrade yt-dlp >/dev/null 2>&1 || true
   fi
+elif ! pkg install -y yt-dlp >/dev/null 2>&1; then
+  python -m pip install --upgrade yt-dlp >/dev/null 2>&1 || warn 'No se pudo instalar yt-dlp durante la actualización.'
 fi
 
 section '4/5 · Gestor Termux'
