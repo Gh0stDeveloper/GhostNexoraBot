@@ -42,6 +42,7 @@ try {
     'adultgif', 'reactiongif', 'adultmedia',
     'mc', 'minecraft', 'mchelp', 'mcseed', 'mcstronghold', 'mcbioma', 'mcanchor', 'mcstruct',
     'mcskin', 'mccape', 'mcplayer', 'mcperfil', 'mcjugador', 'mcgamertag', 'mcserver', 'mccraft', 'mcalert', 'mcprice',
+    'styles', 'estilos', 'themes', 'botstyles', 'waifustyles', 'style', 'estilo', 'theme', 'botstyle',
   ]) {
     assert.equal(tokens.has(expected), true, `missing effective command token: ${expected}`)
   }
@@ -51,15 +52,27 @@ try {
   const waifuOwner = effective.find((row) => row.tokens.includes('rw'))?.command
   assert.equal(waifuOwner?.description.includes('AniList'), true)
   const minerShopOwner = effective.find((row) => row.tokens.includes('minershop'))?.command
-  assert.equal(minerShopOwner?.description.includes('carrusel estable'), true, 'minershop V11 override is not effective')
+  assert.equal(minerShopOwner?.description.includes('estilo visual activo'), true, 'minershop V13 style override is not effective')
+  const shopOwner = effective.find((row) => row.tokens.includes('shop'))?.command
+  assert.equal(shopOwner?.description.includes('estilo visual activo'), true, 'shop V13 style override is not effective')
   const adultGifOwner = effective.find((row) => row.tokens.includes('adultgif'))?.command
   assert.equal(adultGifOwner?.description.includes('carga/reproducción'), true, 'adultgif V11 override is not effective')
   const mcPlayerOwner = effective.find((row) => row.tokens.includes('mcplayer'))?.command
   assert.equal(mcPlayerOwner?.description.includes('Bedrock/Xbox'), true, 'Minecraft V12 profile override is not effective')
+  const stylesOwner = effective.find((row) => row.tokens.includes('styles'))?.command
+  assert.equal(stylesOwner?.description.includes('AniList'), true, 'styles V13 command is not effective')
 
   const { normalizeMinecraftPlayerQuery } = await import('../apps/bot/dist/services/minecraft-profile-v12.js')
   assert.equal(normalizeMinecraftPlayerQuery('  JULIAN   AGZ  '), 'JULIAN AGZ')
   assert.equal(normalizeMinecraftPlayerQuery('Java_Player'), 'Java_Player')
+
+  const { listBotVisualStyles, getCurrentBotVisualStyle, setCurrentBotVisualStyle } = await import('../apps/bot/dist/services/bot-styles-v13.js')
+  const styles = listBotVisualStyles()
+  assert.equal(styles.length, 12)
+  assert.equal(getCurrentBotVisualStyle().id, 'default')
+  assert.equal(setCurrentBotVisualStyle('sakura', 'ci@s.whatsapp.net').id, 'sakura')
+  assert.equal(getCurrentBotVisualStyle().id, 'sakura')
+  assert.equal(setCurrentBotVisualStyle('default', 'ci@s.whatsapp.net').id, 'default')
 
   assert.ok(commands.length > 100)
 
