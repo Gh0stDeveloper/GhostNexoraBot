@@ -1,6 +1,7 @@
 import type { BotCommand } from '../types.js'
 import { setMenuCommandProvider } from '../services/menu-registry.js'
 import { generalCommands } from './general.js'
+import { creditsCommands } from './credits.js'
 import { profileCommands } from './profile.js'
 import { reactionCommands } from './reactions.js'
 import { downloadCommands } from './downloads.js'
@@ -84,6 +85,7 @@ const liteSubbotCommands = subbotCommands.filter((command) => command.name !== '
 
 export const termuxLiteCommands: BotCommand[] = [
   ...generalCommands,
+  ...creditsCommands,
   ...profileCommands,
   ...reactionCommands,
   ...downloadCommands,
