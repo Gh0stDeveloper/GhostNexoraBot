@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "build:termux": "tsc -p tsconfig.termux.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
-    "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite node dist/termux-lite.js",
-    "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite node dist/pair.js",
+    "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite node dist-termux/termux-lite.js",
+    "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite node dist-termux/pair.js",
     "llm:train": "node dist/llm/train.js",
     "llm:worker": "node dist/llm/llm-worker-supervisor.js",
     "playwright:install": "playwright install chromium"
