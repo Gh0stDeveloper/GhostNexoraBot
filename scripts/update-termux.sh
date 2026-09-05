@@ -58,7 +58,7 @@ set_env TELEGRAM_CHANNEL_URL ''
 chmod 600 "${ENV_FILE}"
 
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-npm install --workspace=@ghostnexora/bot --include=dev >/tmp/ghostnexora-termux-update-npm.log 2>&1 || {
+npm install --workspace=@ghostnexora/bot --include=dev --omit=optional >/tmp/ghostnexora-termux-update-npm.log 2>&1 || {
   warn 'npm install falló. Últimas líneas:'
   tail -n 60 /tmp/ghostnexora-termux-update-npm.log >&2 || true
   exit 1
@@ -68,7 +68,7 @@ npm run build:termux --workspace=@ghostnexora/bot >/tmp/ghostnexora-termux-updat
   tail -n 80 /tmp/ghostnexora-termux-update-build.log >&2 || true
   exit 1
 }
-ok 'Dependencias sincronizadas y runtime Lite recompilado.'
+ok 'Dependencias Lite sincronizadas sin Sharp/Playwright y runtime recompilado.'
 
 if command -v yt-dlp >/dev/null 2>&1; then
   if pkg list-installed 2>/dev/null | grep -q '^yt-dlp/'; then
@@ -98,4 +98,5 @@ printf '\nActualización Termux Lite finalizada en %ss.\n' "${ELAPSED}"
 printf 'Anterior: %s\n' "${OLD_SHA:0:12}"
 printf 'Actual : %s\n' "${NEW_SHA:0:12}"
 printf 'Runtime: JavaScript compilado Lite.\n'
+printf 'Sharp/Playwright: omitidos.\n'
 printf 'Sesión y datos: conservados.\n'
