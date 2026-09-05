@@ -73,7 +73,29 @@ try {
   assert.ok(fs.existsSync(path.join(llmDir, 'model-2.bin')))
   assert.ok(fs.existsSync(path.join(llmDir, 'vocab-2.json')))
 
-  console.log('LLM modular + incremental smoke: OK')
+  // Phase 1: chunk deduplication + local RAG.
+  const incrementalCorpus = await import('./incremental-corpus.js')
+  const knowledge = 'El comando fantasma fase uno usa RAG local con Ollama y evita duplicar chunks del corpus.'
+  const first = incrementalCorpus.ingestLive(knowledge)
+  const afterFirst = incrementalCorpus.countVectors()
+  const second = incrementalCorpus.ingestLive(knowledge)
+  const afterSecond = incrementalCorpus.countVectors()
+  assert.ok(first.vectors >= 1, 'first live knowledge must create at least one vector')
+  assert.equal(second.vectors, 0, 'duplicate live knowledge must not create another vector')
+  assert.ok(second.duplicatesSkipped >= 1, 'duplicate chunk must be reported')
+  assert.equal(afterSecond, afterFirst, 'vector count must remain stable after duplicate ingestion')
+
+  const { retrieveLocalKnowledge } = await import('../services/llm-rag.js')
+  const rag = retrieveLocalKnowledge('comando fantasma fase uno RAG Ollama', 0)
+  assert.ok(rag.hits.length >= 1, 'RAG must retrieve local knowledge')
+  assert.match(rag.contextText, /CONTEXTO LOCAL RECUPERADO/)
+  assert.match(rag.contextText, /RAG local con Ollama/i)
+
+  const { shouldLearnText } = await import('../services/llm-free-chat.js')
+  assert.equal(shouldLearnText('https://example.com/no-aprender'), false)
+  assert.equal(shouldLearnText('Este mensaje normal sí sirve como contexto conversacional.'), true)
+
+  console.log('LLM modular + incremental + RAG smoke: OK')
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })
 }
