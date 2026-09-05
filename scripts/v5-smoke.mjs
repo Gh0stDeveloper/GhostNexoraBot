@@ -125,6 +125,9 @@ try {
   assert.equal(getCurrentBotVisualStyle().id, 'megumin')
   assert.equal(setCurrentBotVisualStyle('default', 'ci@s.whatsapp.net').id, 'default')
 
+  const adultRoleplaySource = await readFile(new URL('../apps/bot/dist/commands/adult-roleplay-v8.js', import.meta.url), 'utf8')
+  assert.equal(adultRoleplaySource.includes('✓ Consentimiento 18+ confirmado.'), false, 'roleplay captions must not repeat the consent confirmation line')
+
   const {
     getAdultRoleplayMessage,
     setAdultRoleplayMessage,
