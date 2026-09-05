@@ -25,16 +25,19 @@ const base64Parts = readdirSync(bundleDir)
   .filter((name) => /^waifus-assets-v1\.b64\.part\d+$/i.test(name))
   .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
 
-function decodeStagedParts(names) {
-  const chunks = names.map((name) => readFileSync(path.join(bundleDir, name)))
-  const raw = Buffer.concat(chunks)
-  if (raw.length >= 2 && raw[0] === 0x50 && raw[1] === 0x4b) return raw
-
-  // GitHub's text-oriented connector may store a binary upload as Base64 text.
-  // Detect that representation and decode the concatenated stream back to ZIP bytes.
-  const encoded = raw.toString('utf8').replace(/\s+/g, '')
-  if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) return raw
+function decodeOnePart(buffer) {
+  if (buffer.length >= 2 && buffer[0] === 0x50 && buffer[1] === 0x4b) return buffer
+  const encoded = buffer.toString('utf8').replace(/\s+/g, '')
+  if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) return buffer
   return Buffer.from(encoded, 'base64')
+}
+
+function decodeStagedParts(names) {
+  const rawParts = names.map((name) => readFileSync(path.join(bundleDir, name)))
+  // The GitHub connector stores each uploaded binary chunk as its own Base64
+  // string. Decode each chunk independently so per-part padding is respected,
+  // then reconstruct the original ZIP byte-for-byte.
+  return Buffer.concat(rawParts.map(decodeOnePart))
 }
 
 let zip
