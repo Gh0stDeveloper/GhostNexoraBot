@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
@@ -6,6 +6,7 @@ import { config } from '../config.js'
 
 export const COIN_NAME = 'Nexora Coins'
 export const COIN_SYMBOL = 'NXC'
+const STARTING_WALLET = 250
 
 export const PROFESSIONS = {
   developer: { label: 'Desarrollador/a', emoji: '💻', min: 70, max: 190, description: 'Aplicaciones, bots, APIs y automatización.', aliases: ['dev', 'programador', 'programadora', 'developer'] },
@@ -41,6 +42,16 @@ export type SubbotRecord = {
   downloadBytes: number
 }
 
+type LegacyEconomyRow = {
+  userJid: string
+  wallet: number
+  bank: number
+  lastWork: number
+  lastRob: number
+  profession: string
+  createdAt: number
+}
+
 const now = () => Date.now()
 const int = (value: unknown) => Number(value ?? 0)
 
@@ -56,18 +67,27 @@ function normalizeProfession(value: string): ProfessionId | null {
   return null
 }
 
+function sqlPath(value: string) {
+  return value.replace(/'/g, "''")
+}
+
 export class EconomyStore {
   readonly file = path.join(config.dataDir, 'ghostnexora.sqlite')
+  readonly walletFile: string
   readonly db: DatabaseSync
+  readonly walletDb: DatabaseSync
 
   constructor() {
     mkdirSync(config.dataDir, { recursive: true })
+    this.walletFile = process.env.NEXORA_GLOBAL_ECONOMY_DB || path.join(config.dataDir, 'nexora-economy.sqlite')
+    mkdirSync(path.dirname(this.walletFile), { recursive: true })
+
     this.db = new DatabaseSync(this.file)
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS economy_users (
         user_jid TEXT PRIMARY KEY,
-        wallet INTEGER NOT NULL DEFAULT 250,
+        wallet INTEGER NOT NULL DEFAULT ${STARTING_WALLET},
         bank INTEGER NOT NULL DEFAULT 0,
         last_work INTEGER NOT NULL DEFAULT 0,
         last_rob INTEGER NOT NULL DEFAULT 0,
@@ -122,9 +142,184 @@ export class EconomyStore {
       );
     `)
 
-    const columns = this.db.prepare('PRAGMA table_info(economy_users)').all() as Array<{ name: string }>
+    const columns = this.db.prepare('PRAGMA main.table_info(economy_users)').all() as Array<{ name: string }>
     if (!columns.some((column) => column.name === 'profession')) {
       this.db.exec(`ALTER TABLE economy_users ADD COLUMN profession TEXT NOT NULL DEFAULT '${DEFAULT_PROFESSION}'`)
+    }
+
+    // Perfil/cooldowns siguen siendo locales a cada instancia. Solo wallet/bank son globales.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS economy_local_users (
+        user_jid TEXT PRIMARY KEY,
+        last_work INTEGER NOT NULL DEFAULT 0,
+        last_rob INTEGER NOT NULL DEFAULT 0,
+        profession TEXT NOT NULL DEFAULT '${DEFAULT_PROFESSION}',
+        created_at INTEGER NOT NULL
+      );
+      INSERT OR IGNORE INTO economy_local_users(user_jid, last_work, last_rob, profession, created_at)
+      SELECT user_jid, last_work, last_rob, COALESCE(profession, '${DEFAULT_PROFESSION}'), created_at FROM main.economy_users;
+    `)
+
+    this.walletDb = new DatabaseSync(this.walletFile)
+    this.walletDb.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 10000;')
+    this.walletDb.exec(`
+      CREATE TABLE IF NOT EXISTS global_economy_users (
+        user_jid TEXT PRIMARY KEY,
+        wallet INTEGER NOT NULL DEFAULT ${STARTING_WALLET},
+        bank INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS wallet_migrations (
+        source_id TEXT PRIMARY KEY,
+        source_file TEXT NOT NULL,
+        users_migrated INTEGER NOT NULL DEFAULT 0,
+        migrated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS economy_global_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_jid TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        counterparty_jid TEXT,
+        note TEXT,
+        instance_role TEXT,
+        instance_id INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_global_ledger_user ON economy_global_ledger(user_jid, created_at DESC);
+    `)
+
+    const role = process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main'
+    const sourceId = role === 'subbot' ? `subbot:${process.env.NEXORA_SUBBOT_ID || path.basename(config.dataDir)}` : 'main'
+    this.migrateLegacyDb(this.db, sourceId, this.file)
+
+    // El padre también recoge saldos de subbots guardados, incluso si hoy están offline/expirados.
+    if (role === 'main') this.migrateStoredSubbots()
+
+    // Toda referencia SQL existente a economy_users queda redirigida de forma transparente:
+    // wallet/bank -> DB global; cooldown/profesión -> DB local de la instancia.
+    this.db.exec(`ATTACH DATABASE '${sqlPath(this.walletFile)}' AS global_wallet;`)
+    this.db.exec(`
+      DROP VIEW IF EXISTS temp.economy_users;
+      DROP TRIGGER IF EXISTS temp.gn_economy_users_insert;
+      DROP TRIGGER IF EXISTS temp.gn_economy_users_update;
+      DROP TRIGGER IF EXISTS temp.gn_economy_users_delete;
+
+      CREATE TEMP VIEW economy_users AS
+      SELECT
+        g.user_jid,
+        g.wallet,
+        g.bank,
+        COALESCE(l.last_work, 0) AS last_work,
+        COALESCE(l.last_rob, 0) AS last_rob,
+        COALESCE(l.profession, '${DEFAULT_PROFESSION}') AS profession,
+        COALESCE(l.created_at, g.created_at) AS created_at
+      FROM global_wallet.global_economy_users AS g
+      LEFT JOIN main.economy_local_users AS l ON l.user_jid = g.user_jid;
+
+      CREATE TEMP TRIGGER gn_economy_users_insert
+      INSTEAD OF INSERT ON economy_users
+      BEGIN
+        INSERT OR IGNORE INTO global_economy_users(user_jid, wallet, bank, created_at, updated_at)
+        VALUES(NEW.user_jid, COALESCE(NEW.wallet, ${STARTING_WALLET}), COALESCE(NEW.bank, 0), COALESCE(NEW.created_at, unixepoch('subsec') * 1000), unixepoch('subsec') * 1000);
+        INSERT OR IGNORE INTO economy_local_users(user_jid, last_work, last_rob, profession, created_at)
+        VALUES(NEW.user_jid, COALESCE(NEW.last_work, 0), COALESCE(NEW.last_rob, 0), COALESCE(NEW.profession, '${DEFAULT_PROFESSION}'), COALESCE(NEW.created_at, unixepoch('subsec') * 1000));
+      END;
+
+      CREATE TEMP TRIGGER gn_economy_users_update
+      INSTEAD OF UPDATE ON economy_users
+      BEGIN
+        INSERT OR IGNORE INTO global_economy_users(user_jid, wallet, bank, created_at, updated_at)
+        VALUES(NEW.user_jid, COALESCE(NEW.wallet, ${STARTING_WALLET}), COALESCE(NEW.bank, 0), COALESCE(NEW.created_at, unixepoch('subsec') * 1000), unixepoch('subsec') * 1000);
+        UPDATE global_economy_users
+          SET wallet = COALESCE(NEW.wallet, wallet), bank = COALESCE(NEW.bank, bank), updated_at = unixepoch('subsec') * 1000
+          WHERE user_jid = OLD.user_jid;
+        INSERT OR IGNORE INTO economy_local_users(user_jid, last_work, last_rob, profession, created_at)
+        VALUES(NEW.user_jid, COALESCE(NEW.last_work, 0), COALESCE(NEW.last_rob, 0), COALESCE(NEW.profession, '${DEFAULT_PROFESSION}'), COALESCE(NEW.created_at, unixepoch('subsec') * 1000));
+        UPDATE economy_local_users
+          SET last_work = COALESCE(NEW.last_work, last_work), last_rob = COALESCE(NEW.last_rob, last_rob), profession = COALESCE(NEW.profession, profession)
+          WHERE user_jid = OLD.user_jid;
+      END;
+
+      CREATE TEMP TRIGGER gn_economy_users_delete
+      INSTEAD OF DELETE ON economy_users
+      BEGIN
+        DELETE FROM global_economy_users WHERE user_jid = OLD.user_jid;
+        DELETE FROM economy_local_users WHERE user_jid = OLD.user_jid;
+      END;
+    `)
+  }
+
+  private legacyRows(source: DatabaseSync): LegacyEconomyRow[] {
+    const table = source.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'economy_users'").get()
+    if (!table) return []
+    return source.prepare(`
+      SELECT user_jid AS userJid, wallet, bank,
+             COALESCE(last_work, 0) AS lastWork,
+             COALESCE(last_rob, 0) AS lastRob,
+             COALESCE(profession, '${DEFAULT_PROFESSION}') AS profession,
+             created_at AS createdAt
+      FROM economy_users
+    `).all() as LegacyEconomyRow[]
+  }
+
+  private migrateLegacyDb(source: DatabaseSync, sourceId: string, sourceFile: string) {
+    const migrated = this.walletDb.prepare('SELECT 1 FROM wallet_migrations WHERE source_id = ?').get(sourceId)
+    if (migrated) return
+    const rows = this.legacyRows(source)
+
+    this.walletDb.exec('BEGIN IMMEDIATE')
+    try {
+      for (const row of rows) {
+        const wallet = Math.max(0, int(row.wallet))
+        const bank = Math.max(0, int(row.bank))
+        const existing = this.walletDb.prepare('SELECT wallet, bank FROM global_economy_users WHERE user_jid = ?').get(row.userJid) as { wallet: number; bank: number } | undefined
+        if (!existing) {
+          this.walletDb.prepare('INSERT INTO global_economy_users(user_jid, wallet, bank, created_at, updated_at) VALUES(?, ?, ?, ?, ?)')
+            .run(row.userJid, wallet, bank, row.createdAt || now(), now())
+          continue
+        }
+
+        // Cada DB antigua regalaba 250 NXC al crear usuario. Al fusionar fuentes se
+        // suma el patrimonio real y se descuenta esa bonificación duplicada.
+        const extraTotal = Math.max(0, wallet + bank - STARTING_WALLET)
+        if (!extraTotal) continue
+        const extraBank = Math.min(bank, extraTotal)
+        const extraWallet = extraTotal - extraBank
+        this.walletDb.prepare('UPDATE global_economy_users SET wallet = wallet + ?, bank = bank + ?, updated_at = ? WHERE user_jid = ?')
+          .run(extraWallet, extraBank, now(), row.userJid)
+        this.walletDb.prepare('INSERT INTO economy_global_ledger(user_jid, kind, amount, note, instance_role, instance_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)')
+          .run(row.userJid, 'legacy_wallet_merge', extraTotal, `source:${sourceId}`, sourceId.startsWith('subbot:') ? 'subbot' : 'main', Number(sourceId.split(':')[1] || 0) || null, now())
+      }
+      this.walletDb.prepare('INSERT INTO wallet_migrations(source_id, source_file, users_migrated, migrated_at) VALUES(?, ?, ?, ?)')
+        .run(sourceId, sourceFile, rows.length, now())
+      this.walletDb.exec('COMMIT')
+    } catch (error) {
+      this.walletDb.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private migrateStoredSubbots() {
+    const root = path.join(config.dataDir, 'subbots')
+    if (!existsSync(root)) return
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const legacyFile = path.join(root, entry.name, 'ghostnexora.sqlite')
+      if (!existsSync(legacyFile)) continue
+      const sourceId = `subbot:${entry.name}`
+      if (this.walletDb.prepare('SELECT 1 FROM wallet_migrations WHERE source_id = ?').get(sourceId)) continue
+      let source: DatabaseSync | null = null
+      try {
+        source = new DatabaseSync(legacyFile, { readOnly: true })
+        this.migrateLegacyDb(source, sourceId, legacyFile)
+      } catch {
+        // Un subbot activo puede estar rotando su WAL justo durante el arranque.
+        // El propio worker repetirá la migración de esa fuente al iniciar.
+      } finally {
+        try { source?.close() } catch {}
+      }
     }
   }
 
@@ -135,6 +330,10 @@ export class EconomyStore {
   private ledger(userJid: string, kind: string, amount: number, counterparty?: string, note?: string) {
     this.db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, counterparty_jid, note, created_at) VALUES(?, ?, ?, ?, ?, ?)')
       .run(userJid, kind, amount, counterparty ?? null, note ?? null, now())
+    try {
+      this.walletDb.prepare('INSERT INTO economy_global_ledger(user_jid, kind, amount, counterparty_jid, note, instance_role, instance_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(userJid, kind, amount, counterparty ?? null, note ?? null, process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main', Number(process.env.NEXORA_SUBBOT_ID || 0) || null, now())
+    } catch {}
   }
 
   balance(userJid: string) {
@@ -266,12 +465,6 @@ export class EconomyStore {
     return expiresAt
   }
 
-  /**
-   * Active entitlement lookup.
-   * Matches exact user_jid first, then any stored row whose JID shares the same
-   * phone digits (handles PN vs device-suffix and some format drift).
-   * Pure LID JIDs without digits still rely on exact match or explicit candidates.
-   */
   hasEntitlement(userJid: string, kind: string, extraCandidates: string[] = []) {
     const stamp = now()
     const candidates = [...new Set([userJid, ...extraCandidates].filter(Boolean))]
@@ -287,21 +480,14 @@ export class EconomyStore {
     const digitsList = [...new Set(candidates.map(digitsFromJid).filter((d) => d.length >= 8))]
     for (const digits of digitsList) {
       const rows = this.db
-        .prepare(
-          `SELECT user_jid as userJid, expires_at as expiresAt FROM entitlements
-           WHERE kind = ? AND expires_at > ? AND user_jid LIKE ?`,
-        )
+        .prepare(`SELECT user_jid as userJid, expires_at as expiresAt FROM entitlements WHERE kind = ? AND expires_at > ? AND user_jid LIKE ?`)
         .all(kind, stamp, `${digits}@%`) as Array<{ userJid: string; expiresAt: number }>
-
       let best = 0
       for (const row of rows) {
-        if (digitsFromJid(row.userJid) === digits && int(row.expiresAt) > best) {
-          best = int(row.expiresAt)
-        }
+        if (digitsFromJid(row.userJid) === digits && int(row.expiresAt) > best) best = int(row.expiresAt)
       }
       if (best) return best
     }
-
     return null
   }
 
@@ -329,10 +515,7 @@ export class EconomyStore {
   getGroupPolicy(groupJid: string): GroupPolicy {
     const row = this.db.prepare('SELECT welcome, anti_link as antiLink, anti_spam as antiSpam, adult_allowed as adultAllowed FROM group_policies WHERE group_jid = ?').get(groupJid) as Record<string, number> | undefined
     return {
-      welcome: Boolean(row?.welcome),
-      antiLink: Boolean(row?.antiLink),
-      antiSpam: Boolean(row?.antiSpam),
-      adultAllowed: Boolean(row?.adultAllowed),
+      welcome: Boolean(row?.welcome), antiLink: Boolean(row?.antiLink), antiSpam: Boolean(row?.antiSpam), adultAllowed: Boolean(row?.adultAllowed),
     }
   }
 
