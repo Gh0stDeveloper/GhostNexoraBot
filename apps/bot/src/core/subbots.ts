@@ -115,6 +115,7 @@ class SubbotManager {
         NEXORA_SUBBOT_EXPIRES_AT: String(record.expiresAt),
         NEXORA_SUBBOT_SHORT_NAME: customization.shortName,
         NEXORA_SUBBOT_NAME: customization.longName,
+        NEXORA_GLOBAL_ECONOMY_DB: economy.walletFile,
         DATA_DIR: path.join(config.dataDir, 'subbots', String(record.id)),
         SESSION_DIR: path.join(config.dataDir, 'subbots', String(record.id), 'session'),
         BOT_NAME: customization.longName,
