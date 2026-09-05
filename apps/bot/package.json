@@ -9,8 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
-    "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite tsx src/termux-lite.ts",
-    "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite tsx src/pair.ts",
+    "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite node dist/termux-lite.js",
+    "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite node dist/pair.js",
     "llm:train": "node dist/llm/train.js",
     "llm:worker": "node dist/llm/llm-worker-supervisor.js",
     "playwright:install": "playwright install chromium"
