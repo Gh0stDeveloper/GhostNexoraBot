@@ -10,7 +10,11 @@ BOT_DOMAIN="${BOT_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 WEB_PORT="${WEB_PORT:-3000}"
 BOT_HEALTH_PORT="${BOT_HEALTH_PORT:-3001}"
+INSTALL_OLLAMA="${INSTALL_OLLAMA:-ask}"
+OLLAMA_MODEL="${OLLAMA_MODEL:-qwen2.5:1.5b}"
 START_TS=$(date +%s)
+FIRST_INSTALL=true
+[[ -d "${INSTALL_DIR}/.git" ]] && FIRST_INSTALL=false
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 ok() { printf '[%s] [ OK ] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -29,6 +33,7 @@ info "Rama: ${BRANCH}"
 info "Instalación: ${INSTALL_DIR}"
 info "Datos persistentes: ${STATE_DIR}"
 info "Usuario de servicio: ${SERVICE_USER}"
+info "Tipo: $([[ "${FIRST_INSTALL}" == true ]] && echo 'primera instalación' || echo 'actualización/reinstalación')"
 
 if [[ "${WEB_PORT}" == "${BOT_HEALTH_PORT}" ]]; then fail 'WEB_PORT y BOT_HEALTH_PORT deben ser diferentes.'; exit 1; fi
 for port in "${WEB_PORT}" "${BOT_HEALTH_PORT}"; do
@@ -37,12 +42,12 @@ done
 
 export DEBIAN_FRONTEND=noninteractive
 
-section '1/9 · Dependencias del sistema'
+section '1/10 · Dependencias del sistema'
 apt-get update >/tmp/ghost-nexora-apt-update.log
 apt-get install -y ca-certificates curl git ffmpeg webp zip build-essential util-linux nginx unzip python3 >/tmp/ghost-nexora-apt-install.log
 ok 'Dependencias base instaladas.'
 
-section '2/9 · Node.js y yt-dlp'
+section '2/10 · Node.js y yt-dlp'
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -p 'Number(process.versions.node.split(`.`)[0])' 2>/dev/null || echo 0)" -lt 24 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | bash - >/tmp/ghost-nexora-node.log
   apt-get install -y nodejs >>/tmp/ghost-nexora-node.log
@@ -57,14 +62,14 @@ else
 fi
 ok "yt-dlp disponible: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 
-section '3/9 · Usuario y almacenamiento persistente'
+section '3/10 · Usuario y almacenamiento persistente'
 if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
   useradd --system --home-dir "${STATE_DIR}" --create-home --shell /usr/sbin/nologin "${SERVICE_USER}"
 fi
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${STATE_DIR}" "${STATE_DIR}/session" "${STATE_DIR}/data" "${STATE_DIR}/data/subbots"
 ok 'Almacenamiento persistente preparado.'
 
-section '4/9 · Código del bot'
+section '4/10 · Código y configuración'
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
   git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
   git -C "${INSTALL_DIR}" checkout "${BRANCH}"
@@ -80,6 +85,7 @@ set_env() {
   if grep -q "^${key}=" .env; then sed -i "s|^${key}=.*|${key}=${value}|" .env; else printf '%s=%s\n' "${key}" "${value}" >> .env; fi
 }
 
+set_env NEXORA_RUNTIME_PROFILE "full"
 set_env SESSION_DIR "${STATE_DIR}/session"
 set_env DATA_DIR "${STATE_DIR}/data"
 set_env MAX_DOWNLOAD_MB "1900"
@@ -96,20 +102,74 @@ if [[ -z "${CURRENT_ADMIN_TOKEN}" || "${CURRENT_ADMIN_TOKEN}" == "change-this-ad
 fi
 
 if [[ -n "${BOT_DOMAIN}" ]]; then set_env PUBLIC_WEB_URL "https://${BOT_DOMAIN}"; else set_env PUBLIC_WEB_URL "http://127.0.0.1:${WEB_PORT}"; fi
+ok '.env base configurado.'
+
+section '5/10 · Ollama + Qwen opcional'
+normalize_choice() {
+  case "${1,,}" in
+    y|yes|s|si|sí|true|1|on) printf 'yes' ;;
+    n|no|false|0|off) printf 'no' ;;
+    *) printf 'ask' ;;
+  esac
+}
+
+OLLAMA_CHOICE="$(normalize_choice "${INSTALL_OLLAMA}")"
+if [[ "${FIRST_INSTALL}" == true ]]; then
+  if [[ "${OLLAMA_CHOICE}" == "ask" ]]; then
+    if [[ -r /dev/tty ]]; then
+      printf '\nOllama es OPCIONAL y consume RAM, almacenamiento y CPU.\n' >/dev/tty
+      printf 'Modelo recomendado: %s\n' "${OLLAMA_MODEL}" >/dev/tty
+      printf '¿Instalar Ollama + Qwen para LLM local? [s/N]: ' >/dev/tty
+      ANSWER=''
+      IFS= read -r ANSWER </dev/tty || true
+      OLLAMA_CHOICE="$(normalize_choice "${ANSWER}")"
+      [[ "${OLLAMA_CHOICE}" == "ask" ]] && OLLAMA_CHOICE='no'
+    else
+      OLLAMA_CHOICE='no'
+      warn 'Terminal interactiva no disponible; Ollama se omite. Puedes instalarlo después.'
+    fi
+  fi
+
+  if [[ "${OLLAMA_CHOICE}" == "yes" ]]; then
+    info "Instalando Ollama y descargando ${OLLAMA_MODEL}…"
+    if bash "${INSTALL_DIR}/scripts/install-ollama.sh" "${OLLAMA_MODEL}" >/tmp/ghost-nexora-ollama.log 2>&1; then
+      set_env OLLAMA_ENABLED "true"
+      set_env OLLAMA_MODEL "${OLLAMA_MODEL}"
+      ok "Ollama + ${OLLAMA_MODEL} instalados y habilitados."
+    else
+      set_env OLLAMA_ENABLED "false"
+      warn 'Ollama no pudo instalarse. El bot continuará sin LLM local.'
+      warn 'Detalle: /tmp/ghost-nexora-ollama.log'
+    fi
+  else
+    set_env OLLAMA_ENABLED "false"
+    set_env OLLAMA_MODEL "${OLLAMA_MODEL}"
+    ok 'Ollama omitido por elección del usuario. El bot funcionará normalmente sin LLM local.'
+  fi
+else
+  CURRENT_OLLAMA_ENABLED="$(grep '^OLLAMA_ENABLED=' .env | cut -d= -f2- | tr '[:upper:]' '[:lower:]' || true)"
+  if [[ "${CURRENT_OLLAMA_ENABLED}" =~ ^(1|true|yes|on)$ ]] && ! command -v ollama >/dev/null 2>&1; then
+    set_env OLLAMA_ENABLED "false"
+    warn 'OLLAMA_ENABLED estaba activo pero Ollama no existe en el sistema; se desactivó para ocultar los comandos LLM locales.'
+  else
+    info 'Instalación existente: se conserva la decisión actual sobre Ollama.'
+  fi
+fi
+
 chown root:"${SERVICE_USER}" .env
 chmod 0640 .env
-ok '.env configurado y protegido.'
+ok '.env protegido.'
 
-section '5/9 · Dependencias Node'
+section '6/10 · Dependencias Node'
 npm install >/tmp/ghost-nexora-npm-install.log 2>&1
 ok 'Dependencias Node instaladas.'
 
-section '6/9 · Build de producción'
+section '7/10 · Build de producción'
 npm run build >/tmp/ghost-nexora-build.log 2>&1
 ok 'Build de producción completado.'
 install -d -m 0750 -o "${SERVICE_USER}" -g "${SERVICE_USER}" "${INSTALL_DIR}/apps/web/.next/cache"
 
-section '7/9 · Systemd'
+section '8/10 · Systemd'
 install -m 0644 systemd/ghost-nexora-bot.service /etc/systemd/system/ghost-nexora-bot.service
 install -m 0644 systemd/ghost-nexora-web.service /etc/systemd/system/ghost-nexora-web.service
 sed -i \
@@ -123,7 +183,7 @@ sed -i \
 systemctl daemon-reload
 ok 'Unidades systemd instaladas.'
 
-section '8/9 · Vinculación WhatsApp'
+section '9/10 · Vinculación WhatsApp'
 SESSION_CREDS="${STATE_DIR}/session/creds.json"
 REGISTERED="false"
 if [[ -f "${SESSION_CREDS}" ]]; then REGISTERED="$(node -e "try{const x=require('${SESSION_CREDS}');process.stdout.write(String(Boolean(x.registered)))}catch{process.stdout.write('false')}" 2>/dev/null || echo false)"; fi
@@ -137,13 +197,15 @@ if [[ "${REGISTERED}" != "true" ]]; then
   if [[ -n "${PHONE}" ]]; then
     CURRENT_OWNERS="$(grep '^OWNER_NUMBERS=' .env | cut -d= -f2- || true)"
     [[ -n "${CURRENT_OWNERS}" ]] || set_env OWNER_NUMBERS "${PHONE}"
+    chown root:"${SERVICE_USER}" .env
+    chmod 0640 .env
     runuser -u "${SERVICE_USER}" -- env ENV_FILE="${INSTALL_DIR}/.env" PAIRING_NUMBER="${PHONE}" npm --prefix "${INSTALL_DIR}" run pair || warn 'La vinculación no terminó; puedes repetirla después.'
   fi
 else
   ok 'Sesión WhatsApp existente detectada; no se volvió a vincular.'
 fi
 
-section '9/9 · Servicios, proxy y Nginx'
+section '10/10 · Servicios, proxy y Nginx'
 systemctl enable --now ghost-nexora-bot.service ghost-nexora-web.service nginx
 ok 'Servicios habilitados y arrancados.'
 
@@ -161,6 +223,8 @@ if [[ -n "${BOT_DOMAIN}" ]]; then
   certbot "${CERTBOT_ARGS[@]}" >/tmp/ghost-nexora-certbot-run.log 2>&1 || warn 'HTTPS no pudo emitirse automáticamente; comprueba DNS.'
 fi
 
+OLLAMA_FINAL="$(grep '^OLLAMA_ENABLED=' .env | cut -d= -f2- || echo false)"
 printf '\nGhost Nexora Bot instalado. Código: %s\n' "$(git rev-parse --short HEAD)"
+printf 'Ollama/LLM local: %s\n' "${OLLAMA_FINAL}"
 printf 'Proxy: https://${BOT_DOMAIN:-ghostnexorabot.duckdns.org}/proxy\n'
 printf 'Health: http://127.0.0.1:${BOT_HEALTH_PORT}/health\n'
