@@ -1,5 +1,7 @@
 import type { BotCommand } from '../types.js'
 import { games, renderTtt } from '../services/games.js'
+import { htmlGameUnavailableText, sendAiHtmlMessage } from '../services/ai-html.js'
+import { buildMarioGameHtml } from '../services/mario-game.js'
 
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} NXC`
 
@@ -92,6 +94,30 @@ export const gameCommands: BotCommand[] = [
       const bet = parseBet(ctx.args[0])
       const game = games.startTtt(ctx.sender, bet)
       await ctx.reply(`🎮 *TRES EN RAYA · VS IA*\n━━━━━━━━━━━━━━\n${renderTtt(game.board)}\n\nTú eres ❌ · Bot es ⭕\n${game.bet ? `Apuesta: *${fmt(game.bet)}*\n` : ''}Juega con *${ctx.prefix}ttt <1-9>*.`)
+    },
+  },
+  {
+    name: 'mario',
+    aliases: ['supermario', 'mariobros', 'mariogame'],
+    category: 'games',
+    description: 'Mini juego interactivo de plataformas estilo Super Mario, completamente en español.',
+    usage: 'mario',
+    async handler(ctx) {
+      try {
+        await sendAiHtmlMessage(ctx.socket, ctx.chatId, buildMarioGameHtml(), {
+          title: 'Super Mario · Ghost Nexora Bot',
+          trustedSources: [],
+          quoted: ctx.message,
+        })
+      } catch (error) {
+        await ctx.reply([
+          '🍄 *SUPER MARIO · GHOST NEXORA*',
+          '━━━━━━━━━━━━━━',
+          htmlGameUnavailableText(ctx.prefix, 'mario'),
+          '',
+          `Detalle: ${error instanceof Error ? error.message : String(error)}`,
+        ].join('\n'))
+      }
     },
   },
 ]
