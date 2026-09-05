@@ -7,6 +7,14 @@ import type { DownloadedMedia } from '../utils/message.js'
 export type BrandingSlot = 'menu' | 'welcome' | 'goodbye'
 export type BrandingAsset = { path: string; kind: 'image' | 'video'; size: number }
 
+type SharpFactory = (input: Buffer, options?: Record<string, unknown>) => {
+  rotate: () => {
+    resize: (width: number, height: number, options: Record<string, unknown>) => {
+      jpeg: (options: Record<string, unknown>) => { toFile: (target: string) => Promise<unknown> }
+    }
+  }
+}
+
 function brandingRoot(instanceId?: number) {
   return instanceId
     ? path.join(config.dataDir, 'subbots', String(instanceId), 'branding')
@@ -23,10 +31,13 @@ async function removeSlot(slot: BrandingSlot, instanceId?: number) {
   ])
 }
 
-async function loadSharp() {
+const importOptional = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<{ default?: unknown }>
+
+async function loadSharp(): Promise<SharpFactory> {
   try {
-    const module = await import('sharp')
-    return module.default
+    const module = await importOptional('sharp')
+    if (typeof module.default !== 'function') throw new Error('Sharp no expuso una función compatible.')
+    return module.default as SharpFactory
   } catch (error) {
     if (config.isTermuxLite) {
       throw new Error('El procesamiento avanzado de imágenes no está disponible en Ghost Nexora Lite para Termux.')
