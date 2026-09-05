@@ -1,3 +1,4 @@
+import { execa } from 'execa'
 import type { BotCommand, CommandContext } from '../types.js'
 import { downloadMessageMedia } from '../utils/message.js'
 import {
@@ -25,6 +26,32 @@ function mimeFromFileName(fileName?: string | null) {
   if (name.endsWith('.png')) return 'image/png'
   if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg'
   return null
+}
+
+async function normalizeForWhatsappPlayback(buffer: Buffer, mimeType: string) {
+  if (!/^(image\/gif|video\/(gif|webm))$/i.test(mimeType)) {
+    return { buffer, mimeType }
+  }
+
+  try {
+    const { stdout } = await execa('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error',
+      '-i', 'pipe:0',
+      '-vf', "scale='min(480,iw)':-2:flags=lanczos,fps=15",
+      '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+      '-movflags', 'frag_keyframe+empty_moov',
+      '-f', 'mp4', 'pipe:1',
+    ], {
+      input: buffer,
+      encoding: 'buffer',
+      timeout: 45_000,
+      maxBuffer: 25 * 1024 * 1024,
+    })
+    return { buffer: Buffer.from(stdout), mimeType: 'video/mp4' }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`No pude convertir el GIF/WEBM a MP4 para WhatsApp: ${detail}`)
+  }
 }
 
 async function add(ctx: CommandContext) {
@@ -58,10 +85,12 @@ async function add(ctx: CommandContext) {
     throw new Error(`Formato no reconocido (${mimetype}). Usa GIF, MP4, WEBM, PNG, JPG o WEBP.`)
   }
 
+  const sourceMime = inferred ?? mimetype
+  const normalized = await normalizeForWhatsappPlayback(media.buffer, sourceMime)
   const saved = await addAdultReactionMedia(
     command,
-    media.buffer,
-    inferred ?? mimetype,
+    normalized.buffer,
+    normalized.mimeType,
     ctx.sender,
     media.fileName ?? undefined,
   )
@@ -72,7 +101,8 @@ async function add(ctx: CommandContext) {
     `Pool/comando: *${saved.command}*`,
     `ID: *${saved.id}*`,
     `Guardados: *${saved.count}/25*`,
-    `Tipo: *${inferred ?? mimetype}*`,
+    `Tipo original: *${sourceMime}*`,
+    normalized.mimeType !== sourceMime ? 'Conversión: *MP4 compatible con WhatsApp*' : `Tipo guardado: *${normalized.mimeType}*`,
   ].join('\n'))
 }
 
@@ -155,6 +185,7 @@ async function help(ctx: CommandContext) {
     '',
     `Comandos: ${listAllowedAdultMediaCommands().join(', ')}`,
     'Acepta GIF/MP4/WEBM/PNG/JPG/WEBP, incluso si WhatsApp lo envía como documento.',
+    'Los GIF/WEBM se convierten automáticamente a MP4 reproducible antes de guardarse.',
     'Máximo: *25* medios por comando.',
   ].join('\n'))
 }
@@ -165,7 +196,7 @@ export const adultMediaV11Commands: BotCommand[] = [
     aliases: ['reactiongif', 'adultmedia'],
     category: 'adult',
     staffOnly: true,
-    description: 'Administra medios de reacción 18+ y corrige la carga de GIF/video/documentos.',
+    description: 'Administra medios de reacción 18+ y corrige la carga/reproducción de GIF, video y documentos.',
     usage: 'adultgif add [comando]|import|list|remove|clear|help',
     handler: async (ctx) => {
       const action = (ctx.args[0] || 'help').toLowerCase()
