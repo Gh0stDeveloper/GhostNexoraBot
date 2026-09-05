@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import dotenv from 'dotenv'
 import { z } from 'zod'
@@ -48,8 +49,8 @@ const schema = z.object({
   LEMPI_HAPPYMOD_SEARCH_ENDPOINTS: z.string().default('/s/happymod,/s/hm,/search/happymod,/search/hm'),
   LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS: z.string().default('/d/happymod,/d/hm,/d/happymoddl,/download/happymod,/download/hm'),
 
-  // Local LLM (Ollama). Disabled by default so existing installations keep the
-  // deterministic Mini-LLM path until explicitly enabled in .env.
+  // Local LLM (Ollama). Disabled by default and only considered available when
+  // both the feature flag and the Ollama executable exist on the host.
   OLLAMA_ENABLED: z.string().default('false'),
   OLLAMA_MODEL: z.string().min(1).default('qwen2.5:1.5b'),
   OLLAMA_BASE_URL: z.string().url().default('http://127.0.0.1:11434'),
@@ -86,6 +87,23 @@ const splitList = (value: string) => value
   .filter(Boolean)
 const isTermuxLite = raw.NEXORA_RUNTIME_PROFILE === 'termux-lite'
 
+function executableAvailable(command: string) {
+  try {
+    const result = spawnSync(command, ['--version'], {
+      stdio: 'ignore',
+      timeout: 2_500,
+      windowsHide: true,
+    })
+    return !result.error && result.status === 0
+  } catch {
+    return false
+  }
+}
+
+const ollamaRequested = !isTermuxLite && truthy(raw.OLLAMA_ENABLED)
+const ollamaExecutable = process.platform === 'win32' ? 'ollama.exe' : 'ollama'
+const ollamaInstalled = ollamaRequested && executableAvailable(ollamaExecutable)
+
 export const config = {
   runtimeProfile: raw.NEXORA_RUNTIME_PROFILE,
   isTermuxLite,
@@ -116,8 +134,10 @@ export const config = {
   lempiPinterestSearchEndpoints: splitList(raw.LEMPI_PINTEREST_SEARCH_ENDPOINTS),
   lempiHappyModSearchEndpoints: splitList(raw.LEMPI_HAPPYMOD_SEARCH_ENDPOINTS),
   lempiHappyModDownloadEndpoints: splitList(raw.LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS),
-  // Termux Lite never enables local LLM/Ollama even if an old .env still says true.
-  ollamaEnabled: !isTermuxLite && truthy(raw.OLLAMA_ENABLED),
+  // Runtime real: requiere flag + binario. Termux Lite siempre permanece en false.
+  ollamaRequested,
+  ollamaInstalled,
+  ollamaEnabled: ollamaInstalled,
   ollamaModel: raw.OLLAMA_MODEL,
   ollamaBaseUrl: raw.OLLAMA_BASE_URL.replace(/\/+$/, ''),
   ollamaTimeoutMs: raw.OLLAMA_TIMEOUT_MS,
