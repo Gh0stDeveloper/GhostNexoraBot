@@ -118,67 +118,55 @@ async function currentVisualIdentity(ctx: CommandContext) {
   }
 }
 
-function menuBody(ctx: CommandContext, rows: ReturnType<typeof effectiveCommands>, displayName: string, role: string) {
-  const sections = new Map<SectionId, string[]>()
-  for (const id of sectionOrder) sections.set(id, [])
-  for (const row of rows) {
-    if (!visible(ctx, row.command)) continue
-    const section = sectionFor(row.command)
-    sections.get(section)!.push(renderTokens(ctx.prefix, row.command, row.tokens))
-  }
-
-  const rendered = sectionOrder
-    .map((id) => {
-      const lines = sections.get(id) ?? []
-      return lines.length ? [sectionTitles[id], ...lines].join('\n') : ''
-    })
-    .filter(Boolean)
-    .join('\n\n')
-
-  return [
-    `╭━━━〔 ${displayName.toUpperCase()} 〕━━━╮`,
-    `┃ 👤 Usuario » ${ctx.pushName || 'Usuario'}`,
-    `┃ 🛡️ Rol » ${role}`,
-    `┃ ⏱️ Uptime » ${formatUptime()}`,
-    `┃ 💰 Moneda » ${COIN_NAME} (${COIN_SYMBOL})`,
-    `┃ ⌨️ Prefijo » ${ctx.prefix}`,
-    '╰━━━━━━━━━━━━━━━━━━━━╯',
-    '',
-    rendered,
-    '',
-    'Ghost Nexora Bot',
-  ].join('\n')
-}
-
 async function menu(ctx: CommandContext) {
-  const rows = effectiveCommands()
+  const profession = professionsV2.get(ctx.sender)
   const role = await roleLabel(ctx)
+  const privateAccess = Boolean(privateAccessStatus(ctx.sender)) || ctx.isOwner || ctx.isBotStaff
+  const instance = ctx.instanceId ? `Subbot #${ctx.instanceId}` : 'MainBot'
   const visual = await currentVisualIdentity(ctx)
-  const body = menuBody(ctx, rows, visual.displayName, role)
-  const access = privateAccessStatus(ctx.sender)
-  const footer = [
-    visual.style.id !== 'default' ? `${visual.style.icon} ${visual.displayName}` : '',
-    access.active ? `Privado · ${access.label}` : '',
-    'Ghost Nexora Bot',
-  ].filter(Boolean).join(' · ')
+  const grouped = new Map<SectionId, string[]>()
+  for (const id of sectionOrder) grouped.set(id, [])
+  for (const row of effectiveCommands()) if (visible(ctx, row.command)) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx.prefix, row.command, row.tokens))
+
+  const sections = sectionOrder.flatMap((id) => {
+    const rows = grouped.get(id) ?? []
+    if (!rows.length) return []
+    rows.sort((a, b) => a.localeCompare(b, 'es'))
+    return [`╭─〔 ${sectionTitles[id]} 〕`, ...rows, '╰────────────────', '']
+  })
+
+  const visualHeader = visual.style.id === 'default'
+    ? '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮'
+    : `╭━━━〔 ${visual.style.icon} *${visual.displayName.toUpperCase()}* 〕━━━╮`
+
+  const body = [
+    visualHeader,
+    visual.style.id !== 'default' ? `┃ 🌸 Waifu activa » *${visual.displayName}*` : '',
+    `┃ ⚙️ Instancia » *${instance}*`, `┃ 👤 Usuario » *${ctx.pushName}*`, `┃ ⌨️ Prefijo » *${ctx.prefix}*`,
+    `┃ ⏱️ Uptime » *${formatUptime()}*`, `┃ 🪙 Moneda » *${COIN_NAME} (${COIN_SYMBOL})*`,
+    `┃ 💼 Profesión » *${profession.emoji} ${profession.label}*`, `┃ 🏷️ Rol » *${role}*`,
+    `┃ 🔐 Privado » *${privateAccess ? 'HABILITADO' : 'NO HABILITADO'}*`, '╰━━━━━━━━━━━━━━━━━━━━╯', '',
+    ...sections,
+    `📚 *Total de comandos efectivos: ${effectiveCommands().filter((row) => visible(ctx, row.command)).length}*`,
+    '',
+    visual.style.id !== 'default' ? `${visual.style.icon} Apariencia: *${visual.displayName}*` : '',
+    '*Ghost Nexora Bot*',
+  ].filter(Boolean).join('\n')
 
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: `${visual.style.icon} ${visual.displayName} · MENÚ`,
+    title: visual.style.id === 'default' ? '👻 Ghost Nexora Bot · MENÚ' : `${visual.style.icon} ${visual.displayName} · MENÚ`,
     body,
-    footer,
     imageUrl: visual.imageUrl,
+    footer: 'Ghost Nexora Bot',
     buttons: [
-      { type: 'reply', text: '🎛️ Personalización', id: `${ctx.prefix}styles` },
-      { type: 'reply', text: '🧠 IA', id: `${ctx.prefix}ai` },
-      { type: 'reply', text: '🎮 Juegos', id: `${ctx.prefix}menu games` },
+      { type: 'url', text: 'Ver canal', url: config.officialChannelUrl },
+      { type: 'reply', text: 'Perfil', id: `${ctx.prefix}profile` },
+      { type: 'reply', text: 'Tienda', id: `${ctx.prefix}shop` },
     ],
   })
 }
 
-const legacyMenuCommand = mediaDevV6Commands.find((command) => command.name === 'menu')
-
 export const menuV5Commands: BotCommand[] = [
-  ...(legacyMenuCommand ? [{ ...legacyMenuCommand, description: 'Menú completo con todos los comandos y avatar/waifu visual activa.', handler: menu }] : [{
-    name: 'menu', aliases: ['help', 'comandos'], category: 'general' as const, description: 'Menú completo con todos los comandos y avatar/waifu visual activa.', handler: menu,
-  }]),
+  ...mediaDevV6Commands,
+  { name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos con avatar/waifu visual de la instancia.', handler: menu },
 ]
