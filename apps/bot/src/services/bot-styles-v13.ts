@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from '../config.js'
-import { searchAniListCharacters } from './anilist-waifu-v5.js'
 
 export type BotVisualStyle = {
   id: string
@@ -11,22 +10,30 @@ export type BotVisualStyle = {
   characterQuery?: string
 }
 
+export type BotStyleImage = {
+  index: number
+  fileName: string
+  filePath: string
+}
+
 export type BotStyleAsset = {
   style: BotVisualStyle
   imageUrl?: string
   characterName?: string
   sourceUrl?: string
+  imageIndex?: number
+  imageCount?: number
 }
 
 const STYLE_FILE = path.join(config.dataDir, 'bot-style.json')
-const CACHE_TTL = 30 * 60_000
-const imageCache = new Map<string, { expiresAt: number; asset: BotStyleAsset }>()
+const LOCAL_ASSET_ROOT = path.join(config.workspaceRoot, 'apps', 'bot', 'assets', 'waifus')
+const LOCAL_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp'])
 
 /**
  * Catálogo visual del bot.
  *
- * Las imágenes NO se almacenan en el repositorio: cada personaje se resuelve
- * dinámicamente desde AniList usando el mismo servicio que el sistema .waifu.
+ * Las waifus usan exclusivamente imágenes locales empaquetadas con el proyecto.
+ * El estilo Default continúa usando la foto actual de la cuenta de WhatsApp.
  * Se mantienen 24 estilos exactos para que .styles muestre 4 chunks de 6.
  */
 export const BOT_VISUAL_STYLES: BotVisualStyle[] = [
@@ -199,10 +206,7 @@ export const BOT_VISUAL_STYLES: BotVisualStyle[] = [
   },
 ]
 
-/**
- * Alias amigables y compatibilidad con los IDs genéricos usados por V13
- * antes de migrar el catálogo a personajes específicos.
- */
+/** Alias amigables y compatibilidad con los IDs genéricos usados por V13. */
 const STYLE_ALIASES: Record<string, string> = {
   megumi: 'megumin',
   'megumi konosuba': 'megumin',
@@ -229,8 +233,6 @@ const STYLE_ALIASES: Record<string, string> = {
   'kaguya shinomiya': 'kaguya',
   'violet evergarden': 'violet',
   'nezuko kamado': 'nezuko',
-
-  // IDs de estilos V13 anteriores.
   moon: 'mai',
   sakura: 'marin',
   neon: 'zerotwo',
@@ -246,6 +248,7 @@ const STYLE_ALIASES: Record<string, string> = {
 
 type StoredStyle = {
   styleId: string
+  selectedImages?: Record<string, number>
   updatedBy?: string
   updatedAt?: number
 }
@@ -259,16 +262,30 @@ function canonicalStyleId(value: string) {
   return STYLE_ALIASES[clean] ?? clean
 }
 
+function cleanSelectedImages(value: unknown) {
+  if (!value || typeof value !== 'object') return {} as Record<string, number>
+  const clean: Record<string, number> = {}
+  for (const [rawId, rawIndex] of Object.entries(value as Record<string, unknown>)) {
+    const id = canonicalStyleId(rawId)
+    const index = Math.floor(Number(rawIndex))
+    if (id !== 'default' && Number.isFinite(index) && index > 0) clean[id] = index
+  }
+  return clean
+}
+
 function readStoredStyle(): StoredStyle {
   try {
     const raw = JSON.parse(fs.readFileSync(STYLE_FILE, 'utf8')) as Partial<StoredStyle>
     const requested = String(raw.styleId ?? 'default')
     const style = getBotVisualStyle(requested)
-    return style
-      ? { styleId: style.id, updatedBy: raw.updatedBy, updatedAt: Number(raw.updatedAt ?? 0) }
-      : { styleId: 'default' }
+    return {
+      styleId: style?.id ?? 'default',
+      selectedImages: cleanSelectedImages(raw.selectedImages),
+      updatedBy: raw.updatedBy,
+      updatedAt: Number(raw.updatedAt ?? 0),
+    }
   } catch {
-    return { styleId: 'default' }
+    return { styleId: 'default', selectedImages: {} }
   }
 }
 
@@ -277,6 +294,14 @@ function persistStyle(state: StoredStyle) {
   const temp = `${STYLE_FILE}.${process.pid}.tmp`
   fs.writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
   fs.renameSync(temp, STYLE_FILE)
+}
+
+function displayCharacterName(style: BotVisualStyle) {
+  return style.characterQuery ?? style.name.split('·')[0]!.trim()
+}
+
+export function getBotVisualStyleAssetRoot() {
+  return LOCAL_ASSET_ROOT
 }
 
 export function listBotVisualStyles() {
@@ -292,40 +317,85 @@ export function getCurrentBotVisualStyle() {
   return getBotVisualStyle(readStoredStyle().styleId) ?? BOT_VISUAL_STYLES[0]!
 }
 
+export function listBotVisualStyleImages(styleOrId: BotVisualStyle | string): BotStyleImage[] {
+  const style = typeof styleOrId === 'string' ? getBotVisualStyle(styleOrId) : styleOrId
+  if (!style || style.id === 'default') return []
+  const dir = path.join(LOCAL_ASSET_ROOT, style.id)
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && LOCAL_IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
+      .map((fileName, offset) => ({
+        index: offset + 1,
+        fileName,
+        filePath: path.join(dir, fileName),
+      }))
+  } catch {
+    return []
+  }
+}
+
+export function getBotVisualStyleImageSelection(styleId: string) {
+  const style = getBotVisualStyle(styleId)
+  if (!style || style.id === 'default') return undefined
+  const images = listBotVisualStyleImages(style)
+  if (!images.length) return undefined
+  const requested = readStoredStyle().selectedImages?.[style.id] ?? 1
+  const image = images.find((row) => row.index === requested) ?? images[0]!
+  return { style, image, imageCount: images.length }
+}
+
 export function setCurrentBotVisualStyle(styleId: string, updatedBy: string) {
   const style = getBotVisualStyle(styleId)
   if (!style) throw new Error(`Estilo desconocido: ${styleId}`)
-  persistStyle({ styleId: style.id, updatedBy, updatedAt: Date.now() })
+  const state = readStoredStyle()
+  persistStyle({
+    ...state,
+    styleId: style.id,
+    selectedImages: state.selectedImages ?? {},
+    updatedBy,
+    updatedAt: Date.now(),
+  })
   return style
 }
 
-function normalizeName(value: string) {
-  return value.trim().toLocaleLowerCase('en').replace(/\s+/g, ' ')
+export function setBotVisualStyleImage(styleId: string, imageIndex: number, updatedBy: string, activate = true) {
+  const style = getBotVisualStyle(styleId)
+  if (!style || style.id === 'default') throw new Error('Debes elegir una waifu con imágenes locales.')
+  const images = listBotVisualStyleImages(style)
+  if (!images.length) throw new Error(`No hay imágenes locales instaladas para ${style.name}. Ejecuta npm run assets:waifus.`)
+  const index = Math.floor(Number(imageIndex))
+  const image = images.find((row) => row.index === index)
+  if (!image) throw new Error(`Imagen inválida. ${style.name} tiene ${images.length} variantes (1-${images.length}).`)
+
+  const state = readStoredStyle()
+  persistStyle({
+    ...state,
+    styleId: activate ? style.id : state.styleId,
+    selectedImages: { ...(state.selectedImages ?? {}), [style.id]: image.index },
+    updatedBy,
+    updatedAt: Date.now(),
+  })
+  return { style, image, imageCount: images.length }
 }
 
 export async function resolveBotVisualStyleAsset(styleOrId: BotVisualStyle | string): Promise<BotStyleAsset> {
   const style = typeof styleOrId === 'string' ? getBotVisualStyle(styleOrId) : styleOrId
   if (!style) throw new Error('Estilo visual no encontrado.')
-  if (!style.characterQuery) return { style }
+  if (style.id === 'default') return { style }
 
-  const cached = imageCache.get(style.id)
-  if (cached && cached.expiresAt > Date.now()) return cached.asset
-
-  const rows = await searchAniListCharacters(style.characterQuery, 6)
-  if (!rows.length) throw new Error(`AniList no devolvió imágenes para ${style.name}.`)
-  const expected = normalizeName(style.characterQuery)
-  const character = rows.find((row) => normalizeName(row.name) === expected)
-    ?? rows.find((row) => normalizeName(row.name).includes(expected) || expected.includes(normalizeName(row.name)))
-    ?? rows[0]!
-
-  const asset: BotStyleAsset = {
-    style,
-    imageUrl: character.imageUrl,
-    characterName: character.name,
-    sourceUrl: character.sourceUrl,
+  const selection = getBotVisualStyleImageSelection(style.id)
+  if (!selection) {
+    throw new Error(`No hay imágenes locales instaladas para ${style.name}. Ejecuta npm run assets:waifus.`)
   }
-  imageCache.set(style.id, { expiresAt: Date.now() + CACHE_TTL, asset })
-  return asset
+  return {
+    style,
+    imageUrl: selection.image.filePath,
+    characterName: displayCharacterName(style),
+    imageIndex: selection.image.index,
+    imageCount: selection.imageCount,
+  }
 }
 
 export async function resolveCurrentBotVisualImage(fallbackUrl?: string) {
