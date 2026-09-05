@@ -9,9 +9,22 @@ import {
 import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
 
+export type InteractiveSelectRow = {
+  id: string
+  title: string
+  description?: string
+  header?: string
+}
+
+export type InteractiveSelectSection = {
+  title: string
+  rows: InteractiveSelectRow[]
+}
+
 export type InteractiveButton =
   | { type: 'reply'; text: string; id: string }
   | { type: 'url'; text: string; url: string }
+  | { type: 'select'; text: string; sections: InteractiveSelectSection[] }
 
 export type CarouselCard = {
   title: string
@@ -21,10 +34,32 @@ export type CarouselCard = {
   buttons: InteractiveButton[]
 }
 
+function nativeButton(button: InteractiveButton) {
+  if (button.type === 'reply') {
+    return { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: button.text, id: button.id }) }
+  }
+  if (button.type === 'url') {
+    return { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: button.text, url: button.url, merchant_url: button.url }) }
+  }
+  return {
+    name: 'single_select',
+    buttonParamsJson: JSON.stringify({
+      title: button.text,
+      sections: button.sections.map((section) => ({
+        title: section.title,
+        rows: section.rows.map((row) => ({
+          id: row.id,
+          title: row.title,
+          description: row.description ?? '',
+          header: row.header ?? '',
+        })),
+      })),
+    }),
+  }
+}
+
 function nativeButtons(buttons: InteractiveButton[]) {
-  return buttons.slice(0, 3).map((button) => button.type === 'reply'
-    ? { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: button.text, id: button.id }) }
-    : { name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: button.text, url: button.url, merchant_url: button.url }) })
+  return buttons.slice(0, 3).map(nativeButton)
 }
 
 function nativeFlow(buttons: InteractiveButton[]) {
