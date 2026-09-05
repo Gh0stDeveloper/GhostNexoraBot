@@ -45,6 +45,9 @@ jobs:
       - name: V5 compatibility smoke
         run: node scripts/v5-smoke.mjs
 
+      - name: YouTube select-first smoke
+        run: node scripts/youtube-select-smoke.mjs
+
       - name: Long Ollama response and checkers UI smoke
         run: node scripts/llm-long-response-ui-smoke.mjs
 
