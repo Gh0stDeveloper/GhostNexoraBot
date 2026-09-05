@@ -17,6 +17,7 @@ for (const candidate of envCandidates) {
 }
 
 const schema = z.object({
+  NEXORA_RUNTIME_PROFILE: z.enum(['full', 'termux-lite']).default('full'),
   BOT_NAME: z.string().min(1).default('Ghost Nexora Bot'),
   PREFIX: z.string().min(1).max(4).default('.'),
   OWNER_NUMBERS: z.string().default(''),
@@ -83,8 +84,11 @@ const splitList = (value: string) => value
   .split(/[\n,]+/)
   .map((item) => item.trim())
   .filter(Boolean)
+const isTermuxLite = raw.NEXORA_RUNTIME_PROFILE === 'termux-lite'
 
 export const config = {
+  runtimeProfile: raw.NEXORA_RUNTIME_PROFILE,
+  isTermuxLite,
   botName: raw.BOT_NAME,
   defaultPrefix: raw.PREFIX,
   owners: raw.OWNER_NUMBERS.split(',').map((value) => value.replace(/\D/g, '')).filter(Boolean),
@@ -112,7 +116,8 @@ export const config = {
   lempiPinterestSearchEndpoints: splitList(raw.LEMPI_PINTEREST_SEARCH_ENDPOINTS),
   lempiHappyModSearchEndpoints: splitList(raw.LEMPI_HAPPYMOD_SEARCH_ENDPOINTS),
   lempiHappyModDownloadEndpoints: splitList(raw.LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS),
-  ollamaEnabled: truthy(raw.OLLAMA_ENABLED),
+  // Termux Lite never enables local LLM/Ollama even if an old .env still says true.
+  ollamaEnabled: !isTermuxLite && truthy(raw.OLLAMA_ENABLED),
   ollamaModel: raw.OLLAMA_MODEL,
   ollamaBaseUrl: raw.OLLAMA_BASE_URL.replace(/\/+$/, ''),
   ollamaTimeoutMs: raw.OLLAMA_TIMEOUT_MS,
