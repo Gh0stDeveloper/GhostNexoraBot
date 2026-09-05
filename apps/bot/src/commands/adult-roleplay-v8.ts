@@ -6,6 +6,7 @@ import { economy } from '../services/economy.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 import { digitsFromJid, getContextInfo } from '../utils/message.js'
 import { pickAdultReactionMedia } from '../services/adult-media-v8.js'
+import { renderAdultRoleplayMessage } from '../services/adult-roleplay-messages-v14.js'
 
 const prohibited = /\b(child|children|underage|minor|preteen|pre-teen|niñ[oa]s?|menor(?:es)?)\b/i
 
@@ -79,7 +80,6 @@ type Def = {
   aliases: string[]
   category: ReactionCategory
   title: string
-  text: string
   nsfwTags: string[]
 }
 
@@ -89,7 +89,6 @@ const defs: Def[] = [
     aliases: ['room'],
     category: 'kiss',
     title: 'ESCENA PRIVADA',
-    text: 'inició una escena privada de roleplay consensuado con',
     nsfwTags: ['waifu', 'neko', 'blowjob'],
   },
   {
@@ -97,7 +96,6 @@ const defs: Def[] = [
     aliases: ['prenar'],
     category: 'cuddle',
     title: 'ROLEPLAY DE PAREJA',
-    text: 'inició un roleplay consensuado de pareja/familia con',
     nsfwTags: ['waifu', 'neko'],
   },
   {
@@ -105,7 +103,6 @@ const defs: Def[] = [
     aliases: ['finishrp'],
     category: 'happy',
     title: 'FIN DE ESCENA',
-    text: 'dio por terminada su escena de roleplay consensuado con',
     nsfwTags: ['waifu', 'neko'],
   },
 ]
@@ -171,10 +168,11 @@ async function run(def: Def, ctx: CommandContext) {
     )
   }
 
+  const roleplayText = renderAdultRoleplayMessage(def.name, ctx.sender, other)
   const caption = [
     `🔞 *${def.title}*`,
     '━━━━━━━━━━━━━━',
-    `@${ctx.sender.split('@')[0]} ${def.text} @${other.split('@')[0]}`,
+    roleplayText,
     '',
     '✓ Consentimiento 18+ confirmado.',
   ].join('\n')
@@ -228,7 +226,7 @@ export const adultRoleplayV8Commands: BotCommand[] = defs.map((def) => ({
   name: def.name,
   aliases: def.aliases,
   category: 'adult',
-  description: `Roleplay 18+ con consentimiento mutuo: ${def.name}. Prioriza medios locales (adultgif).`,
+  description: `Roleplay 18+ con consentimiento mutuo: ${def.name}. Mensaje personalizable por staff y medios locales adultgif.`,
   usage: `${def.name} @usuario`,
   handler: (ctx) => run(def, ctx),
 }))
