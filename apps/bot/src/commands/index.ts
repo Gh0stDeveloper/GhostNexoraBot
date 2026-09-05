@@ -3,6 +3,7 @@ import '../services/economy-wallet-reconcile.js'
 import type { BotCommand } from '../types.js'
 import { setMenuCommandProvider } from '../services/menu-registry.js'
 import { generalCommands } from './general.js'
+import { creditsCommands } from './credits.js'
 import { aiCommands } from './ai.js'
 import { profileCommands } from './profile.js'
 import { reactionCommands } from './reactions.js'
@@ -90,6 +91,7 @@ import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.
 
 export const commands: BotCommand[] = [
   ...generalCommands,
+  ...creditsCommands,
   ...aiCommands,
   ...profileCommands,
   ...reactionCommands,
