@@ -40,6 +40,8 @@ try {
     'waifu', 'rw', 'wsearch', 'winfo', 'wimage', 'ainfo', 'alist', 'ytmp3', 'ytmp4', 'facebook',
     'minershop', 'minertienda', 'minerbuy', 'comprarminero', 'joblicense', 'comprartitulo', 'jobrequirements',
     'adultgif', 'reactiongif', 'adultmedia',
+    'mc', 'minecraft', 'mchelp', 'mcseed', 'mcstronghold', 'mcbioma', 'mcanchor', 'mcstruct',
+    'mcskin', 'mccape', 'mcplayer', 'mcperfil', 'mcjugador', 'mcgamertag', 'mcserver', 'mccraft', 'mcalert', 'mcprice',
   ]) {
     assert.equal(tokens.has(expected), true, `missing effective command token: ${expected}`)
   }
@@ -52,6 +54,13 @@ try {
   assert.equal(minerShopOwner?.description.includes('carrusel estable'), true, 'minershop V11 override is not effective')
   const adultGifOwner = effective.find((row) => row.tokens.includes('adultgif'))?.command
   assert.equal(adultGifOwner?.description.includes('carga/reproducción'), true, 'adultgif V11 override is not effective')
+  const mcPlayerOwner = effective.find((row) => row.tokens.includes('mcplayer'))?.command
+  assert.equal(mcPlayerOwner?.description.includes('Bedrock/Xbox'), true, 'Minecraft V12 profile override is not effective')
+
+  const { normalizeMinecraftPlayerQuery } = await import('../apps/bot/dist/services/minecraft-profile-v12.js')
+  assert.equal(normalizeMinecraftPlayerQuery('  JULIAN   AGZ  '), 'JULIAN AGZ')
+  assert.equal(normalizeMinecraftPlayerQuery('Java_Player'), 'Java_Player')
+
   assert.ok(commands.length > 100)
 
   // Suscripciones mineras: tres planes simultáneos deben contar como tres mineros activos.
