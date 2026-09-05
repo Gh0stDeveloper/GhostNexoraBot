@@ -78,6 +78,10 @@ function looksLikeCommand(text: string, prefix: string) {
   return false
 }
 
+function normalizeMemoryText(text: string) {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 400)
+}
+
 export function shouldLearnText(text: string) {
   const t = text.trim()
   if (t.length < 2 || t.length > 1200) return false
@@ -276,7 +280,7 @@ export const llmFreeChat = {
   rememberIncoming(chatId: string, text: string, pushName?: string) {
     if (!this.isEnabled(chatId)) return
     if (!this.isGroupAllowed(chatId)) return
-    if (!shouldLearnText(text) && text.trim().length < 2) return
+    if (!shouldLearnText(text)) return
     if (looksLikeCommand(text, '.')) return
     conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
   },
@@ -303,7 +307,13 @@ export const llmFreeChat = {
 
   async respond(text: string, chatId: string, pushName?: string) {
     try {
-      conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
+      const normalized = normalizeMemoryText(text)
+      const last = conversationMemory.recent(chatId, 1).at(-1)
+      const alreadyRemembered = last?.role === 'user' && normalizeMemoryText(last.text) === normalized
+      if (!alreadyRemembered && normalized) {
+        conversationMemory.pushUser(chatId, text, pushName || 'Usuario')
+      }
+
       const state = load()
       if (state.slangEnabled) {
         const slang = slangReply(text)
@@ -315,7 +325,6 @@ export const llmFreeChat = {
       const answer = await contextualAnswer(chatId, text)
       if (!answer) return null
       conversationMemory.pushBot(chatId, answer)
-      // Hasta 4000 para no cortar explicación + código
       return answer.slice(0, 4000)
     } catch {
       return null
