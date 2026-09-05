@@ -8,12 +8,18 @@ import {
   type MediaInfo,
 } from '../services/downloader.js'
 import { downloadLempi } from '../services/lempi.js'
-import { sendCarousel } from '../services/interactive.js'
+import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { logger } from '../utils/logger.js'
 
 const youtubeHosts = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be']
+const DOWNLOAD_QUALITIES = [
+  { value: 144, description: 'El más liviano · datos justos' },
+  { value: 240, description: 'Liviano · conexiones lentas' },
+  { value: 360, description: 'Calidad estándar · recomendado' },
+  { value: 720, description: 'HD · mejor disponible' },
+] as const
 
 function bytes(value: number) {
   return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 / 1024).toFixed(1)} MB`
@@ -57,12 +63,20 @@ function mediaCaption(kind: 'audio' | 'video', info: MediaInfo | undefined, size
   ].filter(Boolean).join('\n')
 }
 
+function wantsDocument(value?: string) {
+  return ['doc', 'document', 'documento', 'file', 'archivo'].includes((value ?? '').trim().toLowerCase())
+}
+
 async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
   const url = youtubeUrl(ctx.args[0] ?? '')
   const allowed = [144, 240, 360, 480, 720, 1080, 1440, 2160]
   const requested = Number(ctx.args[1] ?? 720)
   const quality = allowed.includes(requested) ? requested : 720
-  const progress = await createDownloadProgress(ctx, kind === 'audio' ? 'YouTube · audio' : `YouTube · video ${quality}p`)
+  const asDocument = kind === 'audio' ? wantsDocument(ctx.args[1]) : wantsDocument(ctx.args[2])
+  const progressLabel = kind === 'audio'
+    ? `YouTube · audio${asDocument ? ' documento' : ''}`
+    : `YouTube · video ${quality}p${asDocument ? ' documento' : ''}`
+  const progress = await createDownloadProgress(ctx, progressLabel)
   const metadataPromise = getMediaInfo(url, 'youtube').catch(() => undefined)
   await progress.update('downloading', 'Preparando y descargando el contenido…')
 
@@ -80,7 +94,14 @@ async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
     await progress.update('sending', `${bytes(result.size)} · enviando a WhatsApp`)
     const caption = mediaCaption(kind, info, result.size, kind === 'video' ? quality : undefined)
 
-    if (kind === 'audio') {
+    if (asDocument) {
+      await ctx.socket.sendMessage(ctx.chatId, {
+        document: { url: result.filePath },
+        mimetype: kind === 'audio' ? 'audio/mpeg' : 'video/mp4',
+        fileName: result.fileName,
+        caption,
+      }, { quoted: ctx.message })
+    } else if (kind === 'audio') {
       // WhatsApp no expone un caption normal para mensajes de audio; la ficha se envía justo antes.
       await ctx.socket.sendMessage(ctx.chatId, { text: caption }, { quoted: ctx.message })
       await ctx.socket.sendMessage(ctx.chatId, {
@@ -102,6 +123,70 @@ async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
   }
 }
 
+async function youtubeDownloadMenu(ctx: CommandContext) {
+  const url = youtubeUrl(ctx.args[0] ?? '')
+  const info = await getMediaInfo(url, 'youtube').catch((): MediaInfo => ({
+    title: 'Video de YouTube',
+    webpageUrl: url,
+  }))
+
+  const body = [
+    `🎬 *${info.title || 'Video de YouTube'}*`,
+    info.uploader ? `👤 ${info.uploader}` : '',
+    duration(info.duration) ? `⏱️ ${duration(info.duration)}` : '',
+    count(info.views) ? `👁️ ${count(info.views)} vistas` : '',
+    '',
+    'Toca *Seleccionar* para elegir calidad y tipo de descarga.',
+  ].filter((line) => line !== '').join('\n')
+
+  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+    title: '📥 MENÚ DE DESCARGA',
+    body,
+    footer: 'Ghost Nexora Bot · YouTube',
+    imageUrl: info.thumbnail,
+    buttons: [{
+      type: 'select',
+      text: 'Seleccionar',
+      sections: [
+        {
+          title: '🎵 AUDIO',
+          rows: [
+            {
+              id: `${ctx.prefix}ytmp3 ${url}`,
+              title: 'Audio MP3',
+              description: 'Enviar como audio reproducible',
+              header: 'MP3',
+            },
+            {
+              id: `${ctx.prefix}ytmp3 ${url} document`,
+              title: 'Audio como documento',
+              description: 'Archivo MP3 descargable',
+            },
+          ],
+        },
+        {
+          title: '🎬 VIDEO NORMAL',
+          rows: DOWNLOAD_QUALITIES.map((quality) => ({
+            id: `${ctx.prefix}ytmp4 ${url} ${quality.value}`,
+            title: `Video ${quality.value}p`,
+            description: quality.description,
+            header: `${quality.value}p`,
+          })),
+        },
+        {
+          title: '📁 VIDEO COMO DOCUMENTO',
+          rows: DOWNLOAD_QUALITIES.map((quality) => ({
+            id: `${ctx.prefix}ytmp4 ${url} ${quality.value} document`,
+            title: `Documento ${quality.value}p`,
+            description: `Archivo MP4 · ${quality.value >= 720 ? 'HD' : quality.value >= 360 ? 'estándar' : 'liviano'}`,
+            header: 'MP4',
+          })),
+        },
+      ],
+    }],
+  })
+}
+
 async function yts(ctx: CommandContext) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}yts <búsqueda>`)
@@ -110,7 +195,7 @@ async function yts(ctx: CommandContext) {
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '▶️ YOUTUBE · BÚSQUEDA',
-    body: `Resultados para: ${query}\nDesliza y elige audio o video.`,
+    body: `Resultados para: ${query}\nDesliza y toca Seleccionar.`,
     footer: 'Ghost Nexora Bot · YouTube',
     cards: rows.map((item, index) => ({
       title: `#${index + 1} · ${item.title}`.slice(0, 120),
@@ -118,22 +203,21 @@ async function yts(ctx: CommandContext) {
         item.channel ? `👤 ${item.channel}` : '',
         duration(item.duration) ? `⏱️ ${duration(item.duration)}` : '',
         count(item.views) ? `👁️ ${count(item.views)} vistas` : '',
-        'Selecciona el formato que quieres descargar.',
+        'Abre el menú para elegir formato y calidad.',
       ].filter(Boolean).join('\n'),
       imageUrl: item.thumbnail,
       buttons: [
-        { type: 'reply', text: '🎵 Audio', id: `${ctx.prefix}ytmp3 ${item.url}` },
-        { type: 'reply', text: '🎬 Video 720p', id: `${ctx.prefix}ytmp4 ${item.url} 720` },
-        { type: 'url', text: '▶️ Abrir', url: item.url },
+        { type: 'reply', text: 'Seleccionar', id: `${ctx.prefix}ytformats ${item.url}` },
       ],
     })),
   })
 }
 
 export const youtubeV3Commands: BotCommand[] = [
-  { name: 'yts', aliases: ['ytsearch', 'buscarvideo'], category: 'downloads', description: 'Busca videos de YouTube y muestra resultados en carrusel.', handler: yts },
-  { name: 'ytmp3', aliases: ['yta', 'ytaudio'], category: 'downloads', description: 'Descarga audio desde un enlace de YouTube.', usage: 'ytmp3 <url>', handler: (ctx) => sendYoutube(ctx, 'audio') },
-  { name: 'ytmp4', aliases: ['ytv', 'ytvideo'], category: 'downloads', description: 'Descarga video desde un enlace de YouTube.', usage: 'ytmp4 <url> [calidad]', handler: (ctx) => sendYoutube(ctx, 'video') },
+  { name: 'yts', aliases: ['ytsearch', 'buscarvideo'], category: 'downloads', description: 'Busca videos de YouTube en carrusel con un botón Seleccionar.', handler: yts },
+  { name: 'ytformats', aliases: ['ytquality', 'ytcalidad', 'ytmenu'], category: 'downloads', description: 'Abre el menú interactivo de audio, calidad y tipo de descarga de YouTube.', usage: 'ytformats <url>', handler: youtubeDownloadMenu },
+  { name: 'ytmp3', aliases: ['yta', 'ytaudio'], category: 'downloads', description: 'Descarga audio desde un enlace de YouTube.', usage: 'ytmp3 <url> [document]', handler: (ctx) => sendYoutube(ctx, 'audio') },
+  { name: 'ytmp4', aliases: ['ytv', 'ytvideo'], category: 'downloads', description: 'Descarga video desde un enlace de YouTube.', usage: 'ytmp4 <url> [calidad] [document]', handler: (ctx) => sendYoutube(ctx, 'video') },
   { name: 'play', aliases: ['playaudio'], category: 'downloads', description: 'Descarga audio desde un enlace de YouTube.', usage: 'play <url>', handler: (ctx) => sendYoutube(ctx, 'audio') },
   { name: 'playvideo', aliases: ['pv'], category: 'downloads', description: 'Descarga video desde un enlace de YouTube.', usage: 'playvideo <url> [calidad]', handler: (ctx) => sendYoutube(ctx, 'video') },
 ]
