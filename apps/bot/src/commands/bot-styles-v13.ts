@@ -146,6 +146,7 @@ async function styleImagesCarousel(ctx: CommandContext, rawStyleId: string, requ
     cards.push({
       title: '📚 Más imágenes',
       body: `${style.name} tiene ${images.length} imágenes locales.\nPágina ${page}/${totalPages}.`,
+      imageUrl: images[0]!.filePath,
       footer: 'Ghost Nexora Styles',
       buttons,
     })
