@@ -15,6 +15,7 @@ assert.equal(ytformats.description.includes('menú interactivo'), true, '.ytform
 
 const interactiveSource = await readFile(new URL('../apps/bot/dist/services/interactive.js', import.meta.url), 'utf8')
 assert.equal(interactiveSource.includes("name: 'single_select'"), true, 'interactive service must support WhatsApp single_select')
+assert.equal(interactiveSource.includes("...(row.description ? { description: row.description } : {})"), true, 'empty select descriptions must be omitted from payloads')
 
 const youtubeSource = await readFile(new URL('../apps/bot/dist/commands/youtube-v3.js', import.meta.url), 'utf8')
 for (const expected of [
@@ -24,12 +25,22 @@ for (const expected of [
   'VIDEO NORMAL',
   'VIDEO COMO DOCUMENTO',
   'document: { url: result.filePath }',
-  'Video ${quality.value}p',
+  'Video ${quality}p',
 ]) {
   assert.equal(youtubeSource.includes(expected), true, `YouTube select flow missing: ${expected}`)
 }
 for (const quality of [144, 240, 360, 720]) {
-  assert.equal(youtubeSource.includes(`value: ${quality}`), true, `YouTube select menu missing ${quality}p quality`)
+  assert.equal(youtubeSource.includes(String(quality)), true, `YouTube select menu missing ${quality}p quality`)
+}
+for (const removed of [
+  'Enviar como audio reproducible',
+  'Archivo MP3 descargable',
+  'El más liviano · datos justos',
+  'Liviano · conexiones lentas',
+  'Calidad estándar · recomendado',
+  'HD · mejor disponible',
+]) {
+  assert.equal(youtubeSource.includes(removed), false, `selected YouTube rows must stay concise: ${removed}`)
 }
 assert.equal(youtubeSource.includes("text: '🎵 Audio'"), false, 'search carousel must not expose a separate Audio button')
 assert.equal(youtubeSource.includes("text: '🎬 Video 720p'"), false, 'search carousel must not expose a separate Video button')
