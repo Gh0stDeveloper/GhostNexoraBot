@@ -7,6 +7,7 @@ SERVICE_USER="${SERVICE_USER:-}"
 STATE_DIR="${STATE_DIR:-/var/lib/ghost-nexora-bot}"
 START_TS=$(date +%s)
 LLM_SERVICE="ghost-nexora-llm.service"
+WEB_SERVICE="ghost-nexora-web.service"
 LLM_INSTALLER="${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
 BROWSER_PROXY_INSTALLER="${INSTALL_DIR}/scripts/install-browser-proxy.sh"
 LLM_STATE_CANDIDATES=(
@@ -39,6 +40,33 @@ set_env() {
 
 env_truthy() {
   case "${1,,}" in 1|true|yes|on|si|sí) return 0 ;; *) return 1 ;; esac
+}
+
+refresh_web_enabled() {
+  local configured
+  configured="$(grep '^WEB_ENABLED=' .env 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
+  WEB_ENABLED=0
+
+  if [[ -z "${configured}" ]]; then
+    # Compatibilidad: las instalaciones anteriores a WEB_ENABLED tenían la web
+    # activa por defecto. Si detectamos servicio o build previo, la preservamos.
+    if systemctl is-active --quiet "${WEB_SERVICE}" 2>/dev/null || systemctl is-enabled --quiet "${WEB_SERVICE}" 2>/dev/null || [[ -d "${INSTALL_DIR}/apps/web/.next" ]]; then
+      configured='true'
+      set_env WEB_ENABLED 'true'
+      info 'Instalación heredada con dashboard detectado: WEB_ENABLED=true añadido automáticamente.'
+    else
+      configured='false'
+      set_env WEB_ENABLED 'false'
+      info 'No se detectó dashboard previo: WEB_ENABLED=false.'
+    fi
+  fi
+
+  if env_truthy "${configured}"; then
+    WEB_ENABLED=1
+    info 'Dashboard web habilitado; se actualizará y reiniciará normalmente.'
+  else
+    info 'Dashboard web deshabilitado; se omitirán dependencias, build y servicio Next.js.'
+  fi
 }
 
 refresh_llm_enabled() {
@@ -100,13 +128,15 @@ info "Usuario de servicios: ${SERVICE_USER}"
 info "Versión anterior: ${OLD_SHA:0:12}"
 info "Datos persistentes: ${STATE_DIR}"
 
-section '1/7 · Código'
+section '1/8 · Código'
 git fetch origin "${BRANCH}"
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
 NEW_SHA="$(git rev-parse HEAD)"
 ok "Código actualizado: ${NEW_SHA:0:12}"
 
+section '2/8 · Detectando componentes existentes'
+refresh_web_enabled
 refresh_llm_enabled
 LLM_BUSY=0
 if [[ "${LLM_ENABLED}" -eq 1 ]] && llm_training_active; then
@@ -118,21 +148,32 @@ else
   if [[ "${LLM_ENABLED}" -eq 1 ]]; then info 'No se detectó entrenamiento LLM en curso.'; fi
 fi
 
-section '2/7 · Herramientas'
+section '3/8 · Herramientas'
 if command -v yt-dlp >/dev/null 2>&1; then
   yt-dlp -U >/tmp/ghost-nexora-ytdlp-update.log 2>&1 || true
   ok "yt-dlp: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 fi
 
-section '3/7 · Dependencias Node'
-npm install >/tmp/ghost-nexora-npm-install.log 2>&1
-ok 'Dependencias sincronizadas.'
+section '4/8 · Dependencias Node'
+if [[ "${WEB_ENABLED}" -eq 1 ]]; then
+  npm install >/tmp/ghost-nexora-npm-install.log 2>&1
+  ok 'Dependencias Bot + Web sincronizadas.'
+else
+  npm install --workspace=@ghostnexora/bot --include=dev >/tmp/ghost-nexora-npm-install.log 2>&1
+  ok 'Dependencias del Bot sincronizadas; Web omitida.'
+fi
 
-section '4/7 · Build'
-npm run build >/tmp/ghost-nexora-build.log 2>&1
-ok 'Build completado.'
+section '5/8 · Build'
+if [[ "${WEB_ENABLED}" -eq 1 ]]; then
+  npm run build >/tmp/ghost-nexora-build.log 2>&1
+  ok 'Build Bot + Web completado.'
+else
+  npm run assets:waifus >/tmp/ghost-nexora-assets.log 2>&1
+  npm run build --workspace=@ghostnexora/bot >/tmp/ghost-nexora-build.log 2>&1
+  ok 'Build del Bot completado; Next.js omitido.'
+fi
 
-section '5/7 · Proxy de navegador y Nginx'
+section '6/8 · Proxy de navegador y Nginx'
 if [[ -f "${BROWSER_PROXY_INSTALLER}" ]]; then
   chmod +x "${BROWSER_PROXY_INSTALLER}"
   INSTALL_DIR="${INSTALL_DIR}" bash "${BROWSER_PROXY_INSTALLER}"
@@ -141,9 +182,37 @@ else
   warn "No existe ${BROWSER_PROXY_INSTALLER}; se omite configuración del proxy."
 fi
 
-section '6/7 · Servicios y permisos'
+section '7/8 · Servicios y permisos'
 if [[ -d "${STATE_DIR}" ]]; then chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR}" || warn 'No se pudo ajustar STATE_DIR.'; fi
 chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
+
+# Mantener las unidades principales actualizadas sin forzar la web cuando está apagada.
+if [[ -f systemd/ghost-nexora-bot.service ]]; then
+  cp systemd/ghost-nexora-bot.service /etc/systemd/system/ghost-nexora-bot.service
+  sed -i \
+    -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
+    -e "s|__STATE_DIR__|${STATE_DIR}|g" \
+    -e "s|__SERVICE_USER__|${SERVICE_USER}|g" \
+    /etc/systemd/system/ghost-nexora-bot.service
+fi
+
+if [[ "${WEB_ENABLED}" -eq 1 ]]; then
+  if [[ -f systemd/ghost-nexora-web.service ]]; then
+    cp systemd/ghost-nexora-web.service /etc/systemd/system/ghost-nexora-web.service
+    WEB_PORT_VALUE="$(grep '^WEB_PORT=' .env | tail -n1 | cut -d= -f2- || echo 3000)"
+    BOT_HEALTH_PORT_VALUE="$(grep '^BOT_HEALTH_PORT=' .env | tail -n1 | cut -d= -f2- || echo 3001)"
+    sed -i \
+      -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
+      -e "s|__STATE_DIR__|${STATE_DIR}|g" \
+      -e "s|__SERVICE_USER__|${SERVICE_USER}|g" \
+      -e "s|__WEB_PORT__|${WEB_PORT_VALUE}|g" \
+      -e "s|__BOT_HEALTH_PORT__|${BOT_HEALTH_PORT_VALUE}|g" \
+      /etc/systemd/system/ghost-nexora-web.service
+  fi
+else
+  systemctl disable --now "${WEB_SERVICE}" >/dev/null 2>&1 || true
+  ok 'Dashboard Web permanece deshabilitado.'
+fi
 
 if [[ "${LLM_ENABLED}" -eq 1 ]]; then
   if [[ -f "${LLM_INSTALLER}" ]]; then
@@ -165,9 +234,17 @@ else
   fi
 fi
 
-section '7/7 · Reinicio de servicios'
+section '8/8 · Reinicio selectivo de servicios'
 systemctl daemon-reload
-systemctl restart ghost-nexora-bot.service ghost-nexora-web.service
+systemctl enable ghost-nexora-bot.service >/dev/null 2>&1 || true
+systemctl restart ghost-nexora-bot.service
+
+if [[ "${WEB_ENABLED}" -eq 1 ]]; then
+  systemctl enable ghost-nexora-web.service >/dev/null 2>&1 || true
+  systemctl restart ghost-nexora-web.service
+else
+  systemctl disable --now ghost-nexora-web.service >/dev/null 2>&1 || true
+fi
 
 if [[ "${LLM_ENABLED}" -eq 1 ]]; then
   if [[ "${LLM_BUSY}" -eq 1 ]]; then
@@ -179,7 +256,7 @@ fi
 
 sleep 3
 BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"
-WEB_STATE="$(systemctl is-active ghost-nexora-web.service || true)"
+if [[ "${WEB_ENABLED}" -eq 1 ]]; then WEB_STATE="$(systemctl is-active ghost-nexora-web.service || true)"; else WEB_STATE='disabled'; fi
 if [[ "${LLM_ENABLED}" -eq 1 ]]; then LLM_STATE="$(systemctl is-active "${LLM_SERVICE}" || true)"; else LLM_STATE='disabled'; fi
 
 if [[ "${BOT_STATE}" != 'active' ]]; then sleep 4; BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"; fi
@@ -188,6 +265,15 @@ if [[ "${BOT_STATE}" != 'active' ]]; then
   systemctl --no-pager --full status ghost-nexora-bot.service || true
   journalctl -u ghost-nexora-bot.service -n 80 --no-pager -o short-precise || true
   exit 1
+fi
+
+if [[ "${WEB_ENABLED}" -eq 1 && "${WEB_STATE}" != 'active' ]]; then
+  sleep 4
+  WEB_STATE="$(systemctl is-active ghost-nexora-web.service || true)"
+  if [[ "${WEB_STATE}" != 'active' ]]; then
+    warn 'ghost-nexora-web no quedó active pese a estar habilitado.'
+    systemctl --no-pager --full status ghost-nexora-web.service || true
+  fi
 fi
 
 if [[ "${LLM_ENABLED}" -eq 1 && "${LLM_BUSY}" -eq 0 && "${LLM_STATE}" != 'active' ]]; then
@@ -200,8 +286,6 @@ if [[ "${LLM_ENABLED}" -eq 1 && "${LLM_BUSY}" -eq 0 && "${LLM_STATE}" != 'active
     exit 1
   fi
 fi
-
-if [[ "${WEB_STATE}" != 'active' ]]; then warn 'ghost-nexora-web no quedó active.'; fi
 
 ELAPSED=$(( $(date +%s) - START_TS ))
 if [[ "${LLM_BUSY}" -eq 1 ]]; then
