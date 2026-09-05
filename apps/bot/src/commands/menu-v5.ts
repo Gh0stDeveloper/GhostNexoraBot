@@ -33,7 +33,7 @@ const sets = {
   rpg: new Set(['grimorio','usar','givegema','inventory','pet','gather','craft','quests','quest','raid']),
   automation: new Set(['groupstats','announce','rss','poll','polls']),
   support: new Set(['ticket','tickets']),
-  personalization: new Set(['setbotname','setbotcurrency','setpfp','sb','welbanner','byebanner','delbanner','delwelbanner','delbyebanner']),
+  personalization: new Set(['setbotname','setbotcurrency','setpfp','sb','welbanner','byebanner','delbanner','delwelbanner','delbyebanner','styles','style']),
 }
 
 function sectionFor(command: BotCommand): SectionId {
