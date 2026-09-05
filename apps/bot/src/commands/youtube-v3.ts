@@ -14,12 +14,7 @@ import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { logger } from '../utils/logger.js'
 
 const youtubeHosts = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be']
-const DOWNLOAD_QUALITIES = [
-  { value: 144, description: 'El más liviano · datos justos' },
-  { value: 240, description: 'Liviano · conexiones lentas' },
-  { value: 360, description: 'Calidad estándar · recomendado' },
-  { value: 720, description: 'HD · mejor disponible' },
-] as const
+const DOWNLOAD_QUALITIES = [144, 240, 360, 720] as const
 
 function bytes(value: number) {
   return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 / 1024).toFixed(1)} MB`
@@ -154,32 +149,25 @@ async function youtubeDownloadMenu(ctx: CommandContext) {
             {
               id: `${ctx.prefix}ytmp3 ${url}`,
               title: 'Audio MP3',
-              description: 'Enviar como audio reproducible',
-              header: 'MP3',
             },
             {
               id: `${ctx.prefix}ytmp3 ${url} document`,
               title: 'Audio como documento',
-              description: 'Archivo MP3 descargable',
             },
           ],
         },
         {
           title: '🎬 VIDEO NORMAL',
           rows: DOWNLOAD_QUALITIES.map((quality) => ({
-            id: `${ctx.prefix}ytmp4 ${url} ${quality.value}`,
-            title: `Video ${quality.value}p`,
-            description: quality.description,
-            header: `${quality.value}p`,
+            id: `${ctx.prefix}ytmp4 ${url} ${quality}`,
+            title: `Video ${quality}p`,
           })),
         },
         {
           title: '📁 VIDEO COMO DOCUMENTO',
           rows: DOWNLOAD_QUALITIES.map((quality) => ({
-            id: `${ctx.prefix}ytmp4 ${url} ${quality.value} document`,
-            title: `Documento ${quality.value}p`,
-            description: `Archivo MP4 · ${quality.value >= 720 ? 'HD' : quality.value >= 360 ? 'estándar' : 'liviano'}`,
-            header: 'MP4',
+            id: `${ctx.prefix}ytmp4 ${url} ${quality} document`,
+            title: `Documento ${quality}p`,
           })),
         },
       ],
