@@ -8,6 +8,7 @@ import { subbotCustomization } from './subbot-customization.js'
 import { sendInteractiveCard } from './interactive.js'
 import { getMessageText, getSender } from '../utils/message.js'
 import { preferredJid, registerIdentity } from './identity.js'
+import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from './bot-styles-v13.js'
 import { logger } from '../utils/logger.js'
 
 const db = economy.db
@@ -104,12 +105,32 @@ function renderTemplate(template: string, jid: string, groupName: string) {
   return template.replaceAll('$user', `@${jid.split('@')[0]}`).replaceAll('$namegroup', groupName)
 }
 
-async function profilePicture(socket: WASocket, participant: GroupParticipant) {
-  for (const jid of [participant.phoneNumber, participant.id, participant.lid].filter((value): value is string => Boolean(value))) {
-    const image = await socket.profilePictureUrl(jid, 'image').catch(() => undefined)
-    if (image) return image
+async function currentBotAvatar(socket: WASocket) {
+  const jid = socket.user?.id
+  if (!jid) return undefined
+  return socket.profilePictureUrl(jid, 'image').catch(() => undefined)
+}
+
+async function currentVisualIdentity(socket: WASocket) {
+  const style = getCurrentBotVisualStyle()
+  const fallback = await currentBotAvatar(socket)
+  if (style.id === 'default') {
+    return { style, imageUrl: fallback, displayName: 'Ghost Nexora Bot' }
   }
-  return undefined
+  try {
+    const asset = await resolveBotVisualStyleAsset(style)
+    return {
+      style,
+      imageUrl: asset.imageUrl || fallback,
+      displayName: asset.characterName || style.characterQuery || style.name.split('·')[0]!.trim(),
+    }
+  } catch {
+    return {
+      style,
+      imageUrl: fallback,
+      displayName: style.characterQuery || style.name.split('·')[0]!.trim(),
+    }
+  }
 }
 
 export async function handleParticipantUpdateV2(socket: WASocket, update: { id: string; participants: GroupParticipant[]; action: ParticipantAction }, instanceId?: number) {
@@ -122,30 +143,37 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
   const metadata = await socket.groupMetadata(update.id).catch(() => null)
   const groupName = metadata?.subject ?? 'este grupo'
   const botName = instanceId ? subbotCustomization.get(instanceId).longName : settings.botDisplayName
-  const asset = await getBrandingAsset(update.action === 'add' ? 'welcome' : 'goodbye', instanceId).catch(() => null)
+  const goodbyeAsset = update.action === 'remove' ? await getBrandingAsset('goodbye', instanceId).catch(() => null) : null
+  const visual = update.action === 'add' ? await currentVisualIdentity(socket) : null
 
   for (const participant of update.participants) {
     const jid = participantJid(participant)
     if (!jid) continue
     registerIdentity(update.id, [participant.id, participant.phoneNumber, participant.lid].filter((value): value is string => Boolean(value)), jid)
     if (update.action === 'add') {
+      const waifuLine = visual && visual.style.id !== 'default' ? `🌸 Apariencia activa: *${visual.displayName}*` : ''
       const defaultText = [
         `🎉 *¡BIENVENIDO/A A ${groupName.toUpperCase()}!*`,
         '━━━━━━━━━━━━━━━━━━',
         `👤 @${jid.split('@')[0]}`,
         `🤖 Soy *${botName}* y estoy aquí para juegos, economía NXC, descargas, IA, stickers y administración.`,
+        waifuLine,
         '',
         `📜 Revisa las reglas con *${settings.prefix}rules*`,
         `👤 Crea/consulta tu perfil con *${settings.prefix}profile*`,
         `📚 Descubre funciones con *${settings.prefix}menu*`,
         '',
         '✨ Participa, respeta a los demás y disfruta del grupo.',
-      ].join('\n')
+      ].filter(Boolean).join('\n')
       const text = groupSettings.welcomeText ? renderTemplate(groupSettings.welcomeText, jid, groupName) : defaultText
-      const imageUrl = asset?.kind === 'image' ? asset.path : (config.welcomeImageUrl || await profilePicture(socket, participant))
+      const title = visual && visual.style.id !== 'default'
+        ? `${visual.style.icon} ${visual.displayName} · BIENVENIDA`
+        : `👻 ${botName} · BIENVENIDA`
       await sendInteractiveCard(socket, update.id, { key: { remoteJid: update.id, id: `welcome-${Date.now()}` }, message: {} } as WAMessage, {
-        title: `👻 ${botName} · BIENVENIDA`, body: text, imageUrl,
-        footer: `${groupName} · Ghost Nexora Bot`,
+        title,
+        body: text,
+        imageUrl: visual?.imageUrl,
+        footer: `${groupName} · ${botName} · Ghost Nexora Bot`,
         buttons: [
           { type: 'reply', text: '📜 Ver reglas', id: `${settings.prefix}rules` },
           { type: 'reply', text: '👤 Mi perfil', id: `${settings.prefix}profile` },
@@ -160,8 +188,8 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
     const goodbye = groupSettings.goodbyeText
       ? renderTemplate(groupSettings.goodbyeText, jid, groupName)
       : `🍂 *HASTA PRONTO*\n━━━━━━━━━━━━━━━━━━\n@${jid.split('@')[0]} salió de *${groupName}*.\n\n👻 *${botName}* agradece el tiempo compartido. Que te vaya bien en lo que sigue.`
-    if (asset?.kind === 'image') await socket.sendMessage(update.id, { image: { url: asset.path }, caption: goodbye, mentions: [jid] }).catch(() => undefined)
-    else if (asset?.kind === 'video') await socket.sendMessage(update.id, { video: { url: asset.path }, gifPlayback: true, caption: goodbye, mentions: [jid] }).catch(() => undefined)
+    if (goodbyeAsset?.kind === 'image') await socket.sendMessage(update.id, { image: { url: goodbyeAsset.path }, caption: goodbye, mentions: [jid] }).catch(() => undefined)
+    else if (goodbyeAsset?.kind === 'video') await socket.sendMessage(update.id, { video: { url: goodbyeAsset.path }, gifPlayback: true, caption: goodbye, mentions: [jid] }).catch(() => undefined)
     else await socket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch((error) => logger.warn({ error, groupId: update.id }, 'goodbye failed'))
   }
 }
