@@ -39,7 +39,7 @@ try {
     'menu', 'help', 'comandos', 'privategift', 'privategrant', 'botsticker', 'kicksticker',
     'waifu', 'rw', 'wsearch', 'winfo', 'wimage', 'ainfo', 'alist', 'ytmp3', 'ytmp4', 'facebook',
     'minershop', 'minertienda', 'minerbuy', 'comprarminero', 'joblicense', 'comprartitulo', 'jobrequirements',
-    'adultgif', 'reactiongif', 'adultmedia',
+    'adultgif', 'reactiongif', 'adultmedia', 'adultmsg', '18msg', 'nsfwmsg', 'rolemsg', 'adultmessage',
     'mc', 'minecraft', 'mchelp', 'mcseed', 'mcstronghold', 'mcbioma', 'mcanchor', 'mcstruct',
     'mcskin', 'mccape', 'mcplayer', 'mcperfil', 'mcjugador', 'mcgamertag', 'mcserver', 'mccraft', 'mcalert', 'mcprice',
     'styles', 'estilos', 'themes', 'botstyles', 'waifustyles', 'style', 'estilo', 'theme', 'botstyle',
@@ -57,6 +57,9 @@ try {
   assert.equal(shopOwner?.description.includes('estilo visual activo'), true, 'shop V13 style override is not effective')
   const adultGifOwner = effective.find((row) => row.tokens.includes('adultgif'))?.command
   assert.equal(adultGifOwner?.description.includes('carga/reproducción'), true, 'adultgif V11 override is not effective')
+  const adultMsgOwner = effective.find((row) => row.tokens.includes('adultmsg'))?.command
+  assert.equal(adultMsgOwner?.staffOnly, true, 'adultmsg must be staff-only')
+  assert.equal(adultMsgOwner?.description.includes('owner/staff'), true, 'adultmsg description must expose staff management')
   const mcPlayerOwner = effective.find((row) => row.tokens.includes('mcplayer'))?.command
   assert.equal(mcPlayerOwner?.description.includes('Bedrock/Xbox'), true, 'Minecraft V12 profile override is not effective')
   const stylesOwner = effective.find((row) => row.tokens.includes('styles'))?.command
@@ -85,6 +88,23 @@ try {
   assert.equal(setCurrentBotVisualStyle('megumi', 'ci@s.whatsapp.net').id, 'megumin')
   assert.equal(getCurrentBotVisualStyle().id, 'megumin')
   assert.equal(setCurrentBotVisualStyle('default', 'ci@s.whatsapp.net').id, 'default')
+
+  const {
+    getAdultRoleplayMessage,
+    setAdultRoleplayMessage,
+    resetAdultRoleplayMessage,
+    renderAdultRoleplayMessage,
+  } = await import('../apps/bot/dist/services/adult-roleplay-messages-v14.js')
+  assert.equal(getAdultRoleplayMessage('room')?.command, 'fuck')
+  assert.equal(getAdultRoleplayMessage('prenar')?.command, 'preñar')
+  const customAdult = setAdultRoleplayMessage('fuck', '{sender} mensaje CI para {target}\\nComando: {command}')
+  assert.equal(customAdult.command, 'fuck')
+  assert.equal(getAdultRoleplayMessage('fuck')?.customized, true)
+  const renderedAdult = renderAdultRoleplayMessage('fuck', '111@s.whatsapp.net', '222@s.whatsapp.net')
+  assert.equal(renderedAdult, '@111 mensaje CI para @222\nComando: fuck')
+  assert.throws(() => setAdultRoleplayMessage('cum', '{sender} menor con {target}'))
+  resetAdultRoleplayMessage('fuck')
+  assert.equal(getAdultRoleplayMessage('fuck')?.customized, false)
 
   assert.ok(commands.length > 100)
 
