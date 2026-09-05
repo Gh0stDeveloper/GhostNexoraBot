@@ -9,6 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
+    "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite tsx src/termux-lite.ts",
+    "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite tsx src/pair.ts",
     "llm:train": "node dist/llm/train.js",
     "llm:worker": "node dist/llm/llm-worker-supervisor.js",
     "playwright:install": "playwright install chromium"
@@ -22,12 +24,14 @@
     "mammoth": "^1.12.1",
     "pdf-parse": "^2.4.5",
     "pino": "^9.9.0",
-    "playwright": "^1.55.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "sharp": "^0.35.3",
     "yt-search": "^2.13.1",
     "zod": "^4.1.5"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.55.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
