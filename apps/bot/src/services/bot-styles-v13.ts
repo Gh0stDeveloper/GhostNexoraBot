@@ -22,6 +22,13 @@ const STYLE_FILE = path.join(config.dataDir, 'bot-style.json')
 const CACHE_TTL = 30 * 60_000
 const imageCache = new Map<string, { expiresAt: number; asset: BotStyleAsset }>()
 
+/**
+ * Catálogo visual del bot.
+ *
+ * Las imágenes NO se almacenan en el repositorio: cada personaje se resuelve
+ * dinámicamente desde AniList usando el mismo servicio que el sistema .waifu.
+ * Se mantienen 24 estilos exactos para que .styles muestre 4 chunks de 6.
+ */
 export const BOT_VISUAL_STYLES: BotVisualStyle[] = [
   {
     id: 'default',
@@ -30,83 +37,212 @@ export const BOT_VISUAL_STYLES: BotVisualStyle[] = [
     icon: '👻',
   },
   {
-    id: 'moon',
-    name: 'Waifu Moon',
-    description: 'Estilo elegante, nocturno y sobrio.',
-    icon: '🌙',
-    characterQuery: 'Mai Sakurajima',
+    id: 'megumin',
+    name: 'Megumin · KONOSUBA',
+    description: 'Archimaga explosiva de KONOSUBA.',
+    icon: '💥',
+    characterQuery: 'Megumin',
   },
   {
-    id: 'sakura',
-    name: 'Waifu Sakura',
-    description: 'Estilo rosado, alegre y moderno.',
+    id: 'rem',
+    name: 'Rem · Re:Zero',
+    description: 'Una de las waifus más reconocidas de Re:Zero.',
+    icon: '💙',
+    characterQuery: 'Rem',
+  },
+  {
+    id: 'tsukasa',
+    name: 'Tsukasa Yuzaki · TONIKAWA',
+    description: 'Protagonista femenina de Tonikaku Kawaii.',
+    icon: '🌙',
+    characterQuery: 'Tsukasa Yuzaki',
+  },
+  {
+    id: 'marin',
+    name: 'Marin Kitagawa · My Dress-Up Darling',
+    description: 'Cosplayer alegre y una de las waifus modernas más populares.',
     icon: '🌸',
     characterQuery: 'Marin Kitagawa',
   },
   {
-    id: 'neon',
-    name: 'Waifu Neon',
-    description: 'Estética futurista con presencia fuerte.',
-    icon: '💠',
-    characterQuery: 'Zero Two',
-  },
-  {
-    id: 'ice',
-    name: 'Waifu Ice',
-    description: 'Diseño azul, limpio y delicado.',
-    icon: '❄️',
-    characterQuery: 'Rem',
-  },
-  {
-    id: 'shadow',
-    name: 'Waifu Shadow',
-    description: 'Estilo oscuro, serio y minimalista.',
-    icon: '🖤',
-    characterQuery: 'Makima',
-  },
-  {
-    id: 'gold',
-    name: 'Waifu Gold',
-    description: 'Diseño premium, luminoso y elegante.',
-    icon: '✨',
-    characterQuery: 'Asuna Yuuki',
-  },
-  {
-    id: 'spy',
-    name: 'Waifu Spy',
-    description: 'Estilo elegante con tonos oscuros y rojos.',
+    id: 'yor',
+    name: 'Yor Forger · SPY x FAMILY',
+    description: 'Elegante, carismática y reconocible.',
     icon: '🥀',
     characterQuery: 'Yor Forger',
   },
   {
-    id: 'magic',
-    name: 'Waifu Magic',
-    description: 'Estética fantástica, clara y refinada.',
+    id: 'asuna',
+    name: 'Asuna Yuuki · Sword Art Online',
+    description: 'Waifu clásica e icónica de Sword Art Online.',
+    icon: '✨',
+    characterQuery: 'Asuna Yuuki',
+  },
+  {
+    id: 'emilia',
+    name: 'Emilia · Re:Zero',
+    description: 'Estilo refinado y fantástico de Re:Zero.',
     icon: '🔮',
     characterQuery: 'Emilia',
   },
   {
-    id: 'gamer',
-    name: 'Waifu Gamer',
-    description: 'Estilo gamer, relajado y colorido.',
-    icon: '🎮',
-    characterQuery: 'Chiaki Nanami',
+    id: 'zerotwo',
+    name: 'Zero Two · DARLING in the FRANXX',
+    description: 'Waifu futurista de estética intensa y muy reconocible.',
+    icon: '💠',
+    characterQuery: 'Zero Two',
   },
   {
-    id: 'crimson',
-    name: 'Waifu Crimson',
-    description: 'Diseño rojo, intenso y llamativo.',
+    id: 'makima',
+    name: 'Makima · Chainsaw Man',
+    description: 'Estilo oscuro y sofisticado de Chainsaw Man.',
+    icon: '🖤',
+    characterQuery: 'Makima',
+  },
+  {
+    id: 'frieren',
+    name: 'Frieren · Sousou no Frieren',
+    description: 'Elfa serena y una de las protagonistas femeninas más populares recientes.',
+    icon: '🧝‍♀️',
+    characterQuery: 'Frieren',
+  },
+  {
+    id: 'nezuko',
+    name: 'Nezuko Kamado · Kimetsu no Yaiba',
+    description: 'Personaje femenino icónico de Demon Slayer.',
+    icon: '🎋',
+    characterQuery: 'Nezuko Kamado',
+  },
+  {
+    id: 'kurumi',
+    name: 'Kurumi Tokisaki · Date A Live',
+    description: 'Waifu de estilo oscuro y muy popular.',
+    icon: '⏳',
+    characterQuery: 'Kurumi Tokisaki',
+  },
+  {
+    id: 'rias',
+    name: 'Rias Gremory · High School DxD',
+    description: 'Estilo rojo y llamativo de una waifu clásica.',
     icon: '❤️‍🔥',
     characterQuery: 'Rias Gremory',
   },
   {
-    id: 'elf',
-    name: 'Waifu Elf',
-    description: 'Estilo fantasía, sereno y limpio.',
-    icon: '🧝‍♀️',
-    characterQuery: 'Frieren',
+    id: 'mikasa',
+    name: 'Mikasa Ackerman · Attack on Titan',
+    description: 'Estilo serio y fuerte de Attack on Titan.',
+    icon: '🧣',
+    characterQuery: 'Mikasa Ackerman',
+  },
+  {
+    id: 'hinata',
+    name: 'Hinata Hyuga · Naruto',
+    description: 'Waifu clásica y muy querida de Naruto.',
+    icon: '💜',
+    characterQuery: 'Hinata Hyuga',
+  },
+  {
+    id: 'robin',
+    name: 'Nico Robin · One Piece',
+    description: 'Estilo elegante de una de las mujeres más populares de One Piece.',
+    icon: '🌺',
+    characterQuery: 'Nico Robin',
+  },
+  {
+    id: 'chiaki',
+    name: 'Chiaki Nanami · Danganronpa',
+    description: 'Waifu gamer de estética relajada y colorida.',
+    icon: '🎮',
+    characterQuery: 'Chiaki Nanami',
+  },
+  {
+    id: 'mai',
+    name: 'Mai Sakurajima · Bunny Girl Senpai',
+    description: 'Waifu elegante y popular de Seishun Buta Yarou.',
+    icon: '🌙',
+    characterQuery: 'Mai Sakurajima',
+  },
+  {
+    id: 'power',
+    name: 'Power · Chainsaw Man',
+    description: 'Estilo enérgico y caótico de Chainsaw Man.',
+    icon: '🩸',
+    characterQuery: 'Power',
+  },
+  {
+    id: 'nami',
+    name: 'Nami · One Piece',
+    description: 'Una de las protagonistas femeninas más reconocidas de One Piece.',
+    icon: '🍊',
+    characterQuery: 'Nami',
+  },
+  {
+    id: 'miku',
+    name: 'Miku Nakano · The Quintessential Quintuplets',
+    description: 'Waifu tranquila y extremadamente popular de Gotoubun no Hanayome.',
+    icon: '🎧',
+    characterQuery: 'Miku Nakano',
+  },
+  {
+    id: 'kaguya',
+    name: 'Kaguya Shinomiya · Kaguya-sama',
+    description: 'Elegante protagonista femenina de Kaguya-sama: Love is War.',
+    icon: '🎀',
+    characterQuery: 'Kaguya Shinomiya',
+  },
+  {
+    id: 'violet',
+    name: 'Violet Evergarden',
+    description: 'Estilo refinado y emotivo inspirado en Violet Evergarden.',
+    icon: '💌',
+    characterQuery: 'Violet Evergarden',
   },
 ]
+
+/**
+ * Alias amigables y compatibilidad con los IDs genéricos usados por V13
+ * antes de migrar el catálogo a personajes específicos.
+ */
+const STYLE_ALIASES: Record<string, string> = {
+  megumi: 'megumin',
+  'megumi konosuba': 'megumin',
+  'megumin konosuba': 'megumin',
+  'tsukasa yuzaki': 'tsukasa',
+  'tsukasa yusaki': 'tsukasa',
+  'tsukasa tonikaku kawaii': 'tsukasa',
+  'tsukasa tonikawa': 'tsukasa',
+  'zero two': 'zerotwo',
+  'zero 2': 'zerotwo',
+  zero2: 'zerotwo',
+  'marin kitagawa': 'marin',
+  'yor forger': 'yor',
+  'asuna yuuki': 'asuna',
+  'asuna yuki': 'asuna',
+  'kurumi tokisaki': 'kurumi',
+  'rias gremory': 'rias',
+  'mikasa ackerman': 'mikasa',
+  'hinata hyuga': 'hinata',
+  'nico robin': 'robin',
+  'chiaki nanami': 'chiaki',
+  'mai sakurajima': 'mai',
+  'miku nakano': 'miku',
+  'kaguya shinomiya': 'kaguya',
+  'violet evergarden': 'violet',
+  'nezuko kamado': 'nezuko',
+
+  // IDs de estilos V13 anteriores.
+  moon: 'mai',
+  sakura: 'marin',
+  neon: 'zerotwo',
+  ice: 'rem',
+  shadow: 'makima',
+  gold: 'asuna',
+  spy: 'yor',
+  magic: 'emilia',
+  gamer: 'chiaki',
+  crimson: 'rias',
+  elf: 'frieren',
+}
 
 type StoredStyle = {
   styleId: string
@@ -114,12 +250,22 @@ type StoredStyle = {
   updatedAt?: number
 }
 
+function normalizeStyleKey(value: string) {
+  return value.trim().toLocaleLowerCase('es-MX').replace(/\s+/g, ' ')
+}
+
+function canonicalStyleId(value: string) {
+  const clean = normalizeStyleKey(value)
+  return STYLE_ALIASES[clean] ?? clean
+}
+
 function readStoredStyle(): StoredStyle {
   try {
     const raw = JSON.parse(fs.readFileSync(STYLE_FILE, 'utf8')) as Partial<StoredStyle>
-    const styleId = String(raw.styleId ?? 'default').toLowerCase()
-    return getBotVisualStyle(styleId)
-      ? { styleId, updatedBy: raw.updatedBy, updatedAt: Number(raw.updatedAt ?? 0) }
+    const requested = String(raw.styleId ?? 'default')
+    const style = getBotVisualStyle(requested)
+    return style
+      ? { styleId: style.id, updatedBy: raw.updatedBy, updatedAt: Number(raw.updatedAt ?? 0) }
       : { styleId: 'default' }
   } catch {
     return { styleId: 'default' }
@@ -138,8 +284,8 @@ export function listBotVisualStyles() {
 }
 
 export function getBotVisualStyle(styleId: string) {
-  const clean = styleId.trim().toLowerCase()
-  return BOT_VISUAL_STYLES.find((style) => style.id === clean)
+  const canonical = canonicalStyleId(styleId)
+  return BOT_VISUAL_STYLES.find((style) => style.id === canonical)
 }
 
 export function getCurrentBotVisualStyle() {
