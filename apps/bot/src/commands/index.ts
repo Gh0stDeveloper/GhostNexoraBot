@@ -79,6 +79,7 @@ import { gatoCommands } from './gato.js'
 import { damasCommands } from './damas.js'
 import { bankingV10Commands } from './banking-v10.js'
 import { minershopV10Commands } from './minershop-v10.js'
+import { balanceV10Commands } from './balance-v10.js'
 
 export const commands: BotCommand[] = [
   ...generalCommands,
@@ -158,6 +159,7 @@ export const commands: BotCommand[] = [
   ...autoChatCommands,
   ...bankingV10Commands,
   ...minershopV10Commands,
+  ...balanceV10Commands,
 ]
 
 setMenuCommandProvider(() => commands)
