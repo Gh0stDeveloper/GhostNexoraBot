@@ -81,6 +81,17 @@ try {
   assert.equal(marioHtml.includes('النقاط'), false)
   assert.ok(Buffer.byteLength(marioHtml, 'utf8') < 200_000, 'Mario HTML should stay compact for WhatsApp rich messages')
 
+  // Todos los juegos HTML deben usar exactamente el transporte que funciona con `.view`.
+  const aiHtmlSource = await readFile(new URL('../apps/bot/dist/services/ai-html.js', import.meta.url), 'utf8')
+  assert.equal(aiHtmlSource.includes('GenAIaeacdsnwHtmlPrimitive'), true, 'HTML games must use the same primitive as .view')
+  assert.equal(aiHtmlSource.includes('messageSecret'), true, 'HTML games must include the .view messageSecret envelope')
+  assert.equal(aiHtmlSource.includes('867051314767696@bot'), true, 'HTML games must use the same forwarded AI bot metadata as .view')
+  assert.equal(aiHtmlSource.includes('forwardOrigin: 4'), true, 'HTML games must use .view forwardOrigin=4')
+  assert.equal(aiHtmlSource.includes("transport: 'view-compatible'"), true, 'HTML games must expose the view-compatible transport marker')
+  assert.equal(aiHtmlSource.includes('forwardedNewsletterMessageInfo'), false, 'legacy newsletter-forwarded HTML transport must stay removed')
+  assert.equal(aiHtmlSource.includes('FOAHtmlPrimitiveDemoDONOTUSE'), false, 'legacy FOA primitive fallback must stay removed')
+  assert.equal(aiHtmlSource.includes("botJid: '0@bot'"), false, 'legacy 0@bot metadata must stay removed')
+
   const moderationSource = await readFile(new URL('../apps/bot/dist/services/moderation-v2.js', import.meta.url), 'utf8')
   assert.equal(moderationSource.includes('resolveBotVisualStyleAsset'), true, 'welcome must resolve the active waifu style')
   assert.equal(moderationSource.includes('currentVisualIdentity'), true, 'welcome must use the bot visual identity')
