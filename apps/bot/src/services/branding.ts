@@ -1,7 +1,6 @@
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import sharp from 'sharp'
 import { config } from '../config.js'
 import type { DownloadedMedia } from '../utils/message.js'
 
@@ -22,6 +21,18 @@ async function removeSlot(slot: BrandingSlot, instanceId?: number) {
     rm(imagePath(slot, instanceId), { force: true }).catch(() => undefined),
     rm(videoPath(slot, instanceId), { force: true }).catch(() => undefined),
   ])
+}
+
+async function loadSharp() {
+  try {
+    const module = await import('sharp')
+    return module.default
+  } catch (error) {
+    if (config.isTermuxLite) {
+      throw new Error('El procesamiento avanzado de imágenes no está disponible en Ghost Nexora Lite para Termux.')
+    }
+    throw error
+  }
 }
 
 export async function getBrandingAsset(slot: BrandingSlot, instanceId?: number): Promise<BrandingAsset | null> {
@@ -48,6 +59,7 @@ export async function saveBrandingAsset(slot: BrandingSlot, media: DownloadedMed
   await removeSlot(slot, instanceId)
   if (media.kind === 'image') {
     const target = imagePath(slot, instanceId)
+    const sharp = await loadSharp()
     await sharp(media.buffer, { animated: false })
       .rotate()
       .resize(1280, 720, { fit: 'inside', withoutEnlargement: true })
