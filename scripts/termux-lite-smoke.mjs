@@ -5,7 +5,6 @@ import path from 'node:path'
 
 const temp = mkdtempSync(path.join(os.tmpdir(), 'ghost-nexora-termux-lite-'))
 process.env.NEXORA_RUNTIME_PROFILE = 'termux-lite'
-// The profile must override stale/full installations that still contain true.
 process.env.OLLAMA_ENABLED = 'true'
 process.env.DATA_DIR = path.join(temp, 'data')
 process.env.SESSION_DIR = path.join(temp, 'session')
@@ -13,8 +12,8 @@ process.env.ADMIN_WEB_TOKEN = 'termux-lite-ci-token'
 
 try {
   const [{ config }, { termuxLiteCommands }] = await Promise.all([
-    import('../apps/bot/dist/config.js'),
-    import('../apps/bot/dist/commands/termux-lite.js'),
+    import('../apps/bot/dist-termux/config.js'),
+    import('../apps/bot/dist-termux/commands/termux-lite.js'),
   ])
 
   assert.equal(config.runtimeProfile, 'termux-lite')
