@@ -48,7 +48,7 @@ const source = `
   const bankCommand = [...commands].reverse().find((command) => command.name === 'bank');
   if (!bankCommand || !bankCommand.aliases?.includes('loan')) throw new Error('bank V10 command not registered');
   const minerShop = [...commands].reverse().find((command) => command.name === 'minershop');
-  if (!minerShop || !/carrusel estable/i.test(minerShop.description)) throw new Error('minershop V11 carousel override not registered');
+  if (!minerShop || !/estilo visual activo/i.test(minerShop.description)) throw new Error('minershop V13 style carousel override not registered');
 
   console.log(JSON.stringify({
     scoreBefore: firstEligibility.profile.creditScore,
