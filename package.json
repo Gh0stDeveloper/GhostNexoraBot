@@ -5,7 +5,8 @@
   "description": "Ghost Nexora Bot - WhatsApp Multi-Device bot, economy, subbots and Next.js web",
   "workspaces": ["apps/*"],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "assets:waifus": "node scripts/extract-waifus.mjs",
+    "build": "npm run assets:waifus && npm run build --workspaces --if-present",
     "dev": "npm run dev --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "bot": "npm run start --workspace=@ghostnexora/bot",
