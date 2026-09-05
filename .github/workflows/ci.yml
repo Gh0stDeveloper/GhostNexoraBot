@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main, "feature/**", "feat/**", "fix/**"]
+    paths-ignore:
+      - "apps/bot/assets/waifus-bundle/**"
   pull_request:
 
 permissions:
