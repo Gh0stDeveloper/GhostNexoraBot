@@ -7,7 +7,7 @@ export const damasCommands: BotCommand[] = [
     name: 'damas',
     aliases: ['checkers', 'damash'],
     category: 'games',
-    description: 'Damas interactivas contra la IA estratégica, con capturas obligatorias, multicaptura y sonido.',
+    description: 'Damas interactivas contra la IA estratégica, con tablero táctil grande, multicaptura y sonido.',
     usage: 'damas',
     async handler(ctx) {
       try {
