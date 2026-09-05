@@ -173,8 +173,6 @@ async function run(def: Def, ctx: CommandContext) {
     `🔞 *${def.title}*`,
     '━━━━━━━━━━━━━━',
     roleplayText,
-    '',
-    '✓ Consentimiento 18+ confirmado.',
   ].join('\n')
   const mentions = [ctx.sender, other]
 
