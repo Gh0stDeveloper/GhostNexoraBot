@@ -71,6 +71,11 @@ try {
   const marioOwner = effective.find((row) => row.tokens.includes('mario'))?.command
   assert.equal(marioOwner?.category, 'games', 'Mario must be listed in the games section')
   assert.equal(marioOwner?.description.includes('español'), true, 'Mario command must be Spanish')
+  const damasOwner = effective.find((row) => row.tokens.includes('damas'))?.command
+  assert.equal(damasOwner?.description.includes('interactivas contra la IA'), true, '.damas must resolve to the HTML interactive game')
+  assert.equal(damasOwner?.groupOnly, undefined, '.damas HTML must work outside groups too')
+  const checkersOwner = effective.find((row) => row.tokens.includes('checkers'))?.command
+  assert.equal(checkersOwner?.description.includes('interactivas contra la IA'), true, '.checkers must resolve to the HTML interactive game')
 
   const { buildMarioGameHtml } = await import('../apps/bot/dist/services/mario-game.js')
   const marioHtml = buildMarioGameHtml()
