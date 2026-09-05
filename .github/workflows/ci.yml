@@ -33,6 +33,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Global wallet migration smoke
+        run: node scripts/economy-global-smoke.mjs
+
       - name: V4 persistence smoke
         run: node scripts/v4-smoke.mjs
 
