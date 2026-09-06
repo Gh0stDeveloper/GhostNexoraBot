@@ -11,6 +11,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "bot": "npm run start --workspace=@ghostnexora/bot",
     "pair": "npm run pair --workspace=@ghostnexora/bot",
+    "session:repair": "node scripts/repair-main-session.mjs",
     "web": "npm run start --workspace=@ghostnexora/web",
     "llm:train": "npm run llm:train --workspace=@ghostnexora/bot"
   },
