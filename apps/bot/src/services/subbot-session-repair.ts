@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { config } from '../config.js'
 import { economy } from './economy.js'
+import { reconcileHistoricalWalletSums } from './economy-wallet-reconcile.js'
 import { logger } from '../utils/logger.js'
 
 const MIGRATION_ID = 'subbot-session-reset-2026-09-v1'
@@ -22,7 +23,7 @@ function tableExists(name: string) {
  * Repairs the broken generation of subbot sessions introduced by older builds.
  *
  * Durable business state is preserved:
- * - Nexora wallet/bank are already reconciled by EconomyStore before this runs.
+ * - Nexora wallet/bank are reconciled before any old subbot directory is removed.
  * - entitlements/subbot_slot purchases and staff grants are NOT deleted.
  * - subbots rows and expires_at are retained so users do not repurchase.
  *
@@ -37,6 +38,11 @@ export function runSubbotSessionRepairMigration() {
 
   const marker = markerPath()
   if (existsSync(marker)) return { ran: false, reason: 'already_applied' as const }
+
+  // EconomyStore has already scanned stored subbot databases by this point.
+  // Run the idempotent full-sum reconciler once more immediately before the
+  // destructive runtime cleanup so historical NXC can never be lost.
+  reconcileHistoricalWalletSums()
 
   mkdirSync(path.dirname(marker), { recursive: true })
   mkdirSync(path.dirname(snapshotPath()), { recursive: true })
