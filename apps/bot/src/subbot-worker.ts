@@ -5,6 +5,7 @@ import { settings } from './core/settings.js'
 import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
 import { installSharedEntitlementBridge } from './services/entitlement-bridge.js'
+import { installAtomicWalletBridge } from './services/wallet-atomic.js'
 import { subbotCustomization } from './services/subbot-customization.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
@@ -28,6 +29,7 @@ if (!Number.isInteger(subbotId) || subbotId <= 0) throw new Error('NEXORA_SUBBOT
 if (!ownerJid) throw new Error('NEXORA_SUBBOT_OWNER_JID requerido')
 
 const sharedEntitlements = installSharedEntitlementBridge()
+installAtomicWalletBridge()
 if (sharedEntitlements) logger.info({ subbotId }, 'subbot using MainBot entitlement database')
 
 function sendParent(message: Record<string, unknown>) {
@@ -81,8 +83,6 @@ function scheduleReconnect() {
     return
   }
 
-  // Never leave a linked subbot permanently dead. Backoff grows to 60 seconds
-  // and then keeps retrying for the lifetime of the subscription.
   reconnectAttempts += 1
   const exponent = Math.min(5, Math.max(0, reconnectAttempts - 1))
   const base = Math.min(60_000, 1500 * (2 ** exponent))
