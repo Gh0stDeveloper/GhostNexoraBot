@@ -8,6 +8,20 @@ function fmtDate(value: number | null) { return value ? new Date(value).toLocale
 function webBase() { return config.publicWebUrl.replace(/\/$/, '') }
 function webAvailable() { return !config.isTermuxLite && config.webEnabled }
 
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: '⚪ Pendiente de vincular',
+    pairing: '🟡 Vinculación en curso',
+    starting: '🟠 Iniciando conexión',
+    online: '🟢 Online',
+    offline: '🟠 Offline · reconectando',
+    logged_out: '🔴 Sesión cerrada por WhatsApp',
+    revoked: '🔴 Revocado',
+    expired: '⚫ Expirado',
+  }
+  return labels[status] ?? status
+}
+
 async function sendQr(ctx: CommandContext, instanceId: number, qr: string, reason?: string) {
   const image = await QRCode.toBuffer(qr, { type: 'png', width: 720, margin: 2, errorCorrectionLevel: 'M' })
   await ctx.socket.sendMessage(ctx.chatId, {
@@ -29,34 +43,63 @@ async function sendQr(ctx: CommandContext, instanceId: number, qr: string, reaso
 
 export const subbotCommands: BotCommand[] = [
   {
-    name: 'subbot', aliases: ['jadibot', 'serbot'], category: 'subbots', description: 'Gestiona tu subbot comprado con Nexora Coins.', usage: webAvailable() ? 'subbot status|pair|qr|portal' : 'subbot status|pair|qr',
+    name: 'subbot', aliases: ['jadibot', 'serbot'], category: 'subbots', description: 'Gestiona tu subbot comprado o regalado.', usage: webAvailable() ? 'subbot status|pair|qr|reset|portal' : 'subbot status|pair|qr|reset',
     async handler(ctx) {
       const action = (ctx.args[0] ?? 'status').toLowerCase()
-      const record = economy.getActiveSubbot(ctx.sender)
+      // getActive() also repairs older databases where subbot_slot existed but
+      // the runtime row was missing.
+      const record = subbotManager.getActive(ctx.sender)
+
       if (action === 'status') {
-        if (!record) throw new Error(`No tienes un subbot activo. Consulta ${ctx.prefix}shop.`)
+        if (!record) throw new Error(`No tienes un subbot activo. Consulta ${ctx.prefix}shop o solicita una concesión al staff.`)
         await ctx.reply([
           '🤖 *MI SUBBOT*',
           '',
           `🆔 Instancia: #${record.id}`,
           `📱 Número: ${record.phone ?? 'sin vincular'}`,
-          `🟢 Estado: ${record.status}`,
+          `🔌 Estado: *${statusLabel(record.status)}*`,
           `⏳ Vence: ${fmtDate(record.expiresAt)}`,
           `💬 Mensajes: ${record.messagesProcessed}`,
           `📥 Tráfico: ${(record.downloadBytes / 1024 / 1024).toFixed(1)} MB`,
           '',
-          record.phone
-            ? (webAvailable() ? `Usa *${ctx.prefix}subbot portal* para generar un token de acceso web.` : 'Instancia vinculada y gestionada directamente desde WhatsApp; el dashboard web no está habilitado en este runtime.')
-            : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*. Si el código falla, usa *${ctx.prefix}subbot qr*.`
+          record.status === 'pending'
+            ? `Debes volver a vincular con *${ctx.prefix}subbot pair 52XXXXXXXXXX* o *${ctx.prefix}subbot qr*.`
+            : record.status === 'logged_out'
+              ? `WhatsApp cerró la sesión. Usa *${ctx.prefix}subbot reset* y vuelve a vincular.`
+              : record.phone
+                ? (webAvailable()
+                  ? `La reconexión es automática. Portal: *${ctx.prefix}subbot portal*. Si la sesión quedó dañada, usa *${ctx.prefix}subbot reset*.`
+                  : `La reconexión es automática. Si la sesión quedó dañada, usa *${ctx.prefix}subbot reset* y vuelve a vincular.`)
+                : `Vincula con *${ctx.prefix}subbot pair 52XXXXXXXXXX*. Si el código falla, usa *${ctx.prefix}subbot qr*.`,
         ].join('\n'))
         return
       }
+
+      if (['reset', 'borrar', 'delete', 'unlink', 'relink'].includes(action)) {
+        if (!record) throw new Error('No tienes una instancia vigente para restablecer.')
+        await subbotManager.resetById(record.id)
+        await ctx.reply([
+          '🧹 *SESIÓN SUBBOT RESTABLECIDA*',
+          '',
+          `Instancia: *#${record.id}*`,
+          'Se eliminaron credenciales, sesión local y tokens de portal.',
+          '*Tu compra/regalo y fecha de vencimiento se conservaron.*',
+          '',
+          `Vuelve a vincular con *${ctx.prefix}subbot pair 52XXXXXXXXXX*`,
+          `o usa *${ctx.prefix}subbot qr*.`
+        ].join('\n'))
+        return
+      }
+
       if (action === 'pair') {
-        if (!record) throw new Error(`Compra una suscripción en ${ctx.prefix}shop antes de vincular un subbot.`)
+        if (!record) throw new Error(`Compra una suscripción en ${ctx.prefix}shop o solicita una concesión al staff antes de vincular un subbot.`)
         const phone = ctx.args[1] ?? ''
         if (!phone) throw new Error(`Uso: ${ctx.prefix}subbot pair 52XXXXXXXXXX`)
         const result = await subbotManager.pair(ctx.sender, phone)
-        if (result.alreadyLinked) { await ctx.reply('✅ Tu subbot ya estaba vinculado.'); return }
+        if (result.alreadyLinked) {
+          await ctx.reply(`ℹ️ La instancia #${record.id} todavía contiene credenciales vinculadas. Si no responde, usa *${ctx.prefix}subbot reset* y vuelve a vincular.`)
+          return
+        }
         if (result.qr) {
           await sendQr(ctx, record.id, result.qr, result.fallbackReason)
           return
@@ -72,20 +115,26 @@ export const subbotCommands: BotCommand[] = [
           '*Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono.*',
           '',
           `El código es temporal y pertenece únicamente a tu instancia #${record.id}.`,
-          `Si WhatsApp rechaza o no muestra el código, usa *${ctx.prefix}subbot qr* y recibirás un QR para escanear.`,
+          `El estado pasará a *online* solo cuando WhatsApp confirme la conexión.`,
+          `Si WhatsApp rechaza el código, usa *${ctx.prefix}subbot qr*.`
         ].join('\n'))
         return
       }
+
       if (action === 'qr') {
-        if (!record) throw new Error(`Compra una suscripción en ${ctx.prefix}shop antes de vincular un subbot.`)
+        if (!record) throw new Error(`Compra una suscripción en ${ctx.prefix}shop o solicita una concesión al staff antes de vincular un subbot.`)
         const result = await subbotManager.qr(ctx.sender)
-        if (result.alreadyLinked) { await ctx.reply('✅ Tu subbot ya está vinculado; no necesitas un QR.'); return }
+        if (result.alreadyLinked) {
+          await ctx.reply(`ℹ️ La instancia #${record.id} ya contiene credenciales. Si no responde, usa *${ctx.prefix}subbot reset* antes de pedir un QR nuevo.`)
+          return
+        }
         if (!result.qr) throw new Error('WhatsApp no devolvió un QR válido.')
         await sendQr(ctx, record.id, result.qr)
         return
       }
+
       if (action === 'portal') {
-        if (!webAvailable()) throw new Error('El dashboard web no está habilitado en esta instalación. Gestiona el subbot directamente con status, pair y qr.')
+        if (!webAvailable()) throw new Error('El dashboard web no está habilitado en esta instalación. Gestiona el subbot directamente con status, pair, qr y reset.')
         if (!record) throw new Error('No tienes un subbot activo.')
         const token = economy.createPortalToken(ctx.sender, record.id)
         await ctx.reply([
@@ -104,9 +153,10 @@ export const subbotCommands: BotCommand[] = [
         ].join('\n'))
         return
       }
+
       throw new Error(webAvailable()
-        ? `Acción inválida. Usa ${ctx.prefix}subbot status, pair, qr o portal.`
-        : `Acción inválida. Usa ${ctx.prefix}subbot status, pair o qr.`)
+        ? `Acción inválida. Usa ${ctx.prefix}subbot status, pair, qr, reset o portal.`
+        : `Acción inválida. Usa ${ctx.prefix}subbot status, pair, qr o reset.`)
     },
   },
   {
@@ -116,7 +166,7 @@ export const subbotCommands: BotCommand[] = [
       if (!rows.length) { await ctx.reply('🤖 No hay subbots registrados todavía.'); return }
       const totalMessages = rows.reduce((sum, row) => sum + row.messagesProcessed, 0)
       const totalBytes = rows.reduce((sum, row) => sum + row.downloadBytes, 0)
-      const lines = rows.slice(0, 30).map((row) => `#${row.id} · ${row.status} · ${row.phone ?? 'sin número'}\nOwner: ${row.ownerJid.split('@')[0]} · vence ${fmtDate(row.expiresAt)}`)
+      const lines = rows.slice(0, 30).map((row) => `#${row.id} · ${statusLabel(row.status)} · ${row.phone ?? 'sin número'}\nOwner: ${row.ownerJid.split('@')[0]} · vence ${fmtDate(row.expiresAt)}`)
       const footer = webAvailable()
         ? `Usa *${ctx.prefix}adminpanel* en chat privado para abrir el dashboard web.`
         : 'Gestión directa desde WhatsApp: el dashboard web está deshabilitado en esta instalación.'
