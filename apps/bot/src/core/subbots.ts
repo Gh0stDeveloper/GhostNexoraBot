@@ -24,12 +24,19 @@ type WorkerMessage = {
   error?: string
   jid?: string | null
   phone?: string | null
+  registered?: boolean
 }
 
 type Waiter = {
   resolve: (value: { ok: boolean; code?: string | null; qr?: string | null; alreadyLinked?: boolean; error?: string }) => void
   reject: (error: Error) => void
   timer: NodeJS.Timeout
+}
+
+type WorkerHealth = {
+  lastHeartbeat: number
+  status: string
+  restarts: number
 }
 
 function sleep(ms: number) {
@@ -55,6 +62,9 @@ class SubbotManager {
   private readonly workers = new Map<number, ChildProcess>()
   private readonly pairingLocks = new Set<number>()
   private readonly waiters = new Map<string, Waiter>()
+  private readonly health = new Map<number, WorkerHealth>()
+  private readonly intentionalStops = new Set<number>()
+  private watchdogTimer: NodeJS.Timeout | null = null
 
   private key(id: number, action: 'pair' | 'qr') {
     return `${id}:${action}`
@@ -71,13 +81,29 @@ class SubbotManager {
     }
   }
 
+  private markHealth(id: number, status: string) {
+    const current = this.health.get(id)
+    this.health.set(id, {
+      lastHeartbeat: Date.now(),
+      status,
+      restarts: current?.restarts ?? 0,
+    })
+  }
+
   private handleWorkerMessage(message: WorkerMessage) {
     const id = Number(message.subbotId ?? 0)
     if (!id) return
 
+    if (message.type === 'heartbeat') {
+      this.markHealth(id, String(message.status ?? this.health.get(id)?.status ?? 'unknown'))
+      return
+    }
+
     if (message.type === 'status') {
+      const status = String(message.status ?? 'offline')
+      this.markHealth(id, status)
       const patch: { status?: string; lastSeenAt?: number; phone?: string } = {
-        status: String(message.status ?? 'offline'),
+        status,
         lastSeenAt: Date.now(),
       }
       if (typeof message.phone === 'string' && message.phone) patch.phone = message.phone
@@ -102,9 +128,45 @@ class SubbotManager {
     }
   }
 
+  /**
+   * Reconciles old installations where an entitlement existed but the subbots
+   * row was never created (or its expiry was not extended). The entitlement is
+   * the durable purchase/grant; the row is only the runtime instance record.
+   */
+  getActive(ownerJid: string): SubbotRecord | null {
+    let record = economy.getActiveSubbot(ownerJid)
+    const entitlementExpiresAt = economy.hasEntitlement(ownerJid, 'subbot_slot')
+
+    if (!record && entitlementExpiresAt) {
+      economy.createSubbot(ownerJid, entitlementExpiresAt)
+      record = economy.getActiveSubbot(ownerJid)
+    } else if (record && entitlementExpiresAt && entitlementExpiresAt > record.expiresAt) {
+      economy.db.prepare('UPDATE subbots SET expires_at = ? WHERE id = ?').run(entitlementExpiresAt, record.id)
+      record = economy.getActiveSubbot(ownerJid)
+    }
+    return record
+  }
+
+  private stopWorker(id: number, reason: string) {
+    const worker = this.workers.get(id)
+    if (!worker) return
+    this.intentionalStops.add(id)
+    this.workers.delete(id)
+    this.health.delete(id)
+    this.rejectWaiters(id, new Error(reason))
+    try { worker.send({ type: 'stop' }) } catch {}
+    setTimeout(() => {
+      try {
+        if (worker.exitCode === null) worker.kill('SIGKILL')
+      } catch {}
+      this.intentionalStops.delete(id)
+    }, 1800).unref?.()
+  }
+
   private spawn(record: SubbotRecord) {
     const existing = this.workers.get(record.id)
-    if (existing && existing.connected) return existing
+    if (existing && existing.connected && existing.exitCode === null) return existing
+    if (existing) this.workers.delete(record.id)
 
     const customization = subbotCustomization.get(record.id)
     const worker = fork(workerPath(), [], {
@@ -119,7 +181,9 @@ class SubbotManager {
         NEXORA_SUBBOT_EXPIRES_AT: String(record.expiresAt),
         NEXORA_SUBBOT_SHORT_NAME: customization.shortName,
         NEXORA_SUBBOT_NAME: customization.longName,
+        // Wallet/bank and paid/granted entitlements are shared with MainBot.
         NEXORA_GLOBAL_ECONOMY_DB: economy.walletFile,
+        NEXORA_GLOBAL_CONTROL_DB: economy.file,
         DATA_DIR: path.join(config.dataDir, 'subbots', String(record.id)),
         SESSION_DIR: path.join(config.dataDir, 'subbots', String(record.id), 'session'),
         BOT_NAME: customization.longName,
@@ -133,6 +197,7 @@ class SubbotManager {
         TELEGRAM_CHANNEL_URL: '',
         OLLAMA_ENABLED: 'false',
         OLLAMA_MODEL: 'qwen2.5:1.5b',
+        WEB_ENABLED: 'false',
         ADMIN_WEB_TOKEN: crypto.randomBytes(24).toString('hex'),
         PUBLIC_WEB_URL: 'http://127.0.0.1:3000',
       },
@@ -140,6 +205,7 @@ class SubbotManager {
     })
 
     this.workers.set(record.id, worker)
+    this.markHealth(record.id, 'starting')
     worker.on('message', (message: WorkerMessage) => this.handleWorkerMessage(message))
     worker.on('error', (error) => {
       logger.error({ error, subbotId: record.id }, 'isolated subbot process error')
@@ -148,13 +214,51 @@ class SubbotManager {
     })
     worker.on('exit', (code, signal) => {
       if (this.workers.get(record.id) === worker) this.workers.delete(record.id)
+      this.health.delete(record.id)
       this.rejectWaiters(record.id, new Error(`Subbot #${record.id} process exited (${code ?? signal ?? 'unknown'})`))
-      const current = economy.getActiveSubbot(record.ownerJid)
-      if (current?.id === record.id && current.expiresAt > Date.now() && !['logged_out', 'revoked', 'pending'].includes(current.status)) {
-        economy.updateSubbot(record.id, { status: 'offline', lastSeenAt: Date.now() })
-      }
+
+      const intentional = this.intentionalStops.has(record.id)
+      if (intentional) return
+      const current = this.getActive(record.ownerJid)
+      if (!current || current.id !== record.id || current.expiresAt <= Date.now()) return
+      if (['logged_out', 'revoked', 'pending', 'expired'].includes(current.status)) return
+
+      economy.updateSubbot(record.id, { status: 'offline', lastSeenAt: Date.now() })
+      const previousRestarts = this.health.get(record.id)?.restarts ?? 0
+      setTimeout(() => {
+        const latest = this.getActive(record.ownerJid)
+        if (!latest || latest.id !== record.id || latest.expiresAt <= Date.now()) return
+        const restarted = this.spawn({ ...latest, status: 'offline' })
+        const state = this.health.get(record.id)
+        if (state) state.restarts = previousRestarts + 1
+        logger.warn({ subbotId: record.id, pid: restarted.pid }, 'subbot worker restarted after unexpected exit')
+      }, 3000).unref?.()
     })
     return worker
+  }
+
+  private startWatchdog() {
+    if (this.watchdogTimer) return
+    this.watchdogTimer = setInterval(() => {
+      const stamp = Date.now()
+      for (const [id, worker] of this.workers) {
+        const state = this.health.get(id)
+        if (!state) continue
+        if (stamp - state.lastHeartbeat <= 90_000) continue
+
+        const record = economy.listSubbots().find((item) => item.id === id)
+        if (!record || record.expiresAt <= stamp || ['pending', 'logged_out', 'revoked', 'expired'].includes(record.status)) continue
+
+        logger.warn({ subbotId: id, lastHeartbeat: state.lastHeartbeat, status: state.status }, 'subbot watchdog restarting stale worker')
+        this.stopWorker(id, `Subbot #${id} reiniciado por watchdog.`)
+        economy.updateSubbot(id, { status: 'offline', lastSeenAt: stamp })
+        setTimeout(() => {
+          const current = this.getActive(record.ownerJid)
+          if (current?.id === id && current.expiresAt > Date.now()) this.spawn({ ...current, status: 'offline' })
+        }, 2500).unref?.()
+      }
+    }, 30_000)
+    this.watchdogTimer.unref?.()
   }
 
   private async request(record: SubbotRecord, action: 'pair' | 'qr') {
@@ -179,9 +283,10 @@ class SubbotManager {
   }
 
   async startActive() {
+    this.startWatchdog()
     const active = economy
       .listSubbots()
-      .filter((item) => item.expiresAt > Date.now() && ['online', 'offline', 'pairing'].includes(item.status))
+      .filter((item) => item.expiresAt > Date.now() && ['online', 'offline', 'pairing', 'starting'].includes(item.status))
     for (const record of active) {
       this.spawn(record)
       await sleep(150)
@@ -190,8 +295,8 @@ class SubbotManager {
 
   async pair(ownerJid: string, rawPhone: string): Promise<PairResult> {
     const phone = normalizePhone(rawPhone)
-    const record = economy.getActiveSubbot(ownerJid)
-    if (!record) throw new Error('No tienes una suscripción de subbot activa. Compra una en .shop.')
+    const record = this.getActive(ownerJid)
+    if (!record) throw new Error('No tienes una suscripción de subbot activa. Compra una en .shop o solicita una concesión al staff.')
     if (this.pairingLocks.has(record.id)) throw new Error('Ya hay una vinculación en curso para este subbot.')
     this.pairingLocks.add(record.id)
     economy.updateSubbot(record.id, { phone, status: 'pairing', lastSeenAt: Date.now() })
@@ -215,8 +320,8 @@ class SubbotManager {
   }
 
   async qr(ownerJid: string) {
-    const record = economy.getActiveSubbot(ownerJid)
-    if (!record) throw new Error('No tienes una suscripción de subbot activa. Compra una en .shop.')
+    const record = this.getActive(ownerJid)
+    if (!record) throw new Error('No tienes una suscripción de subbot activa. Compra una en .shop o solicita una concesión al staff.')
     if (this.pairingLocks.has(record.id)) throw new Error('Ya hay una vinculación en curso para este subbot.')
     this.pairingLocks.add(record.id)
     economy.updateSubbot(record.id, { status: 'pairing', lastSeenAt: Date.now() })
@@ -238,12 +343,7 @@ class SubbotManager {
     const record = economy.listSubbots().find((item) => item.id === id)
     if (!record) throw new Error('La instancia de subbot no existe.')
 
-    const worker = this.workers.get(id)
-    this.workers.delete(id)
-    this.rejectWaiters(id, new Error(`Subbot #${id} reiniciado.`))
-    try { worker?.send({ type: 'stop' }) } catch {}
-    setTimeout(() => { try { worker?.kill('SIGKILL') } catch {} }, 1500)
-
+    this.stopWorker(id, `Subbot #${id} reiniciado.`)
     await rm(path.join(config.dataDir, 'subbots', String(id)), { recursive: true, force: true })
     economy.db.prepare("UPDATE subbots SET phone = NULL, status = 'pending', last_seen_at = ? WHERE id = ?").run(Date.now(), id)
     economy.db.prepare('DELETE FROM portal_tokens WHERE subbot_id = ?').run(id)
@@ -251,7 +351,7 @@ class SubbotManager {
   }
 
   async reset(ownerJid: string) {
-    const record = economy.getActiveSubbot(ownerJid)
+    const record = this.getActive(ownerJid)
     if (!record) throw new Error('No tienes una instancia activa para restablecer.')
     return this.resetById(record.id)
   }
