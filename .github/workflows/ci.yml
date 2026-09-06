@@ -39,6 +39,12 @@ jobs:
       - name: Optional Web command registry smoke
         run: node scripts/web-optional-smoke.mjs
 
+      - name: Subbot recovery and shared entitlement smoke
+        run: node scripts/subbot-recovery-smoke.mjs
+
+      - name: Atomic wallet multi-process smoke
+        run: node scripts/wallet-atomic-smoke.mjs
+
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
 
