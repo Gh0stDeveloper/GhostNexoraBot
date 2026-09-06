@@ -23,6 +23,7 @@ import { autoChat } from './services/auto-chat.js'
 import { llmFreeChat } from './services/llm-free-chat.js'
 import { sendAssistantReply } from './services/assistant-reply.js'
 import { hasAudio, transcribeWhatsAppAudio } from './services/audio-transcribe.js'
+import { runSubbotSessionRepairMigration } from './services/subbot-session-repair.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -34,6 +35,7 @@ let connected = false
 let connectedAt: Date | null = null
 let activeJid: string | null = null
 let reconnectTimer: NodeJS.Timeout | null = null
+let reconnectAttempts = 0
 let mainSocket: WASocket | null = null
 
 function json(res: http.ServerResponse, status: number, payload: unknown) {
@@ -107,6 +109,8 @@ function startHealthServer() {
       subbots: {
         total: subbots.length,
         online: subbots.filter((item) => item.status === 'online').length,
+        pending: subbots.filter((item) => item.status === 'pending').length,
+        offline: subbots.filter((item) => item.status === 'offline').length,
       },
     })
   })
@@ -153,8 +157,16 @@ async function routeMessage(
     return false
   })) return
 
-  if (await handleKickSticker(socket, message).catch(() => false)) return
-  if (await moderateIncomingV2(socket, message)) return
+  if (await handleKickSticker(socket, message).catch((error) => {
+    logger.warn({ error, chatId }, 'kick sticker handler failed; continuing route')
+    return false
+  })) return
+
+  // A moderation failure must never silence the whole command router.
+  if (await moderateIncomingV2(socket, message).catch((error) => {
+    logger.warn({ error, chatId }, 'moderation failed; continuing command route')
+    return false
+  })) return
 
   const handled = await router.handle(socket, message)
   if (handled) return
@@ -250,6 +262,23 @@ async function routeMessage(
   await maybeHumanInteraction(socket, message).catch(() => false)
 }
 
+function scheduleMainReconnect(reason: string) {
+  if (reconnectTimer) return
+  reconnectAttempts += 1
+  const exponent = Math.min(5, Math.max(0, reconnectAttempts - 1))
+  const delay = Math.min(60_000, 2000 * (2 ** exponent)) + Math.floor(Math.random() * 1000)
+  logger.warn({ reconnectAttempts, delay, reason }, 'main WhatsApp reconnect scheduled')
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    void connect().catch((error) => {
+      logger.error({ error, reconnectAttempts }, 'main WhatsApp reconnect failed')
+      scheduleMainReconnect('connect_failed')
+    })
+  }, delay)
+  reconnectTimer.unref?.()
+}
+
 async function connect() {
   const { socket } = await createSocket()
   mainSocket = socket
@@ -281,6 +310,7 @@ async function connect() {
       connectedAt = new Date()
       activeJid = socket.user?.id ?? null
       mainSocket = socket
+      reconnectAttempts = 0
       logger.info({ jid: activeJid, prefix: settings.prefix }, config.botName + ' connected')
     }
     if (connection === 'close') {
@@ -293,17 +323,21 @@ async function connect() {
         logger.error('session logged out; run `npm run pair` to link again')
         return
       }
-      if (!reconnectTimer) {
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null
-          void connect().catch((error) => logger.error({ error }, 'reconnect failed'))
-        }, 3000)
-      }
+      scheduleMainReconnect(`connection_close:${statusCode ?? 'unknown'}`)
     }
   })
 }
 
 await settings.init()
+
+// One-time repair for stale linked-but-silent subbot sessions. EconomyStore and
+// its historical wallet reconciliation have already initialized by this point,
+// so deleting the old subbot runtime directories cannot discard NXC balances.
+const subbotRepair = runSubbotSessionRepairMigration()
+if (subbotRepair.ran) {
+  logger.warn({ reset: subbotRepair.reset }, 'subbot repair migration completed; affected users must pair again')
+}
+
 startTempCleanup()
 startHealthServer()
 startBrowserProxy()
@@ -319,7 +353,10 @@ if (config.ollamaEnabled) {
 }
 
 await subbotManager.startActive()
-await connect()
+await connect().catch((error) => {
+  logger.error({ error }, 'initial WhatsApp connection failed')
+  scheduleMainReconnect('initial_connect_failed')
+})
 
 process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))
