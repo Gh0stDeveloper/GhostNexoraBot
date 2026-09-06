@@ -1,42 +1,29 @@
 # 🔄 Actualizar Ghost Nexora Bot
 
-Esta guía explica cómo comprobar si existe una versión nueva, actualizar una instalación existente, validar el resultado y volver temporalmente a un commit anterior si algo falla.
+Esta guía cubre la actualización segura de una instalación existente, incluidos **Bot**, **Web opcional**, **Ollama/LLM opcional**, persistencia y la migración extraordinaria de reparación de subbots de septiembre de 2026.
 
-> [📖 Volver al README](../README.md)
-> · [🚀 Primera instalación y activación](FIRST_INSTALL.md)
-> · [📢 Canal oficial de WhatsApp](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i)
+> [📖 Volver al README](../README.md) · [🚀 Primera instalación](FIRST_INSTALL.md) · [📢 Canal oficial](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i)
 
 ---
 
-## 1. Dónde se anuncian las versiones
+## Actualización estable
 
-Las nuevas versiones y avisos se publicarán en:
+Para una VPS instalada en `/opt/ghost-nexora-bot`:
 
-- [📢 Canal oficial de Ghost Nexora Bot](https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i)
-- [📦 Repositorio de Ghost Nexora Bot](https://github.com/Gh0stDeveloper/GhostNexoraBot)
-- [🧪 GitHub Actions](https://github.com/Gh0stDeveloper/GhostNexoraBot/actions)
+```bash
+sudo /opt/ghost-nexora-bot/scripts/update.sh
+```
 
-No actualices una instalación productiva hacia una rama experimental sin saber qué rama estás utilizando.
+El actualizador conserva `.env`, sesión principal, SQLite y la configuración existente de **Web** y **Ollama**.
 
----
-
-## 2. Comprobar qué rama tienes instalada
+### Comprobar versión
 
 ```bash
 git -C /opt/ghost-nexora-bot branch --show-current
-```
-
-Ver el commit instalado:
-
-```bash
 git -C /opt/ghost-nexora-bot rev-parse --short HEAD
 ```
 
----
-
-## 3. Comprobar si hay una actualización sin instalarla
-
-### Para `main`
+Ver si existen commits nuevos:
 
 ```bash
 sudo git -C /opt/ghost-nexora-bot fetch origin main
@@ -44,17 +31,119 @@ printf 'Instalado: '; git -C /opt/ghost-nexora-bot rev-parse --short HEAD
 printf 'Remoto:    '; git -C /opt/ghost-nexora-bot rev-parse --short origin/main
 ```
 
-Para ver los commits pendientes:
+---
+
+# 🧹 Reparación extraordinaria de subbots · septiembre 2026
+
+> [!IMPORTANT]
+> La primera ejecución de la versión que incorpora la migración `subbot-session-reset-2026-09-v1` **borra las sesiones antiguas de los subbots una sola vez**. Esto corrige instancias que figuraban vinculadas pero habían quedado offline o sin responder.
+
+La migración **NO** elimina:
+
+- la sesión del MainBot;
+- Nexora Coins de los usuarios;
+- banco o billetera global;
+- compras `subbot_slot`;
+- subbots regalados por staff;
+- fecha de vencimiento de la suscripción;
+- acceso privado comprado;
+- acceso privado regalado.
+
+Antes de borrar los directorios viejos, el runtime ejecuta nuevamente la reconciliación histórica de billeteras. Después crea un snapshot sin credenciales y reinicia únicamente el estado efímero del subbot.
+
+### Lo que sí se elimina
+
+- credenciales WhatsApp de cada subbot antiguo;
+- archivos bajo `data/subbots/<id>/`;
+- número vinculado guardado en la instancia;
+- tokens antiguos del portal web del subbot;
+- contadores runtime antiguos de esa instancia.
+
+Las suscripciones vigentes quedan en estado:
+
+```text
+pending
+```
+
+El usuario debe volver a vincular:
+
+```text
+.subbot status
+.subbot pair 521XXXXXXXXXX
+```
+
+o usar:
+
+```text
+.subbot qr
+```
+
+**No debe volver a comprar el subbot** mientras su `subbot_slot` siga vigente.
+
+### Migración de una sola ejecución
+
+Marcador:
+
+```text
+/var/lib/ghost-nexora-bot/data/.migrations/subbot-session-reset-2026-09-v1.done
+```
+
+Snapshot de recuperación sin credenciales WhatsApp:
+
+```text
+/var/lib/ghost-nexora-bot/data/backups/subbot-session-reset-2026-09-v1.json
+```
+
+Puedes comprobarlos con:
 
 ```bash
-git -C /opt/ghost-nexora-bot log --oneline HEAD..origin/main
+sudo cat /var/lib/ghost-nexora-bot/data/.migrations/subbot-session-reset-2026-09-v1.done
+sudo ls -lh /var/lib/ghost-nexora-bot/data/backups/subbot-session-reset-2026-09-v1.json
 ```
+
+Una vez creado el marcador, futuras actualizaciones **no vuelven a borrar** los subbots que ya hayan sido vinculados nuevamente.
 
 ---
 
-## 4. Backup manual recomendado antes de actualizar
+## Mejoras de subbots incluidas
 
-La actualización normal no elimina la sesión ni SQLite, pero antes de una versión importante es recomendable crear una copia del estado y `.env`.
+Después de la reparación:
+
+- los workers reintentan conexión durante toda la vigencia de la suscripción;
+- ya no existe el límite antiguo de 12 reconexiones que podía dejar un proceso “vivo pero mudo”;
+- MainBot recibe heartbeat de cada worker;
+- un watchdog reinicia workers atascados;
+- un cierre inesperado del proceso hijo provoca respawn automático cuando corresponde;
+- errores aislados de moderación no cancelan el router de comandos;
+- el timeout del subbot usa `BOT_MESSAGE_TIMEOUT_MS`, igual que MainBot;
+- `.subbot reset` elimina solo sesión/credenciales y conserva la suscripción;
+- si existe un `subbot_slot` vigente pero falta la fila runtime, el sistema reconstruye la instancia como `pending`.
+
+---
+
+## Billetera, compras y permisos compartidos
+
+MainBot y subbots utilizan una única billetera global en:
+
+```text
+/var/lib/ghost-nexora-bot/data/nexora-economy.sqlite
+```
+
+Las transferencias y compras se procesan con bloqueo transaccional sobre esa base compartida. Esto evita que dos procesos gasten simultáneamente el mismo saldo.
+
+También se comparte la base de permisos del MainBot. Por tanto:
+
+- una compra de acceso privado funciona desde todas las instancias;
+- `privategift` queda persistido en la base principal;
+- un acceso privado regalado no debe volver a pedir compra;
+- `subbotgrant` queda registrado como `subbot_slot`;
+- si una compra no puede registrar el entitlement, el débito intenta revertirse automáticamente.
+
+---
+
+## Backup manual recomendado
+
+Antes de una actualización importante:
 
 ```bash
 sudo tar -czf "/root/ghostnexora-before-update-$(date +%Y%m%d-%H%M%S).tar.gz" \
@@ -62,192 +151,137 @@ sudo tar -czf "/root/ghostnexora-before-update-$(date +%Y%m%d-%H%M%S).tar.gz" \
   /opt/ghost-nexora-bot/.env
 ```
 
-Lista los backups:
-
-```bash
-ls -lh /root/ghostnexora-before-update-*.tar.gz
-```
-
-El backup contiene información sensible. No lo compartas ni lo subas a GitHub.
+El backup contiene datos sensibles. No lo publiques ni lo subas al repositorio.
 
 ---
 
-## 5. Actualización normal de `main`
+## Web y Ollama opcionales durante una actualización
 
-```bash
-sudo /opt/ghost-nexora-bot/scripts/update.sh
+El updater preserva instalaciones antiguas.
+
+### Web
+
+Si una VPS anterior no contiene `WEB_ENABLED`, el updater detecta `ghost-nexora-web.service` o un build `.next` existente. Si ya tenías dashboard, añade:
+
+```env
+WEB_ENABLED=true
 ```
 
-### Actualizar desde una rama de trabajo (ejemplo)
+Si estaba deshabilitado, no obliga a instalarlo.
 
-```bash
-sudo env BRANCH=feature/apk-adult-improvements /opt/ghost-nexora-bot/scripts/update.sh
+### Ollama
+
+Si tienes:
+
+```env
+OLLAMA_ENABLED=true
 ```
+
+y el ejecutable `ollama` existe, el updater conserva Ollama y su worker. Si el binario ya no existe, desactiva el LLM local para evitar comandos rotos.
 
 ---
 
-## 6. Actualizar **sin interrumpir** el entrenamiento Mini-LLM
+## Entrenamiento Mini-LLM activo
 
-El worker `ghost-nexora-llm.service` es un proceso **separado** del bot de WhatsApp. Aun así, versiones antiguas de `update.sh` reiniciaban siempre el worker y podían cortar un entrenamiento en curso.
+El updater detecta el estado de entrenamiento antes de reiniciar `ghost-nexora-llm.service`. Si hay entrenamiento activo, actualiza el resto del sistema sin matar ese worker.
 
-### Comportamiento actual de `update.sh`
-
-1. Lee `*/llm/state.json` (por defecto bajo `/var/lib/ghost-nexora-bot/llm/`).
-2. Si `learning: true` (o progreso parcial con mensaje de entrenamiento), **no** ejecuta `systemctl restart ghost-nexora-llm`.
-3. Solo reinicia `ghost-nexora-bot` y `ghost-nexora-web`.
-4. Actualiza el archivo de unidad systemd del LLM en disco (`SKIP_LLM_RESTART=1`) para el próximo arranque limpio, sin matar el proceso actual.
-
-### Comprobar si el entrenamiento está activo antes de actualizar
+Comprobar:
 
 ```bash
-# Estado del servicio
 systemctl is-active ghost-nexora-llm
-
-# Progreso persistido
 sudo cat /var/lib/ghost-nexora-bot/llm/state.json | head -80
-
-# Logs en vivo del worker
 sudo journalctl -u ghost-nexora-llm -f
 ```
 
-Campos útiles en `state.json`:
+---
 
-- `learning`: `true` mientras corre una pasada de entrenamiento
-- `currentProgress`: porcentaje aproximado (0–100)
-- `currentStep` / `currentTotalSteps`
-- `currentMessage`: texto legible del paso actual
+## Verificar después de actualizar
 
-Durante el entrenamiento el modelo se guarda por checkpoints periódicos (`LLM_CHECKPOINT_EVERY`, por defecto cada 1000 pasos) en `model.bin`. Aun así, **evitar el reinicio** es lo más seguro: el bucle de épocas vive en memoria del proceso.
-
-### Actualizar solo bot/web a mano (máxima precaución)
-
-Si prefieres no usar el script:
+### MainBot
 
 ```bash
-cd /opt/ghost-nexora-bot
-sudo git fetch origin
-sudo git checkout main   # o la rama que uses
-sudo git pull --ff-only
-sudo npm install
-sudo npm run build
-sudo systemctl restart ghost-nexora-bot ghost-nexora-web
-# NO reiniciar ghost-nexora-llm mientras learning=true
+sudo systemctl status ghost-nexora-bot --no-pager -l
+curl -fsS http://127.0.0.1:3001/health
 ```
 
-### Después de que el entrenamiento termine
-
-Cuando `learning` vuelva a `false` y el progreso sea 100 o el mensaje indique completado, puedes reiniciar el worker si necesitas cargar código nuevo del LLM:
+### Web, si está habilitada
 
 ```bash
-sudo systemctl restart ghost-nexora-llm
+sudo systemctl status ghost-nexora-web --no-pager -l
+```
+
+### Ollama/LLM, si está habilitado
+
+```bash
+sudo systemctl status ollama ghost-nexora-llm --no-pager -l
+ollama list
+```
+
+### Logs del bot
+
+```bash
+sudo journalctl -u ghost-nexora-bot -n 150 --no-pager
+```
+
+En WhatsApp prueba:
+
+```text
+.ping
+.menu
+.subbot status
 ```
 
 ---
 
-## 7. Qué hace `update.sh`
+## La sesión principal no debe pedir pairing
 
-1. Entra en `/opt/ghost-nexora-bot`.
-2. Detecta si el Mini-LLM está entrenando (`state.json`).
-3. `git fetch` / `checkout` / `pull --ff-only` de la rama indicada.
-4. Actualiza `yt-dlp` si está instalado.
-5. `npm install` y `npm run build`.
-6. Ajusta permisos de `STATE_DIR`.
-7. Refresca la unidad `ghost-nexora-llm` (con o sin restart según entrenamiento).
-8. Reinicia **solo** bot y web si hay entrenamiento activo; si no, reinicia también el worker LLM.
-9. Imprime el estado de los tres servicios.
-
-La sesión principal, subbots y SQLite viven en `/var/lib/ghost-nexora-bot`, fuera del árbol Git. El archivo `.env` tampoco debe ser reemplazado por Git.
-
----
-
-## 8. Verificar la actualización
-
-```bash
-sudo systemctl status ghost-nexora-bot --no-pager
-sudo systemctl status ghost-nexora-web --no-pager
-sudo systemctl status ghost-nexora-llm --no-pager
-```
-
-```bash
-systemctl is-active ghost-nexora-bot ghost-nexora-web ghost-nexora-llm
-git -C /opt/ghost-nexora-bot rev-parse --short HEAD
-```
-
-Logs:
-
-```bash
-sudo journalctl -u ghost-nexora-bot -n 100 --no-pager
-sudo journalctl -u ghost-nexora-llm -n 100 --no-pager
-```
-
-En WhatsApp: `.ping`, `.menu`, y el comando de estado del Mini-LLM si lo usas.
-
----
-
-## 9. La actualización no debe pedir pairing de nuevo
-
-Una actualización normal **no debe volver a vincular WhatsApp** porque la sesión está en:
+Una actualización normal conserva:
 
 ```text
 /var/lib/ghost-nexora-bot/session
 ```
 
-Si aparece desconectado, revisa logs antes de repetir pairing.
+La migración extraordinaria descrita arriba afecta **solo las sesiones de los subbots**, no la cuenta principal.
+
+Si MainBot aparece desconectado, revisa logs antes de volver a vincularlo.
 
 ---
 
-## 10. Si cambia `.env.example`
-
-El updater conserva tu `.env`. Compara y agrega variables nuevas a mano:
-
-```bash
-cd /opt/ghost-nexora-bot
-diff -u .env.example .env || true
-```
-
----
-
-## 11. Rollback temporal a un commit anterior
+## Rollback temporal
 
 ```bash
 cd /opt/ghost-nexora-bot
 sudo git checkout <SHA-ANTERIOR>
 sudo npm install
 sudo npm run build
-sudo systemctl restart ghost-nexora-bot ghost-nexora-web
-# Solo reinicia LLM si NO hay entrenamiento activo
+sudo systemctl restart ghost-nexora-bot
 ```
+
+Reinicia Web y LLM únicamente si están habilitados y, para LLM, si no hay entrenamiento activo.
+
+> [!WARNING]
+> El rollback de código no restaura las credenciales viejas de subbots después de que la migración de reparación ya fue aplicada. Los usuarios deben completar nuevamente `.subbot pair` o `.subbot qr`.
 
 ---
 
-## 12. Resumen de comandos
+## Resumen
 
-### Actualizar estable
+Actualizar VPS:
 
 ```bash
 sudo /opt/ghost-nexora-bot/scripts/update.sh
 ```
 
-### Actualizar rama de mejoras (ejemplo)
+Logs:
 
 ```bash
-sudo env BRANCH=feature/apk-adult-improvements /opt/ghost-nexora-bot/scripts/update.sh
+sudo journalctl -u ghost-nexora-bot -f
 ```
 
-### Forzar no reiniciar LLM aunque no se detecte entrenamiento
+Estado de la migración subbot:
 
 ```bash
-sudo env SKIP_LLM_RESTART=1 INSTALL_DIR=/opt/ghost-nexora-bot \
-  bash /opt/ghost-nexora-bot/scripts/install-llm-worker-service.sh
-# y reiniciar solo bot/web a mano
+sudo cat /var/lib/ghost-nexora-bot/data/.migrations/subbot-session-reset-2026-09-v1.done
 ```
-
-### Logs LLM
-
-```bash
-sudo journalctl -u ghost-nexora-llm -f
-```
-
----
 
 [🚀 Volver a la guía de primera instalación](FIRST_INSTALL.md)
