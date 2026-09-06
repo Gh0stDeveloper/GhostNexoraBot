@@ -4,17 +4,23 @@ Ghost Nexora Bot incluye un reparador para el caso en que las credenciales local
 
 ## Comando recomendado
 
-Desde el repositorio:
+Después de instalar o actualizar Ghost Nexora Bot, el comando recomendado en VPS es:
 
 ```bash
-sudo npm run session:repair
+ghostnexorabot sessionrepair
 ```
 
-En una VPS instalada en la ruta estándar también puede ejecutarse:
+Si necesitas privilegios porque la instalación usa systemd:
 
 ```bash
-cd /opt/ghost-nexora-bot
-sudo npm run session:repair
+sudo ghostnexorabot sessionrepair
+```
+
+También se aceptan estos alias:
+
+```bash
+sudo ghostnexorabot session-repair
+sudo ghostnexorabot repair-session
 ```
 
 El método predeterminado es **pairing por código de número**.
@@ -22,28 +28,68 @@ El método predeterminado es **pairing por código de número**.
 ### Indicar el número desde el comando
 
 ```bash
-sudo npm run session:repair -- --phone 521XXXXXXXXXX
+sudo ghostnexorabot sessionrepair --phone 521XXXXXXXXXX
 ```
 
 ### Usar QR
 
 ```bash
-sudo npm run session:repair -- --method qr
+sudo ghostnexorabot sessionrepair --method qr
 ```
 
 ### Reparar pero no iniciar automáticamente el MainBot
 
 ```bash
-sudo npm run session:repair -- --no-start
+sudo ghostnexorabot sessionrepair --no-start
 ```
 
 ### Solo comprobar rutas/configuración
 
 ```bash
-sudo npm run session:repair -- --check
+sudo ghostnexorabot sessionrepair --check
 ```
 
 `--check` no detiene servicios, no mueve la sesión y no ejecuta pairing.
+
+---
+
+## CLI global `ghostnexorabot`
+
+El instalador/actualizador prepara automáticamente el CLI global durante `npm install`.
+
+En Linux/VPS queda disponible como:
+
+```text
+/usr/local/bin/ghostnexorabot
+```
+
+En Windows se prepara como:
+
+```text
+%LOCALAPPDATA%\GhostNexora\bin\ghostnexorabot.cmd
+```
+
+El mismo CLI también ofrece comandos operativos básicos:
+
+```bash
+ghostnexorabot status
+ghostnexorabot start
+ghostnexorabot stop
+ghostnexorabot restart
+ghostnexorabot logs
+ghostnexorabot pair
+ghostnexorabot update
+ghostnexorabot help
+```
+
+El comando de reparación sigue utilizando internamente `npm run session:repair`; este último se conserva como fallback para desarrollo o instalaciones donde el CLI global todavía no haya sido instalado.
+
+Fallback:
+
+```bash
+cd /opt/ghost-nexora-bot
+sudo npm run session:repair
+```
 
 ---
 
@@ -97,7 +143,7 @@ Si WhatsApp no permite vincular un dispositivo nuevo, el comando:
 Cuando WhatsApp vuelva a permitir la vinculación, basta ejecutar nuevamente:
 
 ```bash
-sudo npm run session:repair
+sudo ghostnexorabot sessionrepair
 ```
 
 No es necesario borrar manualmente carpetas ni modificar SQLite.
@@ -124,15 +170,22 @@ El backup contiene credenciales sensibles de WhatsApp. No debe subirse a GitHub,
 
 ## Después de reparar
 
-Comprueba systemd:
+Comprueba el estado con el mismo CLI:
 
 ```bash
-sudo systemctl status ghost-nexora-bot --no-pager -l
+ghostnexorabot status
 ```
 
 Logs:
 
 ```bash
+ghostnexorabot logs
+```
+
+También puedes usar systemd directamente:
+
+```bash
+sudo systemctl status ghost-nexora-bot --no-pager -l
 sudo journalctl -u ghost-nexora-bot -n 120 --no-pager
 ```
 
@@ -150,12 +203,19 @@ En WhatsApp prueba:
 
 ---
 
-## Wrapper VPS
+## Wrappers/fallbacks heredados
 
-También existe:
+Continúan disponibles:
 
 ```bash
 sudo bash /opt/ghost-nexora-bot/scripts/repair-session.sh
 ```
 
-El wrapper entra al directorio correcto y ejecuta el mismo `session:repair`.
+y:
+
+```bash
+cd /opt/ghost-nexora-bot
+sudo npm run session:repair
+```
+
+Ambos terminan ejecutando el mismo reparador de sesión principal.
