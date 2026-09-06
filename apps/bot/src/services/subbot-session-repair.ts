@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { config } from '../config.js'
-import { economy, type SubbotRecord } from './economy.js'
+import { economy } from './economy.js'
 import { logger } from '../utils/logger.js'
 
 const MIGRATION_ID = 'subbot-session-reset-2026-09-v1'
