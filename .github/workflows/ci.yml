@@ -45,6 +45,12 @@ jobs:
       - name: Atomic wallet multi-process smoke
         run: node scripts/wallet-atomic-smoke.mjs
 
+      - name: MainBot session repair dry-run
+        run: |
+          cp .env.example .env
+          npm run session:repair -- --check
+          rm -f .env
+
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
 
@@ -76,7 +82,7 @@ jobs:
         run: npx tsx apps/bot/src/llm/smoke.ts
 
       - name: Validate shell scripts
-        run: bash -n scripts/install.sh scripts/update.sh scripts/install-ollama.sh scripts/install-llm-worker-service.sh scripts/install-termux.sh scripts/update-termux.sh scripts/termux/ghostnexora
+        run: bash -n scripts/install.sh scripts/update.sh scripts/install-ollama.sh scripts/install-llm-worker-service.sh scripts/install-termux.sh scripts/update-termux.sh scripts/repair-session.sh scripts/termux/ghostnexora
 
   windows-installer:
     runs-on: windows-latest
@@ -84,6 +90,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Validate PowerShell syntax
         shell: pwsh
@@ -110,3 +121,10 @@ jobs:
       - name: Windows manager help smoke
         shell: powershell
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/ghostnexora.ps1 help
+
+      - name: MainBot session repair Windows dry-run
+        shell: powershell
+        run: |
+          Copy-Item .env.example .env
+          npm.cmd run session:repair -- --check
+          Remove-Item .env -Force
