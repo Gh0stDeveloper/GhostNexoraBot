@@ -10,6 +10,7 @@ import { subbotManager } from './core/subbots.js'
 import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
 import { economyV2 } from './services/economy-v2.js'
+import { installAtomicWalletBridge } from './services/wallet-atomic.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
 import { handleKickSticker } from './services/human-stickers.js'
@@ -29,6 +30,8 @@ import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
 import { startBrowserProxy } from './services/browser-proxy.js'
+
+installAtomicWalletBridge()
 
 const startedAt = new Date()
 let connected = false
@@ -162,7 +165,6 @@ async function routeMessage(
     return false
   })) return
 
-  // A moderation failure must never silence the whole command router.
   if (await moderateIncomingV2(socket, message).catch((error) => {
     logger.warn({ error, chatId }, 'moderation failed; continuing command route')
     return false
@@ -171,7 +173,6 @@ async function routeMessage(
   const handled = await router.handle(socket, message)
   if (handled) return
 
-  // Audio / nota de voz con modo libre: solo existe cuando Ollama está habilitado.
   if (
     config.ollamaEnabled &&
     chatId &&
@@ -330,9 +331,6 @@ async function connect() {
 
 await settings.init()
 
-// One-time repair for stale linked-but-silent subbot sessions. EconomyStore and
-// its historical wallet reconciliation have already initialized by this point,
-// so deleting the old subbot runtime directories cannot discard NXC balances.
 const subbotRepair = runSubbotSessionRepairMigration()
 if (subbotRepair.ran) {
   logger.warn({ reset: subbotRepair.reset }, 'subbot repair migration completed; affected users must pair again')
