@@ -4,6 +4,7 @@ import { CommandRouter } from './core/router.js'
 import { settings } from './core/settings.js'
 import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
+import { installSharedEntitlementBridge } from './services/entitlement-bridge.js'
 import { subbotCustomization } from './services/subbot-customization.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
@@ -25,6 +26,9 @@ let phone = process.env.NEXORA_SUBBOT_PHONE || null
 
 if (!Number.isInteger(subbotId) || subbotId <= 0) throw new Error('NEXORA_SUBBOT_ID inválido')
 if (!ownerJid) throw new Error('NEXORA_SUBBOT_OWNER_JID requerido')
+
+const sharedEntitlements = installSharedEntitlementBridge()
+if (sharedEntitlements) logger.info({ subbotId }, 'subbot using MainBot entitlement database')
 
 function sendParent(message: Record<string, unknown>) {
   try { process.send?.(message) } catch {}
@@ -63,8 +67,10 @@ let reconnectTimer: NodeJS.Timeout | null = null
 let reconnectAttempts = 0
 let stopping = false
 let latestQr: { value: string; createdAt: number } | null = null
+let connectionState = 'starting'
 
 function report(status: string, extra: Record<string, unknown> = {}) {
+  connectionState = status
   sendParent({ type: 'status', subbotId, status, ...extra })
 }
 
@@ -74,16 +80,24 @@ function scheduleReconnect() {
     report('expired')
     return
   }
+
+  // Never leave a linked subbot permanently dead. Backoff grows to 60 seconds
+  // and then keeps retrying for the lifetime of the subscription.
   reconnectAttempts += 1
-  if (reconnectAttempts > 12) {
-    report('offline', { reason: 'reconnect_limit' })
-    return
-  }
-  const delay = Math.min(30_000, reconnectAttempts <= 2 ? 1500 : 3000 * reconnectAttempts)
+  const exponent = Math.min(5, Math.max(0, reconnectAttempts - 1))
+  const base = Math.min(60_000, 1500 * (2 ** exponent))
+  const jitter = Math.floor(Math.random() * 1250)
+  const delay = base + jitter
+  report('offline', { reconnectAttempt: reconnectAttempts, retryInMs: delay })
+
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
-    void start().catch((error) => logger.error({ error, subbotId }, 'isolated subbot reconnect failed'))
+    void start().catch((error) => {
+      logger.error({ error, subbotId, reconnectAttempts }, 'isolated subbot reconnect failed')
+      scheduleReconnect()
+    })
   }, delay)
+  reconnectTimer.unref?.()
 }
 
 async function routeMessage(message: WAMessage) {
@@ -97,13 +111,22 @@ async function routeMessage(message: WAMessage) {
     observeGroupActivity(chatId, resolveStoredIdentity(getSender(message)), chatId.endsWith('@g.us'), text.startsWith(settings.prefix))
   }
 
-  if (await handleAntiViewOnce(socket, message).catch(() => false)) return
-  if (await handleKickSticker(socket, message).catch(() => false)) return
-  if (await moderateIncomingV2(socket, message)) return
+  if (await handleAntiViewOnce(socket, message).catch((error) => {
+    logger.warn({ error, subbotId, chatId }, 'anti-view-once failed; continuing message route')
+    return false
+  })) return
+  if (await handleKickSticker(socket, message).catch((error) => {
+    logger.warn({ error, subbotId, chatId }, 'kick-sticker handler failed; continuing message route')
+    return false
+  })) return
+  if (await moderateIncomingV2(socket, message).catch((error) => {
+    logger.warn({ error, subbotId, chatId }, 'subbot moderation failed; continuing message route')
+    return false
+  })) return
 
   const handled = await router.handle(socket, message)
   if (handled) return
-  if (chatId?.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
+  if (chatId.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
   await maybeHumanInteraction(socket, message).catch(() => false)
 }
 
@@ -113,6 +136,7 @@ async function start() {
     return
   }
   latestQr = null
+  connectionState = 'starting'
   const { createSocket } = await import('./core/session.js')
   const { socket: created } = await createSocket(config.sessionDir)
   socket = created
@@ -120,7 +144,7 @@ async function start() {
   socket.ev.on('messages.upsert', ({ messages, type }) => {
     if (type !== 'notify') return
     for (const message of messages) {
-      void withTimeout(routeMessage(message), 120_000, `isolated-subbot route #${subbotId}`)
+      void withTimeout(routeMessage(message), config.botMessageTimeoutMs, `isolated-subbot route #${subbotId}`)
         .catch((error) => logger.error({ error, subbotId }, 'isolated subbot message failed'))
     }
   })
@@ -234,6 +258,17 @@ process.on('message', (message: unknown) => {
     process.exit(0)
   }
 })
+
+const heartbeat = setInterval(() => {
+  sendParent({
+    type: 'heartbeat',
+    subbotId,
+    status: connectionState,
+    registered: Boolean(socket?.authState.creds.registered),
+    phone,
+  })
+}, 20_000)
+heartbeat.unref?.()
 
 process.on('disconnect', () => process.exit(0))
 process.on('SIGTERM', () => process.exit(0))
