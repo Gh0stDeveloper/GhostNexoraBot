@@ -1,5 +1,6 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { SettingsStore } from './core/settings.js'
+import type { LocaleCode, TranslationValues } from './i18n/index.js'
 
 /**
  * Project-local socket type.
@@ -36,6 +37,8 @@ export interface CommandContext {
   argText: string
   prefix: string
   settings: SettingsStore
+  locale: LocaleCode
+  t: (key: string, values?: TranslationValues) => string
   isOwner: boolean
   isBotStaff: boolean
   isGroup: boolean
