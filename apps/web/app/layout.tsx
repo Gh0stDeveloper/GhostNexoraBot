@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import PublicQuickStart from '../components/PublicQuickStart'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -22,7 +23,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        {children}
+        <PublicQuickStart />
+      </body>
     </html>
   )
 }
