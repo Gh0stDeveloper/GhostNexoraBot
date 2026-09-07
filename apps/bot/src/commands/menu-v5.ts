@@ -16,17 +16,6 @@ const sectionOrder = [
 
 type SectionId = typeof sectionOrder[number]
 
-const sectionTitles: Record<SectionId, string> = {
-  knowledge: '🧠 *IA · BÚSQUEDA · CONOCIMIENTO*', youtube: '🎵 *DESCARGAS · YOUTUBE Y AUDIO*',
-  downloads: '📲 *DESCARGAS · REDES Y ARCHIVOS*', general: '🌐 *GENERAL*', minecraft: '⛏️ *MINECRAFT · JAVA Y BEDROCK*', profile: '👤 *PERFIL*',
-  progress: '🏆 *PROGRESO · TEMPORADAS · MUNDO*', economy: '🪙 *ECONOMÍA Y FINANZAS*',
-  rpg: '📖 *RPG · CRAFTING · MASCOTAS*', games: '🎮 *JUEGOS Y APUESTAS NXC*', collection: '🌸 *GACHA Y COLECCIÓN*',
-  social: '💞 *SOCIAL · REACCIONES · REPUTACIÓN*', stickers: '🎨 *STICKERS Y HERRAMIENTAS*',
-  groups: '👥 *ADMINISTRACIÓN DE GRUPOS*', automation: '📊 *COMUNIDAD · AUTOMATIZACIÓN*', subbots: '🤖 *SUBBOTS*',
-  adult: '🔞 *DESCARGAS Y CONTENIDO 18+*', personalization: '🎛️ *PERSONALIZACIÓN*', support: '🎫 *SOPORTE*',
-  staff: '🛡️ *STAFF DEL BOT*', other: '🧩 *OTROS COMANDOS*',
-}
-
 const sets = {
   knowledge: new Set(['ai','aistatus','investiga','google','wiki','anime','manga','mangachapters','mangadl','deepseek','llm','minillm','localai']),
   youtube: new Set(['yts','ytmp3','ytmp4','play','playvideo','ytmusic','yt','ytformats','lyrics','soundcloud']),
@@ -68,12 +57,17 @@ function visible(ctx: CommandContext, command: BotCommand) {
   return true
 }
 
-function renderTokens(prefix: string, command: BotCommand, tokens: string[]) {
+function renderTokens(ctx: CommandContext, command: BotCommand, tokens: string[]) {
   const usage = command.usage?.trim()
-  const primary = usage ? `${prefix}${usage}` : `${prefix}${command.name}`
-  const aliases = tokens.filter((token) => token !== command.name.toLowerCase()).slice(0, 8).map((token) => `${prefix}${token}`)
+  const primary = usage ? `${ctx.prefix}${usage}` : `${ctx.prefix}${command.name}`
+  const aliases = tokens.filter((token) => token !== command.name.toLowerCase()).slice(0, 8).map((token) => `${ctx.prefix}${token}`)
   const suffix = aliases.length ? ` · ${aliases.join(' · ')}` : ''
-  const restriction = [command.groupOnly ? 'grupo' : '', command.adminOnly ? 'admin' : '', command.staffOnly ? 'staff' : '', command.ownerOnly ? 'owner' : ''].filter(Boolean).join('/')
+  const restriction = [
+    command.groupOnly ? ctx.t('menu.restriction.group') : '',
+    command.adminOnly ? ctx.t('menu.restriction.admin') : '',
+    command.staffOnly ? ctx.t('menu.restriction.staff') : '',
+    command.ownerOnly ? ctx.t('menu.restriction.owner') : '',
+  ].filter(Boolean).join('/')
   return `│ ${primary}${suffix}${restriction ? ` 〔${restriction}〕` : ''}`
 }
 
@@ -84,10 +78,10 @@ function formatUptime() {
 }
 
 async function roleLabel(ctx: CommandContext) {
-  if (ctx.isOwner) return 'Owner'
-  if (ctx.isBotStaff) return 'Staff global'
-  if (ctx.isGroup && await isGroupAdministrator(ctx).catch(() => false)) return 'Administrador de grupo'
-  return 'Usuario'
+  if (ctx.isOwner) return ctx.t('menu.role.owner')
+  if (ctx.isBotStaff) return ctx.t('menu.role.staff')
+  if (ctx.isGroup && await isGroupAdministrator(ctx).catch(() => false)) return ctx.t('menu.role.groupAdmin')
+  return ctx.t('menu.role.user')
 }
 
 async function currentBotAvatar(ctx: CommandContext) {
@@ -126,42 +120,48 @@ async function menu(ctx: CommandContext) {
   const visual = await currentVisualIdentity(ctx)
   const grouped = new Map<SectionId, string[]>()
   for (const id of sectionOrder) grouped.set(id, [])
-  for (const row of effectiveCommands()) if (visible(ctx, row.command)) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx.prefix, row.command, row.tokens))
+  for (const row of effectiveCommands()) if (visible(ctx, row.command)) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx, row.command, row.tokens))
 
   const sections = sectionOrder.flatMap((id) => {
     const rows = grouped.get(id) ?? []
     if (!rows.length) return []
-    rows.sort((a, b) => a.localeCompare(b, 'es'))
-    return [`╭─〔 ${sectionTitles[id]} 〕`, ...rows, '╰────────────────', '']
+    rows.sort((a, b) => a.localeCompare(b, ctx.locale))
+    return [`╭─〔 ${ctx.t(`menu.section.${id}`)} 〕`, ...rows, '╰────────────────', '']
   })
 
   const visualHeader = visual.style.id === 'default'
     ? '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮'
     : `╭━━━〔 ${visual.style.icon} *${visual.displayName.toUpperCase()}* 〕━━━╮`
 
+  const effectiveCount = effectiveCommands().filter((row) => visible(ctx, row.command)).length
   const body = [
     visualHeader,
-    visual.style.id !== 'default' ? `┃ 🌸 Waifu activa » *${visual.displayName}*` : '',
-    `┃ ⚙️ Instancia » *${instance}*`, `┃ 👤 Usuario » *${ctx.pushName}*`, `┃ ⌨️ Prefijo » *${ctx.prefix}*`,
-    `┃ ⏱️ Uptime » *${formatUptime()}*`, `┃ 🪙 Moneda » *${COIN_NAME} (${COIN_SYMBOL})*`,
-    `┃ 💼 Profesión » *${profession.emoji} ${profession.label}*`, `┃ 🏷️ Rol » *${role}*`,
-    `┃ 🔐 Privado » *${privateAccess ? 'HABILITADO' : 'NO HABILITADO'}*`, '╰━━━━━━━━━━━━━━━━━━━━╯', '',
+    visual.style.id !== 'default' ? ctx.t('menu.header.activeWaifu', { name: visual.displayName }) : '',
+    ctx.t('menu.header.instance', { value: instance }),
+    ctx.t('menu.header.user', { value: ctx.pushName }),
+    ctx.t('menu.header.prefix', { value: ctx.prefix }),
+    ctx.t('menu.header.uptime', { value: formatUptime() }),
+    ctx.t('menu.header.currency', { value: `${COIN_NAME} (${COIN_SYMBOL})` }),
+    ctx.t('menu.header.profession', { value: `${profession.emoji} ${profession.label}` }),
+    ctx.t('menu.header.role', { value: role }),
+    ctx.t('menu.header.private', { value: privateAccess ? ctx.t('menu.private.enabled') : ctx.t('menu.private.disabled') }),
+    '╰━━━━━━━━━━━━━━━━━━━━╯', '',
     ...sections,
-    `📚 *Total de comandos efectivos: ${effectiveCommands().filter((row) => visible(ctx, row.command)).length}*`,
+    ctx.t('menu.totalCommands', { count: effectiveCount }),
     '',
-    visual.style.id !== 'default' ? `${visual.style.icon} Apariencia: *${visual.displayName}*` : '',
+    visual.style.id !== 'default' ? ctx.t('menu.appearance', { icon: visual.style.icon, name: visual.displayName }) : '',
     '*Ghost Nexora Bot*',
   ].filter(Boolean).join('\n')
 
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: visual.style.id === 'default' ? '👻 Ghost Nexora Bot · MENÚ' : `${visual.style.icon} ${visual.displayName} · MENÚ`,
+    title: ctx.t('menu.title', { icon: visual.style.id === 'default' ? '👻' : visual.style.icon, name: visual.style.id === 'default' ? 'Ghost Nexora Bot' : visual.displayName }),
     body,
     imageUrl: visual.imageUrl,
     footer: 'Ghost Nexora Bot',
     buttons: [
-      { type: 'url', text: 'Ver canal', url: config.officialChannelUrl },
-      { type: 'reply', text: 'Perfil', id: `${ctx.prefix}profile` },
-      { type: 'reply', text: 'Tienda', id: `${ctx.prefix}shop` },
+      { type: 'url', text: ctx.t('menu.button.channel'), url: config.officialChannelUrl },
+      { type: 'reply', text: ctx.t('menu.button.profile'), id: `${ctx.prefix}profile` },
+      { type: 'reply', text: ctx.t('menu.button.shop'), id: `${ctx.prefix}shop` },
     ],
   })
 }
