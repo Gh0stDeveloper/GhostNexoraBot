@@ -1,10 +1,15 @@
 import { community } from '../services/community.js'
 import { settings } from '../core/settings.js'
-import { messages as esMessages, legacyReplacements as esLegacy } from './locales/es/default.js'
-import { messages as enMessages, legacyReplacements as enLegacy } from './locales/en/default.js'
+import { messages as esDefault, legacyReplacements as esLegacy } from './locales/es/default.js'
+import { messages as enDefault, legacyReplacements as enLegacy } from './locales/en/default.js'
+import { messages as esSystem } from './locales/es/system.js'
+import { messages as enSystem } from './locales/en/system.js'
 import { normalizeLocale, type LocaleCode, type TranslationValues } from './types.js'
 
-const catalogs = { es: esMessages, en: enMessages } as const
+const catalogs = {
+  es: { ...esDefault, ...esSystem },
+  en: { ...enDefault, ...enSystem },
+} as const
 const replacements = { es: esLegacy, en: enLegacy } as const
 
 function interpolate(template: string, values: TranslationValues = {}) {
