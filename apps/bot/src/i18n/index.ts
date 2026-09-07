@@ -36,13 +36,20 @@ export function resolveChatLocale(chatId?: string | null): LocaleCode {
   return groupLocale ? normalizeLocale(groupLocale, globalLocale) : globalLocale
 }
 
-export function localizeLegacyText(text: string, locale: LocaleCode) {
-  if (!text || locale === 'es') return text
+function applyLegacyReplacements(text: string, locale: LocaleCode) {
   let output = text
   for (const [source, target] of replacements[locale].slice().sort((a, b) => b[0].length - a[0].length)) {
     if (source && output.includes(source)) output = output.split(source).join(target)
   }
   return output
+}
+
+export function localizeLegacyText(text: string, locale: LocaleCode) {
+  if (!text || locale === 'es') return text
+  // No traducir bloques Markdown de código: pueden contener strings, comandos o
+  // ejemplos exactos que deben conservarse byte por byte.
+  const segments = text.split(/(```[\s\S]*?```)/g)
+  return segments.map((segment) => segment.startsWith('```') ? segment : applyLegacyReplacements(segment, locale)).join('')
 }
 
 export function translateForChat(chatId: string | null | undefined, key: string, values: TranslationValues = {}) {
