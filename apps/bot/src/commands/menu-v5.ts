@@ -7,6 +7,7 @@ import { effectiveCommands } from '../services/menu-registry.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
+import { localeName } from '../i18n/index.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 
 const sectionOrder = [
@@ -140,6 +141,7 @@ async function menu(ctx: CommandContext) {
     ctx.t('menu.header.instance', { value: instance }),
     ctx.t('menu.header.user', { value: ctx.pushName }),
     ctx.t('menu.header.prefix', { value: ctx.prefix }),
+    ctx.t('menu.header.language', { value: `${localeName(ctx.locale, ctx.locale)} (${ctx.locale})` }),
     ctx.t('menu.header.uptime', { value: formatUptime() }),
     ctx.t('menu.header.currency', { value: `${COIN_NAME} (${COIN_SYMBOL})` }),
     ctx.t('menu.header.profession', { value: `${profession.emoji} ${profession.label}` }),
