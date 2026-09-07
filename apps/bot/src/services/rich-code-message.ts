@@ -4,6 +4,7 @@
  */
 import { generateWAMessageFromContent, type WAMessage, type WASocket } from 'baileys'
 import { logger } from '../utils/logger.js'
+import { resolveChatLocale, translate } from '../i18n/index.js'
 
 export type CodeBlock = {
   highlightType: number
@@ -125,7 +126,7 @@ export async function sendRichAiCodeMessage(
   quoted?: WAMessage,
 ) {
   const userJid = socket.user?.id
-  if (!userJid) throw new Error('Sesión de WhatsApp no autenticada.')
+  if (!userJid) throw new Error(translate(resolveChatLocale(chatId), 'interactive.authRequired'))
 
   const parts = payload.fullText ? parseMarkdownParts(payload.fullText) : []
 
