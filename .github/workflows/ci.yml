@@ -64,6 +64,9 @@ jobs:
       - name: WhatsApp offline browser resilience smoke
         run: node scripts/nav-offline-smoke.mjs
 
+      - name: Arcade V16 offline games smoke
+        run: node scripts/arcade-v16-smoke.mjs
+
       - name: Canonical V15 download routing smoke
         run: node scripts/download-routing-v15-smoke.mjs
 
