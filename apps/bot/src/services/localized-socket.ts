@@ -1,6 +1,6 @@
 import type { WASocket } from 'baileys'
 import type { NexoraSocket } from '../types.js'
-import { localizeLegacyText, type LocaleCode } from '../i18n/index.js'
+import { localizeLegacyText, resolveChatLocale, type LocaleCode } from '../i18n/index.js'
 
 const LOCALIZED_KEYS = new Set([
   'text',
@@ -33,11 +33,13 @@ function localizeValue(value: unknown, locale: LocaleCode, key = ''): unknown {
   return output
 }
 
-export function createLocalizedSocket(socket: WASocket, locale: LocaleCode): NexoraSocket {
+export function createLocalizedSocket(socket: WASocket, fallbackLocale: LocaleCode): NexoraSocket {
   return new Proxy(socket as NexoraSocket, {
     get(target, property, receiver) {
       if (property === 'sendMessage') {
         return async (jid: string, content: unknown, options?: unknown) => {
+          let locale = fallbackLocale
+          try { locale = resolveChatLocale(jid) } catch { /* keep context fallback */ }
           return target.sendMessage(jid, localizeValue(content, locale) as never, options as never)
         }
       }
