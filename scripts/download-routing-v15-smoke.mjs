@@ -29,6 +29,9 @@ const snippet = `
     'liteapks','liteapksselect','liteapksdl',
     'aptoide','aptoideselect','aptoidedl',
     'happymod','happymodselect','happymoddl',
+    'fdroid','fdroidselect','fdroiddl',
+    'apktools','apktoolsselect','apktoolsdl',
+    'androforever','androforeverselect','androforeverdl',
     'tiktok','tiktokselect','tiktokdl',
     'xvideos','xnxx','pornhub','adultselect','adultdl'
   ]) expectOne(name);
@@ -47,6 +50,9 @@ const snippet = `
   expectRoute('aptdl', 'aptoidedl');
   expectRoute('hm', 'happymod');
   expectRoute('hmdl', 'happymoddl');
+  expectRoute('f-droid', 'fdroid');
+  expectRoute('apktoolsearch', 'apktools');
+  expectRoute('andro', 'androforever');
   expectRoute('xv', 'xvideos');
   expectRoute('xn', 'xnxx');
   expectRoute('ph', 'pornhub');
@@ -54,7 +60,7 @@ const snippet = `
   const result = {
     commandCount: commands.length,
     tiktok: byRoute.get('tt')?.name,
-    stores: ['uptodown','liteapks','aptoide','happymod'].map((key) => byRoute.get(key)?.name),
+    stores: ['uptodown','liteapks','aptoide','happymod','fdroid','apktools','androforever'].map((key) => byRoute.get(key)?.name),
     adult: ['xvideos','xnxx','pornhub'].map((key) => byRoute.get(key)?.name),
     globalApk: byRoute.has('apk'),
     globalApkDl: byRoute.has('apkdl'),
