@@ -10,6 +10,8 @@ import { getMessageText, getSender } from '../utils/message.js'
 import { preferredJid, registerIdentity } from './identity.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from './bot-styles-v13.js'
 import { logger } from '../utils/logger.js'
+import { resolveChatLocale, translate } from '../i18n/index.js'
+import { createLocalizedSocket } from './localized-socket.js'
 
 const db = economy.db
 const spamWindows = new Map<string, number[]>()
@@ -46,14 +48,17 @@ function resetWarnings(groupJid: string, userJid: string) {
 
 async function warnOrKick(socket: WASocket, message: WAMessage, kind: 'link' | 'spam', userJid: string) {
   const chatId = message.key.remoteJid!
+  const locale = resolveChatLocale(chatId)
+  const localizedSocket = createLocalizedSocket(socket, locale)
+  const t = (key: string, values: Record<string, string | number> = {}) => translate(locale, key, values)
   const count = warning(chatId, userJid, kind)
-  const label = kind === 'link' ? 'ANTI-LINK' : 'ANTI-SPAM'
-  const reason = kind === 'link' ? 'Los enlaces no están permitidos en este grupo.' : 'Estás enviando mensajes demasiado rápido.'
+  const label = t(kind === 'link' ? 'moderation.antiLink' : 'moderation.antiSpam')
+  const reason = t(kind === 'link' ? 'moderation.linkReason' : 'moderation.spamReason')
   await socket.sendMessage(chatId, { delete: message.key }).catch(() => undefined)
 
   if (count < 3) {
-    await socket.sendMessage(chatId, {
-      text: `╭━━〔 ⚠️ *${label}* 〕━━╮\n┃ @${userJid.split('@')[0]}\n┃ ${reason}\n┃ Advertencia: *${count}/3*\n┃ A la tercera advertencia serás expulsado/a.\n╰━━━━━━━━━━━━━━━━╯`,
+    await localizedSocket.sendMessage(chatId, {
+      text: t('moderation.warning', { label, user: userJid.split('@')[0] ?? '', reason, count }),
       mentions: [userJid],
     }).catch(() => undefined)
     return true
@@ -61,10 +66,10 @@ async function warnOrKick(socket: WASocket, message: WAMessage, kind: 'link' | '
 
   const removed = await socket.groupParticipantsUpdate(chatId, [userJid], 'remove').then(() => true).catch(() => false)
   if (removed) resetWarnings(chatId, userJid)
-  await socket.sendMessage(chatId, {
+  await localizedSocket.sendMessage(chatId, {
     text: removed
-      ? `╭━━〔 🚫 *${label} · 3/3* 〕━━╮\n┃ @${userJid.split('@')[0]} alcanzó 3 advertencias.\n┃ Acción: *EXPULSADO/A*.\n╰━━━━━━━━━━━━━━━━╯`
-      : `⚠️ @${userJid.split('@')[0]} alcanzó *3/3* advertencias, pero no pude expulsarlo. Verifica que el bot sea administrador.`,
+      ? t('moderation.kicked', { label, user: userJid.split('@')[0] ?? '' })
+      : t('moderation.kickFailed', { user: userJid.split('@')[0] ?? '' }),
     mentions: [userJid],
   }).catch(() => undefined)
   return true
@@ -140,8 +145,11 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
   if (!groupSettings.botEnabled) return
   if (update.action === 'add' && !policy.welcome) return
   if (update.action === 'remove' && !groupSettings.goodbyeEnabled) return
+  const locale = resolveChatLocale(update.id)
+  const localizedSocket = createLocalizedSocket(socket, locale)
+  const t = (key: string, values: Record<string, string | number> = {}) => translate(locale, key, values)
   const metadata = await socket.groupMetadata(update.id).catch(() => null)
-  const groupName = metadata?.subject ?? 'este grupo'
+  const groupName = metadata?.subject ?? t('moderation.groupFallback')
   const botName = instanceId ? subbotCustomization.get(instanceId).longName : settings.botDisplayName
   const goodbyeAsset = update.action === 'remove' ? await getBrandingAsset('goodbye', instanceId).catch(() => null) : null
   const visual = update.action === 'add' ? await currentVisualIdentity(socket) : null
@@ -151,45 +159,46 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
     if (!jid) continue
     registerIdentity(update.id, [participant.id, participant.phoneNumber, participant.lid].filter((value): value is string => Boolean(value)), jid)
     if (update.action === 'add') {
-      const waifuLine = visual && visual.style.id !== 'default' ? `🌸 Apariencia activa: *${visual.displayName}*` : ''
+      const waifuLine = visual && visual.style.id !== 'default' ? t('moderation.welcome.appearance', { name: visual.displayName }) : ''
       const defaultText = [
-        `🎉 *¡BIENVENIDO/A A ${groupName.toUpperCase()}!*`,
+        t('moderation.welcome.heading', { group: groupName.toUpperCase() }),
         '━━━━━━━━━━━━━━━━━━',
         `👤 @${jid.split('@')[0]}`,
-        `🤖 Soy *${botName}* y estoy aquí para juegos, economía NXC, descargas, IA, stickers y administración.`,
+        t('moderation.welcome.intro', { bot: botName }),
         waifuLine,
         '',
-        `📜 Revisa las reglas con *${settings.prefix}rules*`,
-        `👤 Crea/consulta tu perfil con *${settings.prefix}profile*`,
-        `📚 Descubre funciones con *${settings.prefix}menu*`,
+        t('moderation.welcome.rules', { prefix: settings.prefix }),
+        t('moderation.welcome.profile', { prefix: settings.prefix }),
+        t('moderation.welcome.menu', { prefix: settings.prefix }),
         '',
-        '✨ Participa, respeta a los demás y disfruta del grupo.',
+        t('moderation.welcome.end'),
       ].filter(Boolean).join('\n')
       const text = groupSettings.welcomeText ? renderTemplate(groupSettings.welcomeText, jid, groupName) : defaultText
-      const title = visual && visual.style.id !== 'default'
-        ? `${visual.style.icon} ${visual.displayName} · BIENVENIDA`
-        : `👻 ${botName} · BIENVENIDA`
-      await sendInteractiveCard(socket, update.id, { key: { remoteJid: update.id, id: `welcome-${Date.now()}` }, message: {} } as WAMessage, {
+      const title = t('moderation.welcome.title', {
+        icon: visual && visual.style.id !== 'default' ? visual.style.icon : '👻',
+        name: visual && visual.style.id !== 'default' ? visual.displayName : botName,
+      })
+      await sendInteractiveCard(localizedSocket, update.id, { key: { remoteJid: update.id, id: `welcome-${Date.now()}` }, message: {} } as WAMessage, {
         title,
         body: text,
         imageUrl: visual?.imageUrl,
         footer: `${groupName} · ${botName} · Ghost Nexora Bot`,
         buttons: [
-          { type: 'reply', text: '📜 Ver reglas', id: `${settings.prefix}rules` },
-          { type: 'reply', text: '👤 Mi perfil', id: `${settings.prefix}profile` },
-          { type: 'url', text: '📢 Canal', url: config.officialChannelUrl },
+          { type: 'reply', text: t('moderation.button.rules'), id: `${settings.prefix}rules` },
+          { type: 'reply', text: t('moderation.button.profile'), id: `${settings.prefix}profile` },
+          { type: 'url', text: t('moderation.button.channel'), url: config.officialChannelUrl },
         ],
       }).catch(async () => {
-        await socket.sendMessage(update.id, { text, mentions: [jid] }).catch(() => undefined)
+        await localizedSocket.sendMessage(update.id, { text, mentions: [jid] }).catch(() => undefined)
       })
       continue
     }
 
     const goodbye = groupSettings.goodbyeText
       ? renderTemplate(groupSettings.goodbyeText, jid, groupName)
-      : `🍂 *HASTA PRONTO*\n━━━━━━━━━━━━━━━━━━\n@${jid.split('@')[0]} salió de *${groupName}*.\n\n👻 *${botName}* agradece el tiempo compartido. Que te vaya bien en lo que sigue.`
-    if (goodbyeAsset?.kind === 'image') await socket.sendMessage(update.id, { image: { url: goodbyeAsset.path }, caption: goodbye, mentions: [jid] }).catch(() => undefined)
-    else if (goodbyeAsset?.kind === 'video') await socket.sendMessage(update.id, { video: { url: goodbyeAsset.path }, gifPlayback: true, caption: goodbye, mentions: [jid] }).catch(() => undefined)
-    else await socket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch((error) => logger.warn({ error, groupId: update.id }, 'goodbye failed'))
+      : t('moderation.goodbye', { user: jid.split('@')[0] ?? '', group: groupName, bot: botName })
+    if (goodbyeAsset?.kind === 'image') await localizedSocket.sendMessage(update.id, { image: { url: goodbyeAsset.path }, caption: goodbye, mentions: [jid] }).catch(() => undefined)
+    else if (goodbyeAsset?.kind === 'video') await localizedSocket.sendMessage(update.id, { video: { url: goodbyeAsset.path }, gifPlayback: true, caption: goodbye, mentions: [jid] }).catch(() => undefined)
+    else await localizedSocket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch((error) => logger.warn({ error, groupId: update.id }, 'goodbye failed'))
   }
 }
