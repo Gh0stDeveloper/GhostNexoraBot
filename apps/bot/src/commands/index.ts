@@ -89,10 +89,12 @@ import { botStylesV13Commands } from './bot-styles-v13.js'
 import { shopStyleV13Commands } from './shop-style-v13.js'
 import { minershopStyleV13Commands } from './minershop-style-v13.js'
 import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.js'
+import { appStoresV15Commands } from './app-stores-v15.js'
+import { tiktokV15Commands } from './tiktok-v15.js'
+import { adultDownloadV15Commands } from './adult-download-v15.js'
 
 // El stack local LLM depende de Ollama. Si OLLAMA_ENABLED=false, el router y el
 // menú no registran .llm/.minillm/.localai ni el control de conversación libre.
-// La IA HTTP (.ai/.investiga) se mantiene independiente porque no usa Ollama.
 const localLlmCommands: BotCommand[] = config.ollamaEnabled
   ? [...miniLlmCommands, ...autoChatCommands]
   : []
@@ -104,7 +106,35 @@ const registeredSubbotCommands = config.webEnabled
   ? subbotCommands
   : subbotCommands.filter((command) => command.name !== 'adminpanel')
 
-export const commands: BotCommand[] = [
+// V15 consolida los flujos que históricamente quedaron duplicados entre varias
+// generaciones. El router conserva la última coincidencia, por lo que permitir
+// duplicados hacía que un botón válido terminara en un handler con otro contrato.
+// Estas entradas se retiran del registro legado y se vuelven a registrar una sola
+// vez al final mediante los módulos canónicos V15.
+const replacedDownloadCommands = new Set([
+  'apk',
+  'apkdl',
+  'apkinfo',
+  'officialapkdl',
+  'officialapkinfo',
+  'officialapkpage',
+  'uptodown',
+  'liteapks',
+  'aptoide',
+  'happymod',
+  'happymoddl',
+  'happymodinfo',
+  'tiktok',
+  'tiktokdl',
+  'tiktokselect',
+  'xvideos',
+  'xnxx',
+  'pornhub',
+  'adultdl',
+  'adultselect',
+])
+
+const legacyCommands: BotCommand[] = [
   ...generalCommands,
   ...creditsCommands,
   ...aiCommands,
@@ -190,6 +220,13 @@ export const commands: BotCommand[] = [
   ...shopStyleV13Commands,
   ...minershopStyleV13Commands,
   ...adultRoleplayMessagesV14Commands,
+]
+
+export const commands: BotCommand[] = [
+  ...legacyCommands.filter((command) => !replacedDownloadCommands.has(command.name.toLowerCase())),
+  ...appStoresV15Commands,
+  ...tiktokV15Commands,
+  ...adultDownloadV15Commands,
 ]
 
 setMenuCommandProvider(() => commands)
