@@ -31,6 +31,57 @@ function isPhoneJid(value?: string | null) {
   return Boolean(value && /@s\.whatsapp\.net$/i.test(value))
 }
 
+function finiteInt(value: unknown) {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+}
+
+/**
+ * Mantiene wallet y bank en >= 0 sin alterar el patrimonio total cuando hay
+ * saldo suficiente entre ambas bolsas. Esto corrige estados heredados donde
+ * una fusión LID <-> PN descontó la bonificación duplicada directamente de
+ * wallet y dejó la cartera negativa.
+ */
+function normalizeEconomyBuckets(wallet: unknown, bank: unknown) {
+  let nextWallet = finiteInt(wallet)
+  let nextBank = finiteInt(bank)
+
+  if (nextWallet < 0) {
+    nextBank += nextWallet
+    nextWallet = 0
+  }
+
+  if (nextBank < 0) {
+    nextWallet += nextBank
+    nextBank = 0
+  }
+
+  return {
+    wallet: Math.max(0, nextWallet),
+    bank: Math.max(0, nextBank),
+  }
+}
+
+/** Repara una sola vez los saldos negativos que pudieron quedar de fusiones antiguas. */
+export function repairNegativeEconomyBalances() {
+  if (!tableExists('economy_users')) return 0
+  const rows = db.prepare(`
+    SELECT user_jid AS userJid, wallet, bank
+    FROM economy_users
+    WHERE wallet < 0 OR bank < 0
+  `).all() as Array<{ userJid: string; wallet: number; bank: number }>
+
+  let repaired = 0
+  for (const row of rows) {
+    const normalized = normalizeEconomyBuckets(row.wallet, row.bank)
+    if (normalized.wallet === finiteInt(row.wallet) && normalized.bank === finiteInt(row.bank)) continue
+    db.prepare('UPDATE economy_users SET wallet = ?, bank = ? WHERE user_jid = ?')
+      .run(normalized.wallet, normalized.bank, row.userJid)
+    repaired += 1
+  }
+  return repaired
+}
+
 export function preferredJid(values: Array<string | null | undefined>) {
   const clean = [...new Set(values.filter((value): value is string => Boolean(value)))]
   return clean.find(isPhoneJid) ?? clean.find((value) => !/@lid$/i.test(value)) ?? clean[0] ?? ''
@@ -52,14 +103,18 @@ function mergeEconomyUser(alias: string, canonical: string) {
   if (!canonicalRow) {
     db.prepare('UPDATE economy_users SET user_jid = ? WHERE user_jid = ?').run(canonical, alias)
   } else {
-    // Cada fila economy_users nació con 250 NXC. Al descubrir que alias LID y PN
-    // pertenecen a la misma persona debemos conservar una sola bonificación inicial,
-    // pero sí preservar todo movimiento real realizado desde ambas identidades.
-    const aliasWalletContribution = Number(aliasRow.wallet) - STARTING_WALLET
+    // Cada identidad nació con 250 NXC. Al unir LID y PN se conserva una sola
+    // bonificación inicial y todo el movimiento real. El descuento de la
+    // bonificación duplicada se distribuye entre wallet/bank para que ninguna
+    // de las dos bolsas termine con números negativos.
+    const merged = normalizeEconomyBuckets(
+      finiteInt(canonicalRow.wallet) + finiteInt(aliasRow.wallet) - STARTING_WALLET,
+      finiteInt(canonicalRow.bank) + finiteInt(aliasRow.bank),
+    )
     db.prepare(`UPDATE economy_users SET
-      wallet = wallet + ?, bank = bank + ?, last_work = MAX(last_work, ?), last_rob = MAX(last_rob, ?),
+      wallet = ?, bank = ?, last_work = MAX(last_work, ?), last_rob = MAX(last_rob, ?),
       created_at = MIN(created_at, ?)
-      WHERE user_jid = ?`).run(aliasWalletContribution, aliasRow.bank, aliasRow.lastWork, aliasRow.lastRob, aliasRow.createdAt, canonical)
+      WHERE user_jid = ?`).run(merged.wallet, merged.bank, aliasRow.lastWork, aliasRow.lastRob, aliasRow.createdAt, canonical)
     db.prepare('DELETE FROM economy_users WHERE user_jid = ?').run(alias)
   }
 
@@ -116,6 +171,10 @@ function mergeEconomyUser(alias: string, canonical: string) {
     else db.prepare('DELETE FROM waifu_rolls WHERE user_jid = ?').run(alias)
   }
 }
+
+// Ejecuta la reparación al cargar el servicio para instalaciones que ya
+// quedaron con wallet/bank negativos por la lógica antigua de identidad.
+repairNegativeEconomyBalances()
 
 export function registerIdentity(groupJid: string | undefined, aliases: string[], canonicalJid: string) {
   const canonical = canonicalJid || preferredJid(aliases)
