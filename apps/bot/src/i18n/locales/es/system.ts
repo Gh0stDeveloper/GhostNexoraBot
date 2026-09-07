@@ -14,6 +14,7 @@ export const messages: TranslationCatalog = {
   'browser.go': 'Ir',
   'browser.preloaded': 'Contenido precargado',
   'browser.pages': 'páginas',
+  'browser.image': 'Imagen',
   'browser.noVisibleContent': 'Sin contenido visible.',
   'browser.links': 'Enlaces',
   'browser.unavailableTitle': 'URL no precargada',
