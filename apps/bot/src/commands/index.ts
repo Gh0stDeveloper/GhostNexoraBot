@@ -90,6 +90,7 @@ import { shopStyleV13Commands } from './shop-style-v13.js'
 import { minershopStyleV13Commands } from './minershop-style-v13.js'
 import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.js'
 import { appStoresV15Commands } from './app-stores-v15.js'
+import { appStoresExtraV15Commands } from './app-stores-extra-v15.js'
 import { tiktokV15Commands } from './tiktok-v15.js'
 import { adultDownloadV15Commands } from './adult-download-v15.js'
 
@@ -225,6 +226,7 @@ const legacyCommands: BotCommand[] = [
 export const commands: BotCommand[] = [
   ...legacyCommands.filter((command) => !replacedDownloadCommands.has(command.name.toLowerCase())),
   ...appStoresV15Commands,
+  ...appStoresExtraV15Commands,
   ...tiktokV15Commands,
   ...adultDownloadV15Commands,
 ]
