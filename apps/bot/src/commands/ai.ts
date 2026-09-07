@@ -3,14 +3,18 @@ import { askAI, aiConfigured, getAIStatus } from '../services/ai.js'
 import { googleSearch, wikipediaSearch, type WebSearchResult } from '../services/web-search.js'
 import { sendAssistantReply } from '../services/assistant-reply.js'
 
-const SYSTEM_PROMPT = [
-  'Eres el asistente de Ghost Nexora Bot (Ghost Developer). Responde en el idioma del usuario; si no es claro, usa español.',
+const SYSTEM_PROMPT_BASE = [
+  'Eres el asistente de Ghost Nexora Bot (Ghost Developer).',
   'Sé preciso, útil y directo. No inventes hechos, enlaces ni fuentes.',
   'Cuando incluyas código, SIEMPRE usa bloques Markdown con lenguaje explícito: ```python, ```typescript, ```bash, ```json, etc.',
   'No uses bloques ``` sin lenguaje. Mantén el formato compatible con WhatsApp.',
   'No reveles razonamiento interno ni cadenas de pensamiento; entrega conclusiones y explicaciones útiles.',
   'Puedes firmar mentalmente como Ghost Nexora, pero no repitas el watermark en cada línea.',
 ].join(' ')
+
+function systemPrompt(ctx: CommandContext) {
+  return `${SYSTEM_PROMPT_BASE} ${ctx.t('assistant.languageInstruction')}`
+}
 
 function requirePrompt(value: string) {
   const text = value.trim()
@@ -90,7 +94,7 @@ export const aiCommands: BotCommand[] = [
       await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const result = await askAI(
         [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt(ctx) },
           { role: 'user', content: prompt },
         ],
         1800,
@@ -98,7 +102,7 @@ export const aiCommands: BotCommand[] = [
       await sendAssistantReply(ctx.socket, ctx.chatId, result.text, {
         userPrompt: prompt,
         model: result.model,
-        title: 'Ghost Nexora · Asistente',
+        title: ctx.t('assistant.title'),
         quoted: ctx.message,
       })
     },
@@ -136,11 +140,11 @@ export const aiCommands: BotCommand[] = [
         [
           {
             role: 'system',
-            content: `${SYSTEM_PROMPT} Para investigación, usa únicamente las fuentes entregadas como evidencia factual. Cita afirmaciones importantes con [1], [2], etc. Si las fuentes no permiten confirmar algo, dilo explícitamente. Termina con una sección "Fuentes" que conserve las URLs proporcionadas.`,
+            content: `${systemPrompt(ctx)} ${ctx.t('assistant.researchInstruction')}`,
           },
           {
             role: 'user',
-            content: `Tema de investigación: ${query}\n\nFuentes obtenidas:\n${sourceContext}\n\nElabora una síntesis clara, separa hechos de incertidumbres y cita las fuentes por número.`,
+            content: ctx.t('assistant.researchTopic', { query, sources: sourceContext }),
           },
         ],
         2300,
@@ -148,7 +152,7 @@ export const aiCommands: BotCommand[] = [
       await sendAssistantReply(ctx.socket, ctx.chatId, result.text, {
         userPrompt: query,
         model: result.model,
-        title: 'Ghost Nexora · Investigación',
+        title: ctx.t('assistant.researchTitle'),
         quoted: ctx.message,
       })
     },
