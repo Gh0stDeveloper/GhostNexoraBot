@@ -25,6 +25,7 @@ import { securityCommands } from './security.js'
 import { economyCommands } from './economy.js'
 import { advancedEconomyCommands } from './economy-advanced.js'
 import { gameCommands } from './games.js'
+import { doxSimulationCommands } from './dox-sim.js'
 import { pvpGameCommands } from './games-pvp.js'
 import { rpgCommands } from './rpg.js'
 import { waifuCommands } from './waifu.js'
@@ -158,6 +159,7 @@ const legacyCommands: BotCommand[] = [
   ...economyCommands,
   ...advancedEconomyCommands,
   ...gameCommands,
+  ...doxSimulationCommands,
   ...dinoCommands,
   ...snakeCommands,
   ...doomCommands,
