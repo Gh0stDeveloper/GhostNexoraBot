@@ -27,6 +27,11 @@ try {
   assert.equal(translate('en', 'menu.button.shop'), 'Shop')
   assert.equal(translate('es', 'menu.button.shop'), 'Tienda')
   assert.equal(localizeLegacyText('Resultados para: Minecraft · Descargar', 'en'), 'Results for: Minecraft · Download')
+  assert.equal(
+    localizeLegacyText('Descargar\n```js\nconst label = "Seleccionar"\n```\nSiguiente', 'en'),
+    'Download\n```js\nconst label = "Seleccionar"\n```\nNext',
+    'legacy translator must never mutate fenced code',
+  )
 
   await settings.setLanguage('en')
   assert.equal(resolveChatLocale('5210000000000@s.whatsapp.net'), 'en')
@@ -57,7 +62,7 @@ try {
   assert.ok(language.aliases?.includes('lang'))
   assert.ok(language.aliases?.includes('idioma'))
 
-  console.log('[i18n-smoke] OK · es/en catalogs · global persistence · per-group override/inherit')
+  console.log('[i18n-smoke] OK · es/en catalogs · global persistence · per-group override/inherit · fenced code protected')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
