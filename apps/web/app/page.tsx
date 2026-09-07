@@ -1,5 +1,4 @@
 import {
-  Activity,
   Bot,
   BrainCircuit,
   CheckCircle2,
@@ -13,7 +12,6 @@ import {
   LogIn,
   MessageSquareMore,
   MonitorSmartphone,
-  Server,
   ShieldCheck,
   Sparkles,
   UsersRound,
@@ -21,259 +19,339 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-export const dynamic = 'force-dynamic'
-
-type Health = {
-  ok: boolean
-  connected: boolean
-  uptimeSeconds?: number
-  prefix?: string
-}
-
-async function getHealth(): Promise<Health> {
-  try {
-    const response = await fetch(process.env.BOT_HEALTH_URL ?? 'http://127.0.0.1:3001/health', {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(1500),
-    })
-    return await response.json() as Health
-  } catch {
-    return { ok: false, connected: false }
-  }
-}
-
 type Feature = {
   icon: LucideIcon
   title: string
   text: string
   highlights: string[]
+  tone: 'cyan' | 'violet' | 'green'
 }
 
 const features: Feature[] = [
   {
     icon: BrainCircuit,
     title: 'Asistente e inteligencia artificial',
-    text: 'Conversación, consultas, investigación asistida y herramientas de conocimiento integradas directamente en WhatsApp.',
-    highlights: ['Conversación contextual', 'Investigación y búsqueda', 'Respuestas extensas y código'],
+    text: 'Conversación, consultas, investigación asistida y herramientas inteligentes integradas directamente en WhatsApp.',
+    highlights: ['Conversación contextual', 'Búsqueda e investigación', 'Respuestas extensas y código'],
+    tone: 'cyan',
   },
   {
     icon: Download,
-    title: 'Descargas y contenido multimedia',
-    text: 'Flujos guiados para encontrar, seleccionar y recibir contenido desde distintas plataformas sin salir del chat.',
+    title: 'Descargas y multimedia',
+    text: 'Flujos guiados para encontrar, seleccionar y recibir contenido desde diferentes plataformas sin abandonar el chat.',
     highlights: ['Video y audio', 'Redes sociales', 'Aplicaciones y archivos'],
+    tone: 'violet',
   },
   {
     icon: Coins,
     title: 'Economía Nexora',
-    text: 'Una economía persistente para comunidades con saldo, banco, profesiones, recompensas, préstamos, comercio y progresión.',
-    highlights: ['Nexora Coins', 'Banco y finanzas', 'Rankings y progresión'],
+    text: 'Una economía persistente para comunidades con cartera, banco, profesiones, comercio, recompensas y progresión.',
+    highlights: ['Nexora Coins', 'Banco y finanzas', 'Rankings y progreso'],
+    tone: 'green',
   },
   {
     icon: Gamepad2,
-    title: 'Juegos y entretenimiento',
-    text: 'Minijuegos, apuestas con moneda virtual, experiencias HTML interactivas, PvP, colección de waifus y sistemas RPG.',
-    highlights: ['Minijuegos', 'PvP y RPG', 'Gacha y colección'],
+    title: 'Arcade y entretenimiento',
+    text: 'Juegos clásicos, experiencias HTML interactivas, PvP, sistemas RPG, casino virtual y colecciones para jugar dentro de WhatsApp.',
+    highlights: ['Mario, Dino y Ninja', 'Pac-Man, Buscaminas y Piano Tiles', 'PvP, RPG y colección'],
+    tone: 'violet',
   },
   {
     icon: ShieldCheck,
     title: 'Comunidades y moderación',
-    text: 'Herramientas para administrar grupos, automatizar tareas repetitivas y mantener conversaciones más ordenadas.',
+    text: 'Herramientas para administrar grupos, automatizar tareas repetitivas y mantener una comunidad más organizada.',
     highlights: ['Anti-link y anti-spam', 'Bienvenida y despedida', 'Permisos y controles'],
+    tone: 'cyan',
   },
   {
     icon: WandSparkles,
     title: 'Personalización',
-    text: 'El bot puede adaptar su identidad visual, banners, stickers, estilos de waifu y presentación a cada instancia.',
-    highlights: ['Estilos visuales', 'Stickers', 'Identidad por subbot'],
-  },
-]
-
-const environments: Array<{ icon: LucideIcon; title: string; text: string }> = [
-  {
-    icon: MessageSquareMore,
-    title: 'WhatsApp Multi-Device',
-    text: 'Experiencia principal para chats privados, grupos, administradores y comunidades.',
-  },
-  {
-    icon: Server,
-    title: 'VPS / Linux',
-    text: 'Entorno recomendado para una instancia permanente, estable y disponible de forma continua.',
-  },
-  {
-    icon: MonitorSmartphone,
-    title: 'Android · Termux Lite',
-    text: 'Perfil ligero para ejecutar las funciones esenciales desde Android cuando no se necesita toda la infraestructura web.',
-  },
-  {
-    icon: LayoutDashboard,
-    title: 'Panel web privado',
-    text: 'Administración visual para el propietario y personal autorizado, separada del sitio público.',
+    text: 'Cada comunidad puede adaptar la presentación del bot con estilos visuales, banners, stickers, waifus y configuraciones propias.',
+    highlights: ['Estilos visuales', 'Stickers y perfiles', 'Identidad por instancia'],
+    tone: 'green',
   },
 ]
 
 const experience = [
-  ['Español e inglés', 'El idioma puede definirse globalmente y cada grupo puede utilizar su propio idioma.'],
-  ['MainBot y subbots', 'Las instancias secundarias mantienen su propia sesión y configuración sin mezclar su operación cotidiana.'],
-  ['Grupos y privado', 'Funciones diseñadas tanto para comunidades como para conversaciones directas autorizadas.'],
-  ['Interacción visual', 'Carruseles, botones, listas, tarjetas, imágenes y experiencias compatibles con WhatsApp.'],
+  ['Español e inglés', 'El idioma puede definirse de forma general y cada grupo puede mantener su propia preferencia.'],
+  ['MainBot y subbots', 'Una misma plataforma puede ofrecer experiencias independientes para diferentes comunidades.'],
+  ['Grupos y privado', 'Comandos y experiencias diseñados tanto para conversaciones directas como para grupos.'],
+  ['Interfaz enriquecida', 'Carruseles, botones, listas, tarjetas, imágenes y juegos interactivos dentro de WhatsApp.'],
 ]
 
-function uptime(seconds = 0) {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  return [days ? `${days}d` : '', hours ? `${hours}h` : '', `${minutes}m`].filter(Boolean).join(' ')
+const platforms: Array<{ icon: LucideIcon; title: string; text: string }> = [
+  {
+    icon: MessageSquareMore,
+    title: 'WhatsApp Multi-Device',
+    text: 'La experiencia principal del bot: comandos, respuestas, multimedia, juegos y herramientas sociales dentro del chat.',
+  },
+  {
+    icon: MonitorSmartphone,
+    title: 'Móvil y escritorio',
+    text: 'Pensado para utilizarse desde los clientes modernos de WhatsApp en teléfono y equipos vinculados, según las capacidades disponibles en cada versión.',
+  },
+  {
+    icon: UsersRound,
+    title: 'Grupos y comunidades',
+    text: 'Moderación, economía, perfiles, entretenimiento y configuraciones adaptables para espacios con muchos participantes.',
+  },
+  {
+    icon: LayoutDashboard,
+    title: 'Experiencia web complementaria',
+    text: 'El sitio público presenta el proyecto y el acceso administrativo permanece separado para usuarios autorizados.',
+  },
+]
+
+const arcade = [
+  'Mario',
+  'Dino Runner',
+  'Ninja',
+  'Snake',
+  'Doom',
+  'Space Dodge',
+  'Pac-Man',
+  'Buscaminas',
+  'Piano Tiles',
+  'Bounce',
+  'Halo Arena',
+]
+
+const toneClass: Record<Feature['tone'], string> = {
+  cyan: 'border-cyan-300/15 bg-cyan-300/[.055] text-cyan-200',
+  violet: 'border-violet-300/15 bg-violet-300/[.055] text-violet-200',
+  green: 'border-emerald-300/15 bg-emerald-300/[.055] text-emerald-200',
 }
 
-export default async function Home() {
-  const health = await getHealth()
-  const online = health.connected
-
+export default function Home() {
   return (
     <main className="relative overflow-hidden">
-      <header className="sticky top-0 z-20 border-b border-white/[.06] bg-[#05070a]/80 backdrop-blur-xl">
+      <div className="pointer-events-none fixed inset-0 -z-10 cyber-grid opacity-70" />
+      <div className="pointer-events-none fixed left-[-12rem] top-24 -z-10 size-[30rem] rounded-full bg-cyan-400/[.10] blur-[110px]" />
+      <div className="pointer-events-none fixed right-[-10rem] top-[32rem] -z-10 size-[32rem] rounded-full bg-violet-500/[.12] blur-[120px]" />
+
+      <header className="sticky top-0 z-30 border-b border-cyan-200/[.08] bg-[#030610]/80 backdrop-blur-2xl">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-4 md:px-8">
-          <a href="#inicio" className="flex items-center gap-3 font-semibold tracking-tight">
-            <span className="grid size-10 place-items-center rounded-xl border border-white/10 bg-white/[.05]">
-              <Bot className="size-5 text-[var(--accent)]" />
+          <a href="#inicio" className="group flex items-center gap-3">
+            <span className="relative grid size-10 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-300/[.08] shadow-[0_0_24px_rgba(34,211,238,.12)]">
+              <Bot className="size-5 text-cyan-200" />
+              <span className="absolute -right-1 -top-1 size-2.5 rounded-full border border-[#030610] bg-violet-400" />
             </span>
-            <span>Ghost Nexora Bot</span>
+            <span>
+              <span className="block text-sm font-bold tracking-[.08em] text-white">GHOST NEXORA</span>
+              <span className="block text-[10px] uppercase tracking-[.22em] text-cyan-200/60">WhatsApp Bot</span>
+            </span>
           </a>
-          <nav className="hidden items-center gap-6 text-sm text-zinc-400 md:flex">
-            <a className="transition hover:text-white" href="#funciones">Funciones</a>
-            <a className="transition hover:text-white" href="#experiencia">Experiencia</a>
-            <a className="transition hover:text-white" href="#plataformas">Plataformas</a>
-            <a className="transition hover:text-white" href="#seguridad">Seguridad</a>
+
+          <nav className="hidden items-center gap-6 text-sm text-slate-400 lg:flex">
+            <a className="transition hover:text-cyan-200" href="#perfil">Perfil</a>
+            <a className="transition hover:text-cyan-200" href="#funciones">Funciones</a>
+            <a className="transition hover:text-cyan-200" href="#arcade">Juegos</a>
+            <a className="transition hover:text-cyan-200" href="#experiencia">Experiencia</a>
+            <a className="transition hover:text-cyan-200" href="#plataformas">Plataformas</a>
           </nav>
-          <a href="/login" className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-black transition hover:brightness-110">
+
+          <a href="/login" className="cyber-button inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-[#021014]">
             <LogIn className="size-4" />
             Acceder
           </a>
         </div>
       </header>
 
-      <section id="inicio" className="mx-auto grid min-h-[76vh] w-full max-w-7xl items-center gap-12 px-5 py-16 md:px-8 lg:grid-cols-[1.08fr_.92fr] lg:py-24">
+      <section id="inicio" className="mx-auto grid min-h-[82vh] w-full max-w-7xl items-center gap-14 px-5 py-16 md:px-8 lg:grid-cols-[1.08fr_.92fr] lg:py-24">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.04] px-3 py-1.5 text-xs text-zinc-300">
-            <span className={`size-2 rounded-full ${online ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-            {online ? 'Servicio de WhatsApp conectado' : 'Servicio de WhatsApp sin conexión detectada'}
+          <div className="inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-300/[.07] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[.18em] text-violet-200">
+            <Sparkles className="size-3.5" />
+            Comunidad · IA · Multimedia · Arcade
           </div>
-          <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[1.01] tracking-[-.055em] sm:text-6xl lg:text-7xl">
-            Mucho más que un bot de <span className="text-[var(--accent)]">WhatsApp.</span>
+
+          <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[.98] tracking-[-.055em] text-white sm:text-6xl lg:text-7xl">
+            Tu comunidad de WhatsApp, llevada a otro <span className="cyber-text">nivel.</span>
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-400">
-            Ghost Nexora Bot es un ecosistema para comunidades: combina inteligencia artificial, descargas, economía, juegos, perfiles, colecciones, stickers, moderación, personalización y subbots en una sola experiencia.
+
+          <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-300/80">
+            Ghost Nexora Bot reúne inteligencia artificial, descargas, economía, juegos, perfiles, colecciones, moderación, personalización y subbots en una experiencia diseñada para hacer que un chat sea mucho más que mensajes.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a href="#funciones" className="rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black transition hover:brightness-110">Conocer el bot</a>
-            <a href="/login" className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.04] px-5 py-3 text-sm font-semibold transition hover:bg-white/[.07]">
-              <LockKeyhole className="size-4" />
-              Panel privado
+
+          <div className="mt-9 flex flex-wrap gap-3">
+            <a href="#funciones" className="cyber-button rounded-xl px-5 py-3 text-sm font-bold text-[#021014]">Explorar funciones</a>
+            <a href="#perfil" className="inline-flex items-center gap-2 rounded-xl border border-violet-300/20 bg-violet-300/[.06] px-5 py-3 text-sm font-semibold text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-300/[.10]">
+              <Bot className="size-4" />
+              Ver perfil
             </a>
           </div>
-          <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm text-zinc-500">
-            <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4 text-[var(--accent)]" />Español / English</span>
-            <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4 text-[var(--accent)]" />Grupos y privado</span>
-            <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4 text-[var(--accent)]" />MainBot + subbots</span>
+
+          <div className="mt-11 flex flex-wrap gap-x-7 gap-y-3 text-sm text-slate-400">
+            <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4 text-cyan-300" />Español / English</span>
+            <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4 text-violet-300" />Grupos y privado</span>
+            <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4 text-emerald-300" />MainBot + subbots</span>
           </div>
         </div>
 
-        <div className="relative">
-          <div className="absolute -inset-8 -z-10 rounded-full bg-emerald-400/[.06] blur-3xl" />
-          <div className="rounded-3xl border border-white/10 bg-[#080c10]/90 p-6 shadow-2xl shadow-black/40">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <span className="flex items-center gap-2 text-sm"><Activity className="size-4 text-[var(--accent)]" />Estado de Ghost Nexora</span>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${online ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/5 text-zinc-500'}`}>{online ? 'ONLINE' : 'OFFLINE'}</span>
-            </div>
-            <div className="mt-5 grid gap-3 text-sm">
-              <div className="flex items-center justify-between rounded-xl border border-white/[.07] bg-white/[.025] px-4 py-3"><span className="text-zinc-500">WhatsApp</span><span>{online ? 'Conectado' : 'Sin conexión'}</span></div>
-              <div className="flex items-center justify-between rounded-xl border border-white/[.07] bg-white/[.025] px-4 py-3"><span className="text-zinc-500">Idiomas</span><span>Español · English</span></div>
-              <div className="flex items-center justify-between rounded-xl border border-white/[.07] bg-white/[.025] px-4 py-3"><span className="text-zinc-500">Experiencia</span><span>Grupos · Privado · Subbots</span></div>
-              <div className="flex items-center justify-between rounded-xl border border-white/[.07] bg-white/[.025] px-4 py-3"><span className="text-zinc-500">Disponibilidad</span><span>{online ? uptime(health.uptimeSeconds) : '—'}</span></div>
-            </div>
-            <div className="mt-5 rounded-2xl border border-emerald-300/10 bg-emerald-400/[.04] p-4">
-              <p className="text-sm font-semibold">Diseñado para crecer con la comunidad</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">Cada módulo se integra dentro del mismo bot para evitar saltar entre múltiples servicios o interfaces.</p>
+        <div id="perfil" className="relative scroll-mt-28">
+          <div className="absolute inset-8 -z-10 rounded-full bg-cyan-300/[.12] blur-[80px]" />
+          <div className="cyber-card relative overflow-hidden rounded-[2rem] p-1">
+            <div className="relative overflow-hidden rounded-[1.75rem] bg-[#070b17]/95 p-6 sm:p-7">
+              <div className="absolute right-0 top-0 h-32 w-32 bg-[radial-gradient(circle_at_top_right,rgba(167,139,250,.25),transparent_68%)]" />
+              <div className="absolute bottom-0 left-0 h-32 w-32 bg-[radial-gradient(circle_at_bottom_left,rgba(34,211,238,.18),transparent_68%)]" />
+
+              <div className="relative flex items-start gap-5">
+                <div className="profile-core grid size-24 shrink-0 place-items-center rounded-[1.6rem] sm:size-28">
+                  <Bot className="size-12 text-white sm:size-14" strokeWidth={1.7} />
+                </div>
+                <div className="min-w-0 pt-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[.25em] text-cyan-300/70">Perfil oficial</p>
+                  <h2 className="mt-2 text-2xl font-black tracking-[-.035em] text-white sm:text-3xl">Ghost Nexora Bot</h2>
+                  <p className="mt-1 text-sm text-violet-200/75">by Ghost Developer / Nexora</p>
+                </div>
+              </div>
+
+              <p className="relative mt-6 text-sm leading-6 text-slate-300/80">
+                Un bot multipropósito pensado para convertir WhatsApp en un espacio más útil, interactivo y entretenido para usuarios, grupos y comunidades.
+              </p>
+
+              <div className="relative mt-6 grid grid-cols-2 gap-3">
+                {[
+                  ['Identidad', 'Personalizable'],
+                  ['Idiomas', 'ES · EN'],
+                  ['Experiencia', 'Social + Arcade'],
+                  ['Formato', 'Interactivo'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-white/[.08] bg-white/[.035] px-4 py-3">
+                    <p className="text-[10px] uppercase tracking-[.16em] text-slate-500">{label}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="relative mt-5 flex flex-wrap gap-2">
+                {['IA', 'Economía', 'Juegos', 'Descargas', 'Moderación', 'Waifus', 'Subbots'].map((tag, index) => (
+                  <span key={tag} className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${index % 3 === 0 ? 'border-cyan-300/15 bg-cyan-300/[.06] text-cyan-200' : index % 3 === 1 ? 'border-violet-300/15 bg-violet-300/[.06] text-violet-200' : 'border-emerald-300/15 bg-emerald-300/[.06] text-emerald-200'}`}>{tag}</span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="funciones" className="mx-auto w-full max-w-7xl px-5 py-20 md:px-8">
+      <section id="funciones" className="mx-auto w-full max-w-7xl scroll-mt-24 px-5 py-20 md:px-8">
         <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[.2em] text-[var(--accent)]">Funciones</p>
-          <h2 className="mt-3 text-4xl font-semibold tracking-[-.035em] md:text-5xl">Una sola experiencia, muchas herramientas.</h2>
-          <p className="mt-4 text-base leading-7 text-zinc-400">Las funciones están organizadas por categorías para que cada usuario encuentre rápidamente lo que necesita desde WhatsApp.</p>
+          <p className="section-kicker">Núcleo de funciones</p>
+          <h2 className="mt-3 text-4xl font-black tracking-[-.04em] text-white md:text-5xl">Todo vive dentro de una misma experiencia.</h2>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-400">Cada módulo está pensado para sentirse como parte del mismo bot, no como una colección de herramientas desconectadas.</p>
         </div>
-        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ icon: Icon, title, text, highlights }) => (
-            <article key={title} className="rounded-2xl border border-white/[.08] bg-white/[.025] p-6 transition hover:-translate-y-0.5 hover:border-white/[.14] hover:bg-white/[.035]">
-              <span className="grid size-11 place-items-center rounded-xl bg-emerald-400/[.08]"><Icon className="size-5 text-[var(--accent)]" /></span>
-              <h3 className="mt-5 text-lg font-semibold">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">{text}</p>
-              <ul className="mt-5 space-y-2 border-t border-white/[.07] pt-4 text-sm text-zinc-500">
-                {highlights.map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-emerald-400/80" />{item}</li>)}
+
+        <div className="mt-11 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {features.map(({ icon: Icon, title, text, highlights, tone }) => (
+            <article key={title} className="group cyber-panel rounded-2xl p-6 transition duration-300 hover:-translate-y-1">
+              <span className={`grid size-11 place-items-center rounded-xl border ${toneClass[tone]}`}><Icon className="size-5" /></span>
+              <h3 className="mt-5 text-lg font-bold text-white">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+              <ul className="mt-5 space-y-2 border-t border-white/[.07] pt-4 text-sm text-slate-400">
+                {highlights.map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-cyan-300" />{item}</li>)}
               </ul>
             </article>
           ))}
         </div>
       </section>
 
-      <section id="experiencia" className="mx-auto w-full max-w-7xl px-5 py-20 md:px-8">
-        <div className="grid gap-8 rounded-3xl border border-white/[.08] bg-[#090d12]/80 p-7 md:p-10 lg:grid-cols-[.85fr_1.15fr]">
-          <div>
-            <Languages className="size-7 text-[var(--accent)]" />
-            <h2 className="mt-5 text-3xl font-semibold tracking-[-.03em]">Se adapta a cada comunidad.</h2>
-            <p className="mt-4 leading-7 text-zinc-400">Una misma instalación puede comportarse de forma distinta según el chat, el grupo, la instancia y el idioma configurado.</p>
+      <section id="arcade" className="mx-auto w-full max-w-7xl scroll-mt-24 px-5 py-20 md:px-8">
+        <div className="cyber-card overflow-hidden rounded-3xl p-[1px]">
+          <div className="grid gap-9 rounded-[calc(1.5rem-1px)] bg-[#070b16]/95 p-7 md:p-10 lg:grid-cols-[.88fr_1.12fr] lg:items-center">
+            <div>
+              <span className="grid size-12 place-items-center rounded-2xl border border-violet-300/20 bg-violet-300/[.08]"><Gamepad2 className="size-6 text-violet-200" /></span>
+              <p className="mt-6 text-xs font-bold uppercase tracking-[.22em] text-violet-300">Ghost Nexora Arcade</p>
+              <h2 className="mt-3 text-3xl font-black tracking-[-.035em] text-white md:text-4xl">Juegos que se sienten dentro del chat.</h2>
+              <p className="mt-4 leading-7 text-slate-400">Desde clásicos rápidos hasta experiencias HTML interactivas con controles táctiles, puntuación y progresión.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {arcade.map((game, index) => (
+                <div key={game} className="rounded-xl border border-white/[.08] bg-white/[.035] px-4 py-4 transition hover:border-violet-300/25 hover:bg-violet-300/[.06]">
+                  <span className="text-[10px] font-bold text-violet-300/60">{String(index + 1).padStart(2, '0')}</span>
+                  <p className="mt-1 text-sm font-semibold text-slate-100">{game}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {experience.map(([title, text]) => (
-              <div key={title} className="rounded-2xl border border-white/[.07] bg-white/[.025] p-5">
-                <p className="font-semibold">{title}</p>
-                <p className="mt-2 text-sm leading-6 text-zinc-400">{text}</p>
-              </div>
+        </div>
+      </section>
+
+      <section id="experiencia" className="mx-auto w-full max-w-7xl scroll-mt-24 px-5 py-20 md:px-8">
+        <div className="grid gap-8 lg:grid-cols-[.72fr_1.28fr] lg:items-start">
+          <div className="lg:sticky lg:top-28">
+            <Languages className="size-8 text-cyan-300" />
+            <p className="mt-5 section-kicker">Experiencia adaptable</p>
+            <h2 className="mt-3 text-3xl font-black tracking-[-.035em] text-white md:text-4xl">Una personalidad para cada comunidad.</h2>
+            <p className="mt-4 leading-7 text-slate-400">El bot puede cambiar su forma de presentarse según el idioma, el grupo, el estilo visual y la instancia que lo utiliza.</p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {experience.map(([title, text], index) => (
+              <article key={title} className="cyber-panel rounded-2xl p-6">
+                <div className="flex items-center justify-between">
+                  <span className={`h-px w-12 ${index % 2 ? 'bg-violet-300' : 'bg-cyan-300'}`} />
+                  <span className="text-[10px] font-bold tracking-[.2em] text-slate-600">0{index + 1}</span>
+                </div>
+                <p className="mt-5 font-bold text-white">{title}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section id="plataformas" className="mx-auto w-full max-w-7xl px-5 py-20 md:px-8">
+      <section id="plataformas" className="mx-auto w-full max-w-7xl scroll-mt-24 px-5 py-20 md:px-8">
         <div className="flex max-w-3xl items-start gap-4">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-400/[.08]"><Globe2 className="size-5 text-blue-300" /></span>
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-cyan-300/15 bg-cyan-300/[.07]"><Globe2 className="size-5 text-cyan-200" /></span>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-300">Plataformas y entornos</p>
-            <h2 className="mt-2 text-4xl font-semibold tracking-[-.035em]">Pensado para diferentes formas de uso.</h2>
+            <p className="section-kicker">Dónde vive Nexora</p>
+            <h2 className="mt-2 text-4xl font-black tracking-[-.04em] text-white">Pensado alrededor de WhatsApp.</h2>
           </div>
         </div>
+
         <div className="mt-10 grid gap-4 md:grid-cols-2">
-          {environments.map(({ icon: Icon, title, text }) => (
-            <article key={title} className="flex gap-4 rounded-2xl border border-white/[.08] bg-white/[.02] p-6">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-white/[.08] bg-white/[.03]"><Icon className="size-5 text-zinc-300" /></span>
-              <div><h3 className="font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-zinc-400">{text}</p></div>
+          {platforms.map(({ icon: Icon, title, text }, index) => (
+            <article key={title} className="cyber-panel flex gap-4 rounded-2xl p-6">
+              <span className={`grid size-11 shrink-0 place-items-center rounded-xl border ${index % 2 ? 'border-violet-300/15 bg-violet-300/[.06] text-violet-200' : 'border-cyan-300/15 bg-cyan-300/[.06] text-cyan-200'}`}><Icon className="size-5" /></span>
+              <div><h3 className="font-bold text-white">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-400">{text}</p></div>
             </article>
           ))}
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-5 py-20 md:px-8">
-        <div className="grid gap-5 md:grid-cols-3">
-          <article className="rounded-2xl border border-white/[.08] bg-white/[.02] p-6"><UsersRound className="size-5 text-[var(--accent)]" /><h3 className="mt-4 font-semibold">Para comunidades</h3><p className="mt-2 text-sm leading-6 text-zinc-400">Perfiles, economía, juegos, rankings, automatización y herramientas sociales ayudan a mantener una comunidad activa.</p></article>
-          <article className="rounded-2xl border border-white/[.08] bg-white/[.02] p-6"><Bot className="size-5 text-[var(--accent)]" /><h3 className="mt-4 font-semibold">Subbots independientes</h3><p className="mt-2 text-sm leading-6 text-zinc-400">Una comunidad puede disponer de su propia instancia vinculada con identidad y sesión separadas.</p></article>
-          <article className="rounded-2xl border border-white/[.08] bg-white/[.02] p-6"><Sparkles className="size-5 text-[var(--accent)]" /><h3 className="mt-4 font-semibold">Evolución continua</h3><p className="mt-2 text-sm leading-6 text-zinc-400">Ghost Nexora Bot está diseñado como una plataforma modular para incorporar nuevas experiencias sin reemplazar el núcleo del bot.</p></article>
+        <div className="grid gap-4 md:grid-cols-3">
+          <article className="cyber-panel rounded-2xl p-6">
+            <UsersRound className="size-6 text-cyan-300" />
+            <h3 className="mt-5 text-lg font-bold text-white">Hecho para comunidades</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Perfiles, economía, juegos, rankings, moderación y herramientas sociales ayudan a mantener conversaciones activas.</p>
+          </article>
+          <article className="cyber-panel rounded-2xl p-6">
+            <Bot className="size-6 text-violet-300" />
+            <h3 className="mt-5 text-lg font-bold text-white">Subbots con identidad propia</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Diferentes comunidades pueden disfrutar una experiencia independiente sin perder el ecosistema de Ghost Nexora.</p>
+          </article>
+          <article className="cyber-panel rounded-2xl p-6">
+            <Sparkles className="size-6 text-emerald-300" />
+            <h3 className="mt-5 text-lg font-bold text-white">Evolución continua</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">La plataforma está preparada para incorporar nuevas funciones, estilos, juegos e idiomas conforme crece el proyecto.</p>
+          </article>
         </div>
       </section>
 
       <section id="seguridad" className="mx-auto w-full max-w-7xl px-5 py-20 md:px-8">
-        <div className="rounded-3xl border border-emerald-300/10 bg-emerald-400/[.04] p-8 md:p-10">
-          <div className="grid gap-8 lg:grid-cols-[1fr_.9fr] lg:items-center">
+        <div className="relative overflow-hidden rounded-3xl border border-emerald-300/15 bg-emerald-300/[.045] p-8 md:p-10">
+          <div className="absolute right-[-4rem] top-[-5rem] size-64 rounded-full bg-emerald-300/[.08] blur-3xl" />
+          <div className="relative grid gap-8 lg:grid-cols-[1fr_.9fr] lg:items-center">
             <div>
-              <ShieldCheck className="size-7 text-[var(--accent)]" />
-              <h2 className="mt-4 text-3xl font-semibold tracking-[-.03em]">Administración privada y separación de acceso.</h2>
-              <p className="mt-4 max-w-2xl leading-7 text-zinc-400">La información administrativa permanece detrás del acceso privado. El sitio público explica el producto y sus capacidades sin publicar código fuente, credenciales, rutas internas ni información sensible de operación.</p>
+              <ShieldCheck className="size-8 text-emerald-300" />
+              <p className="mt-5 text-xs font-bold uppercase tracking-[.22em] text-emerald-300">Privacidad de la plataforma</p>
+              <h2 className="mt-3 text-3xl font-black tracking-[-.035em] text-white">Una página pública debe hablar del bot, no de su infraestructura.</h2>
+              <p className="mt-4 max-w-2xl leading-7 text-slate-400">Esta portada se limita a presentar Ghost Nexora Bot y sus capacidades. La administración, información operativa y herramientas privadas permanecen fuera de la vista pública.</p>
             </div>
             <div className="space-y-3 text-sm">
-              {['Panel administrativo con acceso restringido', 'Permisos diferenciados para owner, staff y administradores', 'Configuración independiente por grupo e instancia', 'Herramientas de moderación y control de comunidad'].map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-xl border border-white/[.07] bg-black/10 px-4 py-3"><CheckCircle2 className="size-4 text-[var(--accent)]" /><span className="text-zinc-300">{item}</span></div>
+              {['Presentación pública enfocada en el producto', 'Administración separada mediante acceso privado', 'Configuraciones adaptables por comunidad', 'Sin exponer estado operativo ni información interna'].map((item) => (
+                <div key={item} className="flex items-center gap-3 rounded-xl border border-white/[.07] bg-black/10 px-4 py-3"><CheckCircle2 className="size-4 text-emerald-300" /><span className="text-slate-300">{item}</span></div>
               ))}
             </div>
           </div>
@@ -281,18 +359,24 @@ export default async function Home() {
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-5 pb-24 pt-10 md:px-8">
-        <div className="rounded-3xl border border-white/[.08] bg-[#090d12] p-8 text-center md:p-12">
-          <Bot className="mx-auto size-8 text-[var(--accent)]" />
-          <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-semibold tracking-[-.03em]">Ghost Nexora Bot concentra una comunidad completa dentro de WhatsApp.</h2>
-          <p className="mx-auto mt-4 max-w-2xl leading-7 text-zinc-400">El sitio público está dedicado a presentar el bot. Las herramientas de operación y administración continúan disponibles únicamente para usuarios autorizados.</p>
-          <a href="/login" className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black transition hover:brightness-110"><LogIn className="size-4" />Acceso administrativo</a>
+        <div className="cyber-card overflow-hidden rounded-3xl p-[1px]">
+          <div className="relative rounded-[calc(1.5rem-1px)] bg-[#070b16] p-8 text-center md:p-12">
+            <div className="absolute left-1/2 top-0 h-px w-2/3 -translate-x-1/2 bg-gradient-to-r from-transparent via-cyan-300 to-transparent" />
+            <div className="mx-auto grid size-14 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[.07]"><Bot className="size-7 text-cyan-200" /></div>
+            <h2 className="mx-auto mt-6 max-w-3xl text-3xl font-black tracking-[-.035em] text-white md:text-4xl">Ghost Nexora Bot es una plataforma social, útil y entretenida construida alrededor de WhatsApp.</h2>
+            <p className="mx-auto mt-5 max-w-2xl leading-7 text-slate-400">Descubre sus funciones desde esta página. La administración del proyecto continúa reservada para usuarios autorizados.</p>
+            <a href="/login" className="mt-8 inline-flex items-center gap-2 rounded-xl border border-violet-300/20 bg-violet-300/[.07] px-5 py-3 text-sm font-bold text-violet-100 transition hover:bg-violet-300/[.12]"><LockKeyhole className="size-4" />Acceso administrativo</a>
+          </div>
         </div>
       </section>
 
-      <footer className="border-t border-white/[.07]">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-zinc-500 md:flex-row md:items-center md:justify-between md:px-8">
-          <div><p className="font-medium text-zinc-300">Ghost Nexora Bot</p><p className="mt-1">Ghost Developer / Nexora</p></div>
-          <div className="flex flex-wrap items-center gap-5"><a href="#funciones" className="hover:text-zinc-300">Funciones</a><a href="#plataformas" className="hover:text-zinc-300">Plataformas</a><a href="/login" className="inline-flex items-center gap-2 text-zinc-300"><LogIn className="size-4" />Acceso privado</a></div>
+      <footer className="border-t border-cyan-200/[.08] bg-[#030610]/70">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 py-9 text-sm text-slate-500 md:flex-row md:items-center md:justify-between md:px-8">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl border border-cyan-300/15 bg-cyan-300/[.06]"><Bot className="size-5 text-cyan-200" /></span>
+            <div><p className="font-bold tracking-wide text-slate-200">Ghost Nexora Bot</p><p className="mt-1">Ghost Developer / Nexora</p></div>
+          </div>
+          <div className="flex flex-wrap items-center gap-5"><a href="#perfil" className="hover:text-cyan-200">Perfil</a><a href="#funciones" className="hover:text-cyan-200">Funciones</a><a href="#arcade" className="hover:text-cyan-200">Juegos</a><a href="#plataformas" className="hover:text-cyan-200">Plataformas</a><a href="/login" className="inline-flex items-center gap-2 text-slate-300"><LogIn className="size-4" />Acceso privado</a></div>
         </div>
       </footer>
     </main>
