@@ -10,6 +10,7 @@ export const messages: TranslationCatalog = {
   'assistant.languageInstruction': 'Responde siempre en español, incluso si el mensaje recibido está en otro idioma, salvo que el usuario esté pidiendo explícitamente una traducción.',
   'assistant.researchInstruction': 'Para investigación, usa únicamente las fuentes entregadas como evidencia factual. Cita afirmaciones importantes con [1], [2], etc. Si las fuentes no permiten confirmar algo, dilo explícitamente. Termina con una sección "Fuentes" que conserve las URLs proporcionadas.',
   'assistant.researchTopic': 'Tema de investigación: {query}\n\nFuentes obtenidas:\n{sources}\n\nElabora una síntesis clara, separa hechos de incertidumbres y cita las fuentes por número.',
+  'menu.header.language': '┃ 🌐 Idioma » *{value}*',
   'browser.go': 'Ir',
   'browser.preloaded': 'Contenido precargado',
   'browser.pages': 'páginas',
