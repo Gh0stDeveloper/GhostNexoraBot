@@ -27,6 +27,22 @@ type PackedPage = {
   title: string
 }
 
+type BrowserLabels = {
+  go: string
+  preloaded: string
+  pages: string
+  image: string
+  noVisibleContent: string
+  links: string
+  unavailableTitle: string
+  networkBlocked: string
+  unavailableBody: string
+  networkExplanation: string
+  copyCommand: string
+  commandCopied: string
+  initialPackFailed: string
+}
+
 function escapeAttr(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -74,7 +90,7 @@ function extractPageLinks(html: string) {
   return links.slice(0, MAX_LINK_CANDIDATES)
 }
 
-function compactPage(page: BrowserDocument, maxBytes: number): PackedPage {
+function compactPage(page: BrowserDocument, maxBytes: number, labels: BrowserLabels): PackedPage {
   if (Buffer.byteLength(page.html, 'utf8') <= maxBytes) return { ...page }
 
   const $ = load(page.html, { xmlMode: false })
@@ -83,8 +99,8 @@ function compactPage(page: BrowserDocument, maxBytes: number): PackedPage {
 
   $('img').each((_, node) => {
     const el = $(node)
-    const alt = (el.attr('alt') || el.attr('title') || 'Imagen').trim().slice(0, 100)
-    el.replaceWith(`<span class="gn-image-placeholder">[${escapeAttr(alt || 'Imagen')}]</span>`)
+    const alt = (el.attr('alt') || el.attr('title') || labels.image).trim().slice(0, 100)
+    el.replaceWith(`<span class="gn-image-placeholder">[${escapeAttr(alt || labels.image)}]</span>`)
   })
 
   $('*').each((_, node) => {
@@ -150,7 +166,7 @@ function compactPage(page: BrowserDocument, maxBytes: number): PackedPage {
     '<div class="gn-text">',
     `<h2>${escapeAttr(page.title || new URL(page.finalUrl).hostname)}</h2>`,
     ...textParts.slice(0, 70).map((text) => `<p>${escapeAttr(text)}</p>`),
-    links.length ? '<h3>Enlaces</h3>' : '',
+    links.length ? `<h3>${escapeAttr(labels.links)}</h3>` : '',
     ...links.map((item) => `<a href="#" data-gn-url="${escapeAttr(item.url)}">${escapeAttr(item.text)}</a>`),
     '</div>',
   ].join('')
@@ -169,9 +185,9 @@ function compactPage(page: BrowserDocument, maxBytes: number): PackedPage {
   return { ...page, html: lite, bytes: Buffer.byteLength(lite, 'utf8') }
 }
 
-async function buildOfflineBundle(startUrl: string, sid: string) {
+async function buildOfflineBundle(startUrl: string, sid: string, labels: BrowserLabels) {
   const initialRaw = await fetchBrowserDocument(startUrl, { sid })
-  const initial = compactPage(initialRaw, INITIAL_PAGE_BUDGET)
+  const initial = compactPage(initialRaw, INITIAL_PAGE_BUDGET, labels)
   const pages: PackedPage[] = [initial]
   const aliases = new Map<string, string>()
   aliases.set(startUrl, initial.finalUrl)
@@ -185,7 +201,7 @@ async function buildOfflineBundle(startUrl: string, sid: string) {
     if (aliases.has(url)) continue
     try {
       const raw = await fetchBrowserDocument(url, { sid })
-      const packed = compactPage(raw, EXTRA_PAGE_BUDGET)
+      const packed = compactPage(raw, EXTRA_PAGE_BUDGET, labels)
       const size = Buffer.byteLength(packed.html, 'utf8')
       if (totalBytes + size > MAX_STANZA_HTML_BYTES) continue
       totalBytes += size
@@ -209,16 +225,19 @@ function buildBrowserShell(options: {
   pages: PackedPage[]
   aliases: Record<string, string>
   initialUrl: string
+  locale: string
+  labels: BrowserLabels
 }) {
   const startUrl = escapeAttr(options.startUrl)
   const bundle = {
     pages: options.pages,
     aliases: options.aliases,
     initialUrl: options.initialUrl,
+    labels: options.labels,
   }
 
   return `<!doctype html>
-<html lang="es">
+<html lang="${escapeAttr(options.locale)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -229,15 +248,15 @@ function buildBrowserShell(options: {
 <body>
 <div class="browser">
 <div class="bar"><button id="back" class="icon" type="button">‹</button><button id="forward" class="icon" type="button">›</button><button id="reload" class="icon" type="button">↻</button><button id="home" class="icon" type="button">⌂</button></div>
-<div class="address"><input id="url" value="${startUrl}" autocomplete="off" spellcheck="false" inputmode="url"><button id="go" type="button">Ir</button></div>
-<div class="meta"><span id="title">Ghost Nexora Browser</span><span id="status">Contenido precargado</span></div>
+<div class="address"><input id="url" value="${startUrl}" autocomplete="off" spellcheck="false" inputmode="url"><button id="go" type="button">${escapeAttr(options.labels.go)}</button></div>
+<div class="meta"><span id="title">Ghost Nexora Browser</span><span id="status">${escapeAttr(options.labels.preloaded)}</span></div>
 <div id="viewport"></div>
 </div>
 <script id="gn-bundle" type="application/json">${safeJson(bundle)}</script>
 <script>
 (function(){
 'use strict';
-var data=JSON.parse(document.getElementById('gn-bundle').textContent||'{}');
+var data=JSON.parse(document.getElementById('gn-bundle').textContent||'{}'),labels=data.labels||{};
 var viewport=document.getElementById('viewport'),address=document.getElementById('url'),titleEl=document.getElementById('title'),statusEl=document.getElementById('status'),backBtn=document.getElementById('back'),forwardBtn=document.getElementById('forward');
 var shadow=viewport.attachShadow?viewport.attachShadow({mode:'open'}):null,pages=Object.create(null),aliases=data.aliases||{},stack=[],index=-1,current='';
 (data.pages||[]).forEach(function(page){pages[page.finalUrl]=page;});
@@ -246,16 +265,16 @@ function humanBytes(value){var n=Number(value||0);if(n<1024)return n+' B';if(n<1
 function normalize(value){var v=String(value||'').trim();if(!v)return'';if(/^https?:\/\//i.test(v))return v;if(/^[^\s/]+\.[A-Za-z]{2,}(?:\/\S*)?$/.test(v))return'https://'+v;return'https://html.duckduckgo.com/html/?q='+encodeURIComponent(v);}
 function resolveKey(url){if(pages[url])return url;if(aliases[url]&&pages[aliases[url]])return aliases[url];try{var u=new URL(url);u.hash='';var clean=u.toString();if(pages[clean])return clean;if(aliases[clean]&&pages[aliases[clean]])return aliases[clean];}catch(_){}return'';}
 function updateButtons(){backBtn.disabled=index<=0;forwardBtn.disabled=index<0||index>=stack.length-1;}
-function renderKey(key,push){var page=pages[key];if(!page)return false;current=key;address.value=page.finalUrl;titleEl.textContent=page.title||'Ghost Nexora Browser';statusEl.textContent='HTTP '+page.status+' · '+humanBytes(page.bytes)+' · '+(data.pages||[]).length+' páginas';setContent(page.html||'<div class="error">Sin contenido visible.</div>');if(push!==false){stack=stack.slice(0,index+1);stack.push(key);index=stack.length-1;}updateButtons();return true;}
+function renderKey(key,push){var page=pages[key];if(!page)return false;current=key;address.value=page.finalUrl;titleEl.textContent=page.title||'Ghost Nexora Browser';statusEl.textContent='HTTP '+page.status+' · '+humanBytes(page.bytes)+' · '+(data.pages||[]).length+' '+labels.pages;setContent(page.html||'<div class="error">'+labels.noVisibleContent+'</div>');if(push!==false){stack=stack.slice(0,index+1);stack.push(key);index=stack.length-1;}updateButtons();return true;}
 function copyText(text){var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(_){}ta.remove();}
-function showUnavailable(url){current='';address.value=url;titleEl.textContent='URL no precargada';statusEl.textContent='WhatsApp bloquea la red';var command='.view '+url;setContent('<div class="error"><strong>Esta URL no está precargada.</strong><br><br>WhatsApp bloquea las conexiones de red de esta tarjeta. Para abrirla, envía al bot:<code id="gn-command"></code><button class="copy" id="gn-copy" type="button">Copiar comando</button></div>');var cmd=root().querySelector?root().querySelector('#gn-command'):null;if(cmd)cmd.textContent=command;var btn=root().querySelector?root().querySelector('#gn-copy'):null;if(btn)btn.addEventListener('click',function(){copyText(command);statusEl.textContent='Comando copiado';});}
+function showUnavailable(url){current='';address.value=url;titleEl.textContent=labels.unavailableTitle;statusEl.textContent=labels.networkBlocked;var command='.view '+url;setContent('<div class="error"><strong>'+labels.unavailableBody+'</strong><br><br>'+labels.networkExplanation+'<code id="gn-command"></code><button class="copy" id="gn-copy" type="button">'+labels.copyCommand+'</button></div>');var cmd=root().querySelector?root().querySelector('#gn-command'):null;if(cmd)cmd.textContent=command;var btn=root().querySelector?root().querySelector('#gn-copy'):null;if(btn)btn.addEventListener('click',function(){copyText(command);statusEl.textContent=labels.commandCopied;});}
 function navigate(url,push){var target=normalize(url),key=resolveKey(target);if(key)renderKey(key,push);else showUnavailable(target);}
 function findAnchor(target){while(target&&target!==root()){if(target.nodeType===1&&target.matches&&target.matches('a[data-gn-url],a[data-gn-fragment]'))return target;target=target.parentNode;}return null;}
 function onClick(event){var a=findAnchor(event.target);if(!a)return;var fragment=a.getAttribute('data-gn-fragment');if(fragment){event.preventDefault();var node=root().getElementById?root().getElementById(fragment):null;if(node&&node.scrollIntoView)node.scrollIntoView({block:'start'});return;}var url=a.getAttribute('data-gn-url');if(url){event.preventDefault();navigate(url,true);}}
 function onSubmit(event){event.preventDefault();var form=event.target,action=form&&form.getAttribute?form.getAttribute('data-gn-action'):'';if(!action)return;var params=new URLSearchParams(new FormData(form)),next=new URL(action);params.forEach(function(value,key){next.searchParams.append(key,value);});navigate(next.toString(),true);}
 root().addEventListener('click',onClick);root().addEventListener('submit',onSubmit);
 document.getElementById('go').addEventListener('click',function(){navigate(address.value,true);});address.addEventListener('keydown',function(event){if(event.key==='Enter')navigate(address.value,true);});document.getElementById('reload').addEventListener('click',function(){if(current)renderKey(current,false);});document.getElementById('home').addEventListener('click',function(){navigate(data.initialUrl||'',true);});backBtn.addEventListener('click',function(){if(index<=0)return;index-=1;renderKey(stack[index],false);updateButtons();});forwardBtn.addEventListener('click',function(){if(index>=stack.length-1)return;index+=1;renderKey(stack[index],false);updateButtons();});
-var initialKey=resolveKey(data.initialUrl||'');if(initialKey)renderKey(initialKey,true);else setContent('<div class="error">No se pudo empacar la página inicial.</div>');
+var initialKey=resolveKey(data.initialUrl||'');if(initialKey)renderKey(initialKey,true);else setContent('<div class="error">'+labels.initialPackFailed+'</div>');
 })();
 </script>
 </body>
@@ -264,19 +283,34 @@ var initialKey=resolveKey(data.initialUrl||'');if(initialKey)renderKey(initialKe
 
 async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
   const sid = randomBytes(16).toString('hex')
+  const labels: BrowserLabels = {
+    go: ctx.t('browser.go'),
+    preloaded: ctx.t('browser.preloaded'),
+    pages: ctx.t('browser.pages'),
+    image: ctx.t('browser.image'),
+    noVisibleContent: ctx.t('browser.noVisibleContent'),
+    links: ctx.t('browser.links'),
+    unavailableTitle: ctx.t('browser.unavailableTitle'),
+    networkBlocked: ctx.t('browser.networkBlocked'),
+    unavailableBody: ctx.t('browser.unavailableBody'),
+    networkExplanation: ctx.t('browser.networkExplanation'),
+    copyCommand: ctx.t('browser.copyCommand'),
+    commandCopied: ctx.t('browser.commandCopied'),
+    initialPackFailed: ctx.t('browser.initialPackFailed'),
+  }
   let bundle: Awaited<ReturnType<typeof buildOfflineBundle>>
 
   try {
-    bundle = await buildOfflineBundle(startUrl, sid)
+    bundle = await buildOfflineBundle(startUrl, sid, labels)
   } catch (error) {
     logger.warn({ error, startUrl }, 'offline browser bundle fetch failed')
     const message = error instanceof Error ? error.message : String(error)
-    await ctx.reply(`No se pudo cargar la página: ${message.slice(0, 240)}`)
+    await ctx.reply(ctx.t('browser.loadFailed', { error: message.slice(0, 240) }))
     return
   }
 
   const msgId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
-  const html = buildBrowserShell({ startUrl, pages: bundle.pages, aliases: bundle.aliases, initialUrl: bundle.initialUrl })
+  const html = buildBrowserShell({ startUrl, pages: bundle.pages, aliases: bundle.aliases, initialUrl: bundle.initialUrl, locale: ctx.locale, labels })
   const payload = {
     response_id: msgId,
     sections: [{ view_model: { primitive: { __typename: 'GenAIaeacdsnwHtmlPrimitive', payload: html, trusted_sources: [] }, __typename: 'GenAISingleLayoutViewModel' } }],
@@ -288,7 +322,7 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
       message: {
         richResponseMessage: {
           messageType: 1,
-          submessages: [{ messageType: 2, messageText: 'Navegador Ghost Nexora' }],
+          submessages: [{ messageType: 2, messageText: ctx.t('browser.messageTitle') }],
           unifiedResponse: { data: Buffer.from(JSON.stringify(payload)).toString('base64') },
           contextInfo: { mentionedJid: [], groupMentions: [], statusAttributions: [], forwardingScore: 1, isForwarded: true, forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' }, forwardOrigin: 4 },
         },
@@ -297,7 +331,7 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
   }
 
   const userJid = ctx.socket.user?.id ?? ctx.sender
-  if (!userJid) throw new Error('No se pudo determinar el JID del bot.')
+  if (!userJid) throw new Error(ctx.t('browser.botJidFailed'))
   const msg = generateWAMessageFromContent(ctx.chatId, slots as never, { userJid })
   await ctx.socket.relayMessage(ctx.chatId, msg.message!, {})
 }
@@ -316,7 +350,7 @@ export const navegadorCommands: BotCommand[] = [
       } catch (error) {
         logger.warn({ error }, 'offline browser send failed')
         const message = error instanceof Error ? error.message : String(error)
-        await ctx.reply(`No se pudo iniciar el navegador: ${message.slice(0, 240)}`)
+        await ctx.reply(ctx.t('browser.startFailed', { error: message.slice(0, 240) }))
       }
     },
   },
