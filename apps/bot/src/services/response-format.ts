@@ -49,7 +49,7 @@ export function formatAssistantResponse(userText: string, answer: string) {
   return wrapBareCode(text, inferLanguage(userText))
 }
 
-/** Respuesta determinista para preguntas de identidad del bot. */
+/** Respuesta determinista para preguntas de identidad del bot en ES/EN. */
 export function asksBotName(text: string) {
   const normalized = text
     .toLocaleLowerCase('es-MX')
@@ -57,5 +57,5 @@ export function asksBotName(text: string) {
     .replace(/[¿?¡!.,;:]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return /\b(c[oó]mo te llamas|cu[aá]l es tu nombre|cual es tu nombre|dime tu nombre|qui[eé]n eres|quien eres|nombre del bot|nombre eres|eres ghost|eres nexora)\b/i.test(normalized)
+  return /\b(c[oó]mo te llamas|cu[aá]l es tu nombre|cual es tu nombre|dime tu nombre|qui[eé]n eres|quien eres|nombre del bot|nombre eres|eres ghost|eres nexora|what(?:'s| is) your name|who are you|tell me your name|bot name|are you ghost|are you nexora)\b/i.test(normalized)
 }
