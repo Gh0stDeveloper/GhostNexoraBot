@@ -1,4 +1,5 @@
 import { economy } from './economy.js'
+import { isSupportedLocale, type LocaleCode } from '../i18n/types.js'
 
 const db = economy.db
 const now = () => Date.now()
@@ -20,6 +21,7 @@ export type GroupCommunitySettings = {
   goodbyeEnabled: boolean
   welcomeText: string | null
   goodbyeText: string | null
+  language: LocaleCode | null
 }
 
 export type RelationshipKind = 'marriage' | 'lover'
@@ -81,6 +83,7 @@ db.exec(`
     goodbye_enabled INTEGER NOT NULL DEFAULT 0,
     welcome_text TEXT,
     goodbye_text TEXT,
+    language TEXT,
     updated_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS community_suggestions (
@@ -92,6 +95,12 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 `)
+
+// Migración no destructiva para instalaciones anteriores al sistema multilenguaje.
+const communityGroupColumns = db.prepare('PRAGMA table_info(community_group_settings)').all() as Array<{ name?: string }>
+if (!communityGroupColumns.some((column) => column.name === 'language')) {
+  db.exec('ALTER TABLE community_group_settings ADD COLUMN language TEXT')
+}
 
 function ensureProfile(userJid: string) {
   db.prepare(`INSERT OR IGNORE INTO community_profiles(user_jid, created_at, updated_at) VALUES(?, ?, ?)`)
@@ -206,13 +215,16 @@ export const community = {
 
   getGroupSettings(groupJid: string): GroupCommunitySettings {
     const row = db.prepare(`SELECT bot_enabled AS botEnabled, goodbye_enabled AS goodbyeEnabled,
-      welcome_text AS welcomeText, goodbye_text AS goodbyeText FROM community_group_settings WHERE group_jid = ?`)
+      welcome_text AS welcomeText, goodbye_text AS goodbyeText, language
+      FROM community_group_settings WHERE group_jid = ?`)
       .get(groupJid) as Record<string, unknown> | undefined
+    const rawLanguage = row?.language ? String(row.language).toLowerCase() : null
     return {
       botEnabled: row ? Boolean(row.botEnabled) : true,
       goodbyeEnabled: row ? Boolean(row.goodbyeEnabled) : false,
       welcomeText: row?.welcomeText ? String(row.welcomeText) : null,
       goodbyeText: row?.goodbyeText ? String(row.goodbyeText) : null,
+      language: isSupportedLocale(rawLanguage) ? rawLanguage : null,
     }
   },
 
@@ -225,6 +237,13 @@ export const community = {
   setGoodbyeEnabled(groupJid: string, enabled: boolean) {
     db.prepare('INSERT OR IGNORE INTO community_group_settings(group_jid, updated_at) VALUES(?, ?)').run(groupJid, now())
     db.prepare('UPDATE community_group_settings SET goodbye_enabled = ?, updated_at = ? WHERE group_jid = ?').run(enabled ? 1 : 0, now(), groupJid)
+    return this.getGroupSettings(groupJid)
+  },
+
+  setGroupLanguage(groupJid: string, language: LocaleCode | null) {
+    db.prepare('INSERT OR IGNORE INTO community_group_settings(group_jid, updated_at) VALUES(?, ?)').run(groupJid, now())
+    const value = language && isSupportedLocale(language) ? language : null
+    db.prepare('UPDATE community_group_settings SET language = ?, updated_at = ? WHERE group_jid = ?').run(value, now(), groupJid)
     return this.getGroupSettings(groupJid)
   },
 
