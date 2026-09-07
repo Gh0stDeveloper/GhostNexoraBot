@@ -1,4 +1,8 @@
+import { existsSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import type { BotCommand } from '../types.js'
+import { config } from '../config.js'
 import { runSpeedTest, systemSnapshot } from '../services/system.js'
 
 export const systemCommands: BotCommand[] = [
@@ -43,6 +47,37 @@ export const systemCommands: BotCommand[] = [
         '',
         'Resultado orientativo: depende de la ruta entre la VPS y el nodo de prueba.',
       ].join('\n'))
+    },
+  },
+  {
+    name: 'actualizar', aliases: ['updatebot', 'botupdate'], category: 'owner', ownerOnly: true,
+    description: 'Solicita una actualización segura del MainBot ejecutando el update.sh oficial de la VPS.',
+    usage: 'actualizar',
+    async handler(ctx) {
+      if (ctx.instanceId) throw new Error('Este comando solo puede ejecutarse desde el MainBot.')
+      if (process.platform !== 'linux' || config.isTermuxLite) throw new Error('La actualización remota solo está disponible en la instalación VPS/Linux con systemd.')
+      if (!existsSync('/etc/systemd/system/ghost-nexora-update.path')) {
+        throw new Error('El trigger seguro de actualización todavía no está instalado. Ejecuta una vez `sudo ghostnexorabot update` en la VPS para habilitarlo.')
+      }
+
+      await mkdir(config.dataDir, { recursive: true })
+      const requestFile = path.join(config.dataDir, 'update-request')
+
+      // Respondemos antes de crear la señal porque update.sh reiniciará el proceso
+      // y la conexión puede cerrarse durante la propia actualización.
+      await ctx.reply([
+        '♻️ *ACTUALIZACIÓN SOLICITADA*',
+        '━━━━━━━━━━━━━━',
+        'Ghost Nexora Bot ejecutará el actualizador oficial de la VPS.',
+        'Se actualizarán código, dependencias y build, y el MainBot se reiniciará al finalizar.',
+        '',
+        'El comando no acepta parámetros ni ejecuta instrucciones arbitrarias.',
+      ].join('\n'))
+
+      await writeFile(requestFile, JSON.stringify({
+        requestedAt: new Date().toISOString(),
+        requestedBy: ctx.sender,
+      }), { encoding: 'utf8', mode: 0o600 })
     },
   },
 ]
