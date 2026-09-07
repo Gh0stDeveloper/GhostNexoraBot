@@ -7,6 +7,8 @@ import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
 import { settings } from './settings.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
+import { createLocalizedSocket } from '../services/localized-socket.js'
+import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -23,8 +25,8 @@ function canonicalUserJid(candidates: string[], fallback: string) {
   return normalizeJid(pn ?? fallback)
 }
 
-const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance'])
-const disabledGroupBootstrapCommands = new Set(['menu', 'bot'])
+const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance', 'language'])
+const disabledGroupBootstrapCommands = new Set(['menu', 'bot', 'language'])
 const youtubeDownloadCommands = new Set(['play', 'playvideo', 'ytformats', 'ytmp3', 'ytmp4'])
 const youtubeSafeClientErrors = [
   /^Debes indicar\b/i,
@@ -35,11 +37,11 @@ const youtubeSafeClientErrors = [
   /^El archivo supera el límite configurado\b/i,
 ]
 
-function publicCommandError(commandName: string, error: unknown) {
-  const message = error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
+function publicCommandError(commandName: string, error: unknown, locale: LocaleCode) {
+  const message = error instanceof Error ? error.message : translate(locale, 'router.unexpectedError')
   if (!youtubeDownloadCommands.has(commandName)) return message
   if (youtubeSafeClientErrors.some((pattern) => pattern.test(message))) return message
-  return 'Error interno en el servidor, método no disponible por el momento.'
+  return translate(locale, 'router.internalUnavailable')
 }
 
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
@@ -72,10 +74,13 @@ export class CommandRouter {
     const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && normalizeJid(this.options.instanceOwnerJid) === sender
     const isGroup = chatId.endsWith('@g.us')
     const prefix = settings.prefix
+    const locale = resolveChatLocale(chatId)
+    const localizedSocket = createLocalizedSocket(socket, locale)
+    const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
     const hasPrivateAccess = isGroup || isBotStaff || isSubbotOwner || Boolean(economy.hasEntitlement(sender, 'private_access'))
 
-    const reply = (replyText: string) => socket.sendMessage(chatId, { text: replyText }, { quoted: message })
-    const react = (emoji: string) => socket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
+    const reply = (replyText: string) => localizedSocket.sendMessage(chatId, { text: replyText }, { quoted: message })
+    const react = (emoji: string) => localizedSocket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
 
     let senderIsGroupAdmin = false
     if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner) {
@@ -91,24 +96,27 @@ export class CommandRouter {
 
     if (!text.startsWith(prefix)) {
       const response = text.toLowerCase()
-      if (response !== 'aceptar' && response !== 'rechazar') return false
+      const relationshipResponse = new Map<string, boolean>([
+        ['aceptar', true], ['accept', true], ['rechazar', false], ['reject', false],
+      ])
+      if (!relationshipResponse.has(response)) return false
       if (!hasPrivateAccess) {
-        await reply(`🔐 Esta acción también requiere acceso privado. Consulta *${prefix}shop* y compra *private1d*, *private7d* o *private30d*.`)
+        await reply(t('router.privateAction', { prefix }))
         await react('🔒').catch(() => undefined)
         return true
       }
       try {
-        const result = community.resolvePendingRelationship(sender, response === 'aceptar')
+        const result = community.resolvePendingRelationship(sender, relationshipResponse.get(response) === true)
         if (!result) return false
-        const kind = result.kind === 'marriage' ? 'matrimonio' : 'relación de amantes'
+        const kind = result.kind === 'marriage' ? t('router.relationship.marriage') : t('router.relationship.lover')
         const messageText = result.accepted
-          ? `💞 *PROPUESTA ACEPTADA*\n━━━━━━━━━━━━━━\n@${result.proposerJid.split('@')[0]} y @${result.targetJid.split('@')[0]} ahora tienen una ${kind}.`
-          : `💔 *PROPUESTA RECHAZADA*\n━━━━━━━━━━━━━━\n@${result.targetJid.split('@')[0]} rechazó la propuesta de @${result.proposerJid.split('@')[0]}.`
-        await socket.sendMessage(chatId, { text: messageText, mentions: [result.proposerJid, result.targetJid] }, { quoted: message })
+          ? t('router.relationship.accepted', { proposer: result.proposerJid.split('@')[0] ?? '', target: result.targetJid.split('@')[0] ?? '', kind })
+          : t('router.relationship.rejected', { proposer: result.proposerJid.split('@')[0] ?? '', target: result.targetJid.split('@')[0] ?? '' })
+        await localizedSocket.sendMessage(chatId, { text: messageText, mentions: [result.proposerJid, result.targetJid] }, { quoted: message })
         await react(result.accepted ? '💞' : '💔').catch(() => undefined)
         return true
       } catch (error) {
-        await reply(`❌ ${error instanceof Error ? error.message : 'No pude procesar la propuesta.'}`)
+        await reply(`❌ ${error instanceof Error ? error.message : t('router.relationship.error')}`)
         return true
       }
     }
@@ -126,41 +134,41 @@ export class CommandRouter {
 
       if (!hasPrivateAccess && !privateStorefrontCommands.has(command.name)) {
         await reply([
-          '╭━━〔 🔐 *CHAT PRIVADO PREMIUM* 〕━━╮',
-          '┃ Tu cuenta todavía no tiene acceso privado.',
-          '┃ Los comandos del bot funcionan en grupos,',
-          '┃ pero este chat requiere una suscripción.',
+          t('router.private.title'),
+          t('router.private.line1'),
+          t('router.private.line2'),
+          t('router.private.line3'),
           '╰━━━━━━━━━━━━━━━━━━━━╯',
           '',
-          `🛒 Consulta planes: *${prefix}shop*`,
-          `💰 Consulta saldo: *${prefix}balance*`,
-          `✅ Compra acceso: *${prefix}buy private1d|private7d|private30d*`,
+          t('router.private.shop', { prefix }),
+          t('router.private.balance', { prefix }),
+          t('router.private.buy', { prefix }),
           '',
-          'El acceso se activa inmediatamente después de una compra válida.',
+          t('router.private.instant'),
         ].join('\n'))
         await react('🔒')
         return true
       }
 
       if (command.ownerOnly && !isOwner) {
-        await reply('⛔ *ACCESO RESTRINGIDO*\n━━━━━━━━━━━━━━\nEste comando está reservado al propietario principal del bot.')
+        await reply(t('router.ownerOnly'))
         await react('🚫')
         return true
       }
       if (command.staffOnly && !isBotStaff && !(command.subbotOwnerAllowed && isSubbotOwner)) {
-        await reply('🛡️ *STAFF DEL BOT*\n━━━━━━━━━━━━━━\nNecesitas ser Owner/administrador global o el propietario autorizado de esta instancia de subbot.')
+        await reply(t('router.staffOnly'))
         await react('🚫')
         return true
       }
       if (command.groupOnly && !isGroup) {
-        await reply('👥 *SOLO GRUPOS*\n━━━━━━━━━━━━━━\nEste comando solo se puede usar dentro de un grupo.')
+        await reply(t('router.groupOnly'))
         await react('🚫')
         return true
       }
 
       if (command.adminOnly || command.botAdminOnly) {
         if (!isGroup) {
-          await reply('👥 Este comando solo se puede usar dentro de un grupo.')
+          await reply(t('router.groupRequired'))
           await react('🚫')
           return true
         }
@@ -172,21 +180,21 @@ export class CommandRouter {
         const senderIsAdmin = senderIsGroupAdmin || isBotStaff || isSubbotOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
         if (command.adminOnly && !senderIsAdmin) {
-          await reply('🛡️ *PERMISO DE ADMIN*\n━━━━━━━━━━━━━━\nNecesitas ser administrador del grupo, staff global o dueño de esta instancia.')
+          await reply(t('router.adminOnly'))
           await react('🚫')
           return true
         }
         if (command.botAdminOnly && !botIsAdmin) {
-          await reply('🤖 *PERMISO FALTANTE*\n━━━━━━━━━━━━━━\nNecesito ser administrador del grupo para realizar esta acción.')
+          await reply(t('router.botAdminOnly'))
           await react('🚫')
           return true
         }
       }
 
       const context: CommandContext = {
-        socket, message, chatId, sender,
-        pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : 'Usuario'),
-        commandName: command.name, args, argText: args.join(' '), prefix, settings,
+        socket: localizedSocket, message, chatId, sender,
+        pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser')),
+        commandName: command.name, args, argText: args.join(' '), prefix, settings, locale, t,
         isOwner, isBotStaff, isGroup, isSubbotOwner,
         instanceId: this.options.instanceId,
         instanceOwnerJid: this.options.instanceOwnerJid,
@@ -198,8 +206,8 @@ export class CommandRouter {
       return true
     } catch (error) {
       logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')
-      const publicError = publicCommandError(command.name, error)
-      await reply(`❌ *NO PUDE COMPLETAR ${prefix}${command.name}*\n━━━━━━━━━━━━━━\n${publicError}`).catch(() => undefined)
+      const publicError = publicCommandError(command.name, error, locale)
+      await reply(t('router.commandError', { prefix, command: command.name, error: publicError })).catch(() => undefined)
       await react('❌').catch(() => undefined)
       return true
     }
