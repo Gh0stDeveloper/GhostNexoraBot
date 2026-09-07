@@ -365,7 +365,7 @@ export const botStylesV13Commands: BotCommand[] = [
     name: 'styleimg',
     aliases: ['waifuimg', 'styleimage', 'imagenwaifu'],
     category: 'general',
-    description: 'Explora las variantes locales de cada waifu y permite a owner, subbot owner y staff aplicar una variante concreta.',
+    description: 'Explora las variantes de cada waifu y permite a owner, subbot owner y staff aplicar la imagen local concreta elegida.',
     usage: 'styleimg <list|set|current> [waifu] [pagina|numero]',
     subbotOwnerAllowed: true,
     handler: styleImageCommand,
