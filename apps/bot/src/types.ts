@@ -1,6 +1,6 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { SettingsStore } from './core/settings.js'
-import type { LocaleCode, TranslationValues } from './i18n/index.js'
+import type { LocaleCode, TranslationValues } from './i18n/types.js'
 
 /**
  * Project-local socket type.
