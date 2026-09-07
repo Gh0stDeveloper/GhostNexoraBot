@@ -28,6 +28,7 @@ type FetchOptions = {
   contentType?: string
   accept?: string
   maxBytes?: number
+  language?: string
 }
 
 type RemoteResult = {
@@ -187,6 +188,12 @@ async function readLimited(response: Response, maxBytes: number) {
   return Buffer.concat(chunks)
 }
 
+function acceptLanguageHeader(language?: string) {
+  return String(language || '').toLowerCase().startsWith('en')
+    ? 'en-US,en;q=0.9,es;q=0.6'
+    : 'es-MX,es;q=0.9,en;q=0.7'
+}
+
 async function fetchRemote(startUrl: string, options: FetchOptions = {}): Promise<RemoteResult> {
   const sid = normalizeSid(options.sid)
   let current = await assertPublicTarget(startUrl)
@@ -201,7 +208,7 @@ async function fetchRemote(startUrl: string, options: FetchOptions = {}): Promis
       const headers: Record<string, string> = {
         'user-agent': MOBILE_UA,
         accept: options.accept ?? 'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.5',
-        'accept-language': 'es-MX,es;q=0.9,en;q=0.7',
+        'accept-language': acceptLanguageHeader(options.language),
       }
       const cookies = cookieHeader(sid, current.hostname)
       if (cookies) headers.cookie = cookies
@@ -534,6 +541,7 @@ export function startBrowserProxy() {
     try {
       const mode = requestUrl.searchParams.get('mode') || (requestUrl.searchParams.get('format') === 'html' ? 'html' : 'json')
       const sid = normalizeSid(requestUrl.searchParams.get('sid') || '')
+      const language = requestUrl.searchParams.get('lang') || undefined
 
       if (mode === 'resource') {
         const target = requestUrl.searchParams.get('url')?.trim()
@@ -564,7 +572,7 @@ export function startBrowserProxy() {
         return
       }
 
-      const result = await fetchDocument(target, { sid, method, body, contentType })
+      const result = await fetchDocument(target, { sid, method, body, contentType, language })
       if (mode === 'html') {
         htmlResponse(res, result.status, `<!doctype html><html><head><meta charset="utf-8"><title>${escapeAttr(result.title)}</title></head><body>${result.html}</body></html>`)
         return
