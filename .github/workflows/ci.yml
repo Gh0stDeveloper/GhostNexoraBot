@@ -46,6 +46,21 @@ jobs:
           path: i18n-user-facing-audit.json
           retention-days: 3
 
+      - name: Upload bot source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-source-snapshot
+          path: |
+            apps/bot/src
+            apps/bot/package.json
+            apps/bot/tsconfig.json
+            package.json
+            scripts/i18n-smoke.mjs
+            scripts/v5-smoke.mjs
+            scripts/youtube-select-smoke.mjs
+            scripts/bank-v10-smoke.mjs
+          retention-days: 3
+
       - name: WhatsApp offline browser resilience smoke
         run: node scripts/nav-offline-smoke.mjs
 
