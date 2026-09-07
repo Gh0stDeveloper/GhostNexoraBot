@@ -36,6 +36,16 @@ jobs:
       - name: Spanish/English i18n isolation smoke
         run: node scripts/i18n-smoke.mjs
 
+      - name: User-facing i18n audit report
+        run: node scripts/i18n-user-facing-audit.mjs
+
+      - name: Upload i18n audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-user-facing-audit
+          path: i18n-user-facing-audit.json
+          retention-days: 3
+
       - name: WhatsApp offline browser resilience smoke
         run: node scripts/nav-offline-smoke.mjs
 
