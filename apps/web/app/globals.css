@@ -2,14 +2,16 @@
 
 :root {
   color-scheme: dark;
-  --background: #05070a;
-  --surface: #0b0f14;
-  --surface-strong: #111820;
-  --line: rgba(255, 255, 255, 0.09);
+  --background: #030610;
+  --surface: #070b16;
+  --surface-strong: #0c1220;
+  --line: rgba(148, 163, 184, 0.12);
   --muted: #8d99a8;
-  --foreground: #f7f9fb;
-  --accent: #56f39a;
-  --accent-strong: #2bd97b;
+  --foreground: #f8fbff;
+  --accent: #67e8f9;
+  --accent-strong: #22d3ee;
+  --violet: #a78bfa;
+  --green: #6ee7b7;
 }
 
 * {
@@ -26,9 +28,10 @@ body {
   min-height: 100vh;
   color: var(--foreground);
   background:
-    radial-gradient(circle at 12% -10%, rgba(86, 243, 154, 0.14), transparent 34rem),
-    radial-gradient(circle at 92% 15%, rgba(71, 151, 255, 0.10), transparent 32rem),
-    var(--background);
+    radial-gradient(circle at 12% 2%, rgba(34, 211, 238, 0.14), transparent 28rem),
+    radial-gradient(circle at 88% 18%, rgba(139, 92, 246, 0.14), transparent 30rem),
+    radial-gradient(circle at 48% 78%, rgba(16, 185, 129, 0.06), transparent 34rem),
+    linear-gradient(180deg, #030610 0%, #050814 54%, #030610 100%);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -37,16 +40,142 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.25;
+  z-index: -20;
+  opacity: 0.28;
   background-image:
-    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: linear-gradient(to bottom, black, transparent 75%);
+    linear-gradient(rgba(103, 232, 249, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, .035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 80%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -19;
+  opacity: .18;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,.018) 0,
+    rgba(255,255,255,.018) 1px,
+    transparent 1px,
+    transparent 4px
+  );
 }
 
 ::selection {
-  background: rgba(86, 243, 154, 0.28);
+  background: rgba(103, 232, 249, 0.28);
+  color: white;
+}
+
+a {
+  text-underline-offset: 4px;
+}
+
+.cyber-grid {
+  background-image:
+    linear-gradient(rgba(103, 232, 249, .026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(167, 139, 250, .024) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at 50% 24%, black 0%, transparent 72%);
+}
+
+.cyber-text {
+  background: linear-gradient(100deg, #67e8f9 8%, #a78bfa 52%, #6ee7b7 96%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 34px rgba(103, 232, 249, .14);
+}
+
+.cyber-button {
+  border: 1px solid rgba(103, 232, 249, .38);
+  background: linear-gradient(115deg, #67e8f9 0%, #5eead4 52%, #6ee7b7 100%);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.06) inset,
+    0 10px 30px rgba(34, 211, 238, .12),
+    0 0 28px rgba(34, 211, 238, .10);
+  transition: transform .2s ease, filter .2s ease, box-shadow .2s ease;
+}
+
+.cyber-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.07);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.08) inset,
+    0 14px 34px rgba(34, 211, 238, .16),
+    0 0 34px rgba(167, 139, 250, .12);
+}
+
+.cyber-card {
+  background: linear-gradient(135deg, rgba(103, 232, 249, .38), rgba(167, 139, 250, .28) 48%, rgba(110, 231, 183, .24));
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, .42),
+    0 0 44px rgba(34, 211, 238, .05);
+}
+
+.cyber-panel {
+  border: 1px solid rgba(148, 163, 184, .105);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.038), rgba(255,255,255,.014)),
+    rgba(7, 11, 22, .74);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .18);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.cyber-panel:hover {
+  border-color: rgba(103, 232, 249, .18);
+  box-shadow:
+    0 22px 55px rgba(0, 0, 0, .24),
+    0 0 24px rgba(103, 232, 249, .035);
+}
+
+.profile-core {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, .30);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,.18), transparent 18%),
+    linear-gradient(145deg, rgba(34, 211, 238, .30), rgba(139, 92, 246, .34) 55%, rgba(16, 185, 129, .22));
+  box-shadow:
+    0 0 0 5px rgba(103, 232, 249, .035),
+    0 0 42px rgba(34, 211, 238, .16),
+    0 18px 38px rgba(0, 0, 0, .35);
+}
+
+.profile-core::before,
+.profile-core::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.profile-core::before {
+  inset: 9px;
+}
+
+.profile-core::after {
+  inset: 18px;
+  border-color: rgba(103, 232, 249, .15);
+}
+
+.profile-core svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 14px rgba(103, 232, 249, .32));
+}
+
+.section-kicker {
+  font-size: .72rem;
+  line-height: 1rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .22em;
+  color: #67e8f9;
 }
 
 .code-scroll::-webkit-scrollbar {
@@ -56,4 +185,13 @@ body::before {
 .code-scroll::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,.16);
   border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
