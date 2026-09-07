@@ -8,7 +8,7 @@ import {
 } from 'baileys'
 import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
-import { localizeLegacyText, resolveChatLocale, type LocaleCode } from '../i18n/index.js'
+import { localizeLegacyText, resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 
 export type InteractiveSelectRow = {
   id: string
@@ -154,9 +154,9 @@ export async function sendInteractiveCard(
   quoted: WAMessage,
   input: { title: string; body: string; footer?: string; imageUrl?: string; buttons?: InteractiveButton[] },
 ) {
-  const userJid = socket.user?.id
-  if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
   const locale = resolveChatLocale(chatId)
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
   const imageMessage = await imageMessageFromUrl(socket, input.imageUrl)
   const title = localizeLegacyText(input.title, locale)
   const body = localizeLegacyText(input.body, locale)
@@ -199,10 +199,10 @@ export async function sendCarousel(
   quoted: WAMessage,
   input: { title: string; body?: string; footer?: string; cards: CarouselCard[] },
 ) {
-  const userJid = socket.user?.id
-  if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
-
   const locale = resolveChatLocale(chatId)
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
+
   const localizedInput = {
     title: localizeLegacyText(input.title, locale),
     body: input.body ? localizeLegacyText(input.body, locale) : undefined,
@@ -259,8 +259,8 @@ export async function sendCarousel(
 
     if (overflowButtons.length) {
       await sendInteractiveCard(socket, chatId, quoted, {
-        title: locale === 'en' ? 'Navigation' : 'Navegación',
-        body: locale === 'en' ? 'More options are available.' : 'Hay más opciones disponibles.',
+        title: translate(locale, 'interactive.navigation.title'),
+        body: translate(locale, 'interactive.navigation.more'),
         footer: localizedInput.footer ?? 'Ghost Nexora Bot',
         buttons: overflowButtons,
       })
