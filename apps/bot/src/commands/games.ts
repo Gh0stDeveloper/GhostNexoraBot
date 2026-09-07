@@ -21,9 +21,17 @@ function parseBet(value?: string) {
 
 function cards(items: Array<{ label: string }>) { return items.map((item) => item.label).join(' · ') }
 
+function normalizeArcadeViewport(name: string, html: string) {
+  if (name !== 'pacman') return html
+  return html
+    .replace('width="456" height="360"', 'width="456" height="480"')
+    .replace('var ox=0,oy=-60;', 'var ox=0,oy=0;')
+}
+
 async function sendArcadeGame(ctx: CommandContext, name: string, title: string, icon: string, build: () => string) {
   try {
-    await sendAiHtmlMessage(ctx.socket, ctx.chatId, build(), { title: `${title} · Ghost Nexora`, trustedSources: [], quoted: ctx.message })
+    const html = normalizeArcadeViewport(name, build())
+    await sendAiHtmlMessage(ctx.socket, ctx.chatId, html, { title: `${title} · Ghost Nexora`, trustedSources: [], quoted: ctx.message })
   } catch (error) {
     await ctx.reply([
       `${icon} *${title.toUpperCase()}*`,
