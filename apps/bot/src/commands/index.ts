@@ -4,6 +4,7 @@ import type { BotCommand } from '../types.js'
 import { config } from '../config.js'
 import { setMenuCommandProvider } from '../services/menu-registry.js'
 import { generalCommands } from './general.js'
+import { languageCommands } from './language.js'
 import { creditsCommands } from './credits.js'
 import { aiCommands } from './ai.js'
 import { profileCommands } from './profile.js'
@@ -137,6 +138,7 @@ const replacedDownloadCommands = new Set([
 
 const legacyCommands: BotCommand[] = [
   ...generalCommands,
+  ...languageCommands,
   ...creditsCommands,
   ...aiCommands,
   ...profileCommands,
