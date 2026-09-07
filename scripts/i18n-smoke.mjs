@@ -62,7 +62,25 @@ try {
   assert.ok(language.aliases?.includes('lang'))
   assert.ok(language.aliases?.includes('idioma'))
 
-  console.log('[i18n-smoke] OK · es/en catalogs · global persistence · per-group override/inherit · fenced code protected')
+  const routerSource = await readFile(new URL('../apps/bot/dist/core/router.js', import.meta.url), 'utf8')
+  assert.equal(routerSource.includes('resolveChatLocale'), true, 'router must resolve effective chat locale')
+  assert.equal(routerSource.includes('createLocalizedSocket'), true, 'router must localize legacy command output')
+  assert.equal(routerSource.includes("'language'"), true, 'language must remain available as a bootstrap/private command')
+
+  const menuSource = await readFile(new URL('../apps/bot/dist/commands/menu-v5.js', import.meta.url), 'utf8')
+  assert.equal(menuSource.includes('menu.header.language'), true, 'menu must display effective locale')
+  assert.equal(menuSource.includes('menu.section.'), true, 'menu section labels must come from catalogs')
+
+  const browserSource = await readFile(new URL('../apps/bot/dist/commands/navegador.js', import.meta.url), 'utf8')
+  assert.equal(browserSource.includes("ctx.t('browser.go')"), true, 'browser toolbar must use locale catalog')
+  assert.equal(browserSource.includes('>Ir</button>'), false, 'browser toolbar must not hardcode the Spanish Go button')
+
+  const autoChatSource = await readFile(new URL('../apps/bot/dist/services/auto-chat.js', import.meta.url), 'utf8')
+  const contextualSource = await readFile(new URL('../apps/bot/dist/services/llm-contextual-answer.js', import.meta.url), 'utf8')
+  assert.equal(autoChatSource.includes('assistant.languageInstruction'), true, 'auto-chat must follow configured locale')
+  assert.equal(contextualSource.includes('assistant.languageInstruction'), true, 'Ollama contextual answers must follow configured locale')
+
+  console.log('[i18n-smoke] OK · catalogs · persistence · group isolation · menu/router/browser/AI · fenced code protected')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
