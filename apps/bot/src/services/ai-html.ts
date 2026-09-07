@@ -2,6 +2,13 @@ import { randomBytes } from 'node:crypto'
 import { generateWAMessageFromContent, type WAMessage, type WASocket } from 'baileys'
 import { logger } from '../utils/logger.js'
 
+const GAME_INPUT_GUARD = `<style id="gn-game-input-guard">html,body,*{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}button,[role=button],canvas,.gn-game-control{touch-action:none!important}</style><script>(function(){if(window.__ghostNexoraInputGuard)return;window.__ghostNexoraInputGuard=1;function block(e){if(e&&e.cancelable)e.preventDefault()}['contextmenu','selectstart','dragstart'].forEach(function(n){document.addEventListener(n,block,{capture:true,passive:false})});document.addEventListener('touchstart',function(e){var t=e.target;if(t&&t.closest&&t.closest('button,[role=button],canvas,.gn-game-control'))block(e)},{capture:true,passive:false});document.addEventListener('touchmove',function(e){var t=e.target;if(t&&t.closest&&t.closest('button,[role=button],canvas,.gn-game-control'))block(e)},{capture:true,passive:false})})();</script>`
+
+export function protectGameHtmlInput(html: string) {
+  if (html.includes('gn-game-input-guard')) return html
+  return `${GAME_INPUT_GUARD}${html}`
+}
+
 /**
  * Envía los juegos/UI HTML con el MISMO sobre richResponse que usa `.view`.
  *
@@ -11,7 +18,9 @@ import { logger } from '../utils/logger.js'
  * servicio replica deliberadamente la estructura compatible de `.view`.
  *
  * Todos los comandos que usan sendAiHtmlMessage() heredan este transporte de forma
- * automática: Mario, Dino, Snake, Doom, Ninja, Space Dodge, Gato, Damas, etc.
+ * automática: Mario, Dino, Snake, Doom, Ninja, Space Dodge, Gato, Damas y Arcade V16.
+ * Además inyecta una protección global contra selección, menú contextual y long-press
+ * dentro de controles/canvas para que mantener un botón no seleccione el mensaje.
  */
 export async function sendAiHtmlMessage(
   socket: WASocket,
@@ -36,7 +45,7 @@ export async function sendAiHtmlMessage(
         view_model: {
           primitive: {
             __typename: 'GenAIaeacdsnwHtmlPrimitive',
-            payload: html,
+            payload: protectGameHtmlInput(html),
             trusted_sources: [] as string[],
           },
           __typename: 'GenAISingleLayoutViewModel',
