@@ -8,6 +8,7 @@ import {
 } from 'baileys'
 import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
+import { localizeLegacyText, resolveChatLocale, type LocaleCode } from '../i18n/index.js'
 
 export type InteractiveSelectRow = {
   id: string
@@ -32,6 +33,25 @@ export type CarouselCard = {
   imageUrl?: string
   footer?: string
   buttons: InteractiveButton[]
+}
+
+function localizedButton(button: InteractiveButton, locale: LocaleCode): InteractiveButton {
+  if (button.type === 'reply') return { ...button, text: localizeLegacyText(button.text, locale) }
+  if (button.type === 'url') return { ...button, text: localizeLegacyText(button.text, locale) }
+  return {
+    ...button,
+    text: localizeLegacyText(button.text, locale),
+    sections: button.sections.map((section) => ({
+      ...section,
+      title: localizeLegacyText(section.title, locale),
+      rows: section.rows.map((row) => ({
+        ...row,
+        title: localizeLegacyText(row.title, locale),
+        description: row.description ? localizeLegacyText(row.description, locale) : undefined,
+        header: row.header ? localizeLegacyText(row.header, locale) : undefined,
+      })),
+    })),
+  }
 }
 
 function nativeButton(button: InteractiveButton) {
@@ -119,10 +139,11 @@ async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
 }
 
 async function sendTextFallback(socket: WASocket, chatId: string, quoted: WAMessage, title: string, body: string, footer?: string) {
+  const locale = resolveChatLocale(chatId)
   const text = [
-    `*${title}*`,
-    body,
-    footer ? `\n_${footer}_` : '',
+    `*${localizeLegacyText(title, locale)}*`,
+    localizeLegacyText(body, locale),
+    footer ? `\n_${localizeLegacyText(footer, locale)}_` : '',
   ].filter(Boolean).join('\n\n')
   await socket.sendMessage(chatId, { text }, { quoted })
 }
@@ -135,20 +156,25 @@ export async function sendInteractiveCard(
 ) {
   const userJid = socket.user?.id
   if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
+  const locale = resolveChatLocale(chatId)
   const imageMessage = await imageMessageFromUrl(socket, input.imageUrl)
+  const title = localizeLegacyText(input.title, locale)
+  const body = localizeLegacyText(input.body, locale)
+  const footer = localizeLegacyText(input.footer ?? 'Ghost Nexora Bot · Ghost Developer / Nexora', locale)
+  const buttons = (input.buttons ?? []).map((button) => localizedButton(button, locale))
   const message = generateWAMessageFromContent(chatId, {
     viewOnceMessage: {
       message: {
         messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
         interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-          body: proto.Message.InteractiveMessage.Body.create({ text: input.body }),
-          footer: proto.Message.InteractiveMessage.Footer.create({ text: input.footer ?? 'Ghost Nexora Bot · Ghost Developer / Nexora' }),
+          body: proto.Message.InteractiveMessage.Body.create({ text: body }),
+          footer: proto.Message.InteractiveMessage.Footer.create({ text: footer }),
           header: proto.Message.InteractiveMessage.Header.fromObject({
-            title: input.title,
+            title,
             hasMediaAttachment: Boolean(imageMessage),
             ...(imageMessage ? { imageMessage } : {}),
           }),
-          nativeFlowMessage: nativeFlow(input.buttons ?? []),
+          nativeFlowMessage: nativeFlow(buttons),
         }),
       },
     },
@@ -163,7 +189,7 @@ export async function sendInteractiveCard(
     logger.info({ chatId, messageId: message.key.id, relayNodes: additionalNodes.map((node) => node.tag) }, 'interactive card relay completed')
   } catch (error) {
     logger.warn({ error, chatId }, 'interactive card relay failed; sending text fallback')
-    await sendTextFallback(socket, chatId, quoted, input.title, input.body, input.footer)
+    await sendTextFallback(socket, chatId, quoted, title, body, footer)
   }
 }
 
@@ -176,7 +202,21 @@ export async function sendCarousel(
   const userJid = socket.user?.id
   if (!userJid) throw new Error('La sesión de WhatsApp todavía no está autenticada.')
 
-  const sourceCards = input.cards.slice(0, 8)
+  const locale = resolveChatLocale(chatId)
+  const localizedInput = {
+    title: localizeLegacyText(input.title, locale),
+    body: input.body ? localizeLegacyText(input.body, locale) : undefined,
+    footer: input.footer ? localizeLegacyText(input.footer, locale) : undefined,
+    cards: input.cards.map((card) => ({
+      ...card,
+      title: localizeLegacyText(card.title, locale),
+      body: localizeLegacyText(card.body, locale),
+      footer: card.footer ? localizeLegacyText(card.footer, locale) : undefined,
+      buttons: card.buttons.map((button) => localizedButton(button, locale)),
+    })),
+  }
+
+  const sourceCards = localizedInput.cards.slice(0, 8)
   const preparedImages = await Promise.all(sourceCards.map((card) => imageMessageFromUrl(socket, card.imageUrl)))
   const overflowButtons = sourceCards.flatMap((card) => card.buttons.slice(2)).slice(0, 3)
 
@@ -199,9 +239,9 @@ export async function sendCarousel(
       message: {
         messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
         interactiveMessage: proto.Message.InteractiveMessage.fromObject({
-          body: proto.Message.InteractiveMessage.Body.create({ text: (input.body ?? input.title).slice(0, 200) }),
-          footer: proto.Message.InteractiveMessage.Footer.create({ text: (input.footer ?? 'Ghost Nexora Bot').slice(0, 60) }),
-          header: proto.Message.InteractiveMessage.Header.create({ title: input.title.slice(0, 80), hasMediaAttachment: false }),
+          body: proto.Message.InteractiveMessage.Body.create({ text: (localizedInput.body ?? localizedInput.title).slice(0, 200) }),
+          footer: proto.Message.InteractiveMessage.Footer.create({ text: (localizedInput.footer ?? 'Ghost Nexora Bot').slice(0, 60) }),
+          header: proto.Message.InteractiveMessage.Header.create({ title: localizedInput.title.slice(0, 80), hasMediaAttachment: false }),
           carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({ cards }),
         }),
       },
@@ -219,15 +259,15 @@ export async function sendCarousel(
 
     if (overflowButtons.length) {
       await sendInteractiveCard(socket, chatId, quoted, {
-        title: 'Navegación',
-        body: 'Hay más opciones disponibles.',
-        footer: input.footer ?? 'Ghost Nexora Bot',
+        title: locale === 'en' ? 'Navigation' : 'Navegación',
+        body: locale === 'en' ? 'More options are available.' : 'Hay más opciones disponibles.',
+        footer: localizedInput.footer ?? 'Ghost Nexora Bot',
         buttons: overflowButtons,
       })
     }
   } catch (error) {
     logger.warn({ error, chatId, cards: cards.length }, 'carousel relay failed; sending text fallback')
-    const summary = input.cards.slice(0, 8).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
-    await sendTextFallback(socket, chatId, quoted, input.title, [input.body, summary].filter(Boolean).join('\n\n'), input.footer)
+    const summary = localizedInput.cards.slice(0, 8).map((card, index) => `${index + 1}. *${card.title}*\n${card.body}`).join('\n\n')
+    await sendTextFallback(socket, chatId, quoted, localizedInput.title, [localizedInput.body, summary].filter(Boolean).join('\n\n'), localizedInput.footer)
   }
 }
