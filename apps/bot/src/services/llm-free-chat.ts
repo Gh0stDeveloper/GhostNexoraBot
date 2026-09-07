@@ -5,6 +5,7 @@ import { config } from '../config.js'
 import { getContextInfo } from '../utils/message.js'
 import { conversationMemory } from './conversation-memory.js'
 import { contextualAnswer } from './llm-contextual-answer.js'
+import { resolveChatLocale } from '../i18n/index.js'
 
 type State = {
   chats: Record<string, boolean>
@@ -315,7 +316,10 @@ export const llmFreeChat = {
       }
 
       const state = load()
-      if (state.slangEnabled) {
+      // Las respuestas coloquiales rápidas actuales están escritas en español.
+      // En chats ingleses dejamos que el LLM genere la respuesta para no filtrar
+      // una frase española fuera de la política de idioma del grupo.
+      if (state.slangEnabled && resolveChatLocale(chatId) === 'es') {
         const slang = slangReply(text)
         if (slang) {
           conversationMemory.pushBot(chatId, slang)
@@ -359,17 +363,12 @@ export const llmFreeChat = {
       chats +
       ' · mention=' +
       (s.requireMention ? 'ON' : 'OFF') +
-      ' · groups=' +
-      (s.groupWhitelist.length || 'all') +
-      ' · cd=' +
+      ' · cooldown=' +
       cd +
-      ' · spam=' +
+      ' · antispam=' +
       spam +
       ' · slang=' +
-      (s.slangEnabled ? 'ON' : 'OFF') +
-      ' · react=' +
-      (s.reactions ? 'ON' : 'OFF') +
-      ' · ctx=ON'
+      (s.slangEnabled ? 'ON' : 'OFF')
     )
   },
 }
