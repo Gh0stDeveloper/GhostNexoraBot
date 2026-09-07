@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config.js'
+import { normalizeLocale, type LocaleCode } from '../i18n/types.js'
 
 interface RuntimeSettings {
   prefix: string
@@ -9,6 +10,7 @@ interface RuntimeSettings {
   botAdmins: string[]
   botDisplayName: string
   currencyName: string
+  language: LocaleCode
 }
 
 function normalizeNumber(value: string) {
@@ -24,6 +26,7 @@ export class SettingsStore {
     botAdmins: [],
     botDisplayName: config.botName,
     currencyName: 'Nexora Coins',
+    language: 'es',
   }
 
   async init() {
@@ -38,6 +41,7 @@ export class SettingsStore {
       if (Array.isArray(parsed.botAdmins)) this.data.botAdmins = [...new Set(parsed.botAdmins.map((value) => normalizeNumber(String(value))).filter(Boolean))]
       if (typeof parsed.botDisplayName === 'string' && parsed.botDisplayName.trim()) this.data.botDisplayName = parsed.botDisplayName.trim().slice(0, 60)
       if (typeof parsed.currencyName === 'string' && parsed.currencyName.trim()) this.data.currencyName = parsed.currencyName.trim().slice(0, 32)
+      this.data.language = normalizeLocale(parsed.language, 'es')
       await this.save()
     } catch {
       await this.save()
@@ -50,6 +54,7 @@ export class SettingsStore {
   get botAdmins() { return [...this.data.botAdmins] }
   get botDisplayName() { return this.data.botDisplayName }
   get currencyName() { return this.data.currencyName }
+  get language() { return this.data.language }
 
   isBotAdmin(number: string) {
     const normalized = normalizeNumber(number)
@@ -91,6 +96,12 @@ export class SettingsStore {
     if (!next || next.length > 4 || /\s/.test(next)) throw new Error('El prefijo debe tener entre 1 y 4 caracteres y no contener espacios.')
     this.data.prefix = next
     await this.save()
+  }
+
+  async setLanguage(language: LocaleCode) {
+    this.data.language = normalizeLocale(language, 'es')
+    await this.save()
+    return this.data.language
   }
 
   async setAdultEnabled(enabled: boolean) {
