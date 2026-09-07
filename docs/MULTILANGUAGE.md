@@ -2,6 +2,14 @@
 
 Ghost Nexora Bot soporta inicialmente **Español (`es`)** e **Inglés (`en`)**.
 
+## Alcance
+
+El sistema multilenguaje cubre la interfaz general del bot: menús, administración, perfiles, economía, descargas, búsqueda, IA, stickers, waifus, subbots, herramientas, mensajes de sistema, moderación, contenido interactivo no lúdico y demás funciones de uso normal.
+
+El **subsystema de juegos queda excluido intencionalmente** de esta migración. Esto incluye minijuegos, juegos HTML, PvP, casino y RPG/jugabilidad. Sus textos pueden conservarse en su idioma actual y no se contabilizan como pendientes en la auditoría estricta de i18n.
+
+Por tanto, cuando el proyecto indique que la cobertura ES/EN está completa, significa **100% de la interfaz incluida en este alcance, exceptuando juegos por decisión explícita del proyecto**.
+
 ## Prioridad de idioma
 
 El idioma efectivo de un chat se resuelve así:
@@ -70,31 +78,22 @@ apps/bot/src/i18n/
 
 `default.ts` representa la voz neutral/default actual del bot. `system.ts` contiene mensajes transversales como UI interactiva, navegador y directivas del asistente.
 
-La separación está preparada para que una fase posterior añada una capa de personalidad por estilo/waifu sin acoplarla al idioma. El idioma (`es`, `en`, etc.) y la personalidad (`default`, futura `megumin`, `rem`, etc.) deben permanecer como ejes independientes.
+La separación está preparada para que una fase posterior añada una capa de personalidad por estilo/waifu sin acoplarla al idioma. El idioma (`es`, `en`, etc.) y la personalidad (`default`, futura `megumin`, `rem`, etc.) permanecen como ejes independientes.
 
-## Uso desde comandos
+## Reglas para textos del bot
 
-Todos los `CommandContext` nuevos incluyen:
+Todo texto nuevo incluido en el alcance multilenguaje debe almacenarse en el catálogo correspondiente y resolverse mediante una clave i18n. Las traducciones inglesas son textos estáticos revisados; no deben generarse traduciendo palabra por palabra en tiempo de ejecución.
+
+Los `CommandContext` incluyen:
 
 ```ts
 ctx.locale
 ctx.t('clave', { valor: '...' })
 ```
 
-Los módulos nuevos o modificados deben colocar su texto de interfaz en los catálogos y usar `ctx.t(...)`; no deben añadir nuevas frases de UI inline si pueden evitarlo.
+Los bloques Markdown ` ```...``` `, URLs, nombres de comandos, identificadores técnicos y datos proporcionados por el usuario no deben traducirse.
 
-El router, menú efectivo, permisos, errores, bienvenida/despedida, moderación y prompts de IA ya usan claves explícitas.
-
-## Compatibilidad con comandos heredados
-
-El bot incluye una capa de compatibilidad para comandos anteriores que todavía construyen algunos textos inline:
-
-- `ctx.reply` pasa por el locale efectivo.
-- `ctx.socket.sendMessage` usa un proxy localizado para `text`, `caption`, títulos y descripciones.
-- carruseles, botones y selectores se localizan antes del relay.
-- los bloques Markdown ` ```...``` ` se protegen y nunca se traducen, evitando modificar código solicitado por el usuario.
-
-Esta compatibilidad permite migrar módulos heredados gradualmente sin romper comandos existentes. Para código nuevo, la fuente de verdad debe seguir siendo el catálogo por idioma.
+La capa heredada de compatibilidad existe únicamente mientras se completa la extracción de módulos antiguos. No es la fuente de verdad del sistema ni sustituye los catálogos estáticos ES/EN.
 
 ## IA
 
@@ -104,7 +103,19 @@ OpenRouter/Ollama/auto-chat reciben una instrucción explícita basada en el idi
 - grupo `es` → respuesta en español;
 - privado → idioma global de la instancia.
 
-Las respuestas coloquiales rápidas escritas específicamente en español se desactivan en chats ingleses y se delegan al LLM para impedir fugas de idioma.
+Las respuestas de IA deben respetar el idioma efectivo del chat aunque la instancia global tenga otro idioma.
+
+## Auditoría
+
+`scripts/i18n-user-facing-audit.mjs` revisa la interfaz incluida en el alcance y detecta textos visibles que todavía permanecen fuera de los catálogos.
+
+La auditoría excluye deliberadamente el subsystema de juegos. Los archivos mixtos también omiten objetos de comando con `category: 'games'`.
+
+El objetivo final para activar el modo estricto es:
+
+```text
+non-game user-facing literals outside locale catalogs = 0
+```
 
 ## Añadir otro idioma
 
@@ -115,6 +126,6 @@ Cuando se añada un idioma nuevo:
 3. Crear `locales/<idioma>/system.ts`.
 4. Mantener exactamente las mismas claves que los catálogos existentes.
 5. Añadir el nombre del idioma (`language.name.<codigo>`).
-6. Extender el smoke de i18n.
+6. Extender los smoke tests de i18n.
 
-El CI compara las claves de español e inglés y comprueba persistencia global, override por grupo, herencia y protección de bloques de código.
+El CI comprueba paridad entre español e inglés, persistencia global, override por grupo, herencia y protección de bloques de código.
