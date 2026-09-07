@@ -12,11 +12,39 @@ const walletDb = path.join(dataDir, 'nexora-economy.sqlite')
 const source = `
   const { economy } = await import('./apps/bot/dist/services/economy.js');
   const { bankingV10 } = await import('./apps/bot/dist/services/banking-v10.js');
+  const { registerIdentity, repairNegativeEconomyBalances } = await import('./apps/bot/dist/services/identity.js');
   const { commands } = await import('./apps/bot/dist/commands/index.js');
   const user = '5215551112222@s.whatsapp.net';
 
   economy.balance(user);
   economy.walletDb.prepare('UPDATE global_economy_users SET wallet = 20000, bank = 5000 WHERE user_jid = ?').run(user);
+
+  // Regresión: una fusión LID -> PN no debe dejar la cartera negativa al
+  // descontar la segunda bonificación inicial de 250 NXC.
+  const canonical = '5215553334444@s.whatsapp.net';
+  const alias = '123456789012345@lid';
+  economy.balance(canonical);
+  economy.balance(alias);
+  economy.walletDb.prepare('UPDATE global_economy_users SET wallet = 0, bank = 1000 WHERE user_jid = ?').run(canonical);
+  economy.walletDb.prepare('UPDATE global_economy_users SET wallet = 0, bank = 0 WHERE user_jid = ?').run(alias);
+  registerIdentity(undefined, [alias, canonical], canonical);
+  const merged = economy.balance(canonical);
+  if (merged.wallet !== 0 || merged.bank !== 750 || merged.total !== 750) {
+    throw new Error('identity merge created an invalid/negative wallet balance');
+  }
+
+  // Repara instalaciones que ya quedaron afectadas por la lógica anterior.
+  economy.walletDb.prepare('UPDATE global_economy_users SET wallet = -240, bank = 735890 WHERE user_jid = ?').run(canonical);
+  const repairedCount = repairNegativeEconomyBalances();
+  const repaired = economy.balance(canonical);
+  if (repairedCount < 1 || repaired.wallet !== 0 || repaired.bank !== 735650 || repaired.total !== 735650) {
+    throw new Error('legacy negative wallet repair did not preserve total wealth');
+  }
+
+  const afterWithdraw = bankingV10.withdraw(canonical, 10);
+  if (afterWithdraw.wallet !== 10 || afterWithdraw.bank !== 735640 || afterWithdraw.total !== 735650) {
+    throw new Error('withdraw after negative-balance repair is incorrect');
+  }
 
   const firstEligibility = bankingV10.eligibility(user);
   if (firstEligibility.profile.creditScore !== 650) throw new Error('default score mismatch');
@@ -55,6 +83,9 @@ const source = `
     scoreAfterEarlyPay: paid.profile.creditScore,
     scoreAfterLate: delinquent.profile.creditScore,
     lateFee: lateLoan.lateFeeTotal,
+    identityMerge: merged,
+    repaired,
+    afterWithdraw,
     minerShop: minerShop.description,
   }));
 `
