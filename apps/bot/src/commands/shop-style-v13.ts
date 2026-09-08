@@ -92,7 +92,7 @@ export const shopStyleV13Commands: BotCommand[] = [
     name: 'shop',
     aliases: ['store', 'tienda'],
     category: 'economy',
-    description: 'Nexora Store sin venta de acceso por chat privado.',
+    description: 'Nexora Store con estilo visual activo y sin venta de acceso por chat privado.',
     handler: shopCommand,
   },
   {
