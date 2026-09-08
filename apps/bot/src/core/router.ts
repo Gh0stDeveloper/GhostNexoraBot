@@ -4,6 +4,7 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
+import { performanceAudit } from '../services/performance-audit.js'
 import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
 import { settings } from './settings.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
@@ -53,17 +54,28 @@ export class CommandRouter {
       this.byName.set(command.name.toLowerCase(), command)
       for (const alias of command.aliases ?? []) this.byName.set(alias.toLowerCase(), command)
     }
+    try {
+      performanceAudit.registerCommands(commands)
+    } catch (error) {
+      logger.warn({ error, instanceId: options.instanceId }, 'command audit catalog registration failed')
+    }
   }
 
   async handle(socket: WASocket, message: WAMessage): Promise<boolean> {
-    const text = getMessageText(message).trim()
+    const ingestStarted = performance.now()
     const chatId = message.key.remoteJid
+    performanceAudit.recordStage('01', performance.now() - ingestStarted)
     if (!chatId) return false
 
     // Defensa en profundidad: un privado no autorizado se consume en silencio.
     // No se responde, no se reacciona y ningún comando alcanza su handler.
     if (!canProcessPrivateMessage(message, this.options.instanceOwnerJid)) return true
 
+    const serializeStarted = performance.now()
+    const text = getMessageText(message).trim()
+    performanceAudit.recordStage('02', performance.now() - serializeStarted)
+
+    const stateStarted = performance.now()
     const me = socket.authState.creds.me
     const selfCandidates = [me?.id, me?.lid].filter((value): value is string => Boolean(value))
     const incomingCandidates = getSenderCandidates(message)
@@ -80,6 +92,7 @@ export class CommandRouter {
     const locale = resolveChatLocale(chatId)
     const localizedSocket = createLocalizedSocket(socket, locale)
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
+    performanceAudit.recordStage('03', performance.now() - stateStarted)
 
     const reply = (replyText: string) => localizedSocket.sendMessage(chatId, { text: replyText }, { quoted: message })
     const react = (emoji: string) => localizedSocket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
@@ -117,28 +130,43 @@ export class CommandRouter {
       }
     }
 
+    const matcherStarted = performance.now()
     const raw = text.slice(prefix.length).trim()
-    if (!raw) return false
+    if (!raw) {
+      performanceAudit.recordStage('05', performance.now() - matcherStarted)
+      return false
+    }
     const [typedName = '', ...args] = raw.split(/\s+/)
     const command = this.byName.get(typedName.toLowerCase())
+    performanceAudit.recordStage('05', performance.now() - matcherStarted)
     if (!command) return false
 
     if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && !disabledGroupBootstrapCommands.has(command.name)) return false
 
     try {
       await react('⚡')
+      const filtersStarted = performance.now()
+      let filtersRecorded = false
+      const finishFilters = () => {
+        if (filtersRecorded) return
+        filtersRecorded = true
+        performanceAudit.recordStage('04', performance.now() - filtersStarted)
+      }
 
       if (command.ownerOnly && !isOwner) {
+        finishFilters()
         await reply(t('router.ownerOnly'))
         await react('🚫')
         return true
       }
       if (command.staffOnly && !isBotStaff && !(command.subbotOwnerAllowed && isSubbotOwner)) {
+        finishFilters()
         await reply(t('router.staffOnly'))
         await react('🚫')
         return true
       }
       if (command.groupOnly && !isGroup) {
+        finishFilters()
         await reply(t('router.groupOnly'))
         await react('🚫')
         return true
@@ -146,6 +174,7 @@ export class CommandRouter {
 
       if (command.adminOnly || command.botAdminOnly) {
         if (!isGroup) {
+          finishFilters()
           await reply(t('router.groupRequired'))
           await react('🚫')
           return true
@@ -158,16 +187,19 @@ export class CommandRouter {
         const senderIsAdmin = senderIsGroupAdmin || isBotStaff || isSubbotOwner
         const botIsAdmin = Boolean(botParticipant?.admin)
         if (command.adminOnly && !senderIsAdmin) {
+          finishFilters()
           await reply(t('router.adminOnly'))
           await react('🚫')
           return true
         }
         if (command.botAdminOnly && !botIsAdmin) {
+          finishFilters()
           await reply(t('router.botAdminOnly'))
           await react('🚫')
           return true
         }
       }
+      finishFilters()
 
       const context: CommandContext = {
         socket: localizedSocket, message, chatId, sender,
@@ -178,7 +210,21 @@ export class CommandRouter {
         instanceOwnerJid: this.options.instanceOwnerJid,
         reply, react,
       }
-      await command.handler(context)
+
+      const executionStarted = performance.now()
+      const heapBefore = process.memoryUsage().heapUsed
+      try {
+        await command.handler(context)
+        const durationMs = performance.now() - executionStarted
+        performanceAudit.recordStage('06', durationMs)
+        performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore)
+      } catch (error) {
+        const durationMs = performance.now() - executionStarted
+        performanceAudit.recordStage('06', durationMs)
+        performanceAudit.recordCommand(command, durationMs, false, process.memoryUsage().heapUsed - heapBefore)
+        throw error
+      }
+
       community.awardCommandXp(sender)
       await react('✅')
       return true
