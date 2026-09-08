@@ -49,7 +49,7 @@ async function configureInactivity(ctx: CommandContext, args = ctx.args) {
   const current = getGroupInactivitySettings(ctx.chatId)
   const action = (args[0] ?? 'status').toLowerCase()
 
-  if (['status', 'estado', 'config', 'ajustes'].includes(action) && args.length === 1) {
+  if (args.length === 0 || (['status', 'estado', 'config', 'ajustes'].includes(action) && args.length === 1)) {
     await ctx.reply([
       '╭━━〔 💤 *POLÍTICA DE INACTIVIDAD* 〕━━╮',
       `┃ Sin actividad: *${current.days} días*`,
