@@ -107,6 +107,8 @@ try {
   assert.equal(relays[0].jid, group)
   assert.ok(relays[0].options?.messageId)
   assert.ok(relays[0].content, 'generated relay content must exist')
+  assert.ok(relays[0].content.lottieStickerMessage, 'generated relay must preserve lottieStickerMessage envelope')
+  assert.ok(relays[0].content.lottieStickerMessage?.message?.stickerMessage, 'generated relay must contain nested stickerMessage')
 
   const { commands } = await import('../apps/bot/dist/commands/index.js')
   const latest = (name) => [...commands].reverse().find((command) => command.name === name)
