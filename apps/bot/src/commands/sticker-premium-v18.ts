@@ -64,7 +64,7 @@ async function listLibrary(ctx: CommandContext) {
   const packLines = packs.map((pack) => `• *${pack.packName}* · ${Number(pack.count)} sticker(s) · ${Number(pack.lottieCount)} Lottie · ${Number(pack.webpCount)} WebP`)
 
   await ctx.reply([
-    '🎭 *BIBLIOTECA GLOBAL DE STICKERS*',
+    '🎭 *BIBLIOTECA DE STICKERS DE ESTA INSTANCIA*',
     '━━━━━━━━━━━━━━',
     `WebP: *${webp.length}* · Lottie/premium: *${lottie.length}* · Packs: *${packs.length}*`,
     '',
@@ -133,7 +133,8 @@ export const stickerPremiumV18Commands: BotCommand[] = [
     aliases: ['globalsticker'],
     category: 'owner',
     staffOnly: true,
-    description: 'Administra stickers WebP, Lottie/premium y packs globales del bot.',
+    subbotOwnerAllowed: true,
+    description: 'Administra stickers WebP, Lottie/premium y packs de la instancia.',
     usage: 'botsticker add|packadd|packsend|packs|list|remove',
     handler: botStickerV18,
   },
@@ -142,6 +143,7 @@ export const stickerPremiumV18Commands: BotCommand[] = [
     aliases: ['premiumsticker', 'wassticker'],
     category: 'owner',
     staffOnly: true,
+    subbotOwnerAllowed: true,
     description: 'Guarda y prueba el relay nativo de un sticker Lottie/premium citado.',
     usage: 'lottiesticker [nombre del pack]',
     handler: lottieStickerCommand,
