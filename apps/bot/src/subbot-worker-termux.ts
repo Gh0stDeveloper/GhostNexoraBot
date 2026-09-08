@@ -11,6 +11,7 @@ import { handleKickSticker } from './services/human-stickers.js'
 import { maybeHumanInteraction } from './services/human-behavior-v8.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { observeGroupActivity } from './services/progression-v4.js'
+import { canProcessPrivateMessage } from './services/private-chat-policy.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { withTimeout } from './utils/timeout.js'
 import { logger } from './utils/logger.js'
@@ -89,6 +90,8 @@ async function routeMessage(message: WAMessage) {
   if (!socket) return
   const chatId = message.key.remoteJid
   if (!chatId || chatId === 'status@broadcast' || !message.message) return
+  if (!canProcessPrivateMessage(message, ownerJid)) return
+
   await observeMessageIdentity(socket, message).catch(() => undefined)
   const text = getMessageText(message).trim()
 
@@ -234,13 +237,10 @@ process.on('message', (message: unknown) => {
   }
 })
 
-// fork() creates an IPC channel. When the MainBot exits/restarts, terminate the
-// tenant too so Android/Termux never accumulates orphan WhatsApp sockets.
 process.on('disconnect', () => process.exit(0))
 process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))
 
 await settings.init()
-await settings.setPrivateCommandsRequireAccess(true)
 startTempCleanup()
 await start()
