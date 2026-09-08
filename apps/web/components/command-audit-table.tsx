@@ -18,8 +18,13 @@ const labels: Record<OpsCommand['status'], string> = {
 export function CommandAuditTable({ commands }: { commands: OpsCommand[] }) {
   const [query, setQuery] = useState('')
   const normalized = query.trim().toLowerCase()
-  const rows = useMemo(() => commands.filter((command) => !normalized || [command.commandName, command.category, command.description, command.status]
-    .some((value) => value.toLowerCase().includes(normalized))), [commands, normalized])
+  const rows = useMemo(() => commands.filter((command) => !normalized || [
+    command.commandName,
+    command.category,
+    command.description,
+    command.status,
+    labels[command.status],
+  ].some((value) => value.toLowerCase().includes(normalized))), [commands, normalized])
 
   return <section className="ops-panel overflow-hidden">
     <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
