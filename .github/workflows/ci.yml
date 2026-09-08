@@ -39,6 +39,9 @@ jobs:
       - name: Group inactive member policy smoke
         run: node scripts/group-inactivity-smoke.mjs
 
+      - name: Operations dashboard telemetry smoke
+        run: node scripts/ops-dashboard-smoke.mjs
+
       - name: Spanish/English i18n isolation smoke
         run: node scripts/i18n-smoke.mjs
 
@@ -46,6 +49,7 @@ jobs:
         run: node scripts/i18n-user-facing-audit.mjs
 
       - name: Upload i18n audit
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: i18n-user-facing-audit
@@ -53,6 +57,7 @@ jobs:
           retention-days: 3
 
       - name: Upload bot source snapshot
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: i18n-source-snapshot
@@ -64,6 +69,7 @@ jobs:
             scripts/i18n-smoke.mjs
             scripts/private-chat-policy-smoke.mjs
             scripts/group-inactivity-smoke.mjs
+            scripts/ops-dashboard-smoke.mjs
             scripts/v5-smoke.mjs
             scripts/youtube-select-smoke.mjs
             scripts/bank-v10-smoke.mjs
