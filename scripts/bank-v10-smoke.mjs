@@ -78,6 +78,17 @@ const source = `
   const minerShop = [...commands].reverse().find((command) => command.name === 'minershop');
   if (!minerShop || !/estilo visual activo/i.test(minerShop.description)) throw new Error('minershop V13 style carousel override not registered');
 
+  // Regresión: los pasivos sin saldo deben mostrarse como 0 NXC, nunca -0 NXC.
+  const balanceCommand = [...commands].reverse().find((command) => command.name === 'balance');
+  if (!balanceCommand) throw new Error('balance command not registered');
+  let balanceText = '';
+  await balanceCommand.handler({
+    sender: user,
+    prefix: '.',
+    reply: async (text) => { balanceText = String(text); },
+  });
+  if (balanceText.includes('-0 NXC')) throw new Error('balance output contains negative zero liabilities');
+
   console.log(JSON.stringify({
     scoreBefore: firstEligibility.profile.creditScore,
     scoreAfterEarlyPay: paid.profile.creditScore,
@@ -86,6 +97,7 @@ const source = `
     identityMerge: merged,
     repaired,
     afterWithdraw,
+    zeroLiabilityFormatting: !balanceText.includes('-0 NXC'),
     minerShop: minerShop.description,
   }));
 `
