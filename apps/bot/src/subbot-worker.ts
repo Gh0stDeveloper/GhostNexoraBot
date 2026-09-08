@@ -14,6 +14,8 @@ import { maybeHumanInteraction } from './services/human-behavior-v8.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { observeGroupActivity } from './services/progression-v4.js'
 import { canProcessPrivateMessage } from './services/private-chat-policy.js'
+import { recordSubbotMessage } from './services/subbot-metrics.js'
+import { createSubbotMessageGate } from './services/subbot-message-gate.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { withTimeout } from './utils/timeout.js'
 import { logger } from './utils/logger.js'
@@ -63,8 +65,11 @@ const allowedCommands = commands.filter((command) =>
 )
 
 const router = new CommandRouter(allowedCommands, { instanceId: subbotId, instanceOwnerJid: ownerJid })
+const messageGate = createSubbotMessageGate()
 
 let socket: WASocket | null = null
+let socketGeneration = 0
+let startPromise: Promise<void> | null = null
 let reconnectTimer: NodeJS.Timeout | null = null
 let reconnectAttempts = 0
 let stopping = false
@@ -92,7 +97,7 @@ function scheduleReconnect() {
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
-    void start().catch((error) => {
+    void ensureStarted().catch((error) => {
       logger.error({ error, subbotId, reconnectAttempts }, 'isolated subbot reconnect failed')
       scheduleReconnect()
     })
@@ -100,65 +105,78 @@ function scheduleReconnect() {
   reconnectTimer.unref?.()
 }
 
-async function routeMessage(message: WAMessage) {
-  if (!socket) return
+async function routeMessage(sourceSocket: WASocket, message: WAMessage) {
+  if (socket !== sourceSocket) return
   const chatId = message.key.remoteJid
   if (!chatId || chatId === 'status@broadcast' || !message.message) return
   if (!canProcessPrivateMessage(message, ownerJid)) return
 
-  await observeMessageIdentity(socket, message).catch(() => undefined)
+  recordSubbotMessage(subbotId)
+  await observeMessageIdentity(sourceSocket, message).catch(() => undefined)
   const text = getMessageText(message).trim()
 
   if (!message.key.fromMe) {
     observeGroupActivity(chatId, resolveStoredIdentity(getSender(message)), chatId.endsWith('@g.us'), text.startsWith(settings.prefix))
   }
 
-  if (await handleAntiViewOnce(socket, message).catch((error) => {
+  if (await handleAntiViewOnce(sourceSocket, message).catch((error) => {
     logger.warn({ error, subbotId, chatId }, 'anti-view-once failed; continuing message route')
     return false
   })) return
-  if (await handleKickSticker(socket, message).catch((error) => {
+  if (await handleKickSticker(sourceSocket, message).catch((error) => {
     logger.warn({ error, subbotId, chatId }, 'kick-sticker handler failed; continuing message route')
     return false
   })) return
-  if (await moderateIncomingV2(socket, message).catch((error) => {
+  if (await moderateIncomingV2(sourceSocket, message).catch((error) => {
     logger.warn({ error, subbotId, chatId }, 'subbot moderation failed; continuing message route')
     return false
   })) return
 
-  const handled = await router.handle(socket, message)
+  const handled = await router.handle(sourceSocket, message)
   if (handled) return
   if (chatId.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
-  await maybeHumanInteraction(socket, message).catch(() => false)
+  await maybeHumanInteraction(sourceSocket, message).catch(() => false)
 }
 
-async function start() {
+async function startSocket() {
   if (stopping || Date.now() >= expiresAt) {
     report('expired')
     return
   }
+
   latestQr = null
   connectionState = 'starting'
+  const generation = ++socketGeneration
   const { createSocket } = await import('./core/session.js')
   const { socket: created } = await createSocket(config.sessionDir)
+
+  if (stopping || generation !== socketGeneration) {
+    try { created.end(new Error('stale isolated subbot socket')) } catch {}
+    return
+  }
   socket = created
 
-  socket.ev.on('messages.upsert', ({ messages, type }) => {
-    if (type !== 'notify') return
+  created.ev.on('messages.upsert', ({ messages, type }) => {
+    if (socket !== created || generation !== socketGeneration) return
     for (const message of messages) {
-      void withTimeout(routeMessage(message), config.botMessageTimeoutMs, `isolated-subbot route #${subbotId}`)
-        .catch((error) => logger.error({ error, subbotId }, 'isolated subbot message failed'))
+      if (!messageGate.shouldHandle(type, message)) continue
+      void withTimeout(routeMessage(created, message), config.botMessageTimeoutMs, `isolated-subbot route #${subbotId}`)
+        .catch((error) => logger.error({ error, subbotId, type }, 'isolated subbot message failed'))
     }
   })
 
-  socket.ev.on('group-participants.update', (update) => {
-    void handleParticipantUpdateV2(socket!, update, subbotId).catch((error) =>
+  created.ev.on('group-participants.update', (update) => {
+    if (socket !== created || generation !== socketGeneration) return
+    void handleParticipantUpdateV2(created, update, subbotId).catch((error) =>
       logger.error({ error, subbotId, groupId: update.id }, 'isolated subbot participant update failed'),
     )
   })
 
-  socket.ev.on('connection.update', ({ connection, lastDisconnect, qr, isNewLogin }) => {
-    if (qr && !socket?.authState.creds.registered) {
+  created.ev.on('connection.update', ({ connection, lastDisconnect, qr, isNewLogin }) => {
+    const isCurrent = socket === created && generation === socketGeneration
+    if (!isCurrent) return
+
+    if (qr && !created.authState.creds.registered) {
       latestQr = { value: qr, createdAt: Date.now() }
       report('pairing', { qr })
     }
@@ -167,15 +185,16 @@ async function start() {
     if (connection === 'open') {
       reconnectAttempts = 0
       latestQr = null
-      phone = socket?.user?.id?.split(':')[0]?.split('@')[0] ?? phone
+      phone = created.user?.id?.split(':')[0]?.split('@')[0] ?? phone
       economy.db.prepare('UPDATE subbots SET status = ?, phone = ?, last_seen_at = ? WHERE id = ?')
         .run('online', phone, Date.now(), subbotId)
-      report('online', { jid: socket?.user?.id ?? null, phone })
+      report('online', { jid: created.user?.id ?? null, phone })
+      logger.info({ subbotId, jid: created.user?.id, generation }, 'isolated subbot socket ready')
       return
     }
 
     if (connection !== 'close') return
-    socket = null
+    if (socket === created) socket = null
     const code = Number((lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode ?? 0)
     const linked = Boolean(created.authState.creds.registered)
     if (code === DisconnectReason.loggedOut) {
@@ -193,42 +212,51 @@ async function start() {
   report(created.authState.creds.registered ? 'starting' : 'pairing')
 }
 
+function ensureStarted() {
+  if (socket?.authState.creds.registered) return Promise.resolve()
+  if (startPromise) return startPromise
+  startPromise = startSocket().finally(() => { startPromise = null })
+  return startPromise
+}
+
 async function requestPairingCode() {
-  if (!socket) await start()
-  if (!socket) throw new Error('Subbot socket no disponible.')
+  if (!socket) await ensureStarted()
+  const activeSocket = socket
+  if (!activeSocket) throw new Error('Subbot socket no disponible.')
   if (!phone) throw new Error('No hay teléfono para solicitar código de vinculación.')
   await new Promise((resolve) => setTimeout(resolve, 2000))
-  if (socket.authState.creds.registered) return null
-  const code = await withTimeout(socket.requestPairingCode(phone), 25_000, `subbot pairing #${subbotId}`)
+  if (activeSocket.authState.creds.registered) return null
+  const code = await withTimeout(activeSocket.requestPairingCode(phone), 25_000, `subbot pairing #${subbotId}`)
   return code?.trim() || null
 }
 
 async function requestQr() {
-  if (!socket) await start()
-  if (!socket) throw new Error('Subbot socket no disponible.')
-  if (socket.authState.creds.registered) return ''
+  if (!socket) await ensureStarted()
+  const activeSocket = socket
+  if (!activeSocket) throw new Error('Subbot socket no disponible.')
+  if (activeSocket.authState.creds.registered) return ''
   if (latestQr && Date.now() - latestQr.createdAt <= 50_000) return latestQr.value
 
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      socket?.ev.off('connection.update', listener as never)
+      activeSocket.ev.off('connection.update', listener as never)
       reject(new Error('WhatsApp no generó un QR a tiempo.'))
     }, 55_000)
     const listener = ({ qr, connection }: { qr?: string; connection?: string }) => {
       if (qr) {
         latestQr = { value: qr, createdAt: Date.now() }
         clearTimeout(timeout)
-        socket?.ev.off('connection.update', listener as never)
+        activeSocket.ev.off('connection.update', listener as never)
         resolve(qr)
         return
       }
       if (connection === 'open') {
         clearTimeout(timeout)
-        socket?.ev.off('connection.update', listener as never)
+        activeSocket.ev.off('connection.update', listener as never)
         resolve('')
       }
     }
-    socket!.ev.on('connection.update', listener as never)
+    activeSocket.ev.on('connection.update', listener as never)
   })
 }
 
@@ -255,6 +283,7 @@ process.on('message', (message: unknown) => {
   }
   if (value.type === 'stop') {
     stopping = true
+    socketGeneration += 1
     if (reconnectTimer) clearTimeout(reconnectTimer)
     try { socket?.end(new Error('isolated subbot stop')) } catch {}
     process.exit(0)
@@ -278,4 +307,4 @@ process.on('SIGINT', () => process.exit(0))
 
 await settings.init()
 startTempCleanup()
-await start()
+await ensureStarted()
