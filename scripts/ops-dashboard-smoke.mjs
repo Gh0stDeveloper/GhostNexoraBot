@@ -50,10 +50,35 @@ try {
   assert.equal(subReset.commands[0]?.invocations, 0, 'reset must preserve audit catalog but clear metrics')
   assert.equal(performanceAudit.snapshot('main').commands.find((row) => row.commandName === 'slowci')?.invocations, 2, 'subbot reset must not touch MainBot')
 
+  const { executeAdminWebControl } = await import('../apps/bot/dist/services/admin-web-control.js')
+  const { economy } = await import('../apps/bot/dist/services/economy.js')
+  const adminUser = '5215558887777@s.whatsapp.net'
+  const before = economy.balance(adminUser)
+  const credit = await executeAdminWebControl({ action: 'add_nxc', userJid: adminUser, amount: 1750 }, null)
+  assert.equal(credit.ok, true)
+  assert.equal(economy.balance(adminUser).wallet, before.wallet + 1750, 'web NXC grant must credit the global wallet')
+
+  const grant = await executeAdminWebControl({ action: 'grant_subbot', userJid: adminUser, durationMs: 86_400_000 }, null)
+  assert.equal(grant.ok, true)
+  const grantedSubbot = economy.getActiveSubbot(adminUser)
+  assert.ok(grantedSubbot, 'web subbot grant must create an active instance')
+  assert.ok(grantedSubbot.expiresAt > Date.now())
+
+  await assert.rejects(
+    () => executeAdminWebControl({ action: 'reset_own_subbot', id: grantedSubbot.id, userJid: '5210000000000@s.whatsapp.net' }, null),
+    /no pertenece/i,
+    'subbot owner reset must reject a different owner',
+  )
+  const ownReset = await executeAdminWebControl({ action: 'reset_own_subbot', id: grantedSubbot.id, userJid: adminUser }, null)
+  assert.equal(ownReset.ok, true)
+  assert.equal(economy.listSubbots().find((row) => row.id === grantedSubbot.id)?.status, 'pending')
+  await assert.rejects(() => executeAdminWebControl({ action: 'broadcast', message: 'CI' }, null), /no está conectado/i)
+
   const routerSource = await readFile(new URL('../apps/bot/src/core/router.ts', import.meta.url), 'utf8')
   const sessionSource = await readFile(new URL('../apps/bot/src/core/session.ts', import.meta.url), 'utf8')
   const groupRuntimeSource = await readFile(new URL('../apps/bot/src/services/group-ops-runtime.ts', import.meta.url), 'utf8')
   const controlSource = await readFile(new URL('../apps/web/app/api/control/route.ts', import.meta.url), 'utf8')
+  const adminControlSource = await readFile(new URL('../apps/bot/src/services/admin-web-control.ts', import.meta.url), 'utf8')
   const adminSource = await readFile(new URL('../apps/web/app/admin/page.tsx', import.meta.url), 'utf8')
   const subbotSource = await readFile(new URL('../apps/web/app/subbot/page.tsx', import.meta.url), 'utf8')
   const publicSource = await readFile(new URL('../apps/web/app/page.tsx', import.meta.url), 'utf8')
@@ -66,6 +91,9 @@ try {
   assert.ok(groupRuntimeSource.includes('groupLeave(groupJid)'), 'group leave control must execute on the owning socket')
   assert.ok(controlSource.includes("action === 'leave_group'"), 'web control must support leave_group')
   assert.ok(controlSource.includes('isSubbot ? `subbot:${subbot.subbotId}`'), 'subbot web session must force its own instance key')
+  assert.ok(adminControlSource.includes("action === 'add_nxc'"), 'bot control must implement web NXC grants')
+  assert.ok(adminControlSource.includes("action === 'grant_subbot'"), 'bot control must implement web subbot grants')
+  assert.ok(adminControlSource.includes("action === 'broadcast'"), 'bot control must implement web broadcast')
   assert.ok(adminSource.includes('<OpsConsole'), 'admin must render shared operations console')
   assert.ok(subbotSource.includes('<OpsConsole'), 'subbot portal must render shared operations console')
   assert.ok(publicSource.includes('PIPELINE DAG'), 'public page must use the same operations design language')
