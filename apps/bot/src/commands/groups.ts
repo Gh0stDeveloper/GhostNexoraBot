@@ -1,7 +1,9 @@
 import type { BotCommand, CommandContext } from '../types.js'
-import { getContextInfo } from '../utils/message.js'
+import { config } from '../config.js'
+import { digitsFromJid, getContextInfo } from '../utils/message.js'
 import { community } from '../services/community.js'
 import { economy } from '../services/economy.js'
+import { groupInactivityReport, normalizeInactiveDays } from '../services/group-inactivity.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 
 async function targetJids(ctx: CommandContext) {
@@ -18,6 +20,129 @@ async function updateGroupOpen(ctx: CommandContext, close: boolean) {
   await ctx.reply(close
     ? '╭─〔 🔒 *GRUPO CERRADO* 〕\n│ Solo los administradores pueden enviar mensajes.\n╰──────────────'
     : '╭─〔 🔓 *GRUPO ABIERTO* 〕\n│ Todos los participantes pueden enviar mensajes.\n╰──────────────')
+}
+
+function inactivityProtection(ctx: CommandContext) {
+  const protectedJids = [ctx.socket.user?.id, ctx.instanceOwnerJid].filter((value): value is string => Boolean(value))
+  const protectedNumbers = [...config.owners, ...ctx.settings.botAdmins]
+  if (ctx.instanceOwnerJid) {
+    const number = digitsFromJid(ctx.instanceOwnerJid)
+    if (number) protectedNumbers.push(number)
+  }
+  return { protectedJids, protectedNumbers: [...new Set(protectedNumbers)] }
+}
+
+function inactiveMention(jid: string) {
+  return digitsFromJid(jid) || jid.split('@')[0] || 'usuario'
+}
+
+function formatTrackedDate(timestamp: number) {
+  if (!timestamp) return 'sin historial suficiente'
+  return new Date(timestamp).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+async function inactiveUsersCommand(ctx: CommandContext) {
+  const days = normalizeInactiveDays(ctx.args[0], 30)
+  const metadata = await ctx.socket.groupMetadata(ctx.chatId)
+  const report = groupInactivityReport(ctx.chatId, metadata.participants, days, inactivityProtection(ctx))
+  const visible = report.inactive.slice(0, 50)
+  const remaining = Math.max(0, report.inactive.length - visible.length)
+
+  const lines = visible.map((member, index) => [
+    `${index + 1}. @${inactiveMention(member.userJid)}`,
+    `   ├ Inactivo: *${member.inactiveDays} días*`,
+    `   ├ Última actividad: ${formatTrackedDate(member.lastActivityAt)}`,
+    `   └ Mensajes registrados: *${member.messages}* · comandos: *${member.commands}*`,
+  ].join('\n'))
+
+  const body = [
+    `╭━━〔 💤 *USUARIOS INACTIVOS · ${metadata.subject}* 〕━━╮`,
+    `┃ Umbral » *${days} días*`,
+    `┃ Miembros » *${report.totalParticipants}*`,
+    `┃ Inactivos confirmados » *${report.inactive.length}*`,
+    `┃ Activos registrados » *${report.activeCount}*`,
+    `┃ Protegidos » *${report.protectedCount}*`,
+    `┃ Sin historial » *${report.unknown.length}*`,
+    `┃ Seguimiento desde » *${formatTrackedDate(report.trackedSince)}*`,
+    '╰━━━━━━━━━━━━━━━━━━━━╯',
+    '',
+    report.inactive.length
+      ? lines.join('\n\n')
+      : `✅ No hay usuarios con inactividad confirmada de ${days} días o más.`,
+    remaining ? `\n… y *${remaining}* usuario(s) inactivo(s) más.` : '',
+    report.unknown.length
+      ? '\nℹ️ Los miembros sin historial no se clasifican como inactivos y nunca se expulsan automáticamente.'
+      : '',
+    `\nPara expulsar los elegibles: *${ctx.prefix}expulsarinactivos ${days}*`,
+  ].filter(Boolean).join('\n')
+
+  await ctx.socket.sendMessage(ctx.chatId, {
+    text: body,
+    mentions: visible.map((member) => member.participantJid),
+  }, { quoted: ctx.message })
+}
+
+async function kickInactiveUsersCommand(ctx: CommandContext) {
+  const days = normalizeInactiveDays(ctx.args[0], 30)
+  const metadata = await ctx.socket.groupMetadata(ctx.chatId)
+  const report = groupInactivityReport(ctx.chatId, metadata.participants, days, inactivityProtection(ctx))
+  const MAX_PER_RUN = 20
+  const candidates = report.inactive.slice(0, MAX_PER_RUN)
+
+  if (!candidates.length) {
+    await ctx.reply([
+      `✅ *SIN EXPULSIONES · ${metadata.subject}*`,
+      '━━━━━━━━━━━━━━',
+      `No hay usuarios elegibles con *${days} días* o más de inactividad confirmada.`,
+      report.unknown.length ? `Sin historial y protegidos contra expulsión automática: *${report.unknown.length}*.` : '',
+    ].filter(Boolean).join('\n'))
+    return
+  }
+
+  let removed = 0
+  let failed = 0
+  const removedMembers: typeof candidates = []
+
+  for (let index = 0; index < candidates.length; index += 5) {
+    const chunk = candidates.slice(index, index + 5)
+    try {
+      await ctx.socket.groupParticipantsUpdate(ctx.chatId, chunk.map((member) => member.participantJid), 'remove')
+      removed += chunk.length
+      removedMembers.push(...chunk)
+    } catch {
+      // Si un lote falla, se intenta miembro por miembro para no abortar toda la limpieza.
+      for (const member of chunk) {
+        try {
+          await ctx.socket.groupParticipantsUpdate(ctx.chatId, [member.participantJid], 'remove')
+          removed += 1
+          removedMembers.push(member)
+        } catch {
+          failed += 1
+        }
+      }
+    }
+    if (index + 5 < candidates.length) await new Promise((resolve) => setTimeout(resolve, 800))
+  }
+
+  const pending = Math.max(0, report.inactive.length - candidates.length)
+  const lines = removedMembers.map((member) => `› @${inactiveMention(member.userJid)} · ${member.inactiveDays} días`)
+  await ctx.socket.sendMessage(ctx.chatId, {
+    text: [
+      `╭━━〔 👢 *LIMPIEZA DE INACTIVOS* 〕━━╮`,
+      `┃ Umbral » *${days} días*`,
+      `┃ Expulsados » *${removed}*`,
+      `┃ Fallidos » *${failed}*`,
+      `┃ Protegidos » *${report.protectedCount}*`,
+      `┃ Sin historial » *${report.unknown.length}*`,
+      `┃ Pendientes por límite » *${pending}*`,
+      '╰━━━━━━━━━━━━━━━━━━━━╯',
+      '',
+      ...lines,
+      pending ? `\n⚠️ Por seguridad se procesan máximo *${MAX_PER_RUN}* miembros por ejecución. Repite el comando para continuar.` : '',
+      report.unknown.length ? '\nℹ️ Los miembros sin historial no fueron expulsados.' : '',
+    ].filter(Boolean).join('\n'),
+    mentions: removedMembers.map((member) => member.participantJid),
+  }, { quoted: ctx.message })
 }
 
 export const groupCommands: BotCommand[] = [
@@ -122,6 +247,27 @@ export const groupCommands: BotCommand[] = [
       await ctx.socket.groupParticipantsUpdate(ctx.chatId, targets, 'remove')
       await ctx.reply(`👢 *MODERACIÓN*\n━━━━━━━━━━━━━━\n${targets.length} usuario(s) expulsado(s).`)
     },
+  },
+  {
+    name: 'inactivos',
+    aliases: ['inactive', 'inactiveusers', 'usuariosinactivos'],
+    category: 'groups',
+    description: 'Lista miembros con inactividad confirmada según la actividad registrada por el bot.',
+    usage: 'inactivos [días]',
+    groupOnly: true,
+    adminOnly: true,
+    handler: inactiveUsersCommand,
+  },
+  {
+    name: 'expulsarinactivos',
+    aliases: ['kickinactive', 'purgeinactive', 'sacarinactivos'],
+    category: 'groups',
+    description: 'Expulsa miembros con inactividad confirmada; protege admins, owners, staff y usuarios sin historial.',
+    usage: 'expulsarinactivos [días]',
+    groupOnly: true,
+    adminOnly: true,
+    botAdminOnly: true,
+    handler: kickInactiveUsersCommand,
   },
   {
     name: 'promote',
