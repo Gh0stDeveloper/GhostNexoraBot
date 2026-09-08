@@ -95,6 +95,9 @@ import { appStoresV15Commands } from './app-stores-v15.js'
 import { appStoresExtraV15Commands } from './app-stores-extra-v15.js'
 import { tiktokV15Commands } from './tiktok-v15.js'
 import { adultDownloadV15Commands } from './adult-download-v15.js'
+import { groupInactivityV18Commands } from './group-inactivity-v18.js'
+import { stickerPremiumV18Commands } from './sticker-premium-v18.js'
+import { economyUiV18Commands } from './economy-ui-v18.js'
 
 // El stack local LLM depende de Ollama. Si OLLAMA_ENABLED=false, el router y el
 // menú no registran .llm/.minillm/.localai ni el control de conversación libre.
@@ -112,8 +115,6 @@ const registeredSubbotCommands = config.webEnabled
 // V15 consolida los flujos que históricamente quedaron duplicados entre varias
 // generaciones. El router conserva la última coincidencia, por lo que permitir
 // duplicados hacía que un botón válido terminara en un handler con otro contrato.
-// Estas entradas se retiran del registro legado y se vuelven a registrar una sola
-// vez al final mediante los módulos canónicos V15.
 const replacedDownloadCommands = new Set([
   'apk',
   'apkdl',
@@ -135,6 +136,16 @@ const replacedDownloadCommands = new Set([
   'pornhub',
   'adultdl',
   'adultselect',
+])
+
+// V18 reemplaza únicamente las implementaciones antiguas de estos comandos y
+// mantiene el resto del registro intacto. Las nuevas versiones se agregan al final.
+const replacedV18Commands = new Set([
+  'inactivos',
+  'expulsarinactivos',
+  'botsticker',
+  'balance',
+  'miner',
 ])
 
 const legacyCommands: BotCommand[] = [
@@ -228,11 +239,14 @@ const legacyCommands: BotCommand[] = [
 ]
 
 export const commands: BotCommand[] = [
-  ...legacyCommands.filter((command) => !replacedDownloadCommands.has(command.name.toLowerCase())),
+  ...legacyCommands.filter((command) => !replacedDownloadCommands.has(command.name.toLowerCase()) && !replacedV18Commands.has(command.name.toLowerCase())),
   ...appStoresV15Commands,
   ...appStoresExtraV15Commands,
   ...tiktokV15Commands,
   ...adultDownloadV15Commands,
+  ...groupInactivityV18Commands,
+  ...stickerPremiumV18Commands,
+  ...economyUiV18Commands,
 ]
 
 setMenuCommandProvider(() => commands)
