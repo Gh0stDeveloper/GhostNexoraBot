@@ -16,6 +16,7 @@ import { maybeHumanInteraction } from './services/human-behavior-v8.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { observeGroupActivity } from './services/progression-v4.js'
 import { startAutomationScheduler } from './services/automation-v4.js'
+import { canProcessPrivateMessage } from './services/private-chat-policy.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -72,12 +73,13 @@ async function routeMessage(
   message: Parameters<CommandRouter['handle']>[1],
   router: CommandRouter,
 ) {
-  await observeMessageIdentity(socket, message).catch((error) => logger.debug({ error }, 'identity observation skipped'))
-
   const chatId = message.key.remoteJid
+  if (!chatId || !canProcessPrivateMessage(message)) return
+
+  await observeMessageIdentity(socket, message).catch((error) => logger.debug({ error }, 'identity observation skipped'))
   const text = getMessageText(message).trim()
 
-  if (chatId && !message.key.fromMe) {
+  if (!message.key.fromMe) {
     observeGroupActivity(
       chatId,
       resolveStoredIdentity(getSender(message)),
@@ -97,7 +99,7 @@ async function routeMessage(
   const handled = await router.handle(socket, message)
   if (handled) return
 
-  if (chatId?.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
+  if (chatId.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
   await maybeHumanInteraction(socket, message).catch(() => false)
 }
 
