@@ -7,6 +7,8 @@ import makeWASocket, {
   type WASocket,
 } from 'baileys'
 import { config } from '../config.js'
+import { registerOpsSocket } from '../services/group-ops-runtime.js'
+import { performanceAudit } from '../services/performance-audit.js'
 import { canSendToChatJid } from '../services/private-chat-policy.js'
 import { silentWaLogger } from '../utils/logger.js'
 
@@ -32,9 +34,15 @@ export async function createSocket(sessionDir = config.sessionDir): Promise<{ so
   socket.sendMessage = (async (jid, content, options) => {
     const instanceOwnerJid = process.env.NEXORA_SUBBOT_OWNER_JID || undefined
     if (!canSendToChatJid(jid, instanceOwnerJid)) return undefined
-    return rawSendMessage(jid, content, options)
+    const started = performance.now()
+    try {
+      return await rawSendMessage(jid, content, options)
+    } finally {
+      performanceAudit.recordStage('07', performance.now() - started)
+    }
   }) as WASocket['sendMessage']
 
+  registerOpsSocket(socket)
   socket.ev.on('creds.update', saveCreds)
   return { socket, saveCreds }
 }
