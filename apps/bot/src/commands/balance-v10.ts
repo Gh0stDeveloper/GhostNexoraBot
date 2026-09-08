@@ -5,7 +5,17 @@ import { bankingV10 } from '../services/banking-v10.js'
 import { mining, MINER_MAX_COUNT } from '../services/mining.js'
 import { professionsV2 } from '../services/professions-v2.js'
 
-const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
+function wholeAmount(value: number) {
+  if (!Number.isFinite(value)) return 0
+  const normalized = Math.trunc(value)
+  return Object.is(normalized, -0) ? 0 : normalized
+}
+
+const fmt = (value: number) => `${wholeAmount(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
+const liabilityFmt = (value: number) => {
+  const amount = Math.max(0, wholeAmount(value))
+  return amount === 0 ? fmt(0) : `-${fmt(amount)}`
+}
 
 function pendingFines(userJid: string) {
   const db = economy.walletDb
@@ -19,13 +29,14 @@ async function balanceV10(ctx: CommandContext) {
   const balance = economy.balance(ctx.sender)
   const assets = advancedEconomy.summary(ctx.sender)
   const debts = advancedEconomy.debts(ctx.sender)
-  const peerDebt = debts.peers.reduce((sum, item) => sum + Number(item.balanceDue ?? 0), 0)
+  const peerDebt = Math.max(0, debts.peers.reduce((sum, item) => sum + Math.max(0, wholeAmount(Number(item.balanceDue ?? 0))), 0))
   const bank = bankingV10.status(ctx.sender)
-  const fines = pendingFines(ctx.sender)
+  const bankDebt = Math.max(0, wholeAmount(bank.totalDebt))
+  const fines = Math.max(0, wholeAmount(pendingFines(ctx.sender)))
   const miner = mining.summary(ctx.sender)
   const profession = professionsV2.get(ctx.sender)
   const gross = balance.total + assets.investments + assets.cda
-  const liabilities = bank.totalDebt + peerDebt + fines
+  const liabilities = bankDebt + peerDebt + fines
   const net = gross - liabilities
 
   await ctx.reply([
@@ -36,10 +47,10 @@ async function balanceV10(ctx: CommandContext) {
     `┃ Plazo fijo: *${fmt(assets.cda)}*`,
     `┃ Minería pendiente: *${fmt(miner.pending)}*`,
     '┣━━━━━━━━━━━━━━━━',
-    `┃ Crédito bancario: *-${fmt(bank.totalDebt)}*`,
-    `┃ Préstamos de usuarios: *-${fmt(peerDebt)}*`,
-    `┃ Multas: *-${fmt(fines)}*`,
-    `┃ Pasivos totales: *-${fmt(liabilities)}*`,
+    `┃ Crédito bancario: *${liabilityFmt(bankDebt)}*`,
+    `┃ Préstamos de usuarios: *${liabilityFmt(peerDebt)}*`,
+    `┃ Multas: *${liabilityFmt(fines)}*`,
+    `┃ Pasivos totales: *${liabilityFmt(liabilities)}*`,
     '┣━━━━━━━━━━━━━━━━',
     `┃ Patrimonio bruto: *${fmt(gross)}*`,
     `┃ Patrimonio neto: *${fmt(net)}*`,
