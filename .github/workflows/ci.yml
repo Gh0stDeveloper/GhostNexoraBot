@@ -36,6 +36,9 @@ jobs:
       - name: Private chat silent-block policy smoke
         run: node scripts/private-chat-policy-smoke.mjs
 
+      - name: Group inactive member policy smoke
+        run: node scripts/group-inactivity-smoke.mjs
+
       - name: Spanish/English i18n isolation smoke
         run: node scripts/i18n-smoke.mjs
 
@@ -60,6 +63,7 @@ jobs:
             package.json
             scripts/i18n-smoke.mjs
             scripts/private-chat-policy-smoke.mjs
+            scripts/group-inactivity-smoke.mjs
             scripts/v5-smoke.mjs
             scripts/youtube-select-smoke.mjs
             scripts/bank-v10-smoke.mjs
