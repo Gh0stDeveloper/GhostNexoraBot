@@ -1,7 +1,7 @@
 import { jidNormalizedUser } from 'baileys'
 import type { BotCommand, CommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
-import { grantPrivateAccess, listPrivateAccess, privateAccessStatus, revokePrivateAccess } from '../services/private-access.js'
+import { allowPrivateChat, denyPrivateChat, isPrivateChatApproved, listPrivateChatUsers } from '../services/private-chat-policy.js'
 
 async function resolveTarget(ctx: CommandContext) {
   const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
@@ -21,91 +21,71 @@ async function resolveTarget(ctx: CommandContext) {
   return `${digits}@s.whatsapp.net`
 }
 
-function parseDuration(args: string[]) {
-  const token = args.find((arg) => /^(?:permanent|permanente|forever|\d+[hd])$/i.test(arg))?.toLowerCase() ?? '7d'
-  if (['permanent', 'permanente', 'forever'].includes(token)) return { label: 'permanente', durationMs: null as number | null }
-  const match = /^(\d+)([hd])$/.exec(token)
-  if (!match) throw new Error('Duración inválida. Usa 12h, 1d, 7d, 30d, 90d, 365d o permanent.')
-  const amount = Number(match[1])
-  if (!Number.isFinite(amount) || amount < 1 || amount > 3650) throw new Error('La duración debe estar entre 1 hora y 3650 días.')
-  const durationMs = amount * (match[2] === 'h' ? 3600_000 : 86400_000)
-  return { label: token, durationMs }
+function requireInstanceOwner(ctx: CommandContext) {
+  if (!ctx.isOwner && !ctx.isSubbotOwner) throw new Error('Solo el owner de esta instancia puede administrar el chat privado.')
 }
 
-function fmtExpiry(expiresAt: number, permanent: boolean) {
-  return permanent ? 'PERMANENTE' : new Date(expiresAt).toLocaleString('es-MX')
+async function privatePolicyCommand(ctx: CommandContext) {
+  requireInstanceOwner(ctx)
+  const action = (ctx.args[0] ?? 'list').toLowerCase()
+
+  if (['allow', 'add', 'aprobar', 'permitir'].includes(action)) {
+    const target = await resolveTarget({ ...ctx, args: ctx.args.slice(1) })
+    const saved = allowPrivateChat(target, ctx.sender)
+    await ctx.socket.sendMessage(ctx.chatId, {
+      text: `🔐 *CHAT PRIVADO AUTORIZADO*\n━━━━━━━━━━━━━━\n@${saved.split('@')[0]} puede usar esta instancia por chat privado.\n\nEl permiso pertenece únicamente a ${ctx.instanceId ? `este subbot #${ctx.instanceId}` : 'este MainBot'}.`,
+      mentions: [saved],
+    }, { quoted: ctx.message })
+    return
+  }
+
+  if (['deny', 'remove', 'revoke', 'quitar', 'bloquear'].includes(action)) {
+    const target = await resolveTarget({ ...ctx, args: ctx.args.slice(1) })
+    const removed = denyPrivateChat(target)
+    await ctx.socket.sendMessage(ctx.chatId, {
+      text: removed
+        ? `🔒 *CHAT PRIVADO REVOCADO*\n━━━━━━━━━━━━━━\n@${target.split('@')[0]} ya no puede usar esta instancia por privado.`
+        : `ℹ️ @${target.split('@')[0]} no estaba autorizado para usar esta instancia por privado.`,
+      mentions: [target],
+    }, { quoted: ctx.message })
+    return
+  }
+
+  if (['status', 'check', 'estado'].includes(action)) {
+    const target = await resolveTarget({ ...ctx, args: ctx.args.slice(1) })
+    const allowed = isPrivateChatApproved(target)
+    await ctx.socket.sendMessage(ctx.chatId, {
+      text: `${allowed ? '🔐' : '🔒'} @${target.split('@')[0]} ${allowed ? 'está autorizado' : 'no está autorizado'} para usar esta instancia por chat privado.`,
+      mentions: [target],
+    }, { quoted: ctx.message })
+    return
+  }
+
+  if (!['list', 'lista', 'users', 'usuarios'].includes(action)) {
+    throw new Error(`Uso: ${ctx.prefix}private allow|deny|status @usuario · ${ctx.prefix}private list`)
+  }
+
+  const rows = listPrivateChatUsers(100)
+  if (!rows.length) {
+    await ctx.reply('🔒 *CHAT PRIVADO BLOQUEADO*\n━━━━━━━━━━━━━━\nNo hay usuarios adicionales autorizados. Solo el owner de esta instancia puede usar el chat privado.')
+    return
+  }
+  const lines = rows.map((row, index) => `${index + 1}. @${row.userJid.split('@')[0]}`)
+  await ctx.socket.sendMessage(ctx.chatId, {
+    text: `╭━━〔 🔐 *ALLOWLIST PRIVADA* 〕━━╮\n${lines.join('\n')}\n╰━━━━━━━━━━━━━━━━╯`,
+    mentions: rows.map((row) => row.userJid),
+  }, { quoted: ctx.message })
 }
 
 export const privateAccessCommands: BotCommand[] = [
   {
-    name: 'privategift', aliases: ['privategrant', 'giveprivate', 'regalaprivado', 'allowprivate', 'privateallow'], category: 'owner', staffOnly: true,
-    description: 'Regala acceso al MainBot por chat privado sin cobrar NXC.',
-    usage: 'privategift @usuario [7d|30d|90d|permanent]',
-    async handler(ctx) {
-      const target = await resolveTarget(ctx)
-      const duration = parseDuration(ctx.args)
-      const grant = grantPrivateAccess(target, duration.durationMs, ctx.sender)
-      await ctx.socket.sendMessage(ctx.chatId, {
-        text: [
-          '╭━━〔 🎁 *ACCESO PRIVADO REGALADO* 〕━━╮',
-          `┃ Usuario » @${target.split('@')[0]}`,
-          `┃ Duración » *${duration.label.toUpperCase()}*`,
-          `┃ Vence » *${fmtExpiry(grant.expiresAt, grant.permanent)}*`,
-          `┃ Staff » @${ctx.sender.split('@')[0]}`,
-          '╰━━━━━━━━━━━━━━━━━━━━╯',
-          '',
-          'El usuario ya puede usar Ghost Nexora Bot por chat privado durante esa vigencia. No se descontaron Nexora Coins.',
-        ].join('\n'),
-        mentions: [target, ctx.sender],
-      }, { quoted: ctx.message })
-    },
-  },
-  {
-    name: 'privaterevoke', aliases: ['denyprivate', 'privateremove'], category: 'owner', staffOnly: true,
-    description: 'Revoca los permisos privados concedidos manualmente por el staff.',
-    usage: 'privaterevoke @usuario',
-    async handler(ctx) {
-      const target = await resolveTarget(ctx)
-      const removed = revokePrivateAccess(target)
-      const remaining = privateAccessStatus(target)
-      let text: string
-      if (!removed) {
-        text = remaining
-          ? `ℹ️ @${target.split('@')[0]} no tenía una concesión manual que retirar. Su acceso activo se conserva hasta *${fmtExpiry(remaining.expiresAt, remaining.permanent)}*.`
-          : `ℹ️ @${target.split('@')[0]} no tenía una concesión manual de acceso privado.`
-      } else if (remaining) {
-        text = `🔐 *PERMISO MANUAL REVOCADO*\n━━━━━━━━━━━━━━\nSe retiraron ${removed} concesión(es) administrativas de @${target.split('@')[0]}.\n\nSu acceso comprado sigue activo hasta *${fmtExpiry(remaining.expiresAt, remaining.permanent)}*.`
-      } else {
-        text = `🔒 *PERMISO MANUAL REVOCADO*\n━━━━━━━━━━━━━━\n@${target.split('@')[0]} ya no tiene acceso privado activo.\n\nLas suscripciones compradas nunca se eliminan mediante este comando.`
-      }
-      await ctx.socket.sendMessage(ctx.chatId, { text, mentions: [target] }, { quoted: ctx.message })
-    },
-  },
-  {
-    name: 'privatestatus', aliases: ['privatecheck'], category: 'owner', staffOnly: true,
-    description: 'Consulta el permiso privado de un usuario.', usage: 'privatestatus @usuario',
-    async handler(ctx) {
-      const target = await resolveTarget(ctx)
-      const status = privateAccessStatus(target)
-      await ctx.socket.sendMessage(ctx.chatId, {
-        text: status
-          ? `🔐 *ACCESO PRIVADO ACTIVO*\n━━━━━━━━━━━━━━\nUsuario: @${target.split('@')[0]}\nVence: *${fmtExpiry(status.expiresAt, status.permanent)}*`
-          : `🔒 @${target.split('@')[0]} no tiene acceso privado activo.`,
-        mentions: [target],
-      }, { quoted: ctx.message })
-    },
-  },
-  {
-    name: 'privateusers', aliases: ['privateaccesslist'], category: 'owner', staffOnly: true,
-    description: 'Lista usuarios que actualmente tienen acceso al bot por privado.',
-    async handler(ctx) {
-      const rows = listPrivateAccess(50)
-      if (!rows.length) throw new Error('No hay usuarios con acceso privado activo.')
-      const lines = rows.map((item, index) => `${index + 1}. @${item.userJid.split('@')[0]} · ${fmtExpiry(item.expiresAt, item.permanent)}`)
-      await ctx.socket.sendMessage(ctx.chatId, {
-        text: `╭━━〔 🔐 *USUARIOS PRIVADOS* 〕━━╮\n${lines.join('\n')}\n╰━━━━━━━━━━━━━━━━╯`,
-        mentions: rows.map((item) => item.userJid),
-      }, { quoted: ctx.message })
-    },
+    name: 'private',
+    aliases: ['privatechat', 'privateallow', 'allowprivate', 'privategift', 'privategrant'],
+    category: 'owner',
+    staffOnly: true,
+    subbotOwnerAllowed: true,
+    description: 'Administra la allowlist local de usuarios autorizados para chat privado.',
+    usage: 'private allow|deny|status @usuario | private list',
+    handler: privatePolicyCommand,
   },
 ]
