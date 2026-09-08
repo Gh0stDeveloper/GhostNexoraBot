@@ -3,6 +3,7 @@ import type { BotCommand } from '../types.js'
 import { getContextInfo, digitsFromJid } from '../utils/message.js'
 import { community } from '../services/community.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
+import { listPrivateChatUsers } from '../services/private-chat-policy.js'
 
 function toggle(value?: string) {
   const normalized = (value ?? '').toLowerCase()
@@ -107,14 +108,10 @@ export const ownerCommands: BotCommand[] = [
   },
   {
     name: 'privatemode', aliases: ['privateaccess'], category: 'owner', ownerOnly: true,
-    description: 'Muestra la política de acceso premium de chats privados.', usage: 'privatemode status',
+    description: 'Muestra la política segura de chats privados del MainBot.', usage: 'privatemode status',
     async handler(ctx) {
-      const action = (ctx.args[0] ?? 'status').toLowerCase()
-      if (['off', 'false', '0', 'disable', 'desactivar'].includes(action)) {
-        throw new Error('El acceso premium en chat privado es obligatorio y no puede desactivarse. Los usuarios deben comprar private1d/private7d/private30d en .shop.')
-      }
-      await ctx.settings.setPrivateCommandsRequireAccess(true)
-      await ctx.reply(`🔐 *CHAT PRIVADO PREMIUM*\n━━━━━━━━━━━━━━\nEstado: *OBLIGATORIO*\nSin private_access solo están disponibles *${ctx.prefix}menu*, *${ctx.prefix}shop*, *${ctx.prefix}balance* y *${ctx.prefix}buy*.`)
+      const allowed = listPrivateChatUsers(200).length
+      await ctx.reply(`🔒 *CHAT PRIVADO RESTRINGIDO*\n━━━━━━━━━━━━━━\nEstado: *BLOQUEADO POR DEFECTO*\nOwner: *AUTORIZADO*\nUsuarios aprobados: *${allowed}*\n\nLos mensajes privados no autorizados se ignoran completamente: sin respuestas, reacciones, comandos, IA ni moderación.\n\nAdministrar: *${ctx.prefix}private allow|deny @usuario* · *${ctx.prefix}private list*`)
     },
   },
   {
@@ -139,7 +136,7 @@ export const ownerCommands: BotCommand[] = [
         `┃ Prefijo » ${ctx.settings.prefix}`,
         `┃ Staff » ${ctx.settings.botAdmins.length} admin(s)`,
         `┃ NSFW global » ${ctx.settings.adultEnabled ? 'ON' : 'OFF'}`,
-        '┃ Privado premium » OBLIGATORIO',
+        `┃ Privado » BLOQUEADO · ${listPrivateChatUsers(200).length} autorizado(s)`,
         `┃ Uptime » ${Math.floor(process.uptime())} s`,
         `┃ RSS » ${(memory.rss / 1024 / 1024).toFixed(1)} MB`,
         `┃ Descarga máx. » ${config.maxDownloadMb} MB`,
