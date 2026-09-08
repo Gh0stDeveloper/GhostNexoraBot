@@ -3,8 +3,8 @@ import { config } from '../config.js'
 import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
-import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
+import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
 import { settings } from './settings.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
@@ -25,7 +25,6 @@ function canonicalUserJid(candidates: string[], fallback: string) {
   return normalizeJid(pn ?? fallback)
 }
 
-const privateStorefrontCommands = new Set(['menu', 'shop', 'buy', 'balance', 'language'])
 const disabledGroupBootstrapCommands = new Set(['menu', 'bot', 'language'])
 const youtubeDownloadCommands = new Set(['play', 'playvideo', 'ytformats', 'ytmp3', 'ytmp4'])
 const youtubeSafeClientErrors = [
@@ -61,6 +60,10 @@ export class CommandRouter {
     const chatId = message.key.remoteJid
     if (!chatId) return false
 
+    // Defensa en profundidad: un privado no autorizado se consume en silencio.
+    // No se responde, no se reacciona y ningún comando alcanza su handler.
+    if (!canProcessPrivateMessage(message, this.options.instanceOwnerJid)) return true
+
     const me = socket.authState.creds.me
     const selfCandidates = [me?.id, me?.lid].filter((value): value is string => Boolean(value))
     const incomingCandidates = getSenderCandidates(message)
@@ -77,7 +80,6 @@ export class CommandRouter {
     const locale = resolveChatLocale(chatId)
     const localizedSocket = createLocalizedSocket(socket, locale)
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
-    const hasPrivateAccess = isGroup || isBotStaff || isSubbotOwner || Boolean(economy.hasEntitlement(sender, 'private_access'))
 
     const reply = (replyText: string) => localizedSocket.sendMessage(chatId, { text: replyText }, { quoted: message })
     const react = (emoji: string) => localizedSocket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
@@ -90,7 +92,6 @@ export class CommandRouter {
     }
 
     if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner && !senderIsGroupAdmin) {
-      // Deliberately consume the message so the human-response layer is not invoked.
       return true
     }
 
@@ -100,11 +101,6 @@ export class CommandRouter {
         ['aceptar', true], ['accept', true], ['rechazar', false], ['reject', false],
       ])
       if (!relationshipResponse.has(response)) return false
-      if (!hasPrivateAccess) {
-        await reply(t('router.privateAction', { prefix }))
-        await react('🔒').catch(() => undefined)
-        return true
-      }
       try {
         const result = community.resolvePendingRelationship(sender, relationshipResponse.get(response) === true)
         if (!result) return false
@@ -131,24 +127,6 @@ export class CommandRouter {
 
     try {
       await react('⚡')
-
-      if (!hasPrivateAccess && !privateStorefrontCommands.has(command.name)) {
-        await reply([
-          t('router.private.title'),
-          t('router.private.line1'),
-          t('router.private.line2'),
-          t('router.private.line3'),
-          '╰━━━━━━━━━━━━━━━━━━━━╯',
-          '',
-          t('router.private.shop', { prefix }),
-          t('router.private.balance', { prefix }),
-          t('router.private.buy', { prefix }),
-          '',
-          t('router.private.instant'),
-        ].join('\n'))
-        await react('🔒')
-        return true
-      }
 
       if (command.ownerOnly && !isOwner) {
         await reply(t('router.ownerOnly'))
