@@ -73,6 +73,9 @@ import { minecraftV12Commands } from './minecraft-v12.js'
 import { shopStyleV13Commands } from './shop-style-v13.js'
 import { minershopStyleV13Commands } from './minershop-style-v13.js'
 import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.js'
+import { groupInactivityV18Commands } from './group-inactivity-v18.js'
+import { stickerPremiumV18Commands } from './sticker-premium-v18.js'
+import { economyUiV18Commands } from './economy-ui-v18.js'
 
 // Termux Lite intentionally excludes:
 // - ai.ts / mini-llm.ts / auto-chat.ts / Ollama features
@@ -80,13 +83,16 @@ import { adultRoleplayMessagesV14Commands } from './adult-roleplay-messages-v14.
 // - stickers.ts / Sharp-based media conversion
 // - Telegram bridge, web dashboard and server-oriented developer commands
 // - advanced visual personalization that requires native image processing
+// Lottie/premium stickers V18 do not require Sharp and are therefore available.
 const liteMenuCommands = menuV5Commands.filter((command) => command.name === 'menu')
 const liteSubbotCommands = subbotCommands.filter((command) => command.name !== 'adminpanel')
 // v2.ts contiene un .subbot heredado; se excluye para no sobrescribir el handler
 // Lite que bloquea portal/dashboard correctamente.
 const liteV2Commands = v2Commands.filter((command) => command.name !== 'subbot')
 
-export const termuxLiteCommands: BotCommand[] = [
+const replacedV18Commands = new Set(['inactivos', 'expulsarinactivos', 'botsticker', 'balance', 'miner'])
+
+const legacyTermuxCommands: BotCommand[] = [
   ...generalCommands,
   ...creditsCommands,
   ...profileCommands,
@@ -160,6 +166,13 @@ export const termuxLiteCommands: BotCommand[] = [
   ...shopStyleV13Commands,
   ...minershopStyleV13Commands,
   ...adultRoleplayMessagesV14Commands,
+]
+
+export const termuxLiteCommands: BotCommand[] = [
+  ...legacyTermuxCommands.filter((command) => !replacedV18Commands.has(command.name.toLowerCase())),
+  ...groupInactivityV18Commands,
+  ...stickerPremiumV18Commands,
+  ...economyUiV18Commands,
 ]
 
 setMenuCommandProvider(() => termuxLiteCommands)
