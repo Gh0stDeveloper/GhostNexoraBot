@@ -64,16 +64,31 @@ const source = `
 
   const balanceCommand = [...commands].reverse().find((command) => command.name === 'balance');
   if (!balanceCommand) throw new Error('balance command not registered');
-  let balanceText = '';
-  await balanceCommand.handler({ sender: user, prefix: '.', reply: async (text) => { balanceText = String(text); } });
+  let relayedBalance = null;
+  const chatId = '120363999999999999@g.us';
+  const quoted = { key: { id: 'BALANCE-SMOKE', remoteJid: chatId, participant: user }, message: { conversation: '.balance' } };
+  const fakeSocket = {
+    user: { id: '5215559999999:1@s.whatsapp.net' },
+    relayMessage: async (_jid, content, options) => { relayedBalance = { content, options }; },
+    sendMessage: async () => undefined,
+  };
+  await balanceCommand.handler({
+    sender: user,
+    prefix: '.',
+    chatId,
+    message: quoted,
+    socket: fakeSocket,
+    reply: async () => undefined,
+  });
+  if (!relayedBalance?.content) throw new Error('interactive balance was not relayed');
+  const balanceText = JSON.stringify(relayedBalance.content);
   const labels = ['Crédito bancario:', 'Préstamos de usuarios:', 'Multas:', 'Pasivos totales:'];
-  const lines = balanceText.split(String.fromCharCode(10)).filter((line) => labels.some((label) => line.includes(label)));
-  if (lines.length !== 4) throw new Error('balance liability lines missing');
-  if (lines.some((line) => line.includes('*-'))) throw new Error('negative liability display detected');
-  const bankDebtLine = lines.find((line) => line.includes('Crédito bancario:'));
-  if (!bankDebtLine || bankDebtLine.includes('*0 NXC*')) throw new Error('bank debt plain amount missing');
+  if (!labels.every((label) => balanceText.includes(label))) throw new Error('balance liability lines missing');
+  if (balanceText.includes('*-0 NXC*')) throw new Error('negative zero liability display detected');
+  if (!balanceText.includes('Crédito bancario:')) throw new Error('bank debt plain amount missing');
+  if (!balanceText.includes('Banco') || !balanceText.includes('Minería')) throw new Error('balance action buttons missing');
 
-  console.log(JSON.stringify({ scoreBefore: firstEligibility.profile.creditScore, scoreAfterEarlyPay: paid.profile.creditScore, scoreAfterLate: delinquent.profile.creditScore, lateFee: lateLoan.lateFeeTotal, identityMerge: merged, repaired, afterWithdraw, positiveLiabilityFormatting: true, minerShop: minerShop.description }));
+  console.log(JSON.stringify({ scoreBefore: firstEligibility.profile.creditScore, scoreAfterEarlyPay: paid.profile.creditScore, scoreAfterLate: delinquent.profile.creditScore, lateFee: lateLoan.lateFeeTotal, identityMerge: merged, repaired, afterWithdraw, positiveLiabilityFormatting: true, interactiveBalance: true, minerShop: minerShop.description }));
 `
 
 try {
