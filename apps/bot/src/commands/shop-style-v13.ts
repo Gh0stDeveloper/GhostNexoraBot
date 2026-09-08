@@ -7,13 +7,12 @@ import { getCurrentBotVisualStyle, resolveCurrentBotVisualImage } from '../servi
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
 
 const shopProducts = [
-  { id: 'private1d', icon: '🔐', title: 'Acceso privado · 1 día', price: 2000, description: 'Todos los comandos disponibles en privado durante 24 horas.' },
-  { id: 'private7d', icon: '🔐', title: 'Acceso privado · 7 días', price: 10000, description: 'Acceso privado durante una semana.' },
-  { id: 'private30d', icon: '💎', title: 'Acceso privado · 30 días', price: 30000, description: 'Plan mensual de acceso privado.' },
-  { id: 'subbot1d', icon: '🤖', title: 'Subbot · 1 día', price: 6000, description: 'Tu propia sesión de WhatsApp durante 24 horas.' },
-  { id: 'subbot7d', icon: '🤖', title: 'Subbot · 7 días', price: 30000, description: 'Subbot independiente durante una semana.' },
-  { id: 'subbot30d', icon: '👑', title: 'Subbot · 30 días', price: 100000, description: 'Subbot independiente durante 30 días.' },
+  { id: 'subbot1d', icon: '🤖', title: 'Subbot · 1 día', price: 6000, durationMs: 86400_000, description: 'Tu propia sesión de WhatsApp durante 24 horas.' },
+  { id: 'subbot7d', icon: '🤖', title: 'Subbot · 7 días', price: 30000, durationMs: 7 * 86400_000, description: 'Subbot independiente durante una semana.' },
+  { id: 'subbot30d', icon: '👑', title: 'Subbot · 30 días', price: 100000, durationMs: 30 * 86400_000, description: 'Subbot independiente durante 30 días.' },
 ] as const
+
+type ShopProductId = typeof shopProducts[number]['id']
 
 async function currentBotAvatar(ctx: CommandContext) {
   const jid = ctx.socket.user?.id
@@ -40,7 +39,7 @@ async function shopCommand(ctx: CommandContext) {
     buttons: [
       { type: 'reply' as const, text: '🛒 Comprar', id: `${ctx.prefix}buy ${item.id}` },
       { type: 'reply' as const, text: '🪙 Mi saldo', id: `${ctx.prefix}balance` },
-      ...(item.id.startsWith('subbot') ? [{ type: 'reply' as const, text: '🤖 Mi subbot', id: `${ctx.prefix}subbot status` }] : []),
+      { type: 'reply' as const, text: '🤖 Mi subbot', id: `${ctx.prefix}subbot status` },
     ],
   }))
 
@@ -66,11 +65,26 @@ async function shopCommand(ctx: CommandContext) {
     body: [
       `Saldo global: ${fmt(balance.total)}`,
       `Estilo visual: ${style.icon} ${style.name}`,
-      'Desliza para ver productos y comprar directamente.',
+      'El acceso por chat privado no se vende: está bloqueado y solo el owner de cada instancia puede autorizar usuarios.',
+      'Desliza para ver productos disponibles.',
     ].join('\n'),
     footer: 'Nexora Economy · Ghost Nexora Bot',
     cards,
   })
+}
+
+async function buyCommand(ctx: CommandContext) {
+  const id = (ctx.args[0] ?? '').toLowerCase()
+  if (id.startsWith('private')) {
+    throw new Error(`El acceso por chat privado ya no se vende. Solo el owner puede autorizar usuarios con ${ctx.prefix}private allow @usuario.`)
+  }
+  const item = shopProducts.find((product) => product.id === id as ShopProductId)
+  if (!item) throw new Error(`Producto inválido. Consulta ${ctx.prefix}shop.`)
+  const result = economy.purchase(ctx.sender, item.price, 'subbot_slot', item.durationMs, { product: item.id, store: 'v16-private-safe' })
+  const active = economy.getActiveSubbot(ctx.sender)
+  if (active) economy.db.prepare('UPDATE subbots SET expires_at = ? WHERE id = ?').run(result.expiresAt, active.id)
+  else economy.createSubbot(ctx.sender, result.expiresAt)
+  await ctx.reply(`✅ *COMPRA COMPLETADA*\n━━━━━━━━━━━━━━\nProducto: *${item.title}*\nPrecio: *${fmt(item.price)}*\nVence: ${new Date(result.expiresAt).toLocaleString('es-MX')}\n\nVincula con *${ctx.prefix}subbot pair <número>* o usa *${ctx.prefix}subbot qr*.`)
 }
 
 export const shopStyleV13Commands: BotCommand[] = [
@@ -78,7 +92,15 @@ export const shopStyleV13Commands: BotCommand[] = [
     name: 'shop',
     aliases: ['store', 'tienda'],
     category: 'economy',
-    description: 'Nexora Store en carrusel con el estilo visual activo de la instancia.',
+    description: 'Nexora Store sin venta de acceso por chat privado.',
     handler: shopCommand,
+  },
+  {
+    name: 'buy',
+    aliases: ['comprar'],
+    category: 'economy',
+    description: 'Compra productos disponibles; el chat privado no se vende.',
+    usage: 'buy <producto>',
+    handler: buyCommand,
   },
 ]
