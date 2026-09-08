@@ -12,10 +12,7 @@ function wholeAmount(value: number) {
 }
 
 const fmt = (value: number) => `${wholeAmount(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
-const liabilityFmt = (value: number) => {
-  const amount = Math.max(0, wholeAmount(value))
-  return amount === 0 ? fmt(0) : `-${fmt(amount)}`
-}
+const liabilityFmt = (value: number) => fmt(Math.max(0, wholeAmount(value)))
 
 function pendingFines(userJid: string) {
   const db = economy.walletDb
