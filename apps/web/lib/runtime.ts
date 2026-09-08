@@ -25,10 +25,22 @@ export const runtime = {
   botHealthUrl: process.env.BOT_HEALTH_URL ?? fileEnv.BOT_HEALTH_URL ?? 'http://127.0.0.1:3001/health',
 }
 
+function botDbFile() {
+  return path.join(runtime.dataDir, 'ghostnexora.sqlite')
+}
+
 export function openBotDb() {
-  const file = path.join(runtime.dataDir, 'ghostnexora.sqlite')
+  const file = botDbFile()
   if (!existsSync(file)) return null
   return new DatabaseSync(file, { readOnly: true })
+}
+
+export function openBotDbWritable() {
+  const file = botDbFile()
+  if (!existsSync(file)) return null
+  const db = new DatabaseSync(file)
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
+  return db
 }
 
 export function tokenHash(token: string) { return createHash('sha256').update(token).digest('hex') }
