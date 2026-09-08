@@ -2,7 +2,7 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { config } from '../config.js'
 import { COIN_NAME, COIN_SYMBOL } from '../services/economy.js'
 import { professionsV2 } from '../services/professions-v2.js'
-import { privateAccessStatus } from '../services/private-access.js'
+import { isPrivateChatApproved } from '../services/private-chat-policy.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
@@ -54,7 +54,7 @@ function sectionFor(command: BotCommand): SectionId {
 
 function visible(ctx: CommandContext, command: BotCommand) {
   if (command.ownerOnly && !ctx.isOwner) return false
-  if (command.staffOnly && !ctx.isBotStaff && !ctx.isOwner) return false
+  if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
   return true
 }
 
@@ -80,6 +80,7 @@ function formatUptime() {
 
 async function roleLabel(ctx: CommandContext) {
   if (ctx.isOwner) return ctx.t('menu.role.owner')
+  if (ctx.isSubbotOwner) return ctx.t('menu.role.owner')
   if (ctx.isBotStaff) return ctx.t('menu.role.staff')
   if (ctx.isGroup && await isGroupAdministrator(ctx).catch(() => false)) return ctx.t('menu.role.groupAdmin')
   return ctx.t('menu.role.user')
@@ -116,7 +117,7 @@ async function currentVisualIdentity(ctx: CommandContext) {
 async function menu(ctx: CommandContext) {
   const profession = professionsV2.get(ctx.sender)
   const role = await roleLabel(ctx)
-  const privateAccess = Boolean(privateAccessStatus(ctx.sender)) || ctx.isOwner || ctx.isBotStaff
+  const privateAccess = ctx.isOwner || ctx.isSubbotOwner || isPrivateChatApproved(ctx.sender)
   const instance = ctx.instanceId ? `Subbot #${ctx.instanceId}` : 'MainBot'
   const visual = await currentVisualIdentity(ctx)
   const grouped = new Map<SectionId, string[]>()
