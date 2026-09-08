@@ -2,6 +2,10 @@ import { downloadContentFromMessage, type AnyMessageContent, type proto, type WA
 
 export function unwrapMessage(message: proto.IMessage | null | undefined): proto.IMessage | undefined {
   if (!message) return undefined
+  const loose = message as proto.IMessage & {
+    lottieStickerMessage?: { message?: proto.IMessage | null }
+  }
+  if (loose.lottieStickerMessage?.message) return unwrapMessage(loose.lottieStickerMessage.message)
   if (message.ephemeralMessage?.message) return unwrapMessage(message.ephemeralMessage.message)
   if (message.viewOnceMessage?.message) return unwrapMessage(message.viewOnceMessage.message)
   if (message.viewOnceMessageV2?.message) return unwrapMessage(message.viewOnceMessageV2.message)
