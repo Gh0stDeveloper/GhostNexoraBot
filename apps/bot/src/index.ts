@@ -9,7 +9,7 @@ import { settings } from './core/settings.js'
 import { subbotManager } from './core/subbots.js'
 import { commands } from './commands/index.js'
 import { economy } from './services/economy.js'
-import { economyV2 } from './services/economy-v2.js'
+import { executeAdminWebControl } from './services/admin-web-control.js'
 import { installAtomicWalletBridge } from './services/wallet-atomic.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
@@ -60,9 +60,7 @@ async function readJson(req: http.IncomingMessage) {
 }
 
 async function executeControl(body: Record<string, unknown>) {
-  const action = String(body.action ?? '')
-  if (action === 'economy-sync') return { ok: true, result: { top: economyV2.globalTop(10) } }
-  return { ok: false, error: 'unknown_action' }
+  return executeAdminWebControl(body, mainSocket)
 }
 
 function startHealthServer() {
