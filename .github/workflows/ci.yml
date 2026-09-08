@@ -39,6 +39,9 @@ jobs:
       - name: Group inactive member policy smoke
         run: node scripts/group-inactivity-smoke.mjs
 
+      - name: V18 subbot, Lottie, inactivity and economy UI smoke
+        run: node scripts/v18-runtime-smoke.mjs
+
       - name: Operations dashboard telemetry smoke
         run: node scripts/ops-dashboard-smoke.mjs
 
@@ -69,6 +72,7 @@ jobs:
             scripts/i18n-smoke.mjs
             scripts/private-chat-policy-smoke.mjs
             scripts/group-inactivity-smoke.mjs
+            scripts/v18-runtime-smoke.mjs
             scripts/ops-dashboard-smoke.mjs
             scripts/v5-smoke.mjs
             scripts/youtube-select-smoke.mjs
