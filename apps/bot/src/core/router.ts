@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
+import { resolveStoredIdentity } from '../services/identity.js'
 import { settings } from './settings.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
@@ -16,14 +17,36 @@ function normalizeJid(value?: string | null) {
   try { return jidNormalizedUser(value) } catch { return value }
 }
 
+function identityCandidates(value?: string | null) {
+  if (!value) return []
+  const normalized = normalizeJid(value)
+  const resolved = normalizeJid(resolveStoredIdentity(normalized))
+  return [...new Set([normalized, resolved].filter(Boolean))]
+}
+
+function sameIdentity(left?: string | null, right?: string | null) {
+  const leftCandidates = identityCandidates(left)
+  const rightCandidates = identityCandidates(right)
+  if (leftCandidates.some((candidate) => rightCandidates.includes(candidate))) return true
+  const leftNumbers = new Set(leftCandidates.map(digitsFromJid).filter(Boolean))
+  return rightCandidates.some((candidate) => {
+    const number = digitsFromJid(candidate)
+    return Boolean(number && leftNumbers.has(number))
+  })
+}
+
 function participantMatches(participant: GroupParticipant, candidates: string[]) {
-  const participantIds = [participant.id, participant.phoneNumber, participant.lid].map(normalizeJid).filter(Boolean)
-  return participantIds.some((jid) => candidates.includes(jid))
+  const participantIds = [participant.id, participant.phoneNumber, participant.lid]
+    .flatMap((value) => identityCandidates(value))
+    .filter(Boolean)
+  const expandedCandidates = candidates.flatMap((value) => identityCandidates(value))
+  return participantIds.some((jid) => expandedCandidates.includes(jid))
 }
 
 function canonicalUserJid(candidates: string[], fallback: string) {
-  const pn = candidates.find((jid) => /@s\.whatsapp\.net$/i.test(jid))
-  return normalizeJid(pn ?? fallback)
+  const expanded = [...new Set(candidates.flatMap((candidate) => identityCandidates(candidate)))]
+  const pn = expanded.find((jid) => /@s\.whatsapp\.net$/i.test(jid))
+  return normalizeJid(pn ?? resolveStoredIdentity(fallback) ?? fallback)
 }
 
 const disabledGroupBootstrapCommands = new Set(['menu', 'bot', 'language'])
@@ -80,13 +103,13 @@ export class CommandRouter {
     const selfCandidates = [me?.id, me?.lid].filter((value): value is string => Boolean(value))
     const incomingCandidates = getSenderCandidates(message)
     const rawSenderCandidates = message.key.fromMe ? selfCandidates : incomingCandidates
-    const senderCandidates = rawSenderCandidates.map(normalizeJid).filter(Boolean)
+    const senderCandidates = rawSenderCandidates.flatMap((candidate) => identityCandidates(candidate)).filter(Boolean)
     const rawSender = message.key.fromMe ? (me?.id ?? getSender(message)) : getSender(message)
     const sender = canonicalUserJid(rawSenderCandidates, rawSender)
-    const senderNumbers = rawSenderCandidates.map(digitsFromJid).filter(Boolean)
+    const senderNumbers = senderCandidates.map(digitsFromJid).filter(Boolean)
     const isOwner = Boolean(message.key.fromMe) || senderNumbers.some((number) => config.owners.includes(number))
     const isBotStaff = isOwner || senderNumbers.some((number) => settings.isBotAdmin(number))
-    const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && normalizeJid(this.options.instanceOwnerJid) === sender
+    const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && sameIdentity(sender, this.options.instanceOwnerJid)
     const isGroup = chatId.endsWith('@g.us')
     const prefix = settings.prefix
     const locale = resolveChatLocale(chatId)
@@ -181,7 +204,7 @@ export class CommandRouter {
         }
         const metadata = await socket.groupMetadata(chatId)
         const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
-        const botCandidates = selfCandidates.map(normalizeJid).filter(Boolean)
+        const botCandidates = selfCandidates.flatMap((candidate) => identityCandidates(candidate)).filter(Boolean)
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
         senderIsGroupAdmin = senderIsGroupAdmin || Boolean(senderParticipant?.admin)
         const senderIsAdmin = senderIsGroupAdmin || isBotStaff || isSubbotOwner
