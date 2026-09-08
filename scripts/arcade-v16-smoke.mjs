@@ -60,4 +60,11 @@ assert.ok(runner.includes('flock -n'), 'privileged runner must prevent concurren
 const shellSyntax = spawnSync('bash', ['-n', 'scripts/update-request-runner.sh'])
 assert.equal(shellSyntax.status, 0, 'update request runner must have valid shell syntax')
 
+// El CLI debe invocar update.sh mediante bash: un checkout puede perder el bit +x
+// y ejecutar el archivo directamente provocaría spawnSync ... EACCES.
+const cliSource = readFileSync('scripts/ghostnexorabot.mjs', 'utf8')
+assert.ok(cliSource.includes("run('bash', [updater])"), 'root updater must run through bash')
+assert.ok(cliSource.includes("run('sudo', ['bash', updater])"), 'non-root updater must run sudo bash')
+assert.ok(!cliSource.includes('status = run(updater, [])'), 'CLI must not execute update.sh directly')
+
 console.log(`[arcade] OK · V16 ${v16Expected.length} + V17 ${v17Expected.length} games · offline HTML · long-press guard · secure .actualizar`)
