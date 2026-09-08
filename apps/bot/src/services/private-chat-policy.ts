@@ -34,6 +34,17 @@ function sameUser(left?: string | null, right?: string | null) {
   return Boolean(ad && bd && ad === bd)
 }
 
+function isDirectUserJid(jid: string) {
+  const normalized = normalizeJid(jid)
+  return normalized.endsWith('@s.whatsapp.net') || normalized.endsWith('@lid')
+}
+
+function ownerMatchesJid(userJid: string, instanceOwnerJid?: string) {
+  if (instanceOwnerJid) return sameUser(userJid, instanceOwnerJid)
+  const digits = digitsFromJid(userJid)
+  return Boolean(digits && config.owners.includes(digits))
+}
+
 export function isPrivateChatApproved(userJid: string) {
   const normalized = normalizeJid(userJid)
   if (!normalized) return false
@@ -58,6 +69,15 @@ export function canProcessPrivateMessage(message: WAMessage, instanceOwnerJid?: 
   if (!chatId || chatId === 'status@broadcast') return false
   if (isPrivateChatOwner(message, instanceOwnerJid)) return true
   return isPrivateChatApproved(canonicalSender(message))
+}
+
+export function canSendToChatJid(chatJid: string, instanceOwnerJid?: string) {
+  const normalized = normalizeJid(chatJid)
+  if (!normalized) return false
+  // Grupos, canales/newsletters y otros destinos no son chats privados de usuario.
+  if (!isDirectUserJid(normalized)) return true
+  if (ownerMatchesJid(normalized, instanceOwnerJid)) return true
+  return isPrivateChatApproved(normalized)
 }
 
 export function allowPrivateChat(userJid: string, addedBy: string) {
