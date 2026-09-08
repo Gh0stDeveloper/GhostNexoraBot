@@ -78,7 +78,7 @@ const source = `
   const minerShop = [...commands].reverse().find((command) => command.name === 'minershop');
   if (!minerShop || !/estilo visual activo/i.test(minerShop.description)) throw new Error('minershop V13 style carousel override not registered');
 
-  // Regresión: los pasivos sin saldo deben mostrarse como 0 NXC, nunca -0 NXC.
+  // Regresión: los pasivos son magnitudes adeudadas y se muestran siempre sin signo negativo.
   const balanceCommand = [...commands].reverse().find((command) => command.name === 'balance');
   if (!balanceCommand) throw new Error('balance command not registered');
   let balanceText = '';
@@ -87,7 +87,14 @@ const source = `
     prefix: '.',
     reply: async (text) => { balanceText = String(text); },
   });
-  if (balanceText.includes('-0 NXC')) throw new Error('balance output contains negative zero liabilities');
+  const liabilityLines = balanceText.split(/\\r?\\n/).filter((line) =>
+    /Crédito bancario|Préstamos de usuarios|Multas|Pasivos totales/.test(line)
+  );
+  if (liabilityLines.length !== 4) throw new Error('balance liability lines missing');
+  if (liabilityLines.some((line) => /\*-/.test(line))) throw new Error('balance output contains negative liability display');
+  if (!liabilityLines.some((line) => /Crédito bancario: \*[1-9][0-9.,]* NXC\*/.test(line))) {
+    throw new Error('positive bank debt is not displayed as its plain amount');
+  }
 
   console.log(JSON.stringify({
     scoreBefore: firstEligibility.profile.creditScore,
@@ -97,7 +104,7 @@ const source = `
     identityMerge: merged,
     repaired,
     afterWithdraw,
-    zeroLiabilityFormatting: !balanceText.includes('-0 NXC'),
+    positiveLiabilityFormatting: liabilityLines.every((line) => !/\*-/.test(line)),
     minerShop: minerShop.description,
   }));
 `
