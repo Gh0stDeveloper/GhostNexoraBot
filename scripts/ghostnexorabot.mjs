@@ -94,10 +94,12 @@ switch (action) {
     else {
       const updater = path.join(repoRoot, 'scripts', 'update.sh')
       requireFile(updater, 'actualizador VPS')
+      // Ejecutamos siempre mediante bash para no depender del bit ejecutable del
+      // archivo después de un checkout, copia o actualización del repositorio.
       if (typeof process.getuid === 'function' && process.getuid() !== 0) {
-        status = run('sudo', [updater])
+        status = run('sudo', ['bash', updater])
       } else {
-        status = run(updater, [])
+        status = run('bash', [updater])
       }
     }
     break
