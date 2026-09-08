@@ -25,6 +25,7 @@ import { llmFreeChat } from './services/llm-free-chat.js'
 import { sendAssistantReply } from './services/assistant-reply.js'
 import { hasAudio, transcribeWhatsAppAudio } from './services/audio-transcribe.js'
 import { runSubbotSessionRepairMigration } from './services/subbot-session-repair.js'
+import { canProcessPrivateMessage } from './services/private-chat-policy.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
@@ -137,13 +138,17 @@ async function routeMessage(
   message: Parameters<CommandRouter['handle']>[1],
   router: CommandRouter,
 ) {
+  const chatId = message.key.remoteJid
+  if (!chatId || !canProcessPrivateMessage(message)) return
+
+  // El corte privado ocurre antes de identidad, moderación, stickers, IA, presencia,
+  // reacciones y comandos. Un privado no autorizado no genera ninguna salida.
   await observeMessageIdentity(socket, message).catch((error) => logger.debug({ error }, 'identity observation skipped'))
 
-  const chatId = message.key.remoteJid
   const text = getMessageText(message).trim()
   const pushName = (message as { pushName?: string }).pushName || 'Usuario'
 
-  if (chatId && !message.key.fromMe) {
+  if (!message.key.fromMe) {
     observeGroupActivity(
       chatId,
       resolveStoredIdentity(getSender(message)),
@@ -175,7 +180,6 @@ async function routeMessage(
 
   if (
     config.ollamaEnabled &&
-    chatId &&
     !message.key.fromMe &&
     hasAudio(message) &&
     llmFreeChat.isEnabled(chatId) &&
@@ -213,7 +217,6 @@ async function routeMessage(
 
   if (
     config.ollamaEnabled &&
-    chatId &&
     llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })
   ) {
     const stopTyping = startTypingIndicator(socket, chatId)
@@ -237,7 +240,6 @@ async function routeMessage(
 
   if (
     config.ollamaEnabled &&
-    chatId &&
     text.length >= 2 &&
     !text.startsWith(settings.prefix) &&
     autoChat.isEnabled(chatId) &&
@@ -259,7 +261,7 @@ async function routeMessage(
     return
   }
 
-  if (chatId?.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
+  if (chatId.endsWith('@g.us') && groupControlsV9.get(chatId).restrictedMode) return
   await maybeHumanInteraction(socket, message).catch(() => false)
 }
 
