@@ -13,6 +13,7 @@ import { handleKickSticker } from './services/human-stickers.js'
 import { maybeHumanInteraction } from './services/human-behavior-v8.js'
 import { startTempCleanup } from './services/temp-cleanup.js'
 import { observeGroupActivity } from './services/progression-v4.js'
+import { canProcessPrivateMessage } from './services/private-chat-policy.js'
 import { getMessageText, getSender } from './utils/message.js'
 import { withTimeout } from './utils/timeout.js'
 import { logger } from './utils/logger.js'
@@ -49,7 +50,6 @@ if (process.env.NEXORA_SUBBOT_NAME) {
   subbotCustomization.setNames(subbotId, process.env.NEXORA_SUBBOT_SHORT_NAME || customization.shortName, process.env.NEXORA_SUBBOT_NAME)
 }
 
-// Subbots are isolated tenants. Management/AI commands belong exclusively to the MainBot.
 const blockedNames = new Set([
   'llm', 'minillm', 'localai', 'corpus', 'llmcorpus',
   'subbot', 'jadibot', 'serbot', 'subbots', 'subbotlist', 'jadibots',
@@ -104,6 +104,8 @@ async function routeMessage(message: WAMessage) {
   if (!socket) return
   const chatId = message.key.remoteJid
   if (!chatId || chatId === 'status@broadcast' || !message.message) return
+  if (!canProcessPrivateMessage(message, ownerJid)) return
+
   await observeMessageIdentity(socket, message).catch(() => undefined)
   const text = getMessageText(message).trim()
 
@@ -275,6 +277,5 @@ process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))
 
 await settings.init()
-await settings.setPrivateCommandsRequireAccess(true)
 startTempCleanup()
 await start()
