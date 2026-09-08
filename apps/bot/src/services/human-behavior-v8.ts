@@ -2,6 +2,7 @@ import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
 import { getMessageText } from '../utils/message.js'
 import { maybeSendHumanSticker } from './human-stickers.js'
+import { premiumStickersV18 } from './premium-stickers-v18.js'
 import { HUMAN_RULES, pickHumanReply } from './human-responses-v8.js'
 
 const REPLY_CHANCE = 0.20
@@ -38,10 +39,17 @@ async function maybeReactToMessage(socket: WASocket, message: WAMessage, text: s
   return true
 }
 
+async function maybeConfiguredSticker(socket: WASocket, message: WAMessage) {
+  // Premium/Lottie first so a matching trigger is not eclipsed by the small
+  // random chance of the legacy WebP library. At most one sticker is sent.
+  if (await premiumStickersV18.maybeSend(socket, message)) return true
+  return maybeSendHumanSticker(socket, message)
+}
+
 export async function maybeHumanInteraction(socket: WASocket, message: WAMessage) {
   if (!config.autoReact || message.key.fromMe || !message.key.remoteJid) return false
   const text = getMessageText(message).trim()
-  if (!text || text.startsWith(config.defaultPrefix)) return maybeSendHumanSticker(socket, message)
+  if (!text || text.startsWith(config.defaultPrefix)) return maybeConfiguredSticker(socket, message)
 
   const matches = matchingRules(text)
   const reacted = await maybeReactToMessage(socket, message, text, matches.length > 0)
@@ -55,7 +63,7 @@ export async function maybeHumanInteraction(socket: WASocket, message: WAMessage
       return true
     }
   }
-  const sticker = await maybeSendHumanSticker(socket, message)
+  const sticker = await maybeConfiguredSticker(socket, message)
   return reacted || sticker
 }
 
