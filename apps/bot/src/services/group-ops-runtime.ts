@@ -82,9 +82,9 @@ async function syncGroups() {
           stamp,
         )
       }
-      if (groups.length) {
-        opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND updated_at < ?').run(instanceKey, stamp)
-      }
+      // Un fetch correcto con cero grupos significa que la instancia ya no pertenece
+      // a ninguno; se limpian también los registros que quedaron de sincronizaciones anteriores.
+      opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND updated_at < ?').run(instanceKey, stamp)
       opsDb.exec('COMMIT')
     } catch (error) {
       opsDb.exec('ROLLBACK')
