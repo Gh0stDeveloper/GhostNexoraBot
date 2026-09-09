@@ -121,8 +121,9 @@ function textAfterTarget(ctx: CommandContext, target: string) {
 async function sendPrivateTarget(ctx: CommandContext, target: string, text: string, groupLabel: string) {
   enforcePrivateSendRate(ctx.sender)
   // Permiso efímero de una sola salida: NO agrega al usuario a la allowlist y
-  // cualquier respuesta privada del destinatario continúa bloqueada.
-  grantOneShotPrivateSend(target)
+  // cualquier respuesta privada del destinatario continúa bloqueada. El permiso
+  // queda además separado por MainBot/subbot mediante instanceOwnerJid.
+  grantOneShotPrivateSend(target, ctx.instanceOwnerJid)
   const delivered = await ctx.socket.sendMessage(target, {
     text: [
       '🤫 *MENSAJE PRIVADO DE GRUPO*',
