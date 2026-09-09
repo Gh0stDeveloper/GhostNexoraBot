@@ -1,62 +1,94 @@
-// apps/bot/src/commands/edit.ts
-import type { Command } from '../types'; // Ajusta la ruta según tu definición de tipo Command
-import { sleep } from '../utils'; // Si tienes una utilidad, sino puedes definirla localmente
+import type { BotCommand, CommandContext } from '../types.js'
+import { digitsFromJid, getContextInfo } from '../utils/message.js'
 
-export default {
-  name: 'edit',           // Comando: !edit
-  category: 'utilidad',
-  description: 'Edita el mensaje al que respondes y luego elimina el comando.',
-  async execute({ sock, msg, args, body, from }) {
-    // 1. Verificar permisos: solo el dueño del bot (o el propio bot) puede usarlo
-    //    En GhostNexoraBot, el dueño suele estar definido en la configuración.
-    //    Aquí asumo que tienes una variable global o un array de dueños.
-    const isOwner = msg.key.fromMe || (global.ownerNumbers && global.ownerNumbers.includes(msg.key.participant || msg.key.remoteJid));
-    if (!isOwner) {
-      await sock.sendMessage(from, { text: '⛔ Solo el dueño del bot puede usar este comando.' });
-      return;
-    }
+const MAX_EDIT_TEXT = 3500
 
-    // 2. Obtener el nuevo texto a establecer (args o body)
-    const nuevoTexto = args.join(' ') || body?.trim(); // Si args está vacío, usa body
-    if (!nuevoTexto) {
-      await sock.sendMessage(from, { text: '❌ Debes proporcionar el nuevo contenido para editar.' });
-      return;
-    }
+function jidBase(value?: string | null) {
+  return (value ?? '').replace(/:\d+@/, '@')
+}
 
-    // 3. Obtener el ID del mensaje que se va a editar (el mensaje al que se responde)
-    const mensajeRespondido = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
-    if (!mensajeRespondido) {
-      await sock.sendMessage(from, { text: '❌ Debes responder a un mensaje para poder editarlo.' });
-      return;
-    }
+function sameIdentity(left?: string | null, right?: string | null) {
+  const a = jidBase(left)
+  const b = jidBase(right)
+  if (a && b && a === b) return true
+  const ad = digitsFromJid(a)
+  const bd = digitsFromJid(b)
+  return Boolean(ad && bd && ad === bd)
+}
 
-    // 4. Obtener el ID del mensaje del comando (para eliminarlo después)
-    const idComando = msg.key.id;
-    if (!idComando) {
-      await sock.sendMessage(from, { text: '❌ No se pudo obtener el ID del comando.' });
-      return;
-    }
+function botIdentityCandidates(ctx: CommandContext) {
+  const me = ctx.socket.authState.creds.me
+  return [ctx.socket.user?.id, me?.id, me?.lid]
+    .filter((value): value is string => Boolean(value))
+}
 
-    try {
-      // 5. Editar el mensaje original con el nuevo texto
-      await sock.sendMessage(
-        from,
-        { text: nuevoTexto, edit: { id: mensajeRespondido } },
-        { messageId: mensajeRespondido } // Opcional, para asegurar el ID
-      );
+async function tryDeleteCommandMessage(ctx: CommandContext) {
+  if (!ctx.message.key.id) return
+  // En grupos WhatsApp solo permitirá borrar el mensaje del staff si esta
+  // instancia tiene permisos suficientes. La edición ya realizada no debe
+  // considerarse fallida si el borrado de la orden no está permitido.
+  await ctx.socket.sendMessage(ctx.chatId, { delete: ctx.message.key }).catch(() => undefined)
+}
 
-      // 6. Eliminar el mensaje de comando (para que no quede rastro)
-      await sock.sendMessage(from, { delete: { id: idComando } });
+async function editQuotedBotMessage(ctx: CommandContext) {
+  // Defensa en profundidad: el router ya aplica staffOnly, pero este handler no
+  // debe volverse utilizable por usuarios normales aunque en el futuro se invoque
+  // desde otra superficie.
+  if (!ctx.isOwner && !ctx.isBotStaff) {
+    throw new Error('Solo el owner y el staff del bot pueden usar este comando.')
+  }
 
-      // 7. (Opcional) Enviar confirmación al usuario (se borrará rápidamente)
-      const confirm = await sock.sendMessage(from, { text: '✅ Mensaje editado correctamente.' });
-      // Esperar 2 segundos y eliminar también el mensaje de confirmación (para limpiar)
-      await sleep(2000);
-      await sock.sendMessage(from, { delete: { id: confirm.key.id } });
+  const context = getContextInfo(ctx.message)
+  const stanzaId = context?.stanzaId
+  const quotedMessage = context?.quotedMessage
+  const newText = ctx.argText.trim()
 
-    } catch (error) {
-      console.error('Error al editar:', error);
-      await sock.sendMessage(from, { text: '⚠️ Ocurrió un error al editar el mensaje.' });
-    }
-  },
-} satisfies Command;
+  if (!stanzaId || !quotedMessage) {
+    throw new Error('Responde a un mensaje enviado por esta instancia del bot para editarlo.')
+  }
+  if (!newText) {
+    throw new Error(`Uso: ${ctx.prefix}edit <nuevo texto>, respondiendo al mensaje del bot.`)
+  }
+  if (newText.length > MAX_EDIT_TEXT) {
+    throw new Error(`El texto editado está limitado a ${MAX_EDIT_TEXT} caracteres.`)
+  }
+
+  const quotedSender = context.participant
+  const botIds = botIdentityCandidates(ctx)
+
+  // En grupos el participant del mensaje citado debe ser esta misma instancia.
+  // En privados WhatsApp puede omitir participant; si viene presente también se
+  // valida. Esto evita intentar editar mensajes escritos por otra persona.
+  if (quotedSender && !botIds.some((id) => sameIdentity(id, quotedSender))) {
+    throw new Error('Solo puedo editar mensajes enviados por esta propia instancia del bot.')
+  }
+  if (ctx.isGroup && !quotedSender) {
+    throw new Error('No pude verificar que el mensaje citado pertenezca a esta instancia.')
+  }
+
+  const editKey = {
+    remoteJid: ctx.chatId,
+    fromMe: true,
+    id: stanzaId,
+  }
+
+  await ctx.socket.sendMessage(ctx.chatId, {
+    text: newText,
+    edit: editKey,
+  })
+
+  await tryDeleteCommandMessage(ctx)
+}
+
+const editCommand: BotCommand = {
+  name: 'edit',
+  aliases: ['editbot', 'editar'],
+  category: 'owner',
+  description: 'Edita un mensaje enviado previamente por esta instancia del bot.',
+  usage: 'edit <nuevo texto>',
+  staffOnly: true,
+  handler: editQuotedBotMessage,
+}
+
+export const editCommands: BotCommand[] = [editCommand]
+export default editCommand
