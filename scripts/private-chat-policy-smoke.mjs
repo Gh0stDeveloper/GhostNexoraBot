@@ -33,6 +33,7 @@ try {
   const regular = '5212222222222@s.whatsapp.net'
   const mainOwner = '5211111111111@s.whatsapp.net'
   const subbotOwner = '5213333333333@s.whatsapp.net'
+  const otherSubbotOwner = '5214444444444@s.whatsapp.net'
   const group = '120363000000@g.us'
 
   assert.equal(policy.canProcessPrivateMessage(message(group, regular)), true, 'groups must remain enabled')
@@ -41,6 +42,20 @@ try {
   assert.equal(policy.canSendToChatJid(group), true, 'group sends must remain enabled')
   assert.equal(policy.canSendToChatJid(regular), false, 'outbound MainBot private send must be blocked by default')
   assert.equal(policy.canSendToChatJid(mainOwner), true, 'outbound MainBot owner send must be allowed')
+
+  // Valley-style controlled DMs get exactly one temporary outbound slot. They
+  // must not create a persistent allowlist entry or allow an inbound reply.
+  policy.grantOneShotPrivateSend(regular)
+  assert.equal(policy.canSendToChatJid(regular), true, 'one-shot MainBot permit must allow one controlled private send')
+  assert.equal(policy.canSendToChatJid(regular), false, 'one-shot MainBot permit must be consumed after one send')
+  assert.equal(policy.isPrivateChatApproved(regular), false, 'one-shot permit must not persist in the private allowlist')
+  assert.equal(policy.canProcessPrivateMessage(message(regular, regular)), false, 'one-shot outbound permit must not enable inbound private chat')
+
+  policy.grantOneShotPrivateSend(regular, subbotOwner)
+  assert.equal(policy.canSendToChatJid(regular), false, 'MainBot must not consume a subbot one-shot permit')
+  assert.equal(policy.canSendToChatJid(regular, otherSubbotOwner), false, 'another subbot must not consume the one-shot permit')
+  assert.equal(policy.canSendToChatJid(regular, subbotOwner), true, 'owning subbot must consume its own one-shot permit')
+  assert.equal(policy.canSendToChatJid(regular, subbotOwner), false, 'subbot one-shot permit must also be single-use')
 
   policy.allowPrivateChat(regular, mainOwner)
   assert.equal(policy.isPrivateChatApproved(regular), true, 'allowlist grant was not persisted')
