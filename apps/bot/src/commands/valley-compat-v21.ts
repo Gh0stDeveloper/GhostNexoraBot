@@ -1,6 +1,6 @@
-import vm from 'node:vm'
+import * as vm from 'node:vm'
 import type { BotCommand, CommandContext } from '../types.js'
-import { canSendToChatJid } from '../services/private-chat-policy.js'
+import { grantOneShotPrivateSend } from '../services/private-chat-policy.js'
 import { digitsFromJid, getContextInfo, unwrapMessage } from '../utils/message.js'
 import { resolveTarget } from '../utils/target.js'
 
@@ -10,9 +10,18 @@ import { resolveTarget } from '../utils/target.js'
 // escribió o editó contenido.
 
 const MAX_TEXT_CHUNK = 3200
+const privateSendWindows = new Map<string, number[]>()
 
 function requirePrivate(ctx: CommandContext) {
   if (ctx.isGroup) throw new Error('Este comando solo está disponible en el chat privado autorizado con esta instancia.')
+}
+
+function enforcePrivateSendRate(sender: string) {
+  const cutoff = Date.now() - 60_000
+  const recent = (privateSendWindows.get(sender) ?? []).filter((stamp) => stamp >= cutoff)
+  if (recent.length >= 5) throw new Error('Límite de mensajes privados alcanzado. Espera un minuto antes de enviar más.')
+  recent.push(Date.now())
+  privateSendWindows.set(sender, recent)
 }
 
 async function sendChunks(ctx: CommandContext, text: string) {
@@ -110,9 +119,10 @@ function textAfterTarget(ctx: CommandContext, target: string) {
 }
 
 async function sendPrivateTarget(ctx: CommandContext, target: string, text: string, groupLabel: string) {
-  if (!canSendToChatJid(target, ctx.instanceOwnerJid)) {
-    throw new Error(`El destino no está autorizado para privados en esta instancia. El owner debe autorizarlo primero con ${ctx.prefix}private allow @usuario.`)
-  }
+  enforcePrivateSendRate(ctx.sender)
+  // Permiso efímero de una sola salida: NO agrega al usuario a la allowlist y
+  // cualquier respuesta privada del destinatario continúa bloqueada.
+  grantOneShotPrivateSend(target)
   const delivered = await ctx.socket.sendMessage(target, {
     text: [
       '🤫 *MENSAJE PRIVADO DE GRUPO*',
@@ -122,7 +132,7 @@ async function sendPrivateTarget(ctx: CommandContext, target: string, text: stri
       text,
     ].join('\n'),
   })
-  if (!delivered) throw new Error('El firewall privado de la instancia rechazó el destino.')
+  if (!delivered) throw new Error('No pude entregar el mensaje privado al destino.')
 }
 
 async function groupsCommand(ctx: CommandContext) {
@@ -266,7 +276,7 @@ export const valleyCompatV21Commands: BotCommand[] = [
     description: 'Lista JIDs de miembros de un grupo perteneciente a esta instancia.', usage: 'partcjid <grupo@g.us>', handler: participantsCommand,
   },
   {
-    name: 'getmsg', aliases: ['get', 'quotedjson'], category: 'owner', staffOnly: true, subbotOwnerAllowed: true,
+    name: 'getmsg', aliases: ['get', 'get2', 'quotedjson'], category: 'owner', staffOnly: true, subbotOwnerAllowed: true,
     description: 'Inspecciona el JSON sanitizado de un mensaje citado.', handler: getQuotedCommand,
   },
   {
@@ -291,7 +301,7 @@ export const valleyCompatV21Commands: BotCommand[] = [
   },
   {
     name: 'msg', aliases: ['invisible', 'whisper', 'privmsg'], category: 'groups', groupOnly: true, adminOnly: true, botAdminOnly: true,
-    description: 'Entrega un mensaje por privado a un miembro autorizado y elimina la orden visible; no suplanta autores.', usage: 'msg @usuario <mensaje>', handler: invisibleGroupMessage,
+    description: 'Entrega un mensaje por privado a un miembro y elimina la orden visible; no abre su acceso privado ni suplanta autores.', usage: 'msg @usuario <mensaje>', handler: invisibleGroupMessage,
   },
   {
     name: 'pv', aliases: ['privategroupmsg'], category: 'owner', staffOnly: true, subbotOwnerAllowed: true,
