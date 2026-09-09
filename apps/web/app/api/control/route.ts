@@ -1,11 +1,13 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_SESSION_COOKIE, SUBBOT_SESSION_COOKIE, verifySession } from '../../../lib/auth'
+import { publicUrl } from '../../../lib/public-url'
 import { openBotDbWritable, runtime } from '../../../lib/runtime'
 
 function controlUrl() {
   const base = new URL(runtime.botHealthUrl)
-  base.pathname = '/control'; base.search = ''
+  base.pathname = '/control'
+  base.search = ''
   return base.toString()
 }
 
@@ -38,7 +40,7 @@ function responseFor(request: NextRequest, result: Record<string, unknown>, isAd
   const wantsJson = (request.headers.get('content-type') ?? '').includes('application/json')
   if (wantsJson) return NextResponse.json(result, { status: result.ok ? 200 : 400 })
   const target = isAdmin ? '/admin' : '/subbot'
-  const redirect = new URL(target, request.url)
+  const redirect = publicUrl(request, target)
   if (isAdmin && instance) redirect.searchParams.set('instance', instance)
   redirect.searchParams.set(result.ok ? 'ok' : 'error', result.ok ? '1' : String(result.error ?? 'control_failed').slice(0, 100))
   return NextResponse.redirect(redirect, 303)
@@ -76,12 +78,43 @@ function localOpsAction(action: string, instance: string, payload: Record<string
     }
 
     return { ok: false, error: 'unknown_local_action' }
+  } catch {
+    return { ok: false, error: 'ops_database_write_failed' }
   } finally {
     db.close()
   }
 }
 
-export async function POST(request: NextRequest) {
+async function sendBotControl(outgoing: Record<string, unknown>, action: string) {
+  const response = await fetch(controlUrl(), {
+    method: 'POST',
+    headers: { authorization: `Bearer ${runtime.adminToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify(outgoing),
+    signal: AbortSignal.timeout(action === 'broadcast' ? 120_000 : 20_000),
+  }).catch(() => null)
+
+  if (!response) return { ok: false, error: 'bot_control_unavailable' } as Record<string, unknown>
+  const parsed = await response.json().catch(() => null)
+  if (!parsed || typeof parsed !== 'object') return { ok: false, error: `bot_control_http_${response.status}` }
+  return parsed as Record<string, unknown>
+}
+
+/** Safe browser diagnostic. It intentionally exposes no admin token or JIDs. */
+export async function GET() {
+  const response = await fetch(runtime.botHealthUrl, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(4_000),
+  }).catch(() => null)
+  const health = response ? await response.json().catch(() => null) as { connected?: boolean } | null : null
+  return NextResponse.json({
+    ok: true,
+    service: 'ghost-nexora-web-control',
+    botControlReachable: Boolean(response),
+    whatsappConnected: Boolean(health?.connected),
+  }, { status: 200, headers: { 'cache-control': 'no-store' } })
+}
+
+async function handlePost(request: NextRequest) {
   const cookieStore = await cookies()
   const admin = verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
   const subbot = verifySession(cookieStore.get(SUBBOT_SESSION_COOKIE)?.value)
@@ -102,8 +135,8 @@ export async function POST(request: NextRequest) {
     const db = openBotDbWritable()
     if (!db) return responseFor(request, { ok: false, error: 'bot_database_unavailable' }, true, instance)
     const id = Number(instance.split(':')[1])
-    const exists = Boolean(db.prepare('SELECT 1 FROM subbots WHERE id = ?').get(id))
-    db.close()
+    let exists = false
+    try { exists = Boolean(db.prepare('SELECT 1 FROM subbots WHERE id = ?').get(id)) } finally { db.close() }
     if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, true, 'main')
   }
 
@@ -120,13 +153,16 @@ export async function POST(request: NextRequest) {
     outgoing.userJid = subbot.userJid
   }
 
-  const response = await fetch(controlUrl(), {
-    method: 'POST',
-    headers: { authorization: `Bearer ${runtime.adminToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify(outgoing),
-    signal: AbortSignal.timeout(action === 'broadcast' ? 120_000 : 20_000),
-  }).catch(() => null)
-
-  const result = response ? await response.json().catch(() => ({ ok: false, error: 'invalid_control_response' })) as Record<string, unknown> : { ok: false, error: 'bot_control_unavailable' }
+  const result = await sendBotControl(outgoing, action)
   return responseFor(request, result, Boolean(isAdmin), instance)
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    return await handlePost(request)
+  } catch {
+    const wantsJson = (request.headers.get('content-type') ?? '').includes('application/json')
+    if (wantsJson) return NextResponse.json({ ok: false, error: 'control_internal_error' }, { status: 500 })
+    return responseFor(request, { ok: false, error: 'control_internal_error' }, true, 'main')
+  }
 }
