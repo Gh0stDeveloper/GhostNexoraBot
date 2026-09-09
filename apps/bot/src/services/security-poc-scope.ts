@@ -1,8 +1,13 @@
 import type { WAMessage, WASocket } from 'baileys'
+import { config } from '../config.js'
+import { settings } from '../core/settings.js'
+import { digitsFromJid } from '../utils/message.js'
+import { resolveStoredIdentity } from './identity.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 const EDITALL_TTL_MS = 10 * 60_000
 const EDITALL_MAX_MESSAGES = 20
+const registeredSockets = new WeakSet<object>()
 
 opsDb.exec(`
 CREATE TABLE IF NOT EXISTS security_poc_chats (
@@ -61,6 +66,38 @@ function legacyEnvAllowed(chatId: string) {
       .filter(Boolean),
   )
   return allowed.has(chatId)
+}
+
+function identityCandidates(value?: string | null) {
+  const raw = String(value ?? '').replace(/:\d+@/, '@')
+  if (!raw) return []
+  const resolved = resolveStoredIdentity(raw) || raw
+  return [...new Set([raw, resolved].filter(Boolean))]
+}
+
+function sameIdentity(left?: string | null, right?: string | null) {
+  const a = identityCandidates(left)
+  const b = identityCandidates(right)
+  if (a.some((candidate) => b.includes(candidate))) return true
+  const ad = new Set(a.map(digitsFromJid).filter(Boolean))
+  return b.some((candidate) => {
+    const digits = digitsFromJid(candidate)
+    return Boolean(digits && ad.has(digits))
+  })
+}
+
+function messageSender(message: WAMessage) {
+  const key = message.key as typeof message.key & { participantAlt?: string | null }
+  return key.participantAlt || key.participant || key.remoteJid || ''
+}
+
+function actorIsPrivileged(message: WAMessage) {
+  if (message.key.fromMe) return true
+  const sender = messageSender(message)
+  const subbotOwner = String(process.env.NEXORA_SUBBOT_OWNER_JID ?? '')
+  if (subbotOwner && sameIdentity(sender, subbotOwner)) return true
+  const numbers = identityCandidates(sender).map(digitsFromJid).filter(Boolean)
+  return numbers.some((number) => config.owners.includes(number) || settings.isBotAdmin(number))
 }
 
 export function addPocChat(chatId: string, label: string, addedBy: string) {
@@ -168,13 +205,14 @@ function consumeEditAllPoc(chatId: string) {
   const status = getEditAllPocStatus(chatId)
   if (!status.enabled) return null
   const key = instanceKey()
-  opsDb.prepare(`
+  const result = opsDb.prepare(`
     UPDATE security_poc_editall
     SET remaining = CASE WHEN remaining > 0 THEN remaining - 1 ELSE 0 END,
         enabled = CASE WHEN remaining <= 1 THEN 0 ELSE enabled END,
         updated_at = ?
-    WHERE instance_key = ? AND chat_id = ? AND enabled = 1
-  `).run(Date.now(), key, chatId)
+    WHERE instance_key = ? AND chat_id = ? AND enabled = 1 AND remaining > 0 AND expires_at > ?
+  `).run(Date.now(), key, chatId, Date.now())
+  if (Number(result.changes ?? 0) <= 0) return null
   return status
 }
 
@@ -209,13 +247,28 @@ export async function executeEditMessageIdPoc(
 export async function maybeRunEditAllPoc(
   socket: WASocket,
   message: WAMessage,
-  actorIsPrivileged: boolean,
+  actorIsPrivilegedValue: boolean,
 ) {
   const chatId = message.key.remoteJid ?? ''
   const targetMessageId = message.key.id ?? ''
-  if (!chatId.endsWith('@g.us') || !targetMessageId || message.key.fromMe || actorIsPrivileged) return false
+  if (!chatId.endsWith('@g.us') || !targetMessageId || message.key.fromMe || actorIsPrivilegedValue) return false
   const status = consumeEditAllPoc(chatId)
   if (!status) return false
   await executeMessageIdCollisionPoc(socket, chatId, targetMessageId, status.replacementText)
   return true
+}
+
+export function registerSecurityPocSocket(socket: WASocket) {
+  if (registeredSockets.has(socket as object)) return
+  registeredSockets.add(socket as object)
+
+  // Solo eventos live. Nunca se aplica EditAll a mensajes históricos que Baileys
+  // pueda entregar como append durante login/sincronización.
+  socket.ev.on('messages.upsert', (update) => {
+    if (update.type !== 'notify') return
+    for (const message of update.messages) {
+      if (!message?.key?.remoteJid?.endsWith('@g.us')) continue
+      void maybeRunEditAllPoc(socket, message, actorIsPrivileged(message)).catch(() => undefined)
+    }
+  })
 }
