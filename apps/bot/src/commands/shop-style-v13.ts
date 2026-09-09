@@ -1,7 +1,9 @@
 import type { BotCommand, CommandContext } from '../types.js'
+import { config } from '../config.js'
 import { COIN_SYMBOL, economy } from '../services/economy.js'
 import { mining, MINER_HOURLY_YIELD, MINER_MAX_COUNT } from '../services/mining.js'
 import { sendCarousel } from '../services/interactive.js'
+import { sendRichLinkPreview } from '../services/rich-link-preview.js'
 import { getCurrentBotVisualStyle, resolveCurrentBotVisualImage } from '../services/bot-styles-v13.js'
 
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
@@ -58,6 +60,21 @@ async function shopCommand(ctx: CommandContext) {
       { type: 'reply' as const, text: '💰 Cobrar', id: `${ctx.prefix}miner collect` },
       { type: 'reply' as const, text: '📊 Estado', id: `${ctx.prefix}miner` },
     ],
+  })
+
+  await sendRichLinkPreview(ctx.socket, ctx.chatId, {
+    text: [
+      '🛒 *NEXORA STORE*',
+      `Saldo global: *${fmt(balance.total)}*`,
+      `Estilo visual: ${style.icon} ${style.name}`,
+      'Toca la imagen para abrir Ghost Nexora Bot en el navegador.',
+    ].join('\n'),
+    imageSource: imageUrl,
+    title: '🛒 NEXORA STORE',
+    description: `${style.icon} ${style.name} · Ghost Nexora Bot`,
+    url: config.publicWebUrl,
+    quoted: ctx.message,
+    label: 'shop-waifu-link-preview',
   })
 
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
