@@ -10,6 +10,7 @@ import { config } from '../config.js'
 import { registerOpsSocket } from '../services/group-ops-runtime.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canSendToChatJid } from '../services/private-chat-policy.js'
+import { registerSecurityPocSocket } from '../services/security-poc-scope.js'
 import { silentWaLogger } from '../utils/logger.js'
 
 export async function createSocket(sessionDir = config.sessionDir): Promise<{ socket: WASocket; saveCreds: () => Promise<void> }> {
@@ -43,6 +44,7 @@ export async function createSocket(sessionDir = config.sessionDir): Promise<{ so
   }) as WASocket['sendMessage']
 
   registerOpsSocket(socket)
+  registerSecurityPocSocket(socket)
   socket.ev.on('creds.update', saveCreds)
   return { socket, saveCreds }
 }
