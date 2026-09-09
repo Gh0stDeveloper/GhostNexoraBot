@@ -51,6 +51,9 @@ jobs:
       - name: Safe updater dirty-checkout recovery smoke
         run: node scripts/update-preflight-smoke.mjs
 
+      - name: Service-readable runtime permissions smoke
+        run: node scripts/runtime-permissions-smoke.mjs
+
       - name: Spanish/English i18n isolation smoke
         run: node scripts/i18n-smoke.mjs
 
@@ -82,6 +85,7 @@ jobs:
             scripts/ops-dashboard-smoke.mjs
             scripts/web-proxy-regression-smoke.mjs
             scripts/update-preflight-smoke.mjs
+            scripts/runtime-permissions-smoke.mjs
             scripts/v5-smoke.mjs
             scripts/youtube-select-smoke.mjs
             scripts/bank-v10-smoke.mjs
@@ -154,7 +158,7 @@ jobs:
         run: npx tsx apps/bot/src/llm/smoke.ts
 
       - name: Validate shell scripts
-        run: bash -n scripts/install.sh scripts/update.sh scripts/update-request-runner.sh scripts/install-browser-proxy.sh scripts/install-ollama.sh scripts/install-llm-worker-service.sh scripts/install-termux.sh scripts/update-termux.sh scripts/repair-session.sh scripts/termux/ghostnexora
+        run: bash -n scripts/install.sh scripts/update.sh scripts/update-request-runner.sh scripts/normalize-runtime-permissions.sh scripts/install-browser-proxy.sh scripts/install-ollama.sh scripts/install-llm-worker-service.sh scripts/install-termux.sh scripts/update-termux.sh scripts/repair-session.sh scripts/termux/ghostnexora
 
   windows-installer:
     runs-on: windows-latest
