@@ -46,31 +46,39 @@ function ownerMatchesJid(userJid: string, instanceOwnerJid?: string) {
   return Boolean(digits && config.owners.includes(digits))
 }
 
-function consumeOneShotPrivateSend(userJid: string) {
-  const normalized = normalizeJid(userJid)
-  const permit = oneShotOutboundPermits.get(normalized)
+function permitScope(instanceOwnerJid?: string) {
+  return normalizeJid(instanceOwnerJid) || 'main'
+}
+
+function permitKey(userJid: string, instanceOwnerJid?: string) {
+  return `${permitScope(instanceOwnerJid)}|${normalizeJid(userJid)}`
+}
+
+function consumeOneShotPrivateSend(userJid: string, instanceOwnerJid?: string) {
+  const key = permitKey(userJid, instanceOwnerJid)
+  const permit = oneShotOutboundPermits.get(key)
   if (!permit) return false
   if (permit.expiresAt < now() || permit.remaining <= 0) {
-    oneShotOutboundPermits.delete(normalized)
+    oneShotOutboundPermits.delete(key)
     return false
   }
   permit.remaining -= 1
-  if (permit.remaining <= 0) oneShotOutboundPermits.delete(normalized)
-  else oneShotOutboundPermits.set(normalized, permit)
+  if (permit.remaining <= 0) oneShotOutboundPermits.delete(key)
+  else oneShotOutboundPermits.set(key, permit)
   return true
 }
 
 /**
  * Autoriza exactamente una salida privada durante unos segundos sin abrir el
- * chat entrante ni persistir al usuario en la allowlist. Se usa para acciones
- * explícitas y controladas (por ejemplo, un DM administrativo originado desde
- * un grupo), manteniendo el lockdown normal para cualquier respuesta posterior.
+ * chat entrante ni persistir al usuario en la allowlist. El permiso queda
+ * aislado por instancia: MainBot no puede consumir un permiso de un subbot ni
+ * viceversa, incluso si dos sockets llegaran a compartir proceso.
  */
-export function grantOneShotPrivateSend(userJid: string, ttlMs = 10_000) {
+export function grantOneShotPrivateSend(userJid: string, instanceOwnerJid?: string, ttlMs = 10_000) {
   const normalized = normalizeJid(userJid)
   if (!normalized || !isDirectUserJid(normalized)) throw new Error('Destino privado inválido.')
   const expiresAt = now() + Math.max(1_000, Math.min(30_000, Math.floor(ttlMs)))
-  oneShotOutboundPermits.set(normalized, { remaining: 1, expiresAt })
+  oneShotOutboundPermits.set(permitKey(normalized, instanceOwnerJid), { remaining: 1, expiresAt })
   return normalized
 }
 
@@ -107,7 +115,7 @@ export function canSendToChatJid(chatJid: string, instanceOwnerJid?: string) {
   if (!isDirectUserJid(normalized)) return true
   if (ownerMatchesJid(normalized, instanceOwnerJid)) return true
   if (isPrivateChatApproved(normalized)) return true
-  return consumeOneShotPrivateSend(normalized)
+  return consumeOneShotPrivateSend(normalized, instanceOwnerJid)
 }
 
 export function allowPrivateChat(userJid: string, addedBy: string) {
@@ -123,7 +131,9 @@ export function allowPrivateChat(userJid: string, addedBy: string) {
 export function denyPrivateChat(userJid: string) {
   const normalized = normalizeJid(userJid)
   if (!normalized) return 0
-  oneShotOutboundPermits.delete(normalized)
+  for (const key of [...oneShotOutboundPermits.keys()]) {
+    if (key.endsWith(`|${normalized}`)) oneShotOutboundPermits.delete(key)
+  }
   const direct = db.prepare('DELETE FROM private_chat_allowlist WHERE user_jid = ?').run(normalized)
   if (Number(direct.changes) > 0) return Number(direct.changes)
   const digits = digitsFromJid(normalized)
