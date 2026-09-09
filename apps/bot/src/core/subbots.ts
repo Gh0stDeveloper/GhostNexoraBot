@@ -364,7 +364,17 @@ class SubbotManager {
       deleteInstanceRows('ops_pipeline_metrics')
       deleteInstanceRows('ops_command_metrics')
       deleteInstanceRows('ops_command_catalog')
-      if (tableExists('entitlements')) db.prepare("DELETE FROM entitlements WHERE user_jid = ? AND kind = 'subbot_slot'").run(record.ownerJid)
+      // El entitlement representa el slot vigente del owner, no una fila histórica.
+      // Si existe otra instancia futura del mismo owner, conservarlo evita que la
+      // limpieza de una instancia vieja rompa la nueva.
+      if (tableExists('entitlements')) {
+        db.prepare(`DELETE FROM entitlements
+          WHERE user_jid = ? AND kind = 'subbot_slot'
+          AND NOT EXISTS (
+            SELECT 1 FROM subbots
+            WHERE owner_jid = ? AND id <> ? AND expires_at > ?
+          )`).run(record.ownerJid, record.ownerJid, id, Date.now())
+      }
       db.prepare('DELETE FROM subbots WHERE id = ?').run(id)
       db.exec('COMMIT')
     } catch (error) {
