@@ -12,6 +12,7 @@ import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from './bot-styl
 import { logger } from '../utils/logger.js'
 import { resolveChatLocale, translate } from '../i18n/index.js'
 import { createLocalizedSocket } from './localized-socket.js'
+import { preloadWhatsAppMedia } from './whatsapp-media.js'
 
 const db = economy.db
 const spamWindows = new Map<string, number[]>()
@@ -138,6 +139,30 @@ async function currentVisualIdentity(socket: WASocket) {
   }
 }
 
+async function sendPreloadedImage(
+  socket: WASocket,
+  chatId: string,
+  source: string,
+  caption: string,
+  mentions: string[],
+  label: string,
+) {
+  const image = await preloadWhatsAppMedia(source, { maxBytes: 20 * 1024 * 1024, timeoutMs: 8_000, label })
+  await socket.sendMessage(chatId, { image, caption, mentions })
+}
+
+async function sendPreloadedVideo(
+  socket: WASocket,
+  chatId: string,
+  source: string,
+  caption: string,
+  mentions: string[],
+  label: string,
+) {
+  const video = await preloadWhatsAppMedia(source, { maxBytes: 25 * 1024 * 1024, timeoutMs: 10_000, label })
+  await socket.sendMessage(chatId, { video, gifPlayback: true, caption, mentions })
+}
+
 export async function handleParticipantUpdateV2(socket: WASocket, update: { id: string; participants: GroupParticipant[]; action: ParticipantAction }, instanceId?: number) {
   if (!['add', 'remove'].includes(update.action)) return
   const policy = economy.getGroupPolicy(update.id)
@@ -151,8 +176,11 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
   const metadata = await socket.groupMetadata(update.id).catch(() => null)
   const groupName = metadata?.subject ?? t('moderation.groupFallback')
   const botName = instanceId ? subbotCustomization.get(instanceId).longName : settings.botDisplayName
+  const welcomeAsset = update.action === 'add' ? await getBrandingAsset('welcome', instanceId).catch(() => null) : null
   const goodbyeAsset = update.action === 'remove' ? await getBrandingAsset('goodbye', instanceId).catch(() => null) : null
-  const visual = update.action === 'add' ? await currentVisualIdentity(socket) : null
+  // También se resuelve para despedidas: si no hay banner personalizado, la
+  // instancia conserva la misma waifu/imagen visual que usa en el menú.
+  const visual = await currentVisualIdentity(socket).catch(() => null)
 
   for (const participant of update.participants) {
     const jid = participantJid(participant)
@@ -174,6 +202,17 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
         t('moderation.welcome.end'),
       ].filter(Boolean).join('\n')
       const text = groupSettings.welcomeText ? renderTemplate(groupSettings.welcomeText, jid, groupName) : defaultText
+
+      // Un GIF/video de bienvenida necesita el mensaje multimedia normal; para
+      // imágenes mantenemos la tarjeta interactiva y cargamos el archivo antes.
+      if (welcomeAsset?.kind === 'video') {
+        await sendPreloadedVideo(localizedSocket, update.id, welcomeAsset.path, text, [jid], 'welcome-video').catch(async (error) => {
+          logger.warn({ error, groupId: update.id }, 'preloaded welcome video failed; using text fallback')
+          await localizedSocket.sendMessage(update.id, { text, mentions: [jid] }).catch(() => undefined)
+        })
+        continue
+      }
+
       const title = t('moderation.welcome.title', {
         icon: visual && visual.style.id !== 'default' ? visual.style.icon : '👻',
         name: visual && visual.style.id !== 'default' ? visual.displayName : botName,
@@ -181,7 +220,7 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
       await sendInteractiveCard(localizedSocket, update.id, { key: { remoteJid: update.id, id: `welcome-${Date.now()}` }, message: {} } as WAMessage, {
         title,
         body: text,
-        imageUrl: visual?.imageUrl,
+        imageUrl: welcomeAsset?.kind === 'image' ? welcomeAsset.path : visual?.imageUrl,
         footer: `${groupName} · ${botName} · Ghost Nexora Bot`,
         buttons: [
           { type: 'reply', text: t('moderation.button.rules'), id: `${settings.prefix}rules` },
@@ -197,8 +236,24 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
     const goodbye = groupSettings.goodbyeText
       ? renderTemplate(groupSettings.goodbyeText, jid, groupName)
       : t('moderation.goodbye', { user: jid.split('@')[0] ?? '', group: groupName, bot: botName })
-    if (goodbyeAsset?.kind === 'image') await localizedSocket.sendMessage(update.id, { image: { url: goodbyeAsset.path }, caption: goodbye, mentions: [jid] }).catch(() => undefined)
-    else if (goodbyeAsset?.kind === 'video') await localizedSocket.sendMessage(update.id, { video: { url: goodbyeAsset.path }, gifPlayback: true, caption: goodbye, mentions: [jid] }).catch(() => undefined)
-    else await localizedSocket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch((error) => logger.warn({ error, groupId: update.id }, 'goodbye failed'))
+
+    if (goodbyeAsset?.kind === 'video') {
+      await sendPreloadedVideo(localizedSocket, update.id, goodbyeAsset.path, goodbye, [jid], 'goodbye-video').catch(async (error) => {
+        logger.warn({ error, groupId: update.id }, 'preloaded goodbye video failed; using text fallback')
+        await localizedSocket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch(() => undefined)
+      })
+      continue
+    }
+
+    const goodbyeImage = goodbyeAsset?.kind === 'image' ? goodbyeAsset.path : visual?.imageUrl
+    if (goodbyeImage) {
+      await sendPreloadedImage(localizedSocket, update.id, goodbyeImage, goodbye, [jid], 'goodbye-image').catch(async (error) => {
+        logger.warn({ error, groupId: update.id }, 'preloaded goodbye image failed; using text fallback')
+        await localizedSocket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch(() => undefined)
+      })
+      continue
+    }
+
+    await localizedSocket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch((error) => logger.warn({ error, groupId: update.id }, 'goodbye failed'))
   }
 }
