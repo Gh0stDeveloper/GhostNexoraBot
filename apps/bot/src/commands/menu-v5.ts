@@ -5,6 +5,7 @@ import { professionsV2 } from '../services/professions-v2.js'
 import { isPrivateChatApproved } from '../services/private-chat-policy.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { sendInteractiveCard } from '../services/interactive.js'
+import { sendRichLinkPreview } from '../services/rich-link-preview.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
 import { localeName } from '../i18n/index.js'
@@ -156,10 +157,27 @@ async function menu(ctx: CommandContext) {
     '*Ghost Nexora Bot*',
   ].filter(Boolean).join('\n')
 
+  const menuTitle = ctx.t('menu.title', {
+    icon: visual.style.id === 'default' ? '👻' : visual.style.icon,
+    name: visual.style.id === 'default' ? 'Ghost Nexora Bot' : visual.displayName,
+  })
+
+  await sendRichLinkPreview(ctx.socket, ctx.chatId, {
+    text: body,
+    imageSource: visual.imageUrl,
+    title: menuTitle,
+    description: `${instance} · Ghost Nexora Bot`,
+    url: config.publicWebUrl,
+    quoted: ctx.message,
+    label: 'menu-waifu-link-preview',
+  })
+
+  // externalAdReply reproduce el bloque grande y clicable de la captura. Los
+  // botones native-flow no pueden vivir dentro de ese preview, así que se
+  // conservan en un segundo bloque compacto sin duplicar la imagen.
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
-    title: ctx.t('menu.title', { icon: visual.style.id === 'default' ? '👻' : visual.style.icon, name: visual.style.id === 'default' ? 'Ghost Nexora Bot' : visual.displayName }),
-    body,
-    imageUrl: visual.imageUrl,
+    title: menuTitle,
+    body: `${ctx.t('menu.button.profile')} · ${ctx.t('menu.button.shop')} · ${ctx.t('menu.button.channel')}`,
     footer: 'Ghost Nexora Bot',
     buttons: [
       { type: 'url', text: ctx.t('menu.button.channel'), url: config.officialChannelUrl },
