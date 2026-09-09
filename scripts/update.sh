@@ -10,6 +10,7 @@ LLM_SERVICE="ghost-nexora-llm.service"
 WEB_SERVICE="ghost-nexora-web.service"
 LLM_INSTALLER="${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
 BROWSER_PROXY_INSTALLER="${INSTALL_DIR}/scripts/install-browser-proxy.sh"
+PREFLIGHT="${INSTALL_DIR}/scripts/safe-git-preflight.mjs"
 LLM_STATE_CANDIDATES=(
   "${STATE_DIR}/llm/state.json"
   "${INSTALL_DIR}/data/llm/state.json"
@@ -26,6 +27,14 @@ trap 'status=$?; fail "La actualización falló en la línea ${LINENO} (exit ${s
 if [[ "${EUID}" -ne 0 ]]; then fail 'Ejecuta este script con sudo/root.'; exit 1; fi
 if [[ ! -d "${INSTALL_DIR}/.git" ]]; then fail "No existe un repositorio Git válido en ${INSTALL_DIR}. Usa install.sh primero."; exit 1; fi
 cd "${INSTALL_DIR}"
+
+# El checkout de producción es administrado. Antes de consultar/pullar el HEAD,
+# respalda cualquier cambio TRACKED y restaura solo código versionado. Nunca
+# ejecuta git clean: .env, data/, sesiones y SQLite permanecen intactos.
+if [[ -f "${PREFLIGHT}" ]]; then
+  env STATE_DIR="${STATE_DIR}" node "${PREFLIGHT}"
+fi
+
 OLD_SHA="$(git rev-parse HEAD)"
 if [[ -z "${SERVICE_USER}" ]]; then
   SERVICE_USER="$(systemctl show -p User --value ghost-nexora-bot.service 2>/dev/null || true)"
@@ -175,7 +184,6 @@ fi
 
 section '6/8 · Proxy de navegador y Nginx'
 if [[ -f "${BROWSER_PROXY_INSTALLER}" ]]; then
-  chmod +x "${BROWSER_PROXY_INSTALLER}"
   INSTALL_DIR="${INSTALL_DIR}" bash "${BROWSER_PROXY_INSTALLER}"
   ok 'Proxy de navegador/Nginx verificado y configurado.'
 else
@@ -216,7 +224,6 @@ fi
 
 if [[ "${LLM_ENABLED}" -eq 1 ]]; then
   if [[ -f "${LLM_INSTALLER}" ]]; then
-    chmod +x "${LLM_INSTALLER}"
     if [[ "${LLM_BUSY}" -eq 1 ]]; then
       INSTALL_DIR="${INSTALL_DIR}" SERVICE_USER="${SERVICE_USER}" SKIP_LLM_RESTART=1 bash "${LLM_INSTALLER}"
       ok 'Unidad LLM actualizada en disco; reinicio omitido por entrenamiento activo.'
