@@ -19,9 +19,8 @@ fi
 [[ -f "${REQUEST_FILE}" ]] || exit 0
 rm -f "${REQUEST_FILE}"
 
-if [[ ! -x "${INSTALL_DIR}/scripts/update.sh" ]]; then
-  chmod +x "${INSTALL_DIR}/scripts/update.sh" 2>/dev/null || true
-fi
-
+# update.sh se ejecuta explícitamente mediante bash; no necesita bit ejecutable.
+# Evitamos chmod sobre archivos versionados porque eso ensuciaba el checkout y
+# podía bloquear la siguiente actualización.
 cd "${INSTALL_DIR}"
 exec env INSTALL_DIR="${INSTALL_DIR}" STATE_DIR="${STATE_DIR}" bash "${INSTALL_DIR}/scripts/update.sh"
