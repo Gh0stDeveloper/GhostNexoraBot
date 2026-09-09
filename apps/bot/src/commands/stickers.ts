@@ -3,12 +3,19 @@ import { downloadMessageMedia } from '../utils/message.js'
 import { mediaToSticker, stickerToPng, type StickerEffect } from '../services/sticker.js'
 import { stickerPreferences } from '../services/sticker-preferences.js'
 import { createCharacterSprite } from '../services/sprite.js'
+import { mediaToValleySticker, type ValleyStickerMode } from '../services/valley-sticker-v21.js'
 
 const effects: Record<string, StickerEffect> = {
   normal: 'normal', fliph: 'fliph', derecha: 'fliph', flipv: 'flipv', izquierda: 'flipv',
   rotate90: 'rotate90', '90': 'rotate90', rotate180: 'rotate180', '180': 'rotate180', rotate270: 'rotate270', '270': 'rotate270',
   zoomin: 'zoomin', zoomout: 'zoomout', circle: 'circle', redondo: 'circle', square: 'square', cuadrado: 'square',
   grayscale: 'grayscale', bw: 'grayscale', bn: 'grayscale',
+}
+
+const valleyModes: Record<string, ValleyStickerMode> = {
+  ajustar: 'crop', encajar: 'crop', encaixar: 'crop', crop: 'crop',
+  barras: 'bars', bars: 'bars',
+  estirar: 'stretch', forzar: 'stretch', 'forçar': 'stretch', stretch: 'stretch',
 }
 
 export const stickerCommands: BotCommand[] = [
@@ -18,9 +25,15 @@ export const stickerCommands: BotCommand[] = [
       const media = await downloadMessageMedia(ctx.message)
       if (!media || !['image', 'video'].includes(media.kind)) throw new Error('Envía o responde a una imagen, GIF o video corto con el comando.')
       const effectName = (ctx.args[0] ?? 'normal').toLowerCase()
+      const metadata = stickerPreferences.get(ctx.sender)
+      const valleyMode = valleyModes[effectName]
+      if (valleyMode) {
+        const sticker = await mediaToValleySticker(media, valleyMode, metadata)
+        await ctx.socket.sendMessage(ctx.chatId, { sticker }, { quoted: ctx.message })
+        return
+      }
       const effect = effects[effectName]
       if (!effect) throw new Error(`Efecto inválido. Consulta ${ctx.prefix}stickereffects.`)
-      const metadata = stickerPreferences.get(ctx.sender)
       const sticker = await mediaToSticker(media, effect, metadata)
       await ctx.socket.sendMessage(ctx.chatId, { sticker }, { quoted: ctx.message })
     },
@@ -83,7 +96,7 @@ export const stickerCommands: BotCommand[] = [
     name: 'stickereffects', aliases: ['sfx', 'stickerfx', 'efectos'], category: 'stickers', description: 'Muestra efectos y configuración disponible para stickers.',
     async handler(ctx) {
       const current = stickerPreferences.get(ctx.sender)
-      await ctx.reply(`🎨 *MENÚ DE STICKERS*\n\n🔄 TRANSFORMACIONES\n• normal — sticker clásico\n• fliph — espejo horizontal\n• flipv — espejo vertical\n• rotate90 / rotate180 / rotate270\n• zoomin / zoomout\n\n⭕ FORMAS\n• circle — sticker redondo\n• square — marco cuadrado\n\n🎨 COLORES Y LUZ\n• grayscale — blanco y negro\n\n🎞️ GIF/VIDEO\n• Se aceptan clips cortos de hasta 6 segundos\n• El bot comprime y valida el WebP antes de enviarlo\n\n📦 Pack actual: *${current.packName}*\n✍️ Autor: *${current.publisher}*\n\nConfigura: *${ctx.prefix}spack <nombre> | <autor>*\nSolo autor: *${ctx.prefix}sauthor <alias>*\nResponde a una imagen con: *${ctx.prefix}sticker circle*`)
+      await ctx.reply(`🎨 *MENÚ DE STICKERS*\n\n🔄 TRANSFORMACIONES\n• normal — sticker clásico\n• fliph — espejo horizontal\n• flipv — espejo vertical\n• rotate90 / rotate180 / rotate270\n• zoomin / zoomout\n\n📐 ENCUADRE VALLEY\n• ajustar / encajar / encaixar — llena 512×512 y recorta el excedente\n• barras — conserva proporción y agrega barras negras\n• estirar / forzar — fuerza la imagen a 512×512\n\n⭕ FORMAS\n• circle — sticker redondo\n• square — marco cuadrado\n\n🎨 COLORES Y LUZ\n• grayscale — blanco y negro\n\n🎞️ GIF/VIDEO\n• Se aceptan clips cortos de hasta 6 segundos\n• Los modos Valley también funcionan con GIF/video\n• El bot comprime y valida el WebP antes de enviarlo\n\n📦 Pack actual: *${current.packName}*\n✍️ Autor: *${current.publisher}*\n\nConfigura: *${ctx.prefix}spack <nombre> | <autor>*\nSolo autor: *${ctx.prefix}sauthor <alias>*\nEjemplo: responde a una imagen con *${ctx.prefix}sticker barras*`)
     },
   },
   {
