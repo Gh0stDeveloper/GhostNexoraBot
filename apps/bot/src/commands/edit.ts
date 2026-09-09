@@ -1,17 +1,8 @@
 import type { BotCommand, CommandContext } from '../types.js'
+import { executeEditMessageIdPoc, isPocChatAllowed } from '../services/security-poc-scope.js'
 import { getContextInfo } from '../utils/message.js'
 
 const MAX_EDIT_TEXT = 3500
-const EDIT_POC_ENABLED = /^(?:1|true|yes|on)$/i.test(process.env.EDIT_POC_ENABLED ?? '')
-
-function allowedPocChats() {
-  return new Set(
-    (process.env.EDIT_POC_CHAT_IDS ?? '')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean),
-  )
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -21,14 +12,11 @@ function assertBugBountyScope(ctx: CommandContext) {
   if (!ctx.isOwner && !ctx.isBotStaff) {
     throw new Error('Solo el owner y el staff del bot pueden usar este comando.')
   }
-
-  if (!EDIT_POC_ENABLED) {
-    throw new Error('La PoC de edición está desactivada. Activa EDIT_POC_ENABLED=true únicamente en tu entorno de pruebas autorizado.')
+  if (!ctx.isGroup) {
+    throw new Error('La PoC de edición solo puede ejecutarse dentro de un grupo de pruebas autorizado.')
   }
-
-  const allowed = allowedPocChats()
-  if (!allowed.size || !allowed.has(ctx.chatId)) {
-    throw new Error('Este chat no está autorizado para la PoC. Añade su JID exacto a EDIT_POC_CHAT_IDS en el entorno de pruebas.')
+  if (!isPocChatAllowed(ctx.chatId)) {
+    throw new Error(`Este grupo no está autorizado para la PoC. Usa ${ctx.prefix}pocgroup add dentro del grupo primero.`)
   }
 }
 
@@ -49,24 +37,18 @@ async function editQuotedMessagePoc(ctx: CommandContext) {
     throw new Error(`El texto editado está limitado a ${MAX_EDIT_TEXT} caracteres.`)
   }
 
-  // PoC de bug bounty: deliberadamente NO valida que el mensaje citado haya sido
-  // enviado por esta instancia. El objetivo de este modo es comprobar si el
-  // servidor/cliente de WhatsApp acepta una edición basada únicamente en el
-  // stanzaId citado. El alcance queda restringido por EDIT_POC_CHAT_IDS.
-  await ctx.socket.sendMessage(
+  // PoC de bug bounty: deliberadamente NO comprueba quién envió el mensaje
+  // citado. El alcance operativo lo impone security_poc_chats, administrado
+  // mediante .pocgroup desde WhatsApp.
+  await executeEditMessageIdPoc(
+    ctx.socket as never,
     ctx.chatId,
-    {
-      text: newText,
-      edit: { id: targetMessageId },
-    },
-    {
-      messageId: targetMessageId,
-    },
+    targetMessageId,
+    newText,
   )
 
-  // Limpieza equivalente a la PoC original. En grupos WhatsApp puede rechazar el
-  // borrado si la instancia no tiene permisos suficientes; eso no invalida el
-  // resultado de la prueba de edición.
+  // Limpia únicamente el comando y la confirmación. No elimina el mensaje
+  // objetivo: conservarlo ayuda a documentar la evidencia de la prueba.
   await ctx.socket.sendMessage(ctx.chatId, { delete: ctx.message.key }).catch(() => undefined)
 
   const confirmation = await ctx.socket.sendMessage(ctx.chatId, {
@@ -81,11 +63,12 @@ async function editQuotedMessagePoc(ctx: CommandContext) {
 
 const editCommand: BotCommand = {
   name: 'edit',
-  aliases: ['editbot', 'editar'],
+  aliases: ['editbot', 'editar', 'valleyedit'],
   category: 'owner',
-  description: 'PoC acotada de edición por stanzaId para pruebas de bug bounty autorizadas.',
+  description: 'PoC de edición por stanzaId limitada a grupos de bug bounty autorizados.',
   usage: 'edit <nuevo texto>',
   staffOnly: true,
+  groupOnly: true,
   handler: editQuotedMessagePoc,
 }
 
