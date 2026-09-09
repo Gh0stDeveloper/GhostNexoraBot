@@ -23,37 +23,58 @@ try {
   const moderation = await read('apps/bot/src/services/moderation-v2.ts')
   const menu = await read('apps/bot/src/commands/menu-v5.ts')
   const shop = await read('apps/bot/src/commands/shop-style-v13.ts')
+  const valley = await read('apps/bot/src/commands/valley-compat-v21.ts')
+  const valleySticker = await read('apps/bot/src/services/valley-sticker-v21.ts')
+  const stickers = await read('apps/bot/src/commands/stickers.ts')
 
-  // Legacy interactive cards/carousels still preload media for their own headers.
+  // Interactive cards/carousels preload media for their own headers.
   assert.match(interactive, /preloadWhatsAppMedia\(imageUrl/, 'interactive cards must preload their image source')
   assert.match(interactive, /generateWAMessageContent\(\{ image \}/, 'interactive cards must upload the materialized media')
   assert.doesNotMatch(interactive, /generateWAMessageContent\(\{ image: \{ url: imageUrl \} \}/, 'old direct-url interactive upload must not return')
   assert.match(interactive, /const imageCache = new Map/, 'carousels must deduplicate repeated artwork uploads')
 
-  // Screenshot-style preview: large image/title block linked to sourceUrl.
-  assert.match(richPreview, /externalAdReply/, 'rich preview must use WhatsApp externalAdReply')
+  // externalAdReply remains available for welcome/goodbye/shop, but the menu was
+  // intentionally restored to the single full interactive card that works across
+  // the user's current WhatsApp clients.
+  assert.match(richPreview, /externalAdReply/, 'rich preview service must remain available for other surfaces')
   assert.match(richPreview, /renderLargerThumbnail: true/, 'rich preview must request the large thumbnail layout')
-  assert.match(richPreview, /showAdAttribution: false/, 'rich preview must not render advertising attribution')
-  assert.match(richPreview, /sourceUrl,/, 'rich preview must expose a clickable URL')
-  assert.match(richPreview, /thumbnail \? \{ thumbnail \}/, 'local waifu bytes must be embedded as the preview thumbnail')
-  assert.match(richPreview, /richPreviewTargetUrl/, 'preview target must reject localhost/internal web URLs')
-
-  assert.match(menu, /sendRichLinkPreview/, 'menu must use the screenshot-style clickable link preview')
-  assert.match(menu, /imageSource: visual\.imageUrl/, 'menu preview must use the selected waifu/avatar')
-  assert.match(menu, /url: config\.publicWebUrl/, 'menu preview click must target the public web URL')
-  assert.match(menu, /sendInteractiveCard/, 'menu quick actions must remain available in a compact second block')
+  assert.doesNotMatch(menu, /sendRichLinkPreview/, 'menu must not use the broken externalAdReply layout')
+  assert.match(menu, /sendInteractiveCard/, 'menu must use the original full interactive card')
+  assert.match(menu, /body,\s*\n\s*imageUrl: visual\.imageUrl/, 'menu card must include the complete body and selected waifu/avatar')
+  assert.match(menu, /\.\.\.valleyCompatV21Commands/, 'Valley compatibility commands must be registered in the full command set')
 
   assert.match(moderation, /getBrandingAsset\('welcome'/, 'welcome must honor a custom welcome banner')
   assert.match(moderation, /const welcomeImage = welcomeAsset\?\.kind === 'image' \? welcomeAsset\.path : visual\?\.imageUrl/, 'welcome image priority must be custom banner then active visual')
-  assert.match(moderation, /sendRichLinkPreview\(localizedSocket, update\.id/, 'welcome/goodbye must use clickable large previews')
+  assert.match(moderation, /sendRichLinkPreview\(localizedSocket, update\.id/, 'welcome/goodbye may keep clickable large previews')
   assert.match(moderation, /const goodbyeImage = goodbyeAsset\?\.kind === 'image' \? goodbyeAsset\.path : visual\?\.imageUrl/, 'goodbye must fall back to the active visual image')
   assert.match(moderation, /sendPreloadedVideo/, 'welcome/goodbye GIF-video branding must still preload local media')
 
-  assert.match(shop, /sendRichLinkPreview/, 'shop must send a clickable waifu preview before the carousel')
+  assert.match(shop, /sendRichLinkPreview/, 'shop may keep a clickable waifu preview before the carousel')
   assert.match(shop, /imageSource: imageUrl/, 'shop rich preview must use the active visual image')
   assert.match(shop, /sendCarousel/, 'shop product carousel must remain available after the preview')
 
-  console.log('V20 clickable waifu link previews for menu, welcome, goodbye and shop: OK')
+  // ValleyBot / ValleyInvisible compatibility: useful capabilities are ported,
+  // while raw arbitrary relay, process eval and message-id spoofing stay excluded.
+  for (const name of ['grupos', 'partcjid', 'getmsg', 'mymsg', 'gettype', 'codeblock', 'relay', 'evalsafe', 'msg', 'pv', 'editbot']) {
+    assert.match(valley, new RegExp(`name: '${name}'`), `Valley-compatible command ${name} must be present`)
+  }
+  assert.match(valley, /canSendToChatJid/, 'private Valley-style messaging must respect the existing private-chat firewall')
+  assert.match(valley, /vm\.createContext/, 'eval compatibility must use an isolated VM context')
+  assert.match(valley, /codeGeneration: \{ strings: false, wasm: false \}/, 'safe eval must disable dynamic code generation')
+  assert.match(valley, /relayMessage\(ctx\.chatId, \{ conversation: text \}/, 'relay compatibility must be constrained to text/current chat')
+  assert.doesNotMatch(valley, /JSON\.parse\(ctx\.argText/, 'raw arbitrary relay JSON must not be accepted')
+  assert.doesNotMatch(valley, /messageId:\s*(?:context\.stanzaId|captured|targetMessage)/, 'Valley message-id spoofing must not be introduced')
+  assert.match(valley, /edit: \{ remoteJid: ctx\.chatId, fromMe: true, id: stanzaId \}/, 'edit compatibility must use legitimate edits of bot-owned messages')
+
+  assert.match(valleySticker, /type ValleyStickerMode = 'crop' \| 'bars' \| 'stretch'/, 'all Valley sticker sizing modes must exist')
+  assert.match(valleySticker, /mediaToValleySticker/, 'Valley sticker converter must be exported')
+  assert.match(valleySticker, /sticker-pack-name/, 'Valley sizing modes must preserve Ghost Nexora sticker metadata')
+  assert.match(stickers, /mediaToValleySticker/, 'main sticker command must call Valley sizing converter')
+  assert.match(stickers, /barras: 'bars'/, 'sticker barras mode must be available')
+  assert.match(stickers, /estirar: 'stretch'/, 'sticker stretch mode must be available')
+  assert.match(stickers, /encaixar: 'crop'/, 'Valley Portuguese crop alias must remain compatible')
+
+  console.log('V20/V21 media, restored menu and Valley compatibility: OK')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
