@@ -27,6 +27,7 @@ try {
   const valleyPoc = await read('apps/bot/src/commands/valley-poc-v22.ts')
   const pocScope = await read('apps/bot/src/services/security-poc-scope.ts')
   const edit = await read('apps/bot/src/commands/edit.ts')
+  const session = await read('apps/bot/src/core/session.ts')
   const valleySticker = await read('apps/bot/src/services/valley-sticker-v21.ts')
   const stickers = await read('apps/bot/src/commands/stickers.ts')
   const privatePolicy = await read('apps/bot/src/services/private-chat-policy.ts')
@@ -79,6 +80,12 @@ try {
   assert.match(pocScope, /EDITALL_TTL_MS = 10 \* 60_000/, 'EditAll PoC must have a ten-minute TTL')
   assert.match(pocScope, /messageId: targetMessageId/, 'scoped PoC service must preserve the target messageId collision primitive')
   assert.match(pocScope, /legacyEnvAllowed/, 'legacy EDIT_POC env configuration may remain as bootstrap fallback')
+  assert.match(pocScope, /export function registerSecurityPocSocket/, 'EditAll must register on every active WhatsApp socket')
+  assert.match(pocScope, /update\.type !== 'notify'/, 'EditAll watcher must ignore history/append syncs')
+  assert.match(pocScope, /NEXORA_SUBBOT_OWNER_JID/, 'subbot owner messages must be protected from EditAll')
+  assert.match(pocScope, /settings\.isBotAdmin/, 'staff messages must be protected from EditAll')
+  assert.match(pocScope, /registeredSockets/, 'a socket must not receive duplicate PoC watchers')
+  assert.match(session, /registerSecurityPocSocket/, 'MainBot and subbot sockets must install the persistent PoC watcher')
 
   // Special/non-common Valley capabilities requested by the user. These are not
   // duplicated from ordinary commands such as ping/sticker/restart.
@@ -91,9 +98,8 @@ try {
   assert.match(valleyPoc, /executeMessageIdCollisionPoc/, 'ValleyInvisible-style next-message ID collision must be wired')
   assert.match(valleyPoc, /messages\.upsert/, 'invisible/PV PoCs must capture a fresh target message event')
   assert.match(valleyPoc, /LISTENER_TTL_MS = 90_000/, 'one-shot target listeners must expire after 90 seconds')
-  assert.match(valleyPoc, /maybeRunEditAllPoc/, 'EditAll switch must be connected to a live bounded runtime listener')
-  assert.match(valleyPoc, /EDITALL_RUNTIME_TTL_MS = 10 \* 60_000 \+ 5_000/, 'EditAll runtime listener must self-expire')
-  assert.match(valleyPoc, /clearEditAllListener/, 'EditAll runtime listener must be removable immediately')
+  assert.match(valleyPoc, /enableEditAllPoc/, 'EditAll command must persist its bounded state')
+  assert.match(valleyPoc, /disableEditAllPoc/, 'EditAll command must be immediately switchable off')
   assert.match(valleyPoc, /JSON\.parse\(raw\)/, 'relayraw must accept the Valley-style JSON research payload')
   assert.match(valleyPoc, /protocolMessage/, 'relayraw must block destructive/control message families')
   assert.doesNotMatch(valleyPoc, /\beval\s*\(/, 'V22 must not expose raw process eval/RCE')
