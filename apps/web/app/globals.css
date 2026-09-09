@@ -126,7 +126,7 @@ a { text-underline-offset: 4px; }
   transition: border-color .18s ease, box-shadow .18s ease;
 }
 .ops-input:focus { border-color: rgba(59,130,246,.52); box-shadow: 0 0 0 3px rgba(59,130,246,.08); }
-.ops-button-muted,.ops-button-danger,.ops-button-primary {
+.ops-button-muted,.ops-button-danger,.ops-button-primary,.ops-tab,.ops-tab-active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -144,6 +144,9 @@ a { text-underline-offset: 4px; }
 .ops-button-primary:hover { background:#3b82f6; }
 .ops-button-danger { border:1px solid rgba(239,68,68,.22); background:rgba(127,29,29,.18); color:#f87171; }
 .ops-button-danger:hover { border-color:rgba(239,68,68,.4); background:rgba(127,29,29,.28); }
+.ops-tab { flex:0 0 auto; border:1px solid rgba(255,255,255,.08); background:#101012; color:#71717a; }
+.ops-tab:hover { border-color:rgba(59,130,246,.22); color:#d4d4d8; background:#141417; }
+.ops-tab-active { flex:0 0 auto; border:1px solid rgba(59,130,246,.32); background:rgba(37,99,235,.16); color:#93c5fd; box-shadow:inset 0 0 0 1px rgba(59,130,246,.05); }
 .ops-badge-good,.ops-badge-warn,.ops-badge-bad {
   display:inline-flex;
   align-items:center;
