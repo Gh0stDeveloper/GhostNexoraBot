@@ -23,6 +23,7 @@ for (const path of [
 const control = read('apps/web/app/api/control/route.ts')
 assert.match(control, /export async function GET\(/, '/api/control must expose a safe browser diagnostic GET')
 assert.match(control, /botControlReachable/, '/api/control diagnostic must report bot reachability')
+assert.match(control, /health\?\.connected\) \|\| persisted\.connected/, '/api/control must combine live health with the persisted runtime heartbeat')
 assert.match(control, /control_internal_error/, 'control POST failures must degrade to a controlled response')
 
 const auth = read('apps/web/lib/auth.ts')
@@ -42,6 +43,7 @@ assert.match(nginx, /PUBLIC_WEB_URL reparado/, 'installer must repair legacy loc
 const main = read('apps/bot/src/index.ts')
 assert.match(main, /let socketGeneration = 0/, 'MainBot must track socket generations')
 assert.match(main, /generation !== socketGeneration/, 'stale MainBot socket events must be ignored')
-assert.match(main, /connected \? mainSocket : null/, 'web control must only receive an actually connected MainBot socket')
+assert.match(main, /effectiveMainConnected\(\) \? mainSocket : null/, 'web control must only receive a registered/live MainBot socket')
+assert.match(main, /mainSocket && mainSocket\.authState\.creds\.registered/, 'MainBot live state must verify registered socket credentials')
 
 console.log('web/proxy regression smoke: OK')
