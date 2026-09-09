@@ -33,7 +33,9 @@ function installUpdateTrigger() {
   const runner = path.join(repoRoot, 'scripts', 'update-request-runner.sh')
   if (!existsSync(runner)) return
 
-  chmodSync(runner, 0o755)
+  // ExecStart invokes the runner through bash. Do not chmod the tracked source
+  // file: changing its mode dirties the production checkout and used to block
+  // the next `git pull --ff-only` update.
   mkdirSync(dataDir, { recursive: true, mode: 0o750 })
 
   const service = `[Unit]\nDescription=Ghost Nexora Bot privileged updater\nAfter=network-online.target\n\n[Service]\nType=oneshot\nEnvironment=INSTALL_DIR=${repoRoot}\nEnvironment=STATE_DIR=${stateDir}\nEnvironment=DATA_DIR=${dataDir}\nExecStart=/usr/bin/env bash ${runner}\nNice=10\nUMask=0077\n`
