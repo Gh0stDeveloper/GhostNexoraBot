@@ -5,6 +5,7 @@ import { digitsFromJid, getSender, getSenderCandidates } from '../utils/message.
 
 const db = economy.db
 const now = () => Date.now()
+const oneShotOutboundPermits = new Map<string, { remaining: number; expiresAt: number }>()
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS private_chat_allowlist (
@@ -45,6 +46,34 @@ function ownerMatchesJid(userJid: string, instanceOwnerJid?: string) {
   return Boolean(digits && config.owners.includes(digits))
 }
 
+function consumeOneShotPrivateSend(userJid: string) {
+  const normalized = normalizeJid(userJid)
+  const permit = oneShotOutboundPermits.get(normalized)
+  if (!permit) return false
+  if (permit.expiresAt < now() || permit.remaining <= 0) {
+    oneShotOutboundPermits.delete(normalized)
+    return false
+  }
+  permit.remaining -= 1
+  if (permit.remaining <= 0) oneShotOutboundPermits.delete(normalized)
+  else oneShotOutboundPermits.set(normalized, permit)
+  return true
+}
+
+/**
+ * Autoriza exactamente una salida privada durante unos segundos sin abrir el
+ * chat entrante ni persistir al usuario en la allowlist. Se usa para acciones
+ * explícitas y controladas (por ejemplo, un DM administrativo originado desde
+ * un grupo), manteniendo el lockdown normal para cualquier respuesta posterior.
+ */
+export function grantOneShotPrivateSend(userJid: string, ttlMs = 10_000) {
+  const normalized = normalizeJid(userJid)
+  if (!normalized || !isDirectUserJid(normalized)) throw new Error('Destino privado inválido.')
+  const expiresAt = now() + Math.max(1_000, Math.min(30_000, Math.floor(ttlMs)))
+  oneShotOutboundPermits.set(normalized, { remaining: 1, expiresAt })
+  return normalized
+}
+
 export function isPrivateChatApproved(userJid: string) {
   const normalized = normalizeJid(userJid)
   if (!normalized) return false
@@ -77,7 +106,8 @@ export function canSendToChatJid(chatJid: string, instanceOwnerJid?: string) {
   // Grupos, canales/newsletters y otros destinos no son chats privados de usuario.
   if (!isDirectUserJid(normalized)) return true
   if (ownerMatchesJid(normalized, instanceOwnerJid)) return true
-  return isPrivateChatApproved(normalized)
+  if (isPrivateChatApproved(normalized)) return true
+  return consumeOneShotPrivateSend(normalized)
 }
 
 export function allowPrivateChat(userJid: string, addedBy: string) {
@@ -93,6 +123,7 @@ export function allowPrivateChat(userJid: string, addedBy: string) {
 export function denyPrivateChat(userJid: string) {
   const normalized = normalizeJid(userJid)
   if (!normalized) return 0
+  oneShotOutboundPermits.delete(normalized)
   const direct = db.prepare('DELETE FROM private_chat_allowlist WHERE user_jid = ?').run(normalized)
   if (Number(direct.changes) > 0) return Number(direct.changes)
   const digits = digitsFromJid(normalized)
