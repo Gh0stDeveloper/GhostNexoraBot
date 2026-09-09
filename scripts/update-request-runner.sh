@@ -6,6 +6,7 @@ STATE_DIR="${STATE_DIR:-/var/lib/ghost-nexora-bot}"
 DATA_DIR="${DATA_DIR:-${STATE_DIR}/data}"
 REQUEST_FILE="${DATA_DIR}/update-request"
 LOCK_FILE="/run/lock/ghost-nexora-bot-update.lock"
+PREFLIGHT="${INSTALL_DIR}/scripts/safe-git-preflight.mjs"
 
 mkdir -p "$(dirname "${LOCK_FILE}")" "${DATA_DIR}"
 exec 9>"${LOCK_FILE}"
@@ -18,6 +19,12 @@ fi
 # comandos en el host.
 [[ -f "${REQUEST_FILE}" ]] || exit 0
 rm -f "${REQUEST_FILE}"
+
+# Limpia únicamente cambios TRACKED del checkout, después de dejar un patch
+# recuperable en STATE_DIR/backups. No toca .env, data/, sesiones ni SQLite.
+if [[ -f "${PREFLIGHT}" ]]; then
+  env STATE_DIR="${STATE_DIR}" node "${PREFLIGHT}"
+fi
 
 # update.sh se ejecuta explícitamente mediante bash; no necesita bit ejecutable.
 # Evitamos chmod sobre archivos versionados porque eso ensuciaba el checkout y
