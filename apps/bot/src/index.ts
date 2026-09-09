@@ -43,6 +43,21 @@ let reconnectAttempts = 0
 let mainSocket: WASocket | null = null
 let socketGeneration = 0
 
+function mainSocketConnected() {
+  return Boolean(mainSocket && mainSocket.authState.creds.registered && mainSocket.user?.id)
+}
+
+function effectiveMainConnected() {
+  return connected || mainSocketConnected()
+}
+
+function markMainSocketLive(socket: WASocket) {
+  if (mainSocket !== socket || !socket.authState.creds.registered) return
+  connected = true
+  activeJid = socket.user?.id ?? activeJid
+  if (!connectedAt) connectedAt = new Date()
+}
+
 function json(res: http.ServerResponse, status: number, payload: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
   res.end(JSON.stringify(payload))
@@ -61,7 +76,7 @@ async function readJson(req: http.IncomingMessage) {
 }
 
 async function executeControl(body: Record<string, unknown>) {
-  return executeAdminWebControl(body, connected ? mainSocket : null)
+  return executeAdminWebControl(body, effectiveMainConnected() ? mainSocket : null)
 }
 
 function startHealthServer() {
@@ -95,16 +110,17 @@ function startHealthServer() {
       return
     }
     const subbots = economy.listSubbots()
-    json(res, connected ? 200 : 503, {
-      ok: connected,
+    const live = effectiveMainConnected()
+    json(res, live ? 200 : 503, {
+      ok: live,
       service: 'ghost-nexora-bot',
       botName: config.botName,
       prefix: settings.prefix,
-      connected,
+      connected: live,
       connectedAt: connectedAt?.toISOString() ?? null,
       startedAt: startedAt.toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
-      activeJid,
+      activeJid: mainSocket?.user?.id ?? activeJid,
       llm: {
         localEnabled: config.ollamaEnabled,
         model: config.ollamaEnabled ? config.ollamaModel : null,
@@ -293,6 +309,7 @@ async function connect() {
 
   socket.ev.on('messages.upsert', ({ messages, type }) => {
     if (generation !== socketGeneration || type !== 'notify') return
+    markMainSocketLive(socket)
     for (const message of messages) {
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
       const chatId = message.key.remoteJid
@@ -303,6 +320,7 @@ async function connect() {
 
   socket.ev.on('group-participants.update', (update) => {
     if (generation !== socketGeneration) return
+    markMainSocketLive(socket)
     void handleParticipantUpdateV2(socket, update).catch((error) =>
       logger.error({ error, groupId: update.id, action: update.action }, 'participant update failed'))
   })
@@ -324,7 +342,7 @@ async function connect() {
     }
     if (connection === 'close') {
       connected = false
-      mainSocket = null
+      if (mainSocket === socket) mainSocket = null
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       const loggedOut = statusCode === DisconnectReason.loggedOut
       logger.warn({ statusCode, loggedOut, generation }, 'WhatsApp connection closed')
