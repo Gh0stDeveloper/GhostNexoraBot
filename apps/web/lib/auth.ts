@@ -61,10 +61,14 @@ export function resolveSubbotPortalToken(input: string): SubbotSession | null {
   if (!db) return null
   try {
     const now = Date.now()
-    const row = db.prepare(`SELECT p.user_jid AS userJid, p.subbot_id AS subbotId, p.expires_at AS tokenExpiresAt,
+    // A portal token is already bound to a concrete subbot_id. Do not require
+    // p.user_jid === s.owner_jid here because WhatsApp identity reconciliation
+    // can migrate the owner between PN and LID after the token was issued.
+    const row = db.prepare(`SELECT COALESCE(s.owner_jid, p.user_jid) AS userJid,
+      p.subbot_id AS subbotId, p.expires_at AS tokenExpiresAt,
       s.expires_at AS subbotExpiresAt
       FROM portal_tokens p
-      JOIN subbots s ON s.id = p.subbot_id AND s.owner_jid = p.user_jid
+      JOIN subbots s ON s.id = p.subbot_id
       WHERE p.token_hash = ? AND p.expires_at > ? AND s.expires_at > ? LIMIT 1`)
       .get(tokenHash(token), now, now) as { userJid: string; subbotId: number; tokenExpiresAt: number; subbotExpiresAt: number } | undefined
     if (!row?.subbotId) return null
