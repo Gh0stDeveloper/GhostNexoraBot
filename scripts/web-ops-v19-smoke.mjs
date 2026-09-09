@@ -55,7 +55,7 @@ assert.match(subbotCommands, /subbotdelete \$\{selector\} confirm/, 'destructive
 assert.match(subbotCommands, /process\.env\.NEXORA_INSTANCE_ROLE === 'subbot'/, 'global cleanup must be blocked inside subbots')
 assert.match(subbotCore, /async deleteById\(id: number\)/, 'subbot manager must implement permanent deletion')
 assert.match(subbotCore, /DELETE FROM entitlements WHERE user_jid = \? AND kind = 'subbot_slot'/, 'permanent deletion must prevent entitlement-based recreation')
-assert.match(subbotCore, /DELETE FROM ops_instance_status WHERE instance_key = \?/, 'permanent deletion must clear runtime heartbeat state')
+assert.match(subbotCore, /deleteInstanceRows\('ops_instance_status'\)/, 'permanent deletion must clear runtime heartbeat state')
 assert.match(subbotCore, /rm\(path\.join\(config\.dataDir, 'subbots', String\(id\)\)/, 'permanent deletion must remove isolated session/data directory')
 
 console.log('V19 web organization, MainBot health, groups and subbot cleanup: OK')
