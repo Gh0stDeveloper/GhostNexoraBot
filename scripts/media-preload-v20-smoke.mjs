@@ -24,6 +24,7 @@ try {
   const menu = await read('apps/bot/src/commands/menu-v5.ts')
   const shop = await read('apps/bot/src/commands/shop-style-v13.ts')
   const valley = await read('apps/bot/src/commands/valley-compat-v21.ts')
+  const edit = await read('apps/bot/src/commands/edit.ts')
   const valleySticker = await read('apps/bot/src/services/valley-sticker-v21.ts')
   const stickers = await read('apps/bot/src/commands/stickers.ts')
   const privatePolicy = await read('apps/bot/src/services/private-chat-policy.ts')
@@ -43,6 +44,20 @@ try {
   assert.match(menu, /sendInteractiveCard/, 'menu must use the original full interactive card')
   assert.match(menu, /body,\s*\n\s*imageUrl: visual\.imageUrl/, 'menu card must include the complete body and selected waifu/avatar')
   assert.match(menu, /\.\.\.valleyCompatV21Commands/, 'Valley compatibility commands must be registered in the full command set')
+
+  // Canonical edit.ts integration. It is registered after Valley compatibility,
+  // therefore .edit/.editbot resolve to this implementation in the router map.
+  assert.match(menu, /import \{ editCommands \} from '\.\/edit\.js'/, 'canonical edit command must be imported into the active registry')
+  assert.match(menu, /\.\.\.valleyCompatV21Commands,\s*\n\s*\.\.\.editCommands,/, 'canonical edit command must override the inherited Valley edit alias')
+  assert.match(edit, /name: 'edit'/, 'edit.ts must expose the canonical edit command')
+  assert.match(edit, /aliases: \['editbot', 'editar'\]/, 'edit aliases must remain available')
+  assert.match(edit, /staffOnly: true/, 'edit command must be restricted to owner/staff by the router')
+  assert.doesNotMatch(edit, /subbotOwnerAllowed:\s*true/, 'subbot owner alone must not be allowed to use edit')
+  assert.match(edit, /if \(!ctx\.isOwner && !ctx\.isBotStaff\)/, 'edit handler must enforce owner/staff in depth')
+  assert.match(edit, /fromMe: true/, 'edit key must identify a message owned by the bot instance')
+  assert.match(edit, /edit: editKey/, 'edit command must use Baileys legitimate message editing')
+  assert.match(edit, /delete: ctx\.message\.key/, 'edit command should clean the invoking command when WhatsApp permissions allow it')
+  assert.doesNotMatch(edit, /global\.ownerNumbers|\{ sock, msg, args, body, from \}/, 'old incompatible command contract must not return')
 
   assert.match(moderation, /getBrandingAsset\('welcome'/, 'welcome must honor a custom welcome banner')
   assert.match(moderation, /const welcomeImage = welcomeAsset\?\.kind === 'image' \? welcomeAsset\.path : visual\?\.imageUrl/, 'welcome image priority must be custom banner then active visual')
@@ -78,7 +93,7 @@ try {
   assert.match(stickers, /estirar: 'stretch'/, 'sticker stretch mode must be available')
   assert.match(stickers, /encaixar: 'crop'/, 'Valley Portuguese crop alias must remain compatible')
 
-  console.log('V20/V21 media, restored menu and Valley compatibility: OK')
+  console.log('V20/V21 media, restored menu, Valley compatibility and canonical edit: OK')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
