@@ -241,7 +241,7 @@ class SubbotManager {
     if (this.watchdogTimer) return
     this.watchdogTimer = setInterval(() => {
       const stamp = Date.now()
-      for (const [id, worker] of this.workers) {
+      for (const [id] of this.workers) {
         const state = this.health.get(id)
         if (!state) continue
         if (stamp - state.lastHeartbeat <= 90_000) continue
@@ -337,6 +337,43 @@ class SubbotManager {
     } finally {
       this.pairingLocks.delete(record.id)
     }
+  }
+
+  async deleteById(id: number) {
+    const record = economy.listSubbots().find((item) => item.id === id)
+    if (!record) throw new Error('La instancia de subbot no existe.')
+
+    this.stopWorker(id, `Subbot #${id} eliminado permanentemente.`)
+    this.pairingLocks.delete(id)
+    await rm(path.join(config.dataDir, 'subbots', String(id)), { recursive: true, force: true })
+
+    const db = economy.db
+    const instanceKey = `subbot:${id}`
+    const tableExists = (name: string) => Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name))
+    const deleteInstanceRows = (table: string) => {
+      if (tableExists(table)) db.prepare(`DELETE FROM ${table} WHERE instance_key = ?`).run(instanceKey)
+    }
+
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      if (tableExists('portal_tokens')) db.prepare('DELETE FROM portal_tokens WHERE subbot_id = ?').run(id)
+      if (tableExists('subbot_customization')) db.prepare('DELETE FROM subbot_customization WHERE subbot_id = ?').run(id)
+      deleteInstanceRows('ops_groups')
+      deleteInstanceRows('ops_group_control_requests')
+      deleteInstanceRows('ops_instance_status')
+      deleteInstanceRows('ops_pipeline_metrics')
+      deleteInstanceRows('ops_command_metrics')
+      deleteInstanceRows('ops_command_catalog')
+      if (tableExists('entitlements')) db.prepare("DELETE FROM entitlements WHERE user_jid = ? AND kind = 'subbot_slot'").run(record.ownerJid)
+      db.prepare('DELETE FROM subbots WHERE id = ?').run(id)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+
+    logger.warn({ subbotId: id, ownerJid: record.ownerJid }, 'subbot instance permanently deleted')
+    return record
   }
 
   async resetById(id: number) {
