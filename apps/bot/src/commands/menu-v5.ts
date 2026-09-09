@@ -10,6 +10,7 @@ import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../service
 import { localeName } from '../i18n/index.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 import { valleyCompatV21Commands } from './valley-compat-v21.js'
+import { editCommands } from './edit.js'
 
 const sectionOrder = [
   'knowledge', 'youtube', 'downloads', 'general', 'minecraft', 'profile', 'progress', 'economy', 'rpg', 'games', 'collection',
@@ -176,5 +177,6 @@ async function menu(ctx: CommandContext) {
 export const menuV5Commands: BotCommand[] = [
   ...mediaDevV6Commands,
   ...valleyCompatV21Commands,
+  ...editCommands,
   { name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos con avatar/waifu visual de la instancia.', handler: menu },
 ]
