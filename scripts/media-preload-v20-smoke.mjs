@@ -26,6 +26,7 @@ try {
   const valley = await read('apps/bot/src/commands/valley-compat-v21.ts')
   const valleySticker = await read('apps/bot/src/services/valley-sticker-v21.ts')
   const stickers = await read('apps/bot/src/commands/stickers.ts')
+  const privatePolicy = await read('apps/bot/src/services/private-chat-policy.ts')
 
   // Interactive cards/carousels preload media for their own headers.
   assert.match(interactive, /preloadWhatsAppMedia\(imageUrl/, 'interactive cards must preload their image source')
@@ -58,7 +59,10 @@ try {
   for (const name of ['grupos', 'partcjid', 'getmsg', 'mymsg', 'gettype', 'codeblock', 'relay', 'evalsafe', 'msg', 'pv', 'editbot']) {
     assert.match(valley, new RegExp(`name: '${name}'`), `Valley-compatible command ${name} must be present`)
   }
-  assert.match(valley, /canSendToChatJid/, 'private Valley-style messaging must respect the existing private-chat firewall')
+  assert.match(valley, /grantOneShotPrivateSend\(target, ctx\.instanceOwnerJid\)/, 'private Valley-style messaging must use an instance-scoped one-shot firewall permit')
+  assert.match(privatePolicy, /oneShotOutboundPermits/, 'private policy must contain ephemeral outbound permits')
+  assert.match(privatePolicy, /remaining: 1/, 'private permit must authorize exactly one outbound message')
+  assert.match(privatePolicy, /permitScope\(instanceOwnerJid/, 'one-shot private permits must be partitioned by MainBot/subbot owner scope')
   assert.match(valley, /vm\.createContext/, 'eval compatibility must use an isolated VM context')
   assert.match(valley, /codeGeneration: \{ strings: false, wasm: false \}/, 'safe eval must disable dynamic code generation')
   assert.match(valley, /relayMessage\(ctx\.chatId, \{ conversation: text \}/, 'relay compatibility must be constrained to text/current chat')
