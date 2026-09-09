@@ -20,8 +20,11 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
+# Keep the persistent state read-only by default. The Operations Center only
+# needs write access to the SQLite/data subtree; WhatsApp session credentials
+# remain outside that exception and therefore stay read-only to the web process.
 ReadOnlyPaths=__STATE_DIR__
-ReadWritePaths=__INSTALL_DIR__/apps/web/.next/cache
+ReadWritePaths=__STATE_DIR__/data __INSTALL_DIR__/apps/web/.next/cache
 
 [Install]
 WantedBy=multi-user.target
