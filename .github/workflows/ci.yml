@@ -48,8 +48,11 @@ jobs:
       - name: V19 web organization, MainBot health and subbot cleanup smoke
         run: node scripts/web-ops-v19-smoke.mjs
 
-      - name: V20 preloaded menu, welcome, goodbye and shop artwork smoke
+      - name: V20/V21/V22 menu, Valley and PoC source smoke
         run: node scripts/media-preload-v20-smoke.mjs
+
+      - name: V22 command-managed PoC runtime smoke
+        run: node scripts/security-poc-v22-smoke.mjs
 
       - name: Web proxy, redirects and MainBot socket regression smoke
         run: node scripts/web-proxy-regression-smoke.mjs
@@ -91,6 +94,7 @@ jobs:
             scripts/ops-dashboard-smoke.mjs
             scripts/web-ops-v19-smoke.mjs
             scripts/media-preload-v20-smoke.mjs
+            scripts/security-poc-v22-smoke.mjs
             scripts/web-proxy-regression-smoke.mjs
             scripts/update-preflight-smoke.mjs
             scripts/runtime-permissions-smoke.mjs
