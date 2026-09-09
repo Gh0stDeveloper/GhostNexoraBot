@@ -11,6 +11,7 @@ WEB_SERVICE="ghost-nexora-web.service"
 LLM_INSTALLER="${INSTALL_DIR}/scripts/install-llm-worker-service.sh"
 BROWSER_PROXY_INSTALLER="${INSTALL_DIR}/scripts/install-browser-proxy.sh"
 PREFLIGHT="${INSTALL_DIR}/scripts/safe-git-preflight.mjs"
+RUNTIME_PERMS="${INSTALL_DIR}/scripts/normalize-runtime-permissions.sh"
 LLM_STATE_CANDIDATES=(
   "${STATE_DIR}/llm/state.json"
   "${INSTALL_DIR}/data/llm/state.json"
@@ -163,6 +164,11 @@ if command -v yt-dlp >/dev/null 2>&1; then
   ok "yt-dlp: $(yt-dlp --version 2>/dev/null || echo desconocido)"
 fi
 
+# El trigger .actualizar se ejecuta con UMask=0077 para proteger su request.
+# A partir de npm/build usamos 0022 para que los artefactos root sean legibles
+# por el usuario no privilegiado del bot. .env se vuelve a fijar a 0640.
+umask 0022
+
 section '4/8 · Dependencias Node'
 if [[ "${WEB_ENABLED}" -eq 1 ]]; then
   npm install >/tmp/ghost-nexora-npm-install.log 2>&1
@@ -182,6 +188,14 @@ else
   ok 'Build del Bot completado; Next.js omitido.'
 fi
 
+# Repara también artefactos 0600/0700 heredados de actualizaciones antiguas.
+if [[ -f "${RUNTIME_PERMS}" ]]; then
+  INSTALL_DIR="${INSTALL_DIR}" SERVICE_USER="${SERVICE_USER}" bash "${RUNTIME_PERMS}"
+  ok "Permisos runtime normalizados para ${SERVICE_USER}."
+else
+  warn "No existe ${RUNTIME_PERMS}; se omite normalización de permisos."
+fi
+
 section '6/8 · Proxy de navegador y Nginx'
 if [[ -f "${BROWSER_PROXY_INSTALLER}" ]]; then
   INSTALL_DIR="${INSTALL_DIR}" bash "${BROWSER_PROXY_INSTALLER}"
@@ -192,7 +206,10 @@ fi
 
 section '7/8 · Servicios y permisos'
 if [[ -d "${STATE_DIR}" ]]; then chown -R "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR}" || warn 'No se pudo ajustar STATE_DIR.'; fi
-chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
+if [[ -f "${INSTALL_DIR}/.env" ]]; then
+  chown root:"${SERVICE_USER}" "${INSTALL_DIR}/.env" 2>/dev/null || true
+  chmod 0640 "${INSTALL_DIR}/.env" 2>/dev/null || true
+fi
 
 # Mantener las unidades principales actualizadas sin forzar la web cuando está apagada.
 if [[ -f systemd/ghost-nexora-bot.service ]]; then
