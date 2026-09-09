@@ -54,7 +54,8 @@ assert.match(subbotCommands, /vencidos\|pendientes\|activos/, 'cleanup command m
 assert.match(subbotCommands, /subbotdelete \$\{selector\} confirm/, 'destructive cleanup must require explicit confirmation')
 assert.match(subbotCommands, /process\.env\.NEXORA_INSTANCE_ROLE === 'subbot'/, 'global cleanup must be blocked inside subbots')
 assert.match(subbotCore, /async deleteById\(id: number\)/, 'subbot manager must implement permanent deletion')
-assert.match(subbotCore, /DELETE FROM entitlements WHERE user_jid = \? AND kind = 'subbot_slot'/, 'permanent deletion must prevent entitlement-based recreation')
+assert.match(subbotCore, /DELETE FROM entitlements\s+WHERE user_jid = \? AND kind = 'subbot_slot'/, 'permanent deletion must prevent entitlement-based recreation')
+assert.match(subbotCore, /NOT EXISTS \(\s*SELECT 1 FROM subbots\s*WHERE owner_jid = \? AND id <> \? AND expires_at > \?/, 'cleanup must preserve entitlement when a newer/future instance survives')
 assert.match(subbotCore, /deleteInstanceRows\('ops_instance_status'\)/, 'permanent deletion must clear runtime heartbeat state')
 assert.match(subbotCore, /rm\(path\.join\(config\.dataDir, 'subbots', String\(id\)\)/, 'permanent deletion must remove isolated session/data directory')
 
