@@ -93,14 +93,24 @@ switch (action) {
     if (isWindows) status = windowsManager('update')
     else {
       const updater = path.join(repoRoot, 'scripts', 'update.sh')
+      const preflight = path.join(repoRoot, 'scripts', 'safe-git-preflight.mjs')
       requireFile(updater, 'actualizador VPS')
+      requireFile(preflight, 'preflight seguro de Git')
+
+      const needsSudo = typeof process.getuid === 'function' && process.getuid() !== 0
+      const preflightStatus = needsSudo
+        ? run('sudo', [process.execPath, preflight])
+        : run(process.execPath, [preflight])
+      if (preflightStatus !== 0) {
+        status = preflightStatus
+        break
+      }
+
       // Ejecutamos siempre mediante bash para no depender del bit ejecutable del
       // archivo después de un checkout, copia o actualización del repositorio.
-      if (typeof process.getuid === 'function' && process.getuid() !== 0) {
-        status = run('sudo', ['bash', updater])
-      } else {
-        status = run('bash', [updater])
-      }
+      status = needsSudo
+        ? run('sudo', ['bash', updater])
+        : run('bash', [updater])
     }
     break
   }
