@@ -5,7 +5,6 @@ import { economy } from './economy.js'
 import { community } from './community.js'
 import { getBrandingAsset } from './branding.js'
 import { subbotCustomization } from './subbot-customization.js'
-import { sendInteractiveCard } from './interactive.js'
 import { getMessageText, getSender } from '../utils/message.js'
 import { preferredJid, registerIdentity } from './identity.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from './bot-styles-v13.js'
@@ -13,6 +12,7 @@ import { logger } from '../utils/logger.js'
 import { resolveChatLocale, translate } from '../i18n/index.js'
 import { createLocalizedSocket } from './localized-socket.js'
 import { preloadWhatsAppMedia } from './whatsapp-media.js'
+import { sendRichLinkPreview } from './rich-link-preview.js'
 
 const db = economy.db
 const spamWindows = new Map<string, number[]>()
@@ -139,18 +139,6 @@ async function currentVisualIdentity(socket: WASocket) {
   }
 }
 
-async function sendPreloadedImage(
-  socket: WASocket,
-  chatId: string,
-  source: string,
-  caption: string,
-  mentions: string[],
-  label: string,
-) {
-  const image = await preloadWhatsAppMedia(source, { maxBytes: 20 * 1024 * 1024, timeoutMs: 8_000, label })
-  await socket.sendMessage(chatId, { image, caption, mentions })
-}
-
 async function sendPreloadedVideo(
   socket: WASocket,
   chatId: string,
@@ -178,8 +166,6 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
   const botName = instanceId ? subbotCustomization.get(instanceId).longName : settings.botDisplayName
   const welcomeAsset = update.action === 'add' ? await getBrandingAsset('welcome', instanceId).catch(() => null) : null
   const goodbyeAsset = update.action === 'remove' ? await getBrandingAsset('goodbye', instanceId).catch(() => null) : null
-  // También se resuelve para despedidas: si no hay banner personalizado, la
-  // instancia conserva la misma waifu/imagen visual que usa en el menú.
   const visual = await currentVisualIdentity(socket).catch(() => null)
 
   for (const participant of update.participants) {
@@ -203,8 +189,6 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
       ].filter(Boolean).join('\n')
       const text = groupSettings.welcomeText ? renderTemplate(groupSettings.welcomeText, jid, groupName) : defaultText
 
-      // Un GIF/video de bienvenida necesita el mensaje multimedia normal; para
-      // imágenes mantenemos la tarjeta interactiva y cargamos el archivo antes.
       if (welcomeAsset?.kind === 'video') {
         await sendPreloadedVideo(localizedSocket, update.id, welcomeAsset.path, text, [jid], 'welcome-video').catch(async (error) => {
           logger.warn({ error, groupId: update.id }, 'preloaded welcome video failed; using text fallback')
@@ -217,17 +201,17 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
         icon: visual && visual.style.id !== 'default' ? visual.style.icon : '👻',
         name: visual && visual.style.id !== 'default' ? visual.displayName : botName,
       })
-      await sendInteractiveCard(localizedSocket, update.id, { key: { remoteJid: update.id, id: `welcome-${Date.now()}` }, message: {} } as WAMessage, {
+      const welcomeImage = welcomeAsset?.kind === 'image' ? welcomeAsset.path : visual?.imageUrl
+      await sendRichLinkPreview(localizedSocket, update.id, {
+        text,
+        imageSource: welcomeImage,
         title,
-        body: text,
-        imageUrl: welcomeAsset?.kind === 'image' ? welcomeAsset.path : visual?.imageUrl,
-        footer: `${groupName} · ${botName} · Ghost Nexora Bot`,
-        buttons: [
-          { type: 'reply', text: t('moderation.button.rules'), id: `${settings.prefix}rules` },
-          { type: 'reply', text: t('moderation.button.profile'), id: `${settings.prefix}profile` },
-          { type: 'url', text: t('moderation.button.channel'), url: config.officialChannelUrl },
-        ],
-      }).catch(async () => {
+        description: `${groupName} · ${botName}`,
+        url: config.publicWebUrl,
+        mentions: [jid],
+        label: 'welcome-waifu-link-preview',
+      }).catch(async (error) => {
+        logger.warn({ error, groupId: update.id }, 'welcome rich preview failed; using text fallback')
         await localizedSocket.sendMessage(update.id, { text, mentions: [jid] }).catch(() => undefined)
       })
       continue
@@ -247,8 +231,16 @@ export async function handleParticipantUpdateV2(socket: WASocket, update: { id: 
 
     const goodbyeImage = goodbyeAsset?.kind === 'image' ? goodbyeAsset.path : visual?.imageUrl
     if (goodbyeImage) {
-      await sendPreloadedImage(localizedSocket, update.id, goodbyeImage, goodbye, [jid], 'goodbye-image').catch(async (error) => {
-        logger.warn({ error, groupId: update.id }, 'preloaded goodbye image failed; using text fallback')
+      await sendRichLinkPreview(localizedSocket, update.id, {
+        text: goodbye,
+        imageSource: goodbyeImage,
+        title: `👋 ${botName}`,
+        description: groupName,
+        url: config.publicWebUrl,
+        mentions: [jid],
+        label: 'goodbye-waifu-link-preview',
+      }).catch(async (error) => {
+        logger.warn({ error, groupId: update.id }, 'goodbye rich preview failed; using text fallback')
         await localizedSocket.sendMessage(update.id, { text: goodbye, mentions: [jid] }).catch(() => undefined)
       })
       continue
