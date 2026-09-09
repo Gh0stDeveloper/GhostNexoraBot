@@ -52,13 +52,21 @@ make_service_readable "${INSTALL_DIR}/venv-whisper"
 
 # Next puede escribir caché en producción; el resto del checkout permanece de solo lectura.
 if [[ -d "${INSTALL_DIR}/apps/web/.next/cache" ]]; then
-  chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}/apps/web/.next/cache"
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}/apps/web/.next/cache"
+  else
+    chgrp -R "${SERVICE_GROUP}" "${INSTALL_DIR}/apps/web/.next/cache"
+  fi
   chmod -R u+rwX,g+rX "${INSTALL_DIR}/apps/web/.next/cache"
 fi
 
 # El secreto de configuración conserva el modelo root + grupo del servicio.
 if [[ -f "${INSTALL_DIR}/.env" ]]; then
-  chown root:"${SERVICE_GROUP}" "${INSTALL_DIR}/.env" 2>/dev/null || chgrp "${SERVICE_GROUP}" "${INSTALL_DIR}/.env"
+  if [[ "${EUID}" -eq 0 ]]; then
+    chown root:"${SERVICE_GROUP}" "${INSTALL_DIR}/.env"
+  else
+    chgrp "${SERVICE_GROUP}" "${INSTALL_DIR}/.env"
+  fi
   chmod 0640 "${INSTALL_DIR}/.env"
 fi
 
