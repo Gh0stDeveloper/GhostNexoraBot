@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_SESSION_COOKIE, SUBBOT_SESSION_COOKIE, verifySession } from '../../../lib/auth'
+import { readOpsSnapshot } from '../../../lib/ops'
 import { publicUrl } from '../../../lib/public-url'
 import { openBotDbWritable, runtime } from '../../../lib/runtime'
 
@@ -36,12 +37,21 @@ function normalizeInstance(value: unknown) {
   return `subbot:${Number(match[1])}`
 }
 
-function responseFor(request: NextRequest, result: Record<string, unknown>, isAdmin: boolean, instance?: string) {
+function normalizeSection(value: unknown, isAdmin: boolean) {
+  const allowed = isAdmin
+    ? new Set(['overview', 'groups', 'audit', 'management', 'subbots'])
+    : new Set(['overview', 'groups', 'audit', 'account'])
+  const raw = String(value ?? 'overview').trim().toLowerCase()
+  return allowed.has(raw) ? raw : 'overview'
+}
+
+function responseFor(request: NextRequest, result: Record<string, unknown>, isAdmin: boolean, instance?: string, section?: string) {
   const wantsJson = (request.headers.get('content-type') ?? '').includes('application/json')
   if (wantsJson) return NextResponse.json(result, { status: result.ok ? 200 : 400 })
   const target = isAdmin ? '/admin' : '/subbot'
   const redirect = publicUrl(request, target)
   if (isAdmin && instance) redirect.searchParams.set('instance', instance)
+  if (section) redirect.searchParams.set('section', normalizeSection(section, isAdmin))
   redirect.searchParams.set(result.ok ? 'ok' : 'error', result.ok ? '1' : String(result.error ?? 'control_failed').slice(0, 100))
   return NextResponse.redirect(redirect, 303)
 }
@@ -106,11 +116,15 @@ export async function GET() {
     signal: AbortSignal.timeout(4_000),
   }).catch(() => null)
   const health = response ? await response.json().catch(() => null) as { connected?: boolean } | null : null
+  const persisted = readOpsSnapshot('main').runtime
   return NextResponse.json({
     ok: true,
     service: 'ghost-nexora-web-control',
     botControlReachable: Boolean(response),
-    whatsappConnected: Boolean(health?.connected),
+    whatsappConnected: Boolean(health?.connected) || persisted.connected,
+    persistedHeartbeatFresh: persisted.fresh,
+    registered: persisted.registered,
+    groupCount: persisted.groupCount,
   }, { status: 200, headers: { 'cache-control': 'no-store' } })
 }
 
@@ -123,26 +137,27 @@ async function handlePost(request: NextRequest) {
   const isAdmin = admin?.role === 'admin'
   const isSubbot = subbot?.role === 'subbot'
   if (!isAdmin && !isSubbot) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  const section = normalizeSection(payload.section, Boolean(isAdmin))
 
   let instance = 'main'
   try {
     instance = isSubbot ? `subbot:${subbot.subbotId}` : normalizeInstance(payload.instance)
   } catch {
-    return responseFor(request, { ok: false, error: 'invalid_instance' }, Boolean(isAdmin))
+    return responseFor(request, { ok: false, error: 'invalid_instance' }, Boolean(isAdmin), undefined, section)
   }
 
   if (isAdmin && instance.startsWith('subbot:')) {
     const db = openBotDbWritable()
-    if (!db) return responseFor(request, { ok: false, error: 'bot_database_unavailable' }, true, instance)
+    if (!db) return responseFor(request, { ok: false, error: 'bot_database_unavailable' }, true, instance, section)
     const id = Number(instance.split(':')[1])
     let exists = false
     try { exists = Boolean(db.prepare('SELECT 1 FROM subbots WHERE id = ?').get(id)) } finally { db.close() }
-    if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, true, 'main')
+    if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, true, 'main', section)
   }
 
   if (['leave_group', 'sync_groups', 'reset_audit'].includes(action)) {
     const requestedBy = isSubbot ? subbot.userJid : 'web-admin'
-    return responseFor(request, localOpsAction(action, instance, payload, requestedBy), Boolean(isAdmin), instance)
+    return responseFor(request, localOpsAction(action, instance, payload, requestedBy), Boolean(isAdmin), instance, section)
   }
 
   const outgoing: Record<string, unknown> = { ...payload }
@@ -154,7 +169,7 @@ async function handlePost(request: NextRequest) {
   }
 
   const result = await sendBotControl(outgoing, action)
-  return responseFor(request, result, Boolean(isAdmin), instance)
+  return responseFor(request, result, Boolean(isAdmin), instance, section)
 }
 
 export async function POST(request: NextRequest) {
@@ -163,6 +178,6 @@ export async function POST(request: NextRequest) {
   } catch {
     const wantsJson = (request.headers.get('content-type') ?? '').includes('application/json')
     if (wantsJson) return NextResponse.json({ ok: false, error: 'control_internal_error' }, { status: 500 })
-    return responseFor(request, { ok: false, error: 'control_internal_error' }, true, 'main')
+    return responseFor(request, { ok: false, error: 'control_internal_error' }, true, 'main', 'overview')
   }
 }
