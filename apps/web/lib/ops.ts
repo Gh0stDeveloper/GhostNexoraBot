@@ -50,8 +50,20 @@ export type OpsRequest = {
   completedAt: number | null
 }
 
+export type OpsRuntimeStatus = {
+  connected: boolean
+  registered: boolean
+  groupCount: number
+  connectedAt: number
+  lastEventAt: number
+  lastGroupSyncAt: number
+  updatedAt: number
+  fresh: boolean
+}
+
 export type OpsSnapshot = {
   instanceKey: string
+  runtime: OpsRuntimeStatus
   summary: {
     throughputMps: number
     averageE2eUs: number
@@ -85,6 +97,7 @@ function commandStatus(avgUs: number, maxUs: number, successRate: number): OpsCo
 function empty(instanceKey: string): OpsSnapshot {
   return {
     instanceKey,
+    runtime: { connected: false, registered: false, groupCount: 0, connectedAt: 0, lastEventAt: 0, lastGroupSyncAt: 0, updatedAt: 0, fresh: false },
     summary: { throughputMps: 0, averageE2eUs: 0, processingNodes: 7, auditedCommands: 0, bottlenecks: 0 },
     stages: STAGES.map(([id, name]) => ({ id, name, invocations: 0, minUs: 0, avgUs: 0, maxUs: 0, lastUs: 0, firstAt: 0, lastAt: 0, status: 'optimal' })),
     commands: [], groups: [], requests: [],
@@ -100,6 +113,27 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
   if (!db) return empty(instanceKey)
   try {
     const snapshot = empty(instanceKey)
+
+    if (tableExists(db, 'ops_instance_status')) {
+      const row = db.prepare(`SELECT connected, registered, group_count AS groupCount,
+        connected_at AS connectedAt, last_event_at AS lastEventAt,
+        last_group_sync_at AS lastGroupSyncAt, updated_at AS updatedAt
+        FROM ops_instance_status WHERE instance_key = ?`).get(instanceKey) as Record<string, number> | undefined
+      if (row) {
+        const updatedAt = Number(row.updatedAt ?? 0)
+        const fresh = updatedAt > 0 && Date.now() - updatedAt < 180_000
+        snapshot.runtime = {
+          connected: Boolean(row.connected) && fresh,
+          registered: Boolean(row.registered),
+          groupCount: Number(row.groupCount ?? 0),
+          connectedAt: Number(row.connectedAt ?? 0),
+          lastEventAt: Number(row.lastEventAt ?? 0),
+          lastGroupSyncAt: Number(row.lastGroupSyncAt ?? 0),
+          updatedAt,
+          fresh,
+        }
+      }
+    }
 
     if (tableExists(db, 'ops_pipeline_metrics')) {
       const rows = db.prepare(`SELECT stage_id AS stageId, stage_name AS stageName, invocations, total_us AS totalUs,
@@ -155,6 +189,7 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
           groupJid: String(row.groupJid), name: String(row.name), participantCount: Number(row.participantCount),
           adminCount: Number(row.adminCount), announce: Boolean(row.announce), restrictMode: Boolean(row.restrictMode), updatedAt: Number(row.updatedAt),
         })) as OpsGroup[]
+      snapshot.runtime.groupCount = snapshot.groups.length
     }
 
     if (tableExists(db, 'ops_group_control_requests')) {
