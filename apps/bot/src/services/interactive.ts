@@ -9,6 +9,7 @@ import {
 import { logger } from '../utils/logger.js'
 import { withTimeout } from '../utils/timeout.js'
 import { localizeLegacyText, resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
+import { preloadWhatsAppMedia } from './whatsapp-media.js'
 
 export type InteractiveSelectRow = {
   id: string
@@ -124,16 +125,21 @@ function interactiveRelayNodes(chatId: string): BinaryNode[] {
 async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
   if (!imageUrl) return undefined
   try {
+    const image = await preloadWhatsAppMedia(imageUrl, {
+      maxBytes: 20 * 1024 * 1024,
+      timeoutMs: 8_000,
+      label: 'interactive-image',
+    })
     const content = await withTimeout(
-      generateWAMessageContent({ image: { url: imageUrl } }, { upload: socket.waUploadToServer }),
-      8_000,
-      'interactive thumbnail',
+      generateWAMessageContent({ image }, { upload: socket.waUploadToServer }),
+      15_000,
+      'interactive image upload',
     )
     return content.imageMessage ?? undefined
   } catch (error) {
     let host: string | undefined
-    try { host = new URL(imageUrl).hostname } catch { /* ignore */ }
-    logger.warn({ error, host }, 'interactive thumbnail failed; continuing without image')
+    try { host = new URL(imageUrl).hostname } catch { /* local path or invalid URL */ }
+    logger.warn({ error, host }, 'interactive image upload failed; continuing without image')
     return undefined
   }
 }
@@ -217,7 +223,18 @@ export async function sendCarousel(
   }
 
   const sourceCards = localizedInput.cards.slice(0, 8)
-  const preparedImages = await Promise.all(sourceCards.map((card) => imageMessageFromUrl(socket, card.imageUrl)))
+  // La tienda suele reutilizar exactamente la misma waifu en todas sus cards.
+  // Prepararla una sola vez evita descargar/cifrar/subir el mismo archivo 4-8 veces.
+  const imageCache = new Map<string, Promise<Awaited<ReturnType<typeof imageMessageFromUrl>>>>()
+  const preparedImages = await Promise.all(sourceCards.map((card) => {
+    if (!card.imageUrl) return undefined
+    let prepared = imageCache.get(card.imageUrl)
+    if (!prepared) {
+      prepared = imageMessageFromUrl(socket, card.imageUrl)
+      imageCache.set(card.imageUrl, prepared)
+    }
+    return prepared
+  }))
   const overflowButtons = sourceCards.flatMap((card) => card.buttons.slice(2)).slice(0, 3)
 
   const cards = sourceCards.map((card, index) => {
