@@ -1,5 +1,7 @@
 import type { WAMessage, WASocket } from 'baileys'
 import type { BotCommand, CommandContext } from '../types.js'
+import { config } from '../config.js'
+import { settings } from '../core/settings.js'
 import { resolveStoredIdentity } from '../services/identity.js'
 import {
   addPocChat,
@@ -11,13 +13,22 @@ import {
   listPocChats,
   removePocChat,
   executeMessageIdCollisionPoc,
+  maybeRunEditAllPoc,
 } from '../services/security-poc-scope.js'
 import { digitsFromJid, getContextInfo, unwrapMessage } from '../utils/message.js'
 import { resolveTarget } from '../utils/target.js'
 
 const LISTENER_TTL_MS = 90_000
+const EDITALL_RUNTIME_TTL_MS = 10 * 60_000 + 5_000
 const MAX_POC_TEXT = 2000
+
 const activeListeners = new Map<string, {
+  socket: CommandContext['socket']
+  listener: (update: any) => void
+  timer: NodeJS.Timeout
+}>()
+
+const activeEditAllListeners = new Map<string, {
   socket: CommandContext['socket']
   listener: (update: any) => void
   timer: NodeJS.Timeout
@@ -103,6 +114,65 @@ function clearActiveListener(key: string) {
   return true
 }
 
+function editAllKey(ctx: CommandContext, chatId: string) {
+  return `${instanceLabel(ctx)}|${chatId}`
+}
+
+function clearEditAllListener(ctx: CommandContext, chatId: string) {
+  const key = editAllKey(ctx, chatId)
+  const active = activeEditAllListeners.get(key)
+  if (!active) return false
+  clearTimeout(active.timer)
+  active.socket.ev.off('messages.upsert', active.listener)
+  activeEditAllListeners.delete(key)
+  return true
+}
+
+function messageSender(message: WAMessage) {
+  const key = message.key as typeof message.key & { participantAlt?: string | null }
+  return key.participantAlt || key.participant || key.remoteJid || ''
+}
+
+function actorIsPrivileged(ctx: CommandContext, message: WAMessage) {
+  if (message.key.fromMe) return true
+  const sender = messageSender(message)
+  if (ctx.instanceOwnerJid && sameIdentity(sender, ctx.instanceOwnerJid)) return true
+  const digits = normalizedIdentity(sender).map(digitsFromJid).find(Boolean) || ''
+  return Boolean(digits && (config.owners.includes(digits) || settings.isBotAdmin(digits)))
+}
+
+function armEditAllRuntime(ctx: CommandContext) {
+  const chatId = ctx.chatId
+  const key = editAllKey(ctx, chatId)
+  clearEditAllListener(ctx, chatId)
+
+  const listener = (update: any) => {
+    if (update?.type !== 'notify' || !Array.isArray(update?.messages)) return
+    for (const incoming of update.messages as WAMessage[]) {
+      if (!incoming?.key || incoming.key.remoteJid !== chatId) continue
+      void (async () => {
+        try {
+          await maybeRunEditAllPoc(
+            ctx.socket as unknown as WASocket,
+            incoming,
+            actorIsPrivileged(ctx, incoming),
+          )
+        } finally {
+          if (!getEditAllPocStatus(chatId).enabled) clearEditAllListener(ctx, chatId)
+        }
+      })()
+    }
+  }
+
+  const timer = setTimeout(() => {
+    clearEditAllListener(ctx, chatId)
+    disableEditAllPoc(chatId, ctx.sender)
+  }, EDITALL_RUNTIME_TTL_MS)
+
+  activeEditAllListeners.set(key, { socket: ctx.socket, listener, timer })
+  ctx.socket.ev.on('messages.upsert', listener)
+}
+
 async function armMessageIdCollision(input: {
   ctx: CommandContext
   groupJid: string
@@ -122,8 +192,7 @@ async function armMessageIdCollision(input: {
     if (update?.type !== 'notify' || !Array.isArray(update?.messages)) return
     for (const incoming of update.messages as WAMessage[]) {
       if (!incoming?.key || incoming.key.remoteJid !== groupJid || incoming.key.fromMe) continue
-      const rawKey = incoming.key as typeof incoming.key & { participantAlt?: string | null }
-      const sender = rawKey.participantAlt || rawKey.participant || rawKey.remoteJid
+      const sender = messageSender(incoming)
       if (!sameIdentity(sender, targetJid)) continue
       const capturedId = incoming.key.id
       if (!capturedId) continue
@@ -179,6 +248,8 @@ async function pocGroupCommand(ctx: CommandContext) {
 
   if (action === 'remove' || action === 'del' || action === 'quitar' || action === 'borrar') {
     const groupJid = currentOrExplicitGroup(ctx, ctx.args[1])
+    clearEditAllListener(ctx, groupJid)
+    cancelValleyPocListenersForChat(groupJid)
     const removed = removePocChat(groupJid)
     await ctx.reply(removed ? `Grupo PoC eliminado: \`${groupJid}\`` : 'Ese grupo no estaba registrado como PoC.')
     return
@@ -202,6 +273,10 @@ async function pocGroupCommand(ctx: CommandContext) {
     if (!ctx.isOwner) throw new Error('Solo el owner principal puede limpiar todos los grupos PoC de una vez.')
     if ((ctx.args[1] ?? '').toLowerCase() !== 'confirm') {
       throw new Error(`Confirma con ${ctx.prefix}pocgroup clear confirm`)
+    }
+    for (const row of listPocChats()) {
+      clearEditAllListener(ctx, row.chatId)
+      cancelValleyPocListenersForChat(row.chatId)
     }
     const removed = clearPocChats()
     await ctx.reply(`Alcance PoC limpiado. Grupos eliminados: *${removed}*.`)
@@ -238,7 +313,7 @@ async function invisibleCommand(ctx: CommandContext) {
     text,
     notifyJid: ctx.chatId,
   })
-  await ctx.reply(`PoC invisible armada durante 90 s para el siguiente mensaje del objetivo en este grupo.`)
+  await ctx.reply('PoC invisible armada durante 90 s para el siguiente mensaje del objetivo en este grupo.')
 }
 
 async function pvCommand(ctx: CommandContext) {
@@ -274,6 +349,7 @@ async function editAllCommand(ctx: CommandContext) {
   if (action === 'on' || action === 'activar') {
     const replacement = ctx.args.slice(1).join(' ').trim()
     const status = enableEditAllPoc(ctx.chatId, replacement, ctx.sender)
+    armEditAllRuntime(ctx)
     await ctx.reply([
       '*EDITALL PoC ACTIVADO*',
       `Máximo: *${status.remaining} mensajes*`,
@@ -286,6 +362,7 @@ async function editAllCommand(ctx: CommandContext) {
   }
 
   if (action === 'off' || action === 'desactivar') {
+    clearEditAllListener(ctx, ctx.chatId)
     disableEditAllPoc(ctx.chatId, ctx.sender)
     await ctx.reply('EditAll PoC desactivado.')
     return
