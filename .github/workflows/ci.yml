@@ -45,6 +45,9 @@ jobs:
       - name: Operations dashboard telemetry smoke
         run: node scripts/ops-dashboard-smoke.mjs
 
+      - name: V19 web organization, MainBot health and subbot cleanup smoke
+        run: node scripts/web-ops-v19-smoke.mjs
+
       - name: Web proxy, redirects and MainBot socket regression smoke
         run: node scripts/web-proxy-regression-smoke.mjs
 
@@ -83,6 +86,7 @@ jobs:
             scripts/group-inactivity-smoke.mjs
             scripts/v18-runtime-smoke.mjs
             scripts/ops-dashboard-smoke.mjs
+            scripts/web-ops-v19-smoke.mjs
             scripts/web-proxy-regression-smoke.mjs
             scripts/update-preflight-smoke.mjs
             scripts/runtime-permissions-smoke.mjs
