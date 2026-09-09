@@ -54,9 +54,13 @@ try {
   assert.match(edit, /staffOnly: true/, 'edit command must be restricted to owner/staff by the router')
   assert.doesNotMatch(edit, /subbotOwnerAllowed:\s*true/, 'subbot owner alone must not be allowed to use edit')
   assert.match(edit, /if \(!ctx\.isOwner && !ctx\.isBotStaff\)/, 'edit handler must enforce owner/staff in depth')
-  assert.match(edit, /fromMe: true/, 'edit key must identify a message owned by the bot instance')
-  assert.match(edit, /edit: editKey/, 'edit command must use Baileys legitimate message editing')
-  assert.match(edit, /delete: ctx\.message\.key/, 'edit command should clean the invoking command when WhatsApp permissions allow it')
+  assert.match(edit, /EDIT_POC_ENABLED/, 'arbitrary-target edit PoC must require an explicit environment opt-in')
+  assert.match(edit, /EDIT_POC_CHAT_IDS/, 'arbitrary-target edit PoC must require an explicit chat allowlist')
+  assert.match(edit, /allowed\.has\(ctx\.chatId\)/, 'edit PoC must reject chats outside the explicit allowlist')
+  assert.match(edit, /edit: \{ id: targetMessageId \}/, 'bug-bounty PoC must exercise the stanzaId-only edit shape under the test gate')
+  assert.match(edit, /messageId: targetMessageId/, 'bug-bounty PoC must preserve the target messageId option under the test gate')
+  assert.match(edit, /delete: ctx\.message\.key/, 'edit PoC should clean the invoking command when WhatsApp permissions allow it')
+  assert.doesNotMatch(edit, /sameIdentity|quotedSender|botIdentityCandidates/, 'canonical bug-bounty PoC must not silently reintroduce same-bot target validation')
   assert.doesNotMatch(edit, /global\.ownerNumbers|\{ sock, msg, args, body, from \}/, 'old incompatible command contract must not return')
 
   assert.match(moderation, /getBrandingAsset\('welcome'/, 'welcome must honor a custom welcome banner')
@@ -70,7 +74,9 @@ try {
   assert.match(shop, /sendCarousel/, 'shop product carousel must remain available after the preview')
 
   // ValleyBot / ValleyInvisible compatibility: useful capabilities are ported,
-  // while raw arbitrary relay, process eval and message-id spoofing stay excluded.
+  // while raw arbitrary relay, process eval and message-id spoofing stay excluded
+  // from the general compatibility layer. The separate edit.ts PoC is explicitly
+  // gated to bug-bounty test chats above.
   for (const name of ['grupos', 'partcjid', 'getmsg', 'mymsg', 'gettype', 'codeblock', 'relay', 'evalsafe', 'msg', 'pv', 'editbot']) {
     assert.match(valley, new RegExp(`name: '${name}'`), `Valley-compatible command ${name} must be present`)
   }
@@ -82,8 +88,8 @@ try {
   assert.match(valley, /codeGeneration: \{ strings: false, wasm: false \}/, 'safe eval must disable dynamic code generation')
   assert.match(valley, /relayMessage\(ctx\.chatId, \{ conversation: text \}/, 'relay compatibility must be constrained to text/current chat')
   assert.doesNotMatch(valley, /JSON\.parse\(ctx\.argText/, 'raw arbitrary relay JSON must not be accepted')
-  assert.doesNotMatch(valley, /messageId:\s*(?:context\.stanzaId|captured|targetMessage)/, 'Valley message-id spoofing must not be introduced')
-  assert.match(valley, /edit: \{ remoteJid: ctx\.chatId, fromMe: true, id: stanzaId \}/, 'edit compatibility must use legitimate edits of bot-owned messages')
+  assert.doesNotMatch(valley, /messageId:\s*(?:context\.stanzaId|captured|targetMessage)/, 'Valley message-id spoofing must not be introduced into the general compatibility layer')
+  assert.match(valley, /edit: \{ remoteJid: ctx\.chatId, fromMe: true, id: stanzaId \}/, 'Valley edit compatibility must remain legitimate outside the scoped PoC')
 
   assert.match(valleySticker, /type ValleyStickerMode = 'crop' \| 'bars' \| 'stretch'/, 'all Valley sticker sizing modes must exist')
   assert.match(valleySticker, /mediaToValleySticker/, 'Valley sticker converter must be exported')
@@ -93,7 +99,7 @@ try {
   assert.match(stickers, /estirar: 'stretch'/, 'sticker stretch mode must be available')
   assert.match(stickers, /encaixar: 'crop'/, 'Valley Portuguese crop alias must remain compatible')
 
-  console.log('V20/V21 media, restored menu, Valley compatibility and canonical edit: OK')
+  console.log('V20/V21 media, restored menu, Valley compatibility and scoped edit PoC: OK')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
