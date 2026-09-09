@@ -1,7 +1,7 @@
 import QRCode from 'qrcode'
 import { config } from '../config.js'
 import type { BotCommand, CommandContext } from '../types.js'
-import { economy } from '../services/economy.js'
+import { economy, type SubbotRecord } from '../services/economy.js'
 import { subbotManager } from '../core/subbots.js'
 
 function fmtDate(value: number | null) { return value ? new Date(value).toLocaleString('es-MX') : 'N/D' }
@@ -20,6 +20,32 @@ function statusLabel(status: string) {
     expired: '⚫ Expirado',
   }
   return labels[status] ?? status
+}
+
+function cleanupSelector(raw: string, rows: SubbotRecord[]) {
+  const selector = raw.trim().toLowerCase()
+  const stamp = Date.now()
+  const exact = /^#?(\d+)$/.exec(selector)
+  if (exact?.[1]) return rows.filter((row) => row.id === Number(exact[1]))
+  if (['expired', 'vencidos', 'vencido', 'expireds'].includes(selector)) {
+    return rows.filter((row) => row.expiresAt <= stamp || ['expired', 'revoked'].includes(row.status))
+  }
+  if (['pending', 'pendientes', 'pendiente'].includes(selector)) {
+    return rows.filter((row) => row.expiresAt > stamp && row.status === 'pending')
+  }
+  if (['active', 'activos', 'activo'].includes(selector)) {
+    return rows.filter((row) => row.expiresAt > stamp && !['pending', 'expired', 'revoked'].includes(row.status))
+  }
+  return []
+}
+
+function cleanupSelectorLabel(raw: string) {
+  const selector = raw.trim().toLowerCase()
+  if (/^#?\d+$/.test(selector)) return `instancia ${selector.startsWith('#') ? selector : `#${selector}`}`
+  if (['expired', 'vencidos', 'vencido', 'expireds'].includes(selector)) return 'instancias vencidas/revocadas'
+  if (['pending', 'pendientes', 'pendiente'].includes(selector)) return 'instancias pendientes'
+  if (['active', 'activos', 'activo'].includes(selector)) return 'instancias activas'
+  return selector
 }
 
 async function sendQr(ctx: CommandContext, instanceId: number, qr: string, reason?: string) {
@@ -168,9 +194,71 @@ export const subbotCommands: BotCommand[] = [
       const totalBytes = rows.reduce((sum, row) => sum + row.downloadBytes, 0)
       const lines = rows.slice(0, 30).map((row) => `#${row.id} · ${statusLabel(row.status)} · ${row.phone ?? 'sin número'}\nOwner: ${row.ownerJid.split('@')[0]} · vence ${fmtDate(row.expiresAt)}`)
       const footer = webAvailable()
-        ? `Usa *${ctx.prefix}adminpanel* en chat privado para abrir el dashboard web.`
-        : 'Gestión directa desde WhatsApp: el dashboard web está deshabilitado en esta instalación.'
+        ? `Panel: *${ctx.prefix}adminpanel* · Limpiar instancias: *${ctx.prefix}subbotdelete vencidos|pendientes|activos*.`
+        : `Limpiar instancias: *${ctx.prefix}subbotdelete vencidos|pendientes|activos*.`
       await ctx.reply(`👑 *CENTRO DE SUBBOTS*\n\nInstancias: *${rows.length}*\nMensajes: *${totalMessages}*\nDescargas: *${(totalBytes / 1024 / 1024).toFixed(1)} MB*\n\n${lines.join('\n\n')}\n\n${footer}`)
+    },
+  },
+  {
+    name: 'subbotdelete', aliases: ['subbotclean', 'cleansubbots', 'deletesubbots', 'borrarsubbots'], category: 'owner', staffOnly: true,
+    description: 'Elimina permanentemente instancias por ID o estado.', usage: 'subbotdelete #ID|vencidos|pendientes|activos [confirm]',
+    async handler(ctx) {
+      if (process.env.NEXORA_INSTANCE_ROLE === 'subbot') throw new Error('La eliminación global de instancias solo está disponible desde MainBot.')
+      if (!ctx.isOwner && !ctx.isBotStaff) throw new Error('Solo owner o staff de MainBot puede eliminar instancias.')
+
+      const selector = (ctx.args[0] ?? '').trim()
+      if (!selector) {
+        throw new Error(`Uso: ${ctx.prefix}subbotdelete #ID|vencidos|pendientes|activos [confirm]`)
+      }
+      const rows = economy.listSubbots()
+      const selected = cleanupSelector(selector, rows)
+      const label = cleanupSelectorLabel(selector)
+      if (!selected.length) {
+        const validSelector = /^#?\d+$/.test(selector) || /^(expired|vencidos?|expireds|pending|pendientes?|active|activos?)$/i.test(selector)
+        if (!validSelector) throw new Error(`Selector inválido. Usa #ID, vencidos, pendientes o activos.`)
+        await ctx.reply(`No hay ${label} para eliminar.`)
+        return
+      }
+
+      const confirmed = ctx.args.slice(1).some((arg) => ['confirm', 'confirmar', 'yes', 'si', 'sí'].includes(arg.toLowerCase()))
+      if (!confirmed) {
+        const preview = selected.slice(0, 12).map((row) => `#${row.id} · ${row.status} · ${row.phone ?? 'sin vincular'} · ${row.ownerJid.split('@')[0]}`)
+        await ctx.reply([
+          '⚠️ *ELIMINACIÓN PERMANENTE DE SUBBOTS*',
+          '',
+          `Objetivo: *${label}*`,
+          `Instancias afectadas: *${selected.length}*`,
+          '',
+          ...preview,
+          selected.length > preview.length ? `… y ${selected.length - preview.length} más.` : '',
+          '',
+          'Esto elimina sesión, worker, portal, telemetría, grupos registrados y el entitlement subbot_slot.',
+          '*La compra/regalo de esas instancias no se conservará.*',
+          '',
+          `Para confirmar: *${ctx.prefix}subbotdelete ${selector} confirm*`,
+        ].filter(Boolean).join('\n'))
+        return
+      }
+
+      const removed: number[] = []
+      const failed: string[] = []
+      for (const row of selected) {
+        try {
+          await subbotManager.deleteById(row.id)
+          removed.push(row.id)
+        } catch (error) {
+          failed.push(`#${row.id}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
+
+      await ctx.reply([
+        '🧹 *LIMPIEZA DE SUBBOTS COMPLETADA*',
+        '',
+        `Objetivo: *${label}*`,
+        `Eliminados: *${removed.length}*${removed.length ? ` · ${removed.map((id) => `#${id}`).join(', ')}` : ''}`,
+        `Fallidos: *${failed.length}*`,
+        failed.length ? `\n${failed.slice(0, 8).join('\n')}` : '',
+      ].filter(Boolean).join('\n'))
     },
   },
   {
