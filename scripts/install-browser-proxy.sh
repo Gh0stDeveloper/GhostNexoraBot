@@ -57,6 +57,15 @@ set_env() {
 
 set_env BROWSER_PROXY_PUBLIC_URL "https://${DOMAIN}/proxy"
 set_env BROWSER_PROXY_PORT "${PORT}"
+
+# Older installations frequently kept PUBLIC_WEB_URL on localhost even though
+# the dashboard was already exposed through this same HTTPS hostname. Repair
+# only loopback/empty values; never overwrite a real custom public domain.
+CURRENT_PUBLIC_WEB_URL="$(read_env PUBLIC_WEB_URL)"
+if [[ -z "${CURRENT_PUBLIC_WEB_URL}" || "${CURRENT_PUBLIC_WEB_URL}" =~ ^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$) ]]; then
+  set_env PUBLIC_WEB_URL "https://${DOMAIN}"
+  ok "PUBLIC_WEB_URL reparado: https://${DOMAIN}"
+fi
 chmod 0640 "${INSTALL_DIR}/.env" || true
 
 info "Configurando backend local ${DOMAIN}/proxy → 127.0.0.1:${PORT}"
@@ -72,18 +81,18 @@ NGINX_DUMP="$(nginx -T 2>/dev/null)" || {
 }
 printf '%s\n' "${NGINX_DUMP}" > /tmp/ghost-nexora-nginx-effective.conf
 
-# Extract candidate config files from nginx -T output. The Python parser then
-# edits the server block itself, which is safer than guessing from filenames.
+# nginx -T emits comments as "# configuration file /path/to/file:". The old
+# parser expected a space before ':' and therefore returned an empty list,
+# which caused the updater to create a duplicate server_name block.
 mapfile -t CONFIG_FILES < <(
   printf '%s\n' "${NGINX_DUMP}" \
-    | sed -nE 's/^# configuration file ([^ ]+) :$/\1/p' \
+    | sed -nE 's/^# configuration file (.+):$/\1/p' \
     | awk '!seen[$0]++' \
     | grep -vE '^/etc/nginx/(sites-available/ghost-nexora-browser-proxy|sites-enabled/ghost-nexora-browser-proxy)$' \
     || true
 )
 
 INJECTED_FILE=""
-INJECT_STATUS="0"
 for file in "${CONFIG_FILES[@]}"; do
   [[ -f "${file}" && -r "${file}" && -w "${file}" ]] || continue
   result="$(python3 - "${file}" "${DOMAIN}" "${PORT}" <<'PY'
@@ -138,14 +147,13 @@ if not candidates:
     print('NO_SERVER')
     raise SystemExit(0)
 
-# Existing managed location already present in this exact server block.
 candidates.sort(reverse=True)
 score, start, end, block = candidates[0]
 if marker in block or re.search(r'location\s*=\s*/proxy/?\s*\{', block):
     print('EXISTS')
     raise SystemExit(0)
 
-location = f'''\n    # Ghost Nexora Browser Proxy (managed)\n    location = /proxy {{\n        proxy_pass http://127.0.0.1:{port}/proxy;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 10s;\n        proxy_send_timeout 30s;\n        proxy_read_timeout 30s;\n        proxy_buffering off;\n    }}\n'''
+location = f'''\n    # Ghost Nexora Browser Proxy (managed)\n    location = /proxy {{\n        proxy_pass http://127.0.0.1:{port}/proxy;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Forwarded-Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_connect_timeout 10s;\n        proxy_send_timeout 30s;\n        proxy_read_timeout 30s;\n        proxy_buffering off;\n    }}\n'''
 new = text[:end - 1] + location + text[end - 1:]
 Path(path).write_text(new)
 print(f'INJECTED:{score}')
@@ -155,13 +163,11 @@ PY
   case "${result}" in
     INJECTED:*)
       INJECTED_FILE="${file}"
-      INJECT_STATUS="1"
       info "location /proxy insertado en ${file} (${result#INJECTED:})."
       break
       ;;
     EXISTS)
       INJECTED_FILE="${file}"
-      INJECT_STATUS="1"
       info "location /proxy ya existe en ${file}."
       break
       ;;
@@ -169,8 +175,14 @@ PY
 done
 
 if [[ -z "${INJECTED_FILE}" ]]; then
-  warn "No encontré un server_name=${DOMAIN} en la configuración activa de Nginx; se creará un vhost dedicado HTTP."
-  cat > "${SITE_AVAILABLE}" <<NGINX
+  # Never create a duplicate if nginx -T already proves that this hostname is
+  # owned by another active server block. This is the exact guard missing from
+  # the old updater that produced "conflicting server name" warnings.
+  if printf '%s\n' "${NGINX_DUMP}" | grep -Eq "^[[:space:]]*server_name[[:space:]]+[^;]*${DOMAIN//./\\.}([^A-Za-z0-9.-]|;).*"; then
+    warn "Nginx ya contiene server_name=${DOMAIN}, pero no se pudo editar su archivo activo. No se creará un vhost duplicado."
+  else
+    warn "No encontré un server_name=${DOMAIN} en la configuración activa de Nginx; se creará un vhost dedicado HTTP."
+    cat > "${SITE_AVAILABLE}" <<NGINX
 server {
     listen 80;
     listen [::]:80;
@@ -180,6 +192,7 @@ server {
         proxy_pass http://127.0.0.1:${PORT}/proxy;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
@@ -190,8 +203,9 @@ server {
     }
 }
 NGINX
-  ln -sfn "${SITE_AVAILABLE}" "${SITE_ENABLED}"
-  INJECTED_FILE="${SITE_AVAILABLE}"
+    ln -sfn "${SITE_AVAILABLE}" "${SITE_ENABLED}"
+    INJECTED_FILE="${SITE_AVAILABLE}"
+  fi
 fi
 
 nginx -t
@@ -212,7 +226,7 @@ if printf '%s\n' "${PUBLIC_HEADERS}" | grep -qi 'x-nextjs-'; then
 elif printf '%s\n' "${PUBLIC_HEADERS}" | grep -qiE 'content-type: text/html'; then
   ok 'La ruta pública /proxy está siendo atendida como HTML por el proxy.'
 else
-  warn 'No se pudo verificar automáticamente la respuesta pública de /proxy. Revisa ${PUBLIC_TEST_URL}.'
+  warn "No se pudo verificar automáticamente la respuesta pública de /proxy. Revisa ${PUBLIC_TEST_URL}."
 fi
 
 ok "Nginx configurado: https://${DOMAIN}/proxy → http://127.0.0.1:${PORT}/proxy"
