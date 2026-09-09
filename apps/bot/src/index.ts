@@ -41,6 +41,7 @@ let activeJid: string | null = null
 let reconnectTimer: NodeJS.Timeout | null = null
 let reconnectAttempts = 0
 let mainSocket: WASocket | null = null
+let socketGeneration = 0
 
 function json(res: http.ServerResponse, status: number, payload: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -60,7 +61,7 @@ async function readJson(req: http.IncomingMessage) {
 }
 
 async function executeControl(body: Record<string, unknown>) {
-  return executeAdminWebControl(body, mainSocket)
+  return executeAdminWebControl(body, connected ? mainSocket : null)
 }
 
 function startHealthServer() {
@@ -281,12 +282,17 @@ function scheduleMainReconnect(reason: string) {
 }
 
 async function connect() {
+  const generation = ++socketGeneration
   const { socket } = await createSocket()
+  if (generation !== socketGeneration) {
+    try { socket.end(new Error('stale main socket generation')) } catch {}
+    return
+  }
   mainSocket = socket
   const router = new CommandRouter(commands)
 
   socket.ev.on('messages.upsert', ({ messages, type }) => {
-    if (type !== 'notify') return
+    if (generation !== socketGeneration || type !== 'notify') return
     for (const message of messages) {
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
       const chatId = message.key.remoteJid
@@ -296,11 +302,13 @@ async function connect() {
   })
 
   socket.ev.on('group-participants.update', (update) => {
+    if (generation !== socketGeneration) return
     void handleParticipantUpdateV2(socket, update).catch((error) =>
       logger.error({ error, groupId: update.id, action: update.action }, 'participant update failed'))
   })
 
   socket.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (generation !== socketGeneration) return
     if (qr && !socket.authState.creds.registered) {
       logger.warn('session is not linked; showing QR fallback in terminal')
       qrcode.generate(qr, { small: true })
@@ -312,14 +320,14 @@ async function connect() {
       activeJid = socket.user?.id ?? null
       mainSocket = socket
       reconnectAttempts = 0
-      logger.info({ jid: activeJid, prefix: settings.prefix }, config.botName + ' connected')
+      logger.info({ jid: activeJid, prefix: settings.prefix, generation }, config.botName + ' connected')
     }
     if (connection === 'close') {
       connected = false
-      if (mainSocket === socket) mainSocket = null
+      mainSocket = null
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       const loggedOut = statusCode === DisconnectReason.loggedOut
-      logger.warn({ statusCode, loggedOut }, 'WhatsApp connection closed')
+      logger.warn({ statusCode, loggedOut, generation }, 'WhatsApp connection closed')
       if (loggedOut) {
         logger.error('session logged out; run `npm run pair` to link again')
         return
