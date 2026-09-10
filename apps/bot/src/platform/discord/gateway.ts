@@ -63,6 +63,11 @@ export class DiscordGateway {
   private heartbeatAcked = true
   private reconnectAttempts = 0
   private stopping = false
+  private terminalError = false
+  private identifyTotal = 0
+  private identifyRemaining = 0
+  private identifyResetWindowMs = 0
+  private identifyResetAt = 0
 
   constructor(
     private readonly rest: DiscordRestClient,
@@ -108,6 +113,25 @@ export class DiscordGateway {
     await this.handlers.onSession?.(this.session ? { ...this.session } : null)
   }
 
+  private refreshIdentifyWindow() {
+    if (this.identifyResetAt > 0 && Date.now() >= this.identifyResetAt) {
+      this.identifyRemaining = this.identifyTotal
+      this.identifyResetAt = Date.now() + this.identifyResetWindowMs
+    }
+  }
+
+  private identifyWaitSeconds() {
+    this.refreshIdentifyWindow()
+    return Math.max(1, Math.ceil(Math.max(0, this.identifyResetAt - Date.now()) / 1000))
+  }
+
+  private async failTerminal(message: string) {
+    this.terminalError = true
+    this.clearHeartbeat()
+    await this.setState('error', message)
+    try { this.socket?.close(4000, 'terminal local error') } catch {}
+  }
+
   private heartbeat() {
     if (!this.socket || this.socket.readyState !== OPEN) return
     if (!this.heartbeatAcked) {
@@ -132,6 +156,12 @@ export class DiscordGateway {
   }
 
   private identify() {
+    this.refreshIdentifyWindow()
+    if (this.identifyRemaining <= 0) {
+      void this.failTerminal(`Discord IDENTIFY agotado; vuelve a intentarlo después de ${this.identifyWaitSeconds()}s.`)
+      return
+    }
+    this.identifyRemaining -= 1
     void this.setState('identifying')
     this.send({
       op: 2,
@@ -197,6 +227,17 @@ export class DiscordGateway {
     }
   }
 
+  private async requireNewSession(reason: string, requestedDelayMs?: number) {
+    this.session = null
+    await this.persistSession().catch(() => undefined)
+    this.refreshIdentifyWindow()
+    if (this.identifyRemaining <= 0) {
+      await this.failTerminal(`Discord necesita una sesión nueva (${reason}), pero IDENTIFY está agotado; vuelve a intentarlo después de ${this.identifyWaitSeconds()}s.`)
+      return
+    }
+    this.requestReconnect(reason, requestedDelayMs)
+  }
+
   private async handlePayload(payload: DiscordGatewayPayload) {
     if (payload.op === 10) {
       const interval = Number((payload.d as { heartbeat_interval?: number })?.heartbeat_interval || 0)
@@ -224,18 +265,15 @@ export class DiscordGateway {
       return
     }
     if (payload.op === 9) {
-      const resumable = payload.d === true
-      if (!resumable) {
-        this.session = null
-        await this.persistSession()
-      }
       const random = this.options.random ?? Math.random
-      this.requestReconnect('invalid session', 1000 + Math.floor(random() * 4000))
+      const retryDelay = 1000 + Math.floor(random() * 4000)
+      if (payload.d === true) this.requestReconnect('invalid resumable session', retryDelay)
+      else await this.requireNewSession('invalid session; new identify required', retryDelay)
     }
   }
 
   private requestReconnect(reason: string, requestedDelayMs?: number) {
-    if (this.stopping || this.reconnectTimer) return
+    if (this.stopping || this.terminalError || this.reconnectTimer) return
     this.clearHeartbeat()
     try { this.socket?.close(4000, reason.slice(0, 120)) } catch {}
     this.socket = undefined
@@ -252,14 +290,8 @@ export class DiscordGateway {
     this.reconnectTimer.unref?.()
   }
 
-  private async invalidateAndReconnect(code: number) {
-    this.session = null
-    await this.persistSession().catch(() => undefined)
-    this.requestReconnect(`gateway close ${code}; new session required`)
-  }
-
   private async openSocket() {
-    if (this.stopping) return
+    if (this.stopping || this.terminalError) return
     const base = this.session?.resumeGatewayUrl || this.baseGatewayUrl
     if (!base) throw new Error('Discord Gateway URL no disponible.')
     await this.setState('connecting')
@@ -279,36 +311,40 @@ export class DiscordGateway {
     socket.addEventListener('close', (event) => {
       this.clearHeartbeat()
       if (this.socket === socket) this.socket = undefined
-      if (this.stopping) return
+      if (this.stopping || this.terminalError) return
       const code = Number(event.code || 0)
       if (FATAL_CLOSE_CODES.has(code)) {
         const hint = code === 4014
           ? 'Discord rechazó intents privilegiados. Revisa MESSAGE_CONTENT en Developer Portal o desactiva DISCORD_MESSAGE_CONTENT_ENABLED.'
           : `Discord Gateway cerró la sesión con código fatal ${code}.`
-        void this.setState('error', hint)
+        void this.failTerminal(hint)
         return
       }
       if (NON_RESUMABLE_CLOSE_CODES.has(code)) {
-        void this.invalidateAndReconnect(code)
+        void this.requireNewSession(`gateway close ${code}; new session required`)
         return
       }
       this.requestReconnect(`gateway close ${code || 'unknown'}`)
     })
 
     socket.addEventListener('error', () => {
-      if (!this.stopping) this.requestReconnect('Discord Gateway WebSocket error')
+      if (!this.stopping && !this.terminalError) this.requestReconnect('Discord Gateway WebSocket error')
     })
   }
 
   async start(persistedSession: DiscordGatewaySession | null = null) {
     if (this.state !== 'idle' && this.state !== 'stopped' && this.state !== 'error') return
     this.stopping = false
+    this.terminalError = false
     this.session = persistedSession
     const gateway = await this.rest.getGatewayBot()
     this.baseGatewayUrl = gateway.url
-    if (!this.session && gateway.session_start_limit.remaining <= 0) {
-      const seconds = Math.ceil(gateway.session_start_limit.reset_after / 1000)
-      await this.setState('error', `Discord IDENTIFY agotado; vuelve a intentarlo después de ${seconds}s.`)
+    this.identifyTotal = Math.max(0, Number(gateway.session_start_limit.total || 0))
+    this.identifyRemaining = Math.max(0, Number(gateway.session_start_limit.remaining || 0))
+    this.identifyResetWindowMs = Math.max(1000, Number(gateway.session_start_limit.reset_after || 1000))
+    this.identifyResetAt = Date.now() + this.identifyResetWindowMs
+    if (!this.session && this.identifyRemaining <= 0) {
+      await this.setState('error', `Discord IDENTIFY agotado; vuelve a intentarlo después de ${this.identifyWaitSeconds()}s.`)
       return
     }
     await this.openSocket()
