@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -15,10 +16,54 @@ process.env.VK_ACCESS_TOKEN = ''
 
 const source = (file) => readFile(path.join(root, file), 'utf8')
 
+async function providerSessionSmoke(http) {
+  const server = createServer((request, response) => {
+    if (request.url === '/seed') {
+      response.statusCode = 200
+      response.setHeader('content-type', 'text/html; charset=utf-8')
+      response.setHeader('set-cookie', [
+        'phase3_session=preserved; Path=/; HttpOnly; SameSite=Lax',
+        'phase3_scoped=yes; Path=/signed; HttpOnly',
+      ])
+      response.end('<html><body>seed</body></html>')
+      return
+    }
+    if (request.url === '/signed/check') {
+      response.statusCode = request.headers.cookie?.includes('phase3_session=preserved') && request.headers.cookie?.includes('phase3_scoped=yes') ? 200 : 403
+      response.setHeader('content-type', 'text/html; charset=utf-8')
+      response.end(`<html><body>${request.headers.cookie ?? 'missing-cookie'}</body></html>`)
+      return
+    }
+    response.statusCode = 404
+    response.end('not found')
+  })
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  try {
+    const address = server.address()
+    assert.ok(address && typeof address !== 'string')
+    const origin = `http://127.0.0.1:${address.port}`
+    const session = new http.ProviderHttpSession()
+    const allowed = [/^127\.0\.0\.1$/]
+    await session.fetchHtml(`${origin}/seed`, allowed)
+    assert.match(session.cookieHeader(`${origin}/signed/check`), /phase3_session=preserved/)
+    assert.match(session.cookieHeader(`${origin}/signed/check`), /phase3_scoped=yes/)
+    assert.doesNotMatch(session.cookieHeader(`${origin}/outside`), /phase3_scoped=yes/)
+    const checked = await session.fetchHtml(`${origin}/signed/check`, allowed, { referer: `${origin}/seed` })
+    assert.match(checked.html, /phase3_session=preserved/)
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve()))
+  }
+}
+
 try {
   const x = await import('../apps/bot/dist/services/download-providers/x.js')
   const vk = await import('../apps/bot/dist/services/download-providers/vk.js')
   const apk = await import('../apps/bot/dist/services/download-providers/apk-stores.js')
+  const http = await import('../apps/bot/dist/services/download-providers/http.js')
   const runtime = await import('../apps/bot/dist/services/download-providers/runtime.js')
 
   assert.equal(x.xPostIdFromUrl('https://x.com/XDevelopers/status/1263145271946551300'), '1263145271946551300')
@@ -50,8 +95,10 @@ try {
   assert.equal(mirrorRows[0].pageUrl, mirrorRelease)
   assert.equal(apk.findApkMirrorVariantUrl(`<a href="${mirrorVariant}">APK</a>`, mirrorRelease), mirrorVariant)
 
-  const dynamicIntermediate = `${mirrorVariant}download/?key=dynamic-nonce-123`
+  const dynamicIntermediate = `${mirrorVariant}download/?forcebaseapk=true&key=dynamic-nonce-123`
   assert.equal(apk.findApkMirrorIntermediateUrl(`<a href="${dynamicIntermediate}">Download APK</a>`, mirrorVariant), dynamicIntermediate)
+  assert.equal(apk.apkMirrorRequiredWaitMs('<div>Whoa there! It looks like you are using an ad blocker, so you will have to wait 15 more sec.</div>'), 16250)
+  assert.equal(apk.apkMirrorRequiredWaitMs('<div>Download ready</div>'), 0)
   const signed = 'https://www.apkmirror.com/wp-content/themes/APKMirror/download.php?id=9768165&key=dynamic-signature'
   assert.equal(apk.findApkMirrorSignedDownloadUrl(`<a id="download-link" href="${signed}">here</a>`, dynamicIntermediate), signed)
   assert.equal(apk.findApkMirrorSignedDownloadUrl('<a id="download-link" href="/wp-content/themes/APKMirror/download.php?id=9768165">bad</a>', dynamicIntermediate), undefined)
@@ -67,6 +114,8 @@ try {
   assert.equal(pureRows[0].packageName, 'com.apkpure.aegon')
   const pureSigned = 'https://d.apkpure.net/custom/com.apkpure.aegon-3207737.apk?key=live-signed-value&k=nonce'
   assert.equal(apk.findApkPureDirectUrl(`<a href="${pureSigned}">Descargar APK</a>`, `${pureDetail}/download`), pureSigned)
+
+  await providerSessionSmoke(http)
 
   runtime.resetProviderHealthForTests()
   assert.equal(await runtime.withProviderTelemetry('apkpure-html', 'search', async () => 7), 7)
@@ -91,10 +140,11 @@ try {
   assert.equal(twitter.description, 'Descarga un enlace público de X/Twitter.')
   assert.equal(commands.find((command) => command.name === 'providerhealth')?.staffOnly, true)
 
-  const [xSource, vkSource, apkSource, envSource, termuxSource] = await Promise.all([
+  const [xSource, vkSource, apkSource, httpSource, envSource, termuxSource] = await Promise.all([
     source('apps/bot/src/services/download-providers/x.ts'),
     source('apps/bot/src/services/download-providers/vk.ts'),
     source('apps/bot/src/services/download-providers/apk-stores.ts'),
+    source('apps/bot/src/services/download-providers/http.ts'),
     source('.env.example'),
     source('apps/bot/src/commands/termux-lite.ts'),
   ])
@@ -107,15 +157,19 @@ try {
   assert.match(vkSource, /mp4_/)
   assert.match(apkSource, /post_type.*app_release/s)
   assert.match(apkSource, /searchtype.*apk/s)
+  assert.match(apkSource, /apkMirrorRequiredWaitMs/)
+  assert.match(apkSource, /ProviderHttpSession/)
   assert.match(apkSource, /\/es\/apk-downloader/)
   assert.match(apkSource, /d\\?\.apkpure\\?\.net|d\.apkpure\.net/)
+  assert.match(httpSource, /set-cookie|setCookie/i)
+  assert.match(httpSource, /cookieHeader/)
   assert.doesNotMatch(apkSource, /download\.php\?id=\d+&key=[A-Za-z0-9_-]{8,}/, 'APKMirror signed id/key must never be hardcoded')
   assert.doesNotMatch(apkSource, /com\.apkpure\.aegon-\d+\.apk\?/, 'APKPure signed CDN URL must never be hardcoded')
   assert.match(envSource, /^X_BEARER_TOKEN=/m)
   assert.match(envSource, /^VK_ACCESS_TOKEN=/m)
   assert.match(termuxSource, /downloadProgressV2Commands/, 'Termux Lite must inherit the same Phase 3 provider command array')
 
-  console.log('[V2 PHASE 3] OK — X/VK/APKMirror/APKPure contracts, dynamic signed URLs, telemetry and shared command registration validated.')
+  console.log('[V2 PHASE 3] OK — X/VK/APKMirror/APKPure contracts, countdown-aware signed URLs, session cookies, telemetry and shared command registration validated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
