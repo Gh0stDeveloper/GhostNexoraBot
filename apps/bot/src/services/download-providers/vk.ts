@@ -1,5 +1,8 @@
+import { mkdtemp, readdir, rm, stat } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { execa } from 'execa'
 import { config } from '../../config.js'
-import { downloadSocialVideo } from '../downloader.js'
 import { downloadProviderFile } from './http.js'
 import { withProviderTelemetry } from './runtime.js'
 
@@ -105,6 +108,38 @@ export type VkDownloadBundle = {
   cleanup: () => Promise<void>
 }
 
+async function downloadVkViaYtDlp(url: string): Promise<Omit<VkDownloadBundle, 'provider'>> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-vk-ytdlp-'))
+  const output = path.join(dir, 'vk-%(id)s.%(ext)s')
+  try {
+    await execa('yt-dlp', [
+      '--js-runtimes', 'node',
+      '--no-playlist',
+      '--no-warnings',
+      '--no-progress',
+      '--restrict-filenames',
+      ...(config.ytdlpCookiesFile ? ['--cookies', config.ytdlpCookiesFile] : []),
+      '-f', 'bv*+ba/b',
+      '--merge-output-format', 'mp4',
+      '--remux-video', 'mp4',
+      '-o', output,
+      url,
+    ], { timeout: 20 * 60_000, maxBuffer: 20 * 1024 * 1024 })
+
+    const entries = (await readdir(dir)).filter((entry) => !entry.endsWith('.part') && !entry.endsWith('.ytdl') && !entry.endsWith('.json'))
+    const fileName = entries[0]
+    if (!fileName) throw new Error('yt-dlp no produjo un archivo para VK.')
+    const filePath = path.join(dir, fileName)
+    const info = await stat(filePath)
+    if (info.size <= 0) throw new Error('yt-dlp produjo un archivo vacío para VK.')
+    if (info.size > config.maxDownloadBytes) throw new Error(`El video supera el límite configurado de ${config.maxDownloadMb} MB.`)
+    return { filePath, fileName, size: info.size, cleanup: () => rm(dir, { recursive: true, force: true }) }
+  } catch (error) {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
 export async function downloadVkVideo(input: string): Promise<VkDownloadBundle> {
   const url = validateVkUrl(input)
   const officialErrors: string[] = []
@@ -126,8 +161,8 @@ export async function downloadVkVideo(input: string): Promise<VkDownloadBundle> 
   }
 
   try {
-    const result = await withProviderTelemetry('vk-ytdlp', 'download', () => downloadSocialVideo(url, 'vk'))
-    return { filePath: result.filePath, fileName: result.fileName, size: result.size, provider: 'vk-ytdlp', cleanup: result.cleanup }
+    const result = await withProviderTelemetry('vk-ytdlp', 'download', () => downloadVkViaYtDlp(url))
+    return { ...result, provider: 'vk-ytdlp' }
   } catch (error) {
     const fallback = error instanceof Error ? error.message : String(error)
     const official = officialErrors.length ? `${officialErrors.join(' · ')} · ` : ''
