@@ -2,7 +2,7 @@
   "name": "ghost-nexora-bot",
   "version": "1.1.0",
   "private": true,
-  "description": "Ghost Nexora Bot - WhatsApp Multi-Device bot, economy, subbots and Next.js web",
+  "description": "Ghost Nexora Bot - multi-platform bot runtime, economy, subbots and Next.js web",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "postinstall": "node scripts/install-cli.mjs",
@@ -20,7 +20,8 @@
     "v2:whatsapp-adapter": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/whatsapp-adapter-v2-smoke.mjs",
     "v2:ui-compat": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase2-ui-smoke.mjs && node scripts/v2-ui-compat-audit.mjs",
     "v2:providers": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase3-provider-smoke.mjs && node scripts/v2-phase3-provider-http-smoke.mjs && node scripts/v2-phase3-provider-lease-smoke.mjs",
-    "v2:providers:live": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase3-live-provider-audit.mjs"
+    "v2:providers:live": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase3-live-provider-audit.mjs",
+    "v2:telegram": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase4-telegram-smoke.mjs && node scripts/v2-phase4-telegram-audit.mjs"
   },
   "overrides": {
     "redstar": {
