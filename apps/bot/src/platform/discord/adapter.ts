@@ -15,6 +15,7 @@ import type { DiscordActionRow, DiscordCreateMessageBody, DiscordEmbed, DiscordM
 
 const DISCORD_TEXT_LIMIT = 2000
 const DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
+const DISCORD_EMBED_TOTAL_LIMIT = 6000
 const DISCORD_CUSTOM_ID_LIMIT = 100
 // Create Message has a 25 MiB request ceiling. Keep 1 MiB for multipart metadata/overhead.
 const MAX_UPLOAD_BYTES = 24 * 1024 * 1024
@@ -74,8 +75,51 @@ async function loadMedia(media: OutgoingMedia) {
 }
 
 function trim(value: string | undefined, limit: number) {
-  if (!value) return undefined
-  return value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 1))}…`
+  if (!value || limit <= 0) return undefined
+  if (value.length <= limit) return value
+  if (limit === 1) return '…'
+  return `${value.slice(0, limit - 1)}…`
+}
+
+function embedCharacters(embed: DiscordEmbed) {
+  return (embed.title?.length ?? 0) +
+    (embed.description?.length ?? 0) +
+    (embed.footer?.text.length ?? 0)
+}
+
+function fitEmbeds(embeds: DiscordEmbed[]) {
+  const input = embeds.slice(0, 10)
+  let remaining = DISCORD_EMBED_TOTAL_LIMIT
+  const result: DiscordEmbed[] = []
+
+  for (let index = 0; index < input.length; index += 1) {
+    const source = input[index]
+    const embedsLeft = input.length - index
+    const budget = Math.max(1, Math.floor(remaining / embedsLeft))
+    const title = trim(source.title, Math.min(256, budget))
+    let localRemaining = Math.max(0, budget - (title?.length ?? 0))
+
+    // Preserve most of each card for its description while keeping room for a
+    // footer when present. The global 6000-char budget is shared across embeds.
+    const footerReserve = source.footer?.text ? Math.min(2048, Math.floor(localRemaining * 0.2)) : 0
+    const description = trim(source.description, Math.min(DISCORD_EMBED_DESCRIPTION_LIMIT, Math.max(0, localRemaining - footerReserve)))
+    localRemaining -= description?.length ?? 0
+    const footerText = trim(source.footer?.text, Math.min(2048, localRemaining))
+
+    const embed: DiscordEmbed = {
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      ...(source.url ? { url: source.url } : {}),
+      ...(source.image ? { image: source.image } : {}),
+      ...(source.thumbnail ? { thumbnail: source.thumbnail } : {}),
+      ...(footerText ? { footer: { text: footerText } } : {}),
+    }
+    const used = embedCharacters(embed)
+    remaining = Math.max(0, remaining - used)
+    result.push(embed)
+  }
+
+  return result
 }
 
 export class DiscordAdapter implements PlatformAdapter {
@@ -184,8 +228,9 @@ export class DiscordAdapter implements PlatformAdapter {
       }
     }
 
+    const fittedEmbeds = fitEmbeds(embeds)
     return {
-      ...(embeds.length ? { embeds } : { content: trim(normalizedUiToText(ui), DISCORD_TEXT_LIMIT) }),
+      ...(fittedEmbeds.length ? { embeds: fittedEmbeds } : { content: trim(normalizedUiToText(ui), DISCORD_TEXT_LIMIT) }),
       ...(actions.length ? { components: this.rows(actions) } : {}),
     }
   }
