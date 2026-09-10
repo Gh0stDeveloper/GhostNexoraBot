@@ -1,7 +1,9 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { config } from '../config.js'
 import type { WASocket } from 'baileys'
+import { config } from '../config.js'
+import { TelegramBotApiClient } from '../platform/telegram/client.js'
+import type { TelegramMessage } from '../platform/telegram/types.js'
 
 export type TelegramCachedMessage = {
   messageId: number
@@ -18,86 +20,95 @@ export type TelegramCachedMessage = {
 const stateDir = path.join(config.dataDir, 'telegram-bridge')
 const stateFile = path.join(stateDir, 'messages.json')
 const cache = new Map<number, TelegramCachedMessage>()
-let started = false
-let offset = 0
+let initialized = false
 
-function token() { return process.env.TELEGRAM_BOT_TOKEN?.trim() || '' }
-function channelId() { return process.env.TELEGRAM_CHANNEL_ID?.trim() || '' }
-function channelUrl() { return process.env.TELEGRAM_CHANNEL_URL?.trim() || '' }
-
-async function tg<T>(method: string, body: Record<string, unknown> = {}) {
-  const key = token()
-  if (!key) throw new Error('Telegram bridge no configurado.')
-  const response = await fetch(`https://api.telegram.org/bot${key}/${method}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000),
-  })
-  const json = await response.json() as { ok?: boolean; result?: T; description?: string }
-  if (!response.ok || !json.ok) throw new Error(json.description || `Telegram API HTTP ${response.status}`)
-  return json.result as T
-}
+function token() { return config.telegramBotToken.trim() }
+function channelId() { return config.telegramChannelId.trim() }
+function channelUrl() { return config.telegramChannelUrl.trim() }
 
 async function persist() {
   await mkdir(stateDir, { recursive: true })
-  await writeFile(stateFile, JSON.stringify({ offset, messages: [...cache.values()].slice(-100) }), { mode: 0o600 })
+  await writeFile(stateFile, JSON.stringify({ messages: [...cache.values()].slice(-100) }), { mode: 0o600 })
 }
 
 async function restore() {
   try {
-    const data = JSON.parse(await readFile(stateFile, 'utf8')) as { offset?: number; messages?: TelegramCachedMessage[] }
-    offset = Number(data.offset || 0)
+    const data = JSON.parse(await readFile(stateFile, 'utf8')) as { messages?: TelegramCachedMessage[] }
     for (const item of data.messages || []) if (Number.isInteger(item.messageId)) cache.set(item.messageId, item)
   } catch { /* first start */ }
 }
 
-function describeMessage(message: any): TelegramCachedMessage | null {
-  if (!message || (channelId() && String(message.chat?.id) !== channelId() && String(message.chat?.username || '') !== channelId().replace(/^@/, ''))) return null
-  const common = { messageId: Number(message.message_id), caption: message.caption as string | undefined, text: message.text as string | undefined, protected: Boolean(message.has_protected_content), createdAt: Date.now() }
-  if (message.photo?.length) return { ...common, type: 'photo', fileId: message.photo[message.photo.length - 1].file_id }
-  if (message.video) return { ...common, type: 'video', fileId: message.video.file_id, mimeType: message.video.mime_type }
+function matchesConfiguredChannel(message: TelegramMessage) {
+  const configured = channelId()
+  if (!configured) return false
+  return String(message.chat?.id) === configured || String(message.chat?.username || '') === configured.replace(/^@/, '')
+}
+
+function describeMessage(message: TelegramMessage): TelegramCachedMessage | null {
+  if (!message || !matchesConfiguredChannel(message)) return null
+  const common = {
+    messageId: Number(message.message_id),
+    caption: message.caption,
+    text: message.text,
+    protected: Boolean(message.has_protected_content),
+    createdAt: Date.now(),
+  }
+  if (message.photo?.length) return { ...common, type: 'photo', fileId: message.photo.at(-1)?.file_id }
+  if (message.video) return { ...common, type: 'video', fileId: message.video.file_id, fileName: message.video.file_name, mimeType: message.video.mime_type }
   if (message.document) return { ...common, type: 'document', fileId: message.document.file_id, fileName: message.document.file_name, mimeType: message.document.mime_type }
-  if (message.audio) return { ...common, type: 'audio', fileId: message.audio.file_id, fileName: message.audio.file_name, mimeType: message.audio.mime_type }
+  if (message.audio || message.voice) {
+    const audio = message.audio || message.voice!
+    return { ...common, type: 'audio', fileId: audio.file_id, fileName: audio.file_name, mimeType: audio.mime_type }
+  }
   if (message.text) return { ...common, type: 'text' }
   return null
 }
 
-async function pollOnce() {
-  const updates = await tg<any[]>('getUpdates', { offset, timeout: 5, allowed_updates: ['channel_post'] })
-  for (const update of updates) {
-    offset = Math.max(offset, Number(update.update_id) + 1)
-    const item = describeMessage(update.channel_post)
-    if (item) cache.set(item.messageId, item)
-  }
+export async function initTelegramBridgeCache() {
+  if (initialized) return true
+  initialized = true
+  await restore()
+  return true
+}
+
+export async function ingestTelegramChannelPost(message: TelegramMessage) {
+  await initTelegramBridgeCache()
+  const item = describeMessage(message)
+  if (!item) return false
+  cache.set(item.messageId, item)
   await persist()
+  return true
+}
+
+// Compatibilidad V7: ya no inicia un segundo getUpdates. El consumidor único es
+// TelegramRuntime; esta función únicamente restaura la caché heredada.
+export async function startTelegramBridge() {
+  if (!token() || !channelId()) return false
+  await initTelegramBridgeCache()
+  return true
+}
+
+export function stopTelegramBridge() { /* no poller since Phase 4 */ }
+export function telegramBridgeConfigured() { return Boolean(token() && channelId()) }
+export function telegramBridgeStatus() {
+  return { configured: telegramBridgeConfigured(), initialized, cachedMessages: cache.size, channelId: channelId() || null }
 }
 
 async function downloadFile(fileId: string) {
-  const file = await tg<{ file_path?: string }>('getFile', { file_id: fileId })
+  const client = new TelegramBotApiClient(token())
+  const file = await client.getFile(fileId)
   if (!file.file_path) throw new Error('Telegram no devolvió la ruta del archivo.')
-  const response = await fetch(`https://api.telegram.org/file/bot${token()}/${file.file_path}`, { signal: AbortSignal.timeout(60_000) })
+  const response = await fetch(client.fileUrl(file.file_path), { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`No se pudo descargar el contenido de Telegram (${response.status}).`)
   return Buffer.from(await response.arrayBuffer())
 }
 
-export async function startTelegramBridge() {
-  if (started || !token() || !channelId()) return false
-  started = true
-  await restore()
-  const loop = async () => {
-    while (started) {
-      try { await pollOnce() } catch { await new Promise((resolve) => setTimeout(resolve, 5000)) }
-    }
-  }
-  void loop()
-  return true
-}
-
-export function telegramBridgeConfigured() { return Boolean(token() && channelId()) }
-
 export async function shareTelegramMessage(socket: WASocket, chatId: string, messageId: number, quoted?: any) {
+  await initTelegramBridgeCache()
   const item = cache.get(messageId)
-  if (!item) throw new Error('Ese mensaje todavía no está en la caché del puente Telegram. Publica/edita el mensaje mientras el puente esté activo e inténtalo de nuevo.')
+  if (!item) throw new Error('Ese mensaje todavía no está en la caché Telegram. Publica o edita el mensaje mientras la plataforma Telegram esté activa e inténtalo de nuevo.')
   if (item.protected) throw new Error('El mensaje de Telegram tiene contenido protegido y no puede redistribuirse.')
-  const footer = channelUrl() ? `\n\n📢 *Canal de WhatsApp:* ${config.officialChannelUrl}` : `\n\n📢 *Canal de WhatsApp:* ${config.officialChannelUrl}`
+  const footer = `\n\n📢 *Canal de WhatsApp:* ${config.officialChannelUrl}${channelUrl() ? `\nTelegram: ${channelUrl()}` : ''}`
   if (item.type === 'text') {
     await socket.sendMessage(chatId, { text: `${item.text || ''}${footer}` }, quoted ? { quoted } : undefined)
     return
