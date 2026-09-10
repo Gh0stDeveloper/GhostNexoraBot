@@ -5,9 +5,11 @@ import qrcode from 'qrcode-terminal'
 import { config } from './config.js'
 import { createSocket } from './core/session.js'
 import { CommandRouter } from './core/router.js'
+import { startTypingIndicator } from './core/typing.js'
 import { settings } from './core/settings.js'
 import { subbotManager } from './core/subbots.js'
 import { commands } from './commands/index.js'
+import { createWhatsAppAdapter } from './platform/whatsapp/adapter.js'
 import { economy } from './services/economy.js'
 import { executeAdminWebControl } from './services/admin-web-control.js'
 import { installAtomicWalletBridge } from './services/wallet-atomic.js'
@@ -136,18 +138,6 @@ function startHealthServer() {
   server.listen(config.healthPort, '127.0.0.1', () => logger.info({ port: config.healthPort }, 'health/control/api server listening'))
 }
 
-function startTypingIndicator(socket: WASocket, chatId: string) {
-  void socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
-  const timer = setInterval(() => {
-    void socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
-  }, 4500)
-  timer.unref?.()
-  return () => {
-    clearInterval(timer)
-    void socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
-  }
-}
-
 async function routeMessage(
   socket: Awaited<ReturnType<typeof createSocket>>['socket'],
   message: Parameters<CommandRouter['handle']>[1],
@@ -155,6 +145,11 @@ async function routeMessage(
 ) {
   const chatId = message.key.remoteJid
   if (!chatId || !canProcessPrivateMessage(message)) return
+
+  // La frontera de salida se crea después del firewall privado. De esa forma un
+  // privado bloqueado no puede generar presencia, reacciones ni otra actividad.
+  const transport = createWhatsAppAdapter(socket)
+  transport.rememberMessage(message)
 
   // El corte privado ocurre antes de identidad, moderación, stickers, IA, presencia,
   // reacciones y comandos. Un privado no autorizado no genera ninguna salida.
@@ -205,9 +200,9 @@ async function routeMessage(
     if (state.requireMention && chatId.endsWith('@g.us')) {
       // No responder audios de grupo sin mención cuando esa política está activa.
     } else {
-      const stopTyping = startTypingIndicator(socket, chatId)
+      const stopTyping = startTypingIndicator(transport, chatId)
       try {
-        await socket.sendMessage(chatId, { react: { text: '🎧', key: message.key } }).catch(() => undefined)
+        if (message.key.id) await transport.react(chatId, message.key.id, '🎧').catch(() => undefined)
         const transcript = await transcribeWhatsAppAudio(message, false)
         if (transcript.trim().length >= 2) {
           llmFreeChat.commitRespond(chatId)
@@ -234,7 +229,7 @@ async function routeMessage(
     config.ollamaEnabled &&
     llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })
   ) {
-    const stopTyping = startTypingIndicator(socket, chatId)
+    const stopTyping = startTypingIndicator(transport, chatId)
     try {
       const response = await llmFreeChat.respond(text, chatId, pushName)
       if (!response) return
@@ -260,18 +255,19 @@ async function routeMessage(
     autoChat.isEnabled(chatId) &&
     autoChat.canRespond(chatId)
   ) {
+    const stopTyping = startTypingIndicator(transport, chatId)
     try {
       const response = await autoChat.respond(chatId, text)
       if (!response) return
-      await socket.sendPresenceUpdate('composing', chatId).catch(() => undefined)
       await sendAssistantReply(socket, chatId, response, {
         userPrompt: text,
         title: 'Ghost Nexora · Chat',
         quoted: message,
       })
-      await socket.sendPresenceUpdate('paused', chatId).catch(() => undefined)
     } catch (error) {
       logger.warn({ error, chatId }, 'auto-chat response failed')
+    } finally {
+      stopTyping()
     }
     return
   }
