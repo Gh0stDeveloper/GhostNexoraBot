@@ -10,6 +10,7 @@ import {
   type Phase3ApkItem,
   type Phase3ApkStore,
 } from '../services/download-providers/apk-stores.js'
+import { withProviderLease } from '../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../services/download-providers/runtime.js'
 
 function isUrl(value: string) {
@@ -55,8 +56,17 @@ async function downloadStore(ctx: CommandContext, store: Phase3ApkStore) {
   const token = ctx.args[0]?.trim()
   if (!token) throw new Error(`Selecciona primero una aplicación con ${ctx.prefix}${store} <búsqueda>.`)
   const progress = await createDownloadProgress(ctx, `${storeLabel(store)} · paquete Android`)
-  await progress.update('downloading', 'Resolviendo la cadena de descarga actual del proveedor')
-  const result = await downloadPhase3Apk(token)
+  await progress.update('downloading', store === 'apkmirror'
+    ? 'Esperando turno y resolviendo la cadena firmada de APKMirror'
+    : 'Resolviendo la cadena de descarga actual del proveedor')
+
+  // APKMirror documenta bloqueos temporales ante descargas simultáneas desde la
+  // misma IP. MainBot y subbots usan procesos separados, por lo que el lease se
+  // coordina mediante almacenamiento global y cubre resolución + descarga.
+  const result = store === 'apkmirror'
+    ? await withProviderLease('apkmirror', () => downloadPhase3Apk(token))
+    : await downloadPhase3Apk(token)
+
   if (result.store !== store) {
     await result.cleanup()
     throw new Error('El token pertenece a otra tienda.')
