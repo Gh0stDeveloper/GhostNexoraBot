@@ -9,6 +9,7 @@ on:
       - 'scripts/v2-phase3-provider-http-smoke.mjs'
       - 'scripts/v2-phase3-provider-lease-smoke.mjs'
       - 'scripts/v2-phase3-live-provider-audit.mjs'
+      - 'scripts/v2-phase3-live-provider-gate.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'docs/v2/**'
@@ -69,15 +70,21 @@ jobs:
       - name: Verify frozen V1 surface plus approved Phase 3 delta
         run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase3-inventory.json
 
-      - name: Live endpoint and signed-download contract audit
-        run: node scripts/v2-phase3-live-provider-audit.mjs --output=artifacts/v2-phase3-live-provider-audit.json
+      - name: Live endpoint and signed-download contract gate
+        run: >-
+          node scripts/v2-phase3-live-provider-gate.mjs
+          --allow-known-antibot-blocks
+          --output=artifacts/v2-phase3-live-provider-audit.json
+          --gate-output=artifacts/v2-phase3-live-provider-gate.json
 
       - name: Upload Phase 3 live audit
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v2-phase3-live-provider-audit
-          path: artifacts/v2-phase3-live-provider-audit.json
+          path: |
+            artifacts/v2-phase3-live-provider-audit.json
+            artifacts/v2-phase3-live-provider-gate.json
           if-no-files-found: warn
           retention-days: 30
 
