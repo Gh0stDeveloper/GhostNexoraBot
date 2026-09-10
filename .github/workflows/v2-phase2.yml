@@ -1,0 +1,76 @@
+name: V2 Phase 2
+
+on:
+  pull_request:
+    paths:
+      - 'apps/bot/**'
+      - 'packages/**'
+      - 'scripts/v2-phase2-ui-smoke.mjs'
+      - 'scripts/v2-ui-compat-audit.mjs'
+      - 'scripts/whatsapp-adapter-v2-smoke.mjs'
+      - 'scripts/v2-phase1-command-regression.mjs'
+      - 'scripts/v2-baseline-report.mjs'
+      - 'docs/v2/**'
+      - 'package.json'
+      - '.github/workflows/v2-phase2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui-compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+
+      - name: Build all workspaces
+        run: npm run build
+
+      - name: Phase 0 contracts remain valid
+        run: npm run v2:contracts
+
+      - name: Phase 1 WhatsApp adapter remains valid
+        run: npm run v2:whatsapp-adapter
+
+      - name: Phase 2 compatibility smoke and source audit
+        run: npm run v2:ui-compat
+
+      - name: Termux Lite build
+        run: npm run build:termux --workspace=@ghostnexora/bot
+
+      - name: Termux Lite profile smoke
+        run: node scripts/termux-lite-smoke.mjs
+
+      - name: Generate current command inventory
+        run: node scripts/v2-baseline-report.mjs --output=v2-phase2-inventory.json
+
+      - name: Verify frozen V1 command/provider parity
+        run: node scripts/v2-phase1-command-regression.mjs --input=v2-phase2-inventory.json
+
+      - name: Upload Phase 2 UI audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase2-ui-audit
+          path: artifacts/v2-phase2-ui-audit.json
+          retention-days: 30
+
+      - name: Upload Phase 2 command inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase2-inventory
+          path: v2-phase2-inventory.json
+          retention-days: 30
