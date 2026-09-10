@@ -12,6 +12,7 @@ export type DiscordGatewayState = 'idle' | 'connecting' | 'identifying' | 'resum
 
 export interface DiscordGatewayHandlers {
   onReady?: (ready: DiscordReady) => void | Promise<void>
+  onResumed?: () => void | Promise<void>
   onMessage?: (message: DiscordMessage) => void | Promise<void>
   onInteraction?: (interaction: DiscordInteraction) => void | Promise<void>
   onSession?: (session: DiscordGatewaySession | null) => void | Promise<void>
@@ -28,7 +29,8 @@ interface DiscordSocket {
 type SocketFactory = (url: string) => DiscordSocket
 
 const OPEN = 1
-const FATAL_CLOSE_CODES = new Set([4004, 4010, 4011, 4013, 4014])
+const FATAL_CLOSE_CODES = new Set([4004, 4010, 4011, 4012, 4013, 4014])
+const NON_RESUMABLE_CLOSE_CODES = new Set([4007, 4009])
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -109,7 +111,7 @@ export class DiscordGateway {
   private heartbeat() {
     if (!this.socket || this.socket.readyState !== OPEN) return
     if (!this.heartbeatAcked) {
-      this.socket.close(4000, 'heartbeat ack timeout')
+      try { this.socket.close(4000, 'heartbeat ack timeout') } catch {}
       return
     }
     this.heartbeatAcked = false
@@ -159,11 +161,9 @@ export class DiscordGateway {
   }
 
   private async dispatch(payload: DiscordGatewayPayload) {
-    if (typeof payload.s === 'number') {
-      if (this.session) {
-        this.session.sequence = payload.s
-        await this.persistSession()
-      }
+    if (typeof payload.s === 'number' && this.session) {
+      this.session.sequence = payload.s
+      await this.persistSession()
     }
 
     if (payload.t === 'READY') {
@@ -183,6 +183,7 @@ export class DiscordGateway {
     if (payload.t === 'RESUMED') {
       this.reconnectAttempts = 0
       await this.setState('ready')
+      await this.handlers.onResumed?.()
       return
     }
 
@@ -251,6 +252,12 @@ export class DiscordGateway {
     this.reconnectTimer.unref?.()
   }
 
+  private async invalidateAndReconnect(code: number) {
+    this.session = null
+    await this.persistSession().catch(() => undefined)
+    this.requestReconnect(`gateway close ${code}; new session required`)
+  }
+
   private async openSocket() {
     if (this.stopping) return
     const base = this.session?.resumeGatewayUrl || this.baseGatewayUrl
@@ -281,11 +288,15 @@ export class DiscordGateway {
         void this.setState('error', hint)
         return
       }
+      if (NON_RESUMABLE_CLOSE_CODES.has(code)) {
+        void this.invalidateAndReconnect(code)
+        return
+      }
       this.requestReconnect(`gateway close ${code || 'unknown'}`)
     })
 
     socket.addEventListener('error', () => {
-      if (!this.stopping) void this.setState('reconnecting', 'Discord Gateway WebSocket error')
+      if (!this.stopping) this.requestReconnect('Discord Gateway WebSocket error')
     })
   }
 
