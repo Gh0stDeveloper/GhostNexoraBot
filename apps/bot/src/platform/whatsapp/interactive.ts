@@ -263,8 +263,8 @@ export async function sendInteractiveCard(
 /**
  * Compatibilidad de carruseles V2.
  *
- * `carouselMessage` queda deliberadamente fuera del camino estable porque el
- * servidor puede aceptar el relay aunque el cliente termine mostrando el aviso
+ * El sobre de carrusel nativo queda deliberadamente fuera del camino estable porque
+ * el servidor puede aceptar el relay aunque el cliente termine mostrando el aviso
  * de actualización de WhatsApp. Los carruseles formados únicamente por acciones
  * de comando se convierten a una tarjeta `single_select`; si contienen URLs o
  * acciones anidadas se renderizan como texto accionable que conserva cada enlace
