@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -10,6 +10,8 @@ process.env.DATA_DIR = temp
 process.env.SESSION_DIR = path.join(temp, 'session')
 process.env.OLLAMA_ENABLED = 'false'
 process.env.WEB_ENABLED = 'false'
+
+const zipFixture = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(96, 0x41)])
 
 const server = createServer((request, response) => {
   if (request.url === '/start') {
@@ -51,6 +53,25 @@ const server = createServer((request, response) => {
     response.end()
     return
   }
+  if (request.url === '/binary-start') {
+    response.statusCode = 302
+    response.setHeader('location', '/binary-file')
+    response.end()
+    return
+  }
+  if (request.url === '/binary-file') {
+    response.statusCode = 200
+    response.setHeader('content-type', 'application/vnd.android.package-archive')
+    response.setHeader('content-length', String(zipFixture.length))
+    response.end(zipFixture)
+    return
+  }
+  if (request.url === '/binary-outside') {
+    response.statusCode = 307
+    response.setHeader('location', 'https://example.com/file.apk')
+    response.end()
+    return
+  }
   response.statusCode = 404
   response.end('not found')
 })
@@ -64,7 +85,7 @@ try {
   const address = server.address()
   assert.ok(address && typeof address !== 'string')
   const origin = `http://127.0.0.1:${address.port}`
-  const { ProviderHttpSession } = await import('../apps/bot/dist/services/download-providers/http.js')
+  const { ProviderHttpSession, downloadProviderFile } = await import('../apps/bot/dist/services/download-providers/http.js')
   const allowed = [/^127\.0\.0\.1$/]
   const session = new ProviderHttpSession()
 
@@ -86,7 +107,34 @@ try {
     /superó 8 redirecciones HTML/,
   )
 
-  console.log('[V2 PHASE 3 HTTP] OK — redirect-hop cookies are retained, redirect hosts are allowlisted, and redirect depth is bounded.')
+  const binary = await downloadProviderFile(`${origin}/binary-start`, {
+    allowedHosts: allowed,
+    provider: 'test-provider',
+    fileBase: 'redirected-apk',
+    extension: 'apk',
+    requireZipMagic: true,
+  })
+  try {
+    assert.equal(binary.finalUrl, `${origin}/binary-file`)
+    assert.equal(binary.size, zipFixture.length)
+    const body = await readFile(binary.filePath)
+    assert.equal(body[0], 0x50)
+    assert.equal(body[1], 0x4b)
+  } finally {
+    await binary.cleanup()
+  }
+
+  await assert.rejects(
+    downloadProviderFile(`${origin}/binary-outside`, {
+      allowedHosts: allowed,
+      provider: 'test-provider',
+      fileBase: 'blocked-redirect',
+      extension: 'apk',
+    }),
+    /Host de proveedor no permitido: example\.com/,
+  )
+
+  console.log('[V2 PHASE 3 HTTP] OK — HTML and binary redirects are bounded/allowlisted, hop cookies survive, and Android ZIP validation remains active.')
 } finally {
   await new Promise((resolve) => server.close(() => resolve()))
   await rm(temp, { recursive: true, force: true })
