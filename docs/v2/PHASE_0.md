@@ -103,6 +103,27 @@ artifacts/v2-current-inventory.json
 
 CI genera además `v2-current-inventory.json` y lo publica como artifact `v2-phase0-baseline`.
 
+### Snapshot generado y congelado
+
+La primera ejecución exitosa de `V2 Phase 0` produjo:
+
+| Perfil | Entradas | Canónicos | Nombres duplicados | Colisiones de alias |
+|---|---:|---:|---:|---:|
+| `minimal` | 508 | 403 | 71 | 37 |
+| `full` | 509 | 404 | 71 | 37 |
+
+La única función canónica presente solo en `full` es `adminpanel`.
+
+El resumen inmutable está en:
+
+```text
+docs/v2/baselines/commands-v1-summary.json
+```
+
+Guarda hashes SHA-256 del conjunto de nombres canónicos y de las filas completas del inventario, además del hash del artifact de CI. Así futuras comparaciones pueden demostrar cambios respecto al estado V1 sin depender de estimaciones manuales.
+
+Las 71 duplicaciones canónicas y 37 colisiones de alias se consideran **deuda heredada V1**. Fase 0 solo las registra; no cambia resolución de comandos. Cualquier limpieza deberá hacerse posteriormente con pruebas de compatibilidad explícitas.
+
 ## Contract tests
 
 Ejecutar:
