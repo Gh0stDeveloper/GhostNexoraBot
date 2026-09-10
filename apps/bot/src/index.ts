@@ -10,6 +10,7 @@ import { settings } from './core/settings.js'
 import { subbotManager } from './core/subbots.js'
 import { commands } from './commands/index.js'
 import { createWhatsAppAdapter } from './platform/whatsapp/adapter.js'
+import { discordRuntimeStatus, startDiscordPlatform } from './platform/discord/runtime.js'
 import { economy } from './services/economy.js'
 import { executeAdminWebControl } from './services/admin-web-control.js'
 import { installAtomicWalletBridge } from './services/wallet-atomic.js'
@@ -123,6 +124,9 @@ function startHealthServer() {
       startedAt: startedAt.toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       activeJid: mainSocket?.user?.id ?? activeJid,
+      platforms: {
+        discord: discordRuntimeStatus(),
+      },
       llm: {
         localEnabled: config.ollamaEnabled,
         model: config.ollamaEnabled ? config.ollamaModel : null,
@@ -365,6 +369,9 @@ startAutomationScheduler(() => mainSocket)
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
+void startDiscordPlatform().then((enabled) => {
+  if (enabled) logger.info('Discord native platform starting')
+}).catch((error) => logger.warn({ error }, 'Discord native platform not started'))
 
 if (config.ollamaEnabled) {
   logger.info({ model: config.ollamaModel }, 'local LLM commands and free-chat enabled')
