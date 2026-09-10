@@ -60,11 +60,11 @@ async function executeEditMessageIdPoc(
   let msgId = baseId ?? undefined
 
   if (!msgId) {
-    const { key } = await sock.sendMessage(jid, {
+    const sent = await sock.sendMessage(jid, {
       text: baseText,
     })
 
-    msgId = key?.id ?? undefined
+    msgId = sent?.key?.id ?? undefined
   }
 
   if (!msgId) {
