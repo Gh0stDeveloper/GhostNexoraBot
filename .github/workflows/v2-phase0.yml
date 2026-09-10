@@ -1,0 +1,44 @@
+name: V2 Phase 0
+
+on:
+  push:
+    branches: ["feat/v2-*", "feature/v2-*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+
+      - name: Build all workspaces
+        run: npm run build
+
+      - name: Platform contracts smoke
+        run: npm run v2:contracts
+
+      - name: Generate V1 pre-V2 command/provider baseline
+        run: node scripts/v2-baseline-report.mjs --output=v2-current-inventory.json
+
+      - name: Upload V2 baseline inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase0-baseline
+          path: v2-current-inventory.json
+          retention-days: 30
