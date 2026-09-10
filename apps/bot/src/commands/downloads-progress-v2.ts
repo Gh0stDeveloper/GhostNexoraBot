@@ -6,6 +6,7 @@ import { downloadAptoideApk } from '../services/aptoide.js'
 import { searchTikTokVideos } from '../services/tiktok-search.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { downloadXMedia } from '../services/download-providers/x.js'
+import { downloadProvidersV3Commands } from './download-providers-v3.js'
 
 function isUrl(value: string) { try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false } }
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -103,4 +104,5 @@ export const downloadProgressV2Commands: BotCommand[] = [
   { name: 'mediafire', aliases: ['mf'], category: 'downloads', description: 'Descarga un archivo MediaFire con progreso editable.', handler: mediafire },
   { name: 'apkdl', aliases: ['appdl', 'apkdownload'], category: 'downloads', description: 'Descarga una APK seleccionada con progreso editable.', handler: apkdl },
   { name: 'ytsearch', aliases: ['buscarvideo', 'ytm'], category: 'downloads', description: 'Alias retirado: la búsqueda de YouTube usa únicamente yts.', async handler(ctx) { throw new Error(`La búsqueda de YouTube se centralizó. Usa ${ctx.prefix}yts <texto>.`) } },
+  ...downloadProvidersV3Commands,
 ]
