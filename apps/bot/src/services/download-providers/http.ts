@@ -7,8 +7,8 @@ import path from 'node:path'
 import { config } from '../../config.js'
 
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
-const HTML_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
-const MAX_HTML_REDIRECTS = 8
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+const MAX_REDIRECTS = 8
 
 type StoredCookie = {
   name: string
@@ -77,6 +77,7 @@ export class ProviderHttpSession {
       let cookiePath = cookieDefaultPath(url.pathname)
       let secure = false
       let expiresAt: number | undefined
+      let invalidDomain = false
 
       for (const attribute of parts) {
         const separator = attribute.indexOf('=')
@@ -85,7 +86,10 @@ export class ProviderHttpSession {
         if (key === 'domain' && attributeValue) {
           const requestedDomain = attributeValue.replace(/^\./, '').toLowerCase()
           const host = url.hostname.toLowerCase()
-          if (!(host === requestedDomain || host.endsWith(`.${requestedDomain}`))) continue
+          if (!(host === requestedDomain || host.endsWith(`.${requestedDomain}`))) {
+            invalidDomain = true
+            break
+          }
           domain = requestedDomain
           hostOnly = false
         } else if (key === 'path' && attributeValue.startsWith('/')) {
@@ -99,6 +103,7 @@ export class ProviderHttpSession {
           if (Number.isFinite(parsed)) expiresAt = parsed
         }
       }
+      if (invalidDomain) continue
 
       const cookie: StoredCookie = { name, value, domain, path: cookiePath, secure, hostOnly, expiresAt }
       const cacheKey = `${domain}|${cookiePath}|${name}`
@@ -152,7 +157,7 @@ export class ProviderHttpSession {
     let currentUrl = assertProviderUrl(input, allowedHosts)
     let referer = options.referer
 
-    for (let redirectCount = 0; redirectCount <= MAX_HTML_REDIRECTS; redirectCount += 1) {
+    for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
       const response = await fetch(currentUrl, {
         redirect: 'manual',
         headers: this.headersFor(currentUrl, { referer, navigation: true }),
@@ -160,10 +165,10 @@ export class ProviderHttpSession {
       })
       this.captureCookies(response.headers, currentUrl)
 
-      if (HTML_REDIRECT_STATUSES.has(response.status)) {
+      if (REDIRECT_STATUSES.has(response.status)) {
         const location = response.headers.get('location')
         if (!location) throw new Error(`El proveedor respondió HTTP ${response.status} sin Location.`)
-        if (redirectCount >= MAX_HTML_REDIRECTS) throw new Error(`El proveedor superó ${MAX_HTML_REDIRECTS} redirecciones HTML.`)
+        if (redirectCount >= MAX_REDIRECTS) throw new Error(`El proveedor superó ${MAX_REDIRECTS} redirecciones HTML.`)
         const nextUrl = assertProviderUrl(new URL(location, currentUrl).toString(), allowedHosts)
         try { await response.body?.cancel() } catch {}
         referer = currentUrl
@@ -207,6 +212,48 @@ export type ProviderDownloadedFile = {
   cleanup: () => Promise<void>
 }
 
+async function fetchBinaryWithValidatedRedirects(
+  input: string,
+  allowedHosts: readonly RegExp[],
+  options: { referer?: string; headers?: Record<string, string> },
+) {
+  let currentUrl = assertProviderUrl(input, allowedHosts)
+  let referer = options.referer
+  const initialHost = new URL(currentUrl).hostname.toLowerCase()
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    const currentHost = new URL(currentUrl).hostname.toLowerCase()
+    const forwarded = { ...(options.headers ?? {}) }
+    if (currentHost !== initialHost) delete forwarded.cookie
+
+    const response = await fetch(currentUrl, {
+      redirect: 'manual',
+      headers: {
+        'user-agent': UA,
+        accept: '*/*',
+        ...forwarded,
+        ...(referer ? { referer } : {}),
+      },
+      signal: AbortSignal.timeout(20 * 60_000),
+    })
+
+    if (REDIRECT_STATUSES.has(response.status)) {
+      const location = response.headers.get('location')
+      if (!location) throw new Error(`El proveedor respondió HTTP ${response.status} sin Location durante la descarga.`)
+      if (redirectCount >= MAX_REDIRECTS) throw new Error(`El proveedor superó ${MAX_REDIRECTS} redirecciones durante la descarga.`)
+      const nextUrl = assertProviderUrl(new URL(location, currentUrl).toString(), allowedHosts)
+      try { await response.body?.cancel() } catch {}
+      referer = currentUrl
+      currentUrl = nextUrl
+      continue
+    }
+
+    return { response, finalUrl: assertProviderUrl(response.url || currentUrl, allowedHosts) }
+  }
+
+  throw new Error('El proveedor superó el límite de redirecciones durante la descarga.')
+}
+
 export async function downloadProviderFile(
   input: string,
   options: {
@@ -225,20 +272,12 @@ export async function downloadProviderFile(
   const filePath = path.join(dir, fileName)
 
   try {
-    const response = await fetch(url, {
-      redirect: 'follow',
-      headers: {
-        'user-agent': UA,
-        accept: '*/*',
-        ...(options.referer ? { referer: options.referer } : {}),
-        ...(options.headers ?? {}),
-      },
-      signal: AbortSignal.timeout(20 * 60_000),
+    const { response, finalUrl } = await fetchBinaryWithValidatedRedirects(url, options.allowedHosts, {
+      referer: options.referer,
+      headers: options.headers,
     })
     if (!response.ok || !response.body) throw new Error(`${options.provider} respondió HTTP ${response.status}.`)
 
-    const finalUrl = response.url || url
-    assertProviderUrl(finalUrl, options.allowedHosts)
     const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
     if (/text\/html|application\/json/i.test(contentType)) throw new Error(`${options.provider} devolvió ${contentType} en lugar de un archivo.`)
 
