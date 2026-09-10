@@ -211,9 +211,13 @@ await required('apkpure-signed-cdn', async () => {
     packageName: 'com.apkpure.aegon',
   })
   const parsed = new URL(direct.url)
-  if (parsed.hostname !== 'd.apkpure.net') throw new Error(`unexpected APKPure download host ${parsed.hostname}`)
+  if (!/^d\.apkpure\.(?:net|com)$/i.test(parsed.hostname)) throw new Error(`unexpected APKPure download host ${parsed.hostname}`)
   if (!/\.(?:apk|xapk|apks)$/i.test(parsed.pathname)) throw new Error('APKPure direct URL is not an Android package path')
-  const binary = await probeZip(direct.url, direct.referer, direct.headers, [/^d\.apkpure\.net$/i, /(^|\.)apkpure\.net$/i])
+  const binary = await probeZip(direct.url, direct.referer, direct.headers, [
+    /^d\.apkpure\.(?:net|com)$/i,
+    /(^|\.)apkpure\.(?:net|com)$/i,
+    /^(?:data|dl|d-\d{1,3})\.winudf\.com$/i,
+  ])
   return { detail, directHost: parsed.hostname, extension: direct.extension, signedQuery: Boolean(parsed.search), binary }
 })
 
