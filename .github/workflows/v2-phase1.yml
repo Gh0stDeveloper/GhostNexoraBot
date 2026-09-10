@@ -7,6 +7,7 @@ on:
       - 'packages/**'
       - 'scripts/whatsapp-adapter-v2-smoke.mjs'
       - 'scripts/v2-phase1-command-regression.mjs'
+      - 'scripts/v2-phase3-command-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'scripts/v2-inventory-worker.mjs'
       - 'docs/v2/**'
@@ -54,8 +55,8 @@ jobs:
       - name: Generate current command inventory
         run: node scripts/v2-baseline-report.mjs --output=v2-phase1-inventory.json
 
-      - name: Verify frozen V1 command/provider parity
-        run: node scripts/v2-phase1-command-regression.mjs --input=v2-phase1-inventory.json
+      - name: Verify frozen V1 surface plus approved Phase 3 delta
+        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase1-inventory.json
 
       - name: Upload Phase 1 inventory
         uses: actions/upload-artifact@v4
