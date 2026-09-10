@@ -32,8 +32,12 @@ type CachedApkItem = {
 }
 
 const APKMIRROR_HOSTS = [/(^|\.)apkmirror\.com$/i]
-const APKPURE_HOSTS = [/(^|\.)apkpure\.net$/i]
-const APKPURE_DOWNLOAD_HOSTS = [/^d\.apkpure\.net$/i, /(^|\.)apkpure\.net$/i]
+const APKPURE_HOSTS = [/(^|\.)apkpure\.(?:net|com)$/i]
+const APKPURE_DOWNLOAD_HOSTS = [
+  /^d\.apkpure\.(?:net|com)$/i,
+  /(^|\.)apkpure\.(?:net|com)$/i,
+  /^(?:data|dl|d-\d{1,3})\.winudf\.com$/i,
+]
 const CACHE_TTL_MS = 30 * 60_000
 const MAX_RESULTS = 8
 const cache = new Map<string, CachedApkItem>()
@@ -316,7 +320,7 @@ export function findApkPureDirectUrl(html: string, baseUrl: string) {
     .map((_index, element) => {
       const href = absolute(baseUrl, $(element).attr('href'))
       const text = $(element).text().replace(/\s+/g, ' ').trim()
-      return href && /^https:\/\/d\.apkpure\.net\//i.test(href) ? { href, text } : null
+      return href && /^https:\/\/d\.apkpure\.(?:net|com)\//i.test(href) ? { href, text } : null
     })
     .get()
     .filter(Boolean) as Array<{ href: string; text: string }>
@@ -345,7 +349,7 @@ export async function resolvePhase3ApkDirect(item: Phase3ApkItem, seedSession?: 
   detailPath.pathname = `${detailPath.pathname.replace(/\/+$/, '')}/download`
   const page = await session.fetchHtml(detailPath.toString(), APKPURE_HOSTS, { referer: item.pageUrl })
   const direct = findApkPureDirectUrl(page.html, page.finalUrl)
-  if (!direct) throw new Error('APKPure no expuso su enlace firmado d.apkpure.net en la página de descarga.')
+  if (!direct) throw new Error('APKPure no expuso su enlace firmado d.apkpure.net/com en la página de descarga.')
   return {
     store: item.store,
     url: direct,
