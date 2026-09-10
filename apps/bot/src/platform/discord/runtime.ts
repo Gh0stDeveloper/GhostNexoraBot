@@ -10,9 +10,17 @@ import type { DiscordGatewaySession, DiscordInteraction, DiscordMessage, Discord
 
 type DiscordRuntimeState = 'disabled' | 'starting' | 'running' | 'reconnecting' | 'stopped' | 'error'
 
+type PersistedIdentity = {
+  botId: string
+  username: string
+  applicationId: string
+  guildCount: number
+}
+
 type PersistedState = {
   schemaVersion: 1
   session: DiscordGatewaySession | null
+  identity?: PersistedIdentity
   updatedAt: string
 }
 
@@ -27,6 +35,18 @@ function safeSession(value: unknown): DiscordGatewaySession | null {
     sessionId: String(row.sessionId),
     resumeGatewayUrl: String(row.resumeGatewayUrl),
     sequence,
+  }
+}
+
+function safeIdentity(value: unknown): PersistedIdentity | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Partial<PersistedIdentity>
+  if (!row.botId || !row.applicationId || !row.username) return null
+  return {
+    botId: String(row.botId),
+    username: String(row.username),
+    applicationId: String(row.applicationId),
+    guildCount: Number.isSafeInteger(row.guildCount) && Number(row.guildCount) >= 0 ? Number(row.guildCount) : 0,
   }
 }
 
@@ -68,10 +88,31 @@ export class DiscordRuntime {
     }
   }
 
+  private identitySnapshot(): PersistedIdentity | undefined {
+    if (!this.botId || !this.username || !this.applicationId) return undefined
+    return {
+      botId: this.botId,
+      username: this.username,
+      applicationId: this.applicationId,
+      guildCount: this.guildCount,
+    }
+  }
+
   private async restoreState() {
     try {
       const raw = JSON.parse(await readFile(discordConfig.stateFile, 'utf8')) as Partial<PersistedState>
-      if (raw.schemaVersion === 1) this.session = safeSession(raw.session)
+      if (raw.schemaVersion !== 1) return
+      const identity = safeIdentity(raw.identity)
+      const session = safeSession(raw.session)
+      // A resumed Gateway session does not emit READY again. Resume is only safe
+      // across process restarts when the bot/application identity was persisted too.
+      if (session && identity) {
+        this.session = session
+        this.botId = identity.botId
+        this.username = identity.username
+        this.applicationId = identity.applicationId
+        this.guildCount = identity.guildCount
+      }
     } catch { /* first start */ }
   }
 
@@ -81,6 +122,7 @@ export class DiscordRuntime {
     const payload: PersistedState = {
       schemaVersion: 1,
       session: this.session,
+      identity: this.identitySnapshot(),
       updatedAt: new Date().toISOString(),
     }
     await writeFile(discordConfig.stateFile, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 })
@@ -95,10 +137,8 @@ export class DiscordRuntime {
     else if (state === 'connecting' || state === 'identifying' || state === 'resuming') this.state = 'starting'
   }
 
-  private async registerCommands(ready: DiscordReady) {
+  private async registerCommands(applicationId: string) {
     if (!discordConfig.registerCommands || !this.rest) return
-    const applicationId = ready.application?.id
-    if (!applicationId) throw new Error('Discord READY no devolvió application.id para registrar comandos.')
     await this.rest.overwriteApplicationCommands(applicationId, discordApplicationCommands, discordConfig.guildId || undefined)
     logger.info({
       commands: discordApplicationCommands.length,
@@ -115,13 +155,31 @@ export class DiscordRuntime {
     this.lastEventAt = this.readyAt
     this.lastError = undefined
     this.router?.setBotUserId(ready.user.id)
+    await this.persistSession(this.session).catch((error) =>
+      logger.warn({ error }, 'Discord READY identity state could not be persisted'))
     try {
-      await this.registerCommands(ready)
+      await this.registerCommands(ready.application.id)
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error)
       logger.warn({ error }, 'Discord application command sync failed; Gateway remains active')
     }
     logger.info({ botId: this.botId, username: this.username, guilds: this.guildCount }, 'Discord native platform ready')
+  }
+
+  private async onResumed() {
+    this.readyAt = new Date().toISOString()
+    this.lastEventAt = this.readyAt
+    this.lastError = undefined
+    if (this.botId) this.router?.setBotUserId(this.botId)
+    if (this.applicationId) {
+      try {
+        await this.registerCommands(this.applicationId)
+      } catch (error) {
+        this.lastError = error instanceof Error ? error.message : String(error)
+        logger.warn({ error }, 'Discord command sync after RESUMED failed; Gateway remains active')
+      }
+    }
+    logger.info({ botId: this.botId, username: this.username, sequence: this.session?.sequence }, 'Discord native platform resumed')
   }
 
   private async onMessage(message: DiscordMessage) {
@@ -168,12 +226,13 @@ export class DiscordRuntime {
 
     this.rest = new DiscordRestClient(discordConfig.token)
     this.adapter = new DiscordAdapter(this.rest)
-    this.router = new DiscordCommandRouter(this.adapter, undefined, () => this.status())
+    this.router = new DiscordCommandRouter(this.adapter, this.botId, () => this.status())
     this.gateway = new DiscordGateway(this.rest, discordConfig.token, discordConfig.intents, {
       onState: (state, error) => this.mapGatewayState(state, error),
       onSession: (session) => this.persistSession(session).catch((error) =>
         logger.warn({ error }, 'Discord Gateway session state could not be persisted')),
       onReady: (ready) => this.onReady(ready),
+      onResumed: () => this.onResumed(),
       onMessage: (message) => this.onMessage(message).catch((error) =>
         logger.warn({ error, channelId: message.channel_id }, 'Discord message failed')),
       onInteraction: (interaction) => this.onInteraction(interaction).catch((error) =>
