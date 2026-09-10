@@ -100,6 +100,31 @@ async function executeEditMessageIdPoc(
   }
 }
 
+/**
+ * Port TypeScript del núcleo usado por VALLEY-STUDIOS/ValleyInvisible.
+ *
+ * La operación se conserva tal cual: construir un extendedTextMessage y
+ * transmitirlo con relayMessage forzando customId como messageId.
+ *
+ * Copyright (c) 2026 Valley Studios — código original bajo licencia MIT.
+ */
+async function executeValleyInvisibleMessageIdCollision(
+  sock: WASocket,
+  targetJid: string,
+  customId: string,
+  messageText: string,
+) {
+  const messageContent = {
+    extendedTextMessage: {
+      text: messageText,
+    },
+  }
+
+  await sock.relayMessage(targetJid, messageContent, {
+    messageId: customId,
+  })
+}
+
 function assertBugBountyScope(ctx: CommandContext) {
   if (!ctx.isOwner && !ctx.isBotStaff) {
     throw new Error('Solo el owner y el staff del bot pueden usar este comando.')
@@ -134,31 +159,50 @@ async function editQuotedMessagePoc(ctx: CommandContext) {
   // En caso contrario se crea el mensaje base vacío, exactamente como el original.
   const baseId = ctx.message.key.fromMe ? ctx.message.key.id : undefined
 
-  await executeEditMessageIdPoc(
-    {
-      jid: ctx.chatId,
-      replyId: targetMessageId,
-      sock: ctx.socket as unknown as WASocket,
-      baseId,
-      baseText: '',
-    },
-    newText,
-    async (data) => {
-      // ValleyBot elimina el stanzaId citado después de emitir la edición.
-      await data.sock.sendMessage(data.jid, {
-        delete: {
-          id: data.replyId,
-        },
-      } as never).catch(() => undefined)
-    },
-  )
+  try {
+    await executeEditMessageIdPoc(
+      {
+        jid: ctx.chatId,
+        replyId: targetMessageId,
+        sock: ctx.socket as unknown as WASocket,
+        baseId,
+        baseText: '',
+      },
+      newText,
+      async (data) => {
+        // ValleyBot elimina el stanzaId citado después de emitir la edición.
+        await data.sock.sendMessage(data.jid, {
+          delete: {
+            id: data.replyId,
+          },
+        } as never).catch(() => undefined)
+      },
+    )
+    return
+  } catch (valleyBotError) {
+    // Compatibilidad literal con ValleyInvisible: si el transporte de edición
+    // de ValleyBot es rechazado, se conserva su primitive de colisión de ID.
+    try {
+      await executeValleyInvisibleMessageIdCollision(
+        ctx.socket as unknown as WASocket,
+        ctx.chatId,
+        targetMessageId,
+        newText,
+      )
+      return
+    } catch (valleyInvisibleError) {
+      const primary = valleyBotError instanceof Error ? valleyBotError.message : String(valleyBotError)
+      const fallback = valleyInvisibleError instanceof Error ? valleyInvisibleError.message : String(valleyInvisibleError)
+      throw new Error(`No se pudo ejecutar la edición. ValleyBot: ${primary}. ValleyInvisible: ${fallback}.`)
+    }
+  }
 }
 
 const editCommand: BotCommand = {
   name: 'edit',
   aliases: ['editbot', 'editar', 'valleyedit'],
   category: 'owner',
-  description: 'PoC de edición por stanzaId con el método ValleyBot, limitada a grupos de bug bounty autorizados.',
+  description: 'PoC de edición por stanzaId con compatibilidad ValleyBot/ValleyInvisible, limitada a grupos de bug bounty autorizados.',
   usage: 'edit <nuevo texto>',
   staffOnly: true,
   groupOnly: true,
