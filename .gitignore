@@ -9,6 +9,7 @@ data/
 *.log
 .DS_Store
 coverage/
+artifacts/
 apps/*/.next/
 apps/*/dist/
 apps/bot/assets/waifus/
