@@ -8,7 +8,7 @@ const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) 
 const apk = await import('../apps/bot/dist/services/download-providers/apk-stores.js')
 
 const report = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   checkedAt: new Date().toISOString(),
   required: {},
   advisory: {},
@@ -31,11 +31,12 @@ async function retry(label, work, attempts = 3) {
   throw new Error(`${label}: ${compactError(last)}`)
 }
 
-async function probeZip(url, referer) {
+async function probeZip(url, referer, requestHeaders = {}) {
   const response = await fetch(url, {
     redirect: 'follow',
     headers: {
-      'user-agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/131 Safari/537.36 GhostNexoraBot/2.0-live-audit',
+      ...requestHeaders,
+      'user-agent': requestHeaders['user-agent'] || 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
       accept: 'application/vnd.android.package-archive,application/zip,application/octet-stream,*/*',
       range: 'bytes=0-7',
       ...(referer ? { referer } : {}),
@@ -133,8 +134,16 @@ try {
     const parsed = new URL(direct.url)
     if (!parsed.pathname.includes('/wp-content/themes/APKMirror/download.php')) throw new Error('APKMirror did not resolve through download.php')
     if (!parsed.searchParams.get('id') || !parsed.searchParams.get('key')) throw new Error('APKMirror signed URL missing id/key')
-    const binary = await probeZip(direct.url, direct.referer)
-    return { variantUrl, signedPath: parsed.pathname, hasDynamicId: true, hasDynamicKey: true, binary }
+    const binary = await probeZip(direct.url, direct.referer, direct.headers)
+    return {
+      variantUrl,
+      signedPath: parsed.pathname,
+      hasDynamicId: true,
+      hasDynamicKey: true,
+      observedWaitMs: direct.waitMs ?? 0,
+      sessionHeadersForwarded: Boolean(direct.headers?.cookie),
+      binary,
+    }
   })
 
   await required('apkpure-online-downloader', async () => {
@@ -156,7 +165,7 @@ try {
     const parsed = new URL(direct.url)
     if (parsed.hostname !== 'd.apkpure.net') throw new Error(`unexpected APKPure download host ${parsed.hostname}`)
     if (!/\.(?:apk|xapk|apks)$/i.test(parsed.pathname)) throw new Error('APKPure direct URL is not an Android package path')
-    const binary = await probeZip(direct.url, direct.referer)
+    const binary = await probeZip(direct.url, direct.referer, direct.headers)
     return { detail, directHost: parsed.hostname, extension: direct.extension, signedQuery: Boolean(parsed.search), binary }
   })
 
@@ -180,4 +189,4 @@ try {
 }
 
 if (fatal) throw fatal
-console.log('[V2 PHASE 3 LIVE] PASS — current provider endpoints and signed download chains are reachable and structurally valid.')
+console.log('[V2 PHASE 3 LIVE] PASS — current provider endpoints and signed download chains are reachable and structurally valid with provider session state preserved.')
