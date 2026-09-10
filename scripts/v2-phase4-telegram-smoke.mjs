@@ -44,7 +44,7 @@ assert.equal(normalized.platform, 'telegram')
 assert.equal(normalized.senderId, 'telegram:9988')
 assert.equal(normalized.chatId, '-100123456')
 assert.equal(normalized.isGroup, true)
-assert.equal(normalized.replyToMessageId, '41')
+assert.equal(normalized.replyTo, '41')
 assert.equal(normalized.media?.kind, 'image')
 assert.equal(telegramFileId(incoming), 'large')
 
