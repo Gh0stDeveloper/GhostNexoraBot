@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "description": "Ghost Nexora Bot - WhatsApp Multi-Device bot, economy, subbots and Next.js web",
-  "workspaces": ["apps/*"],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "postinstall": "node scripts/install-cli.mjs",
     "assets:waifus": "node scripts/extract-waifus.mjs",
@@ -14,7 +14,9 @@
     "pair": "npm run pair --workspace=@ghostnexora/bot",
     "session:repair": "node scripts/repair-main-session.mjs",
     "web": "npm run start --workspace=@ghostnexora/web",
-    "llm:train": "npm run llm:train --workspace=@ghostnexora/bot"
+    "llm:train": "npm run llm:train --workspace=@ghostnexora/bot",
+    "v2:contracts": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/core && npm run build --workspace=@ghostnexora/runtime && node scripts/platform-contracts-v2-smoke.mjs",
+    "v2:inventory": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-baseline-report.mjs"
   },
   "overrides": {
     "redstar": {
