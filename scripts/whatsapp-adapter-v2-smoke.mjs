@@ -122,7 +122,7 @@ try {
 
   await adapter.react(incoming.key.remoteJid, incoming.key.id, '⚡')
   assert.equal(sentCalls[4].content.react.text, '⚡')
-  assert.equal(sentCalls[4].content.react.key, incoming.key)
+  assert.deepEqual(sentCalls[4].content.react.key, incoming.key)
 
   await adapter.setTyping(incoming.key.remoteJid, true)
   await adapter.setTyping(incoming.key.remoteJid, false)
