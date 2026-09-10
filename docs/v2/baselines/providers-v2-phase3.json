@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "phase": 3,
+  "totalProviders": 21,
+  "providers": [
+    { "id": "youtube", "family": "social-media", "status": "existing" },
+    { "id": "tiktok", "family": "social-media", "status": "existing" },
+    { "id": "instagram", "family": "social-media", "status": "existing" },
+    { "id": "facebook", "family": "social-media", "status": "existing" },
+    { "id": "twitter", "family": "social-media", "status": "hardened", "primary": "X API v2 when configured", "fallback": "yt-dlp" },
+    { "id": "vk", "family": "social-media", "status": "added", "primary": "VK API video.get v5.199 when configured", "fallback": "yt-dlp" },
+    { "id": "soundcloud", "family": "audio", "status": "existing" },
+    { "id": "mediafire", "family": "files", "status": "existing" },
+    { "id": "erome", "family": "adult-media", "status": "existing" },
+    { "id": "xvideos", "family": "adult-media", "status": "existing" },
+    { "id": "xnxx", "family": "adult-media", "status": "existing" },
+    { "id": "pornhub", "family": "adult-media", "status": "existing" },
+    { "id": "uptodown", "family": "android-store", "status": "existing" },
+    { "id": "liteapks", "family": "android-store", "status": "existing" },
+    { "id": "aptoide", "family": "android-store", "status": "existing" },
+    { "id": "happymod", "family": "android-store", "status": "existing" },
+    { "id": "fdroid", "family": "android-store", "status": "existing" },
+    { "id": "apktools", "family": "android-store", "status": "existing" },
+    { "id": "androforever", "family": "android-store", "status": "existing" },
+    { "id": "apkmirror", "family": "android-store", "status": "added", "primary": "live HTML + signed download chain" },
+    { "id": "apkpure", "family": "android-store", "status": "added", "primary": "Online APK Downloader + live signed CDN href" }
+  ]
+}

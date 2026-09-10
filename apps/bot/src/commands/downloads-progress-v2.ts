@@ -5,6 +5,8 @@ import { downloadMediaFire } from '../services/mediafire.js'
 import { downloadAptoideApk } from '../services/aptoide.js'
 import { searchTikTokVideos } from '../services/tiktok-search.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+import { downloadXMedia } from '../services/download-providers/x.js'
+import { downloadProvidersV3Commands } from './download-providers-v3.js'
 
 function isUrl(value: string) { try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false } }
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -13,6 +15,34 @@ async function socialDownload(ctx: CommandContext, name: string, platform: 'tikt
   if (!isUrl(url)) throw new Error(`Uso: ${ctx.prefix}${name.toLowerCase()} <url>`)
   const progress = await createDownloadProgress(ctx, `${name} · video`)
   await progress.update('downloading', 'Obteniendo y validando el archivo')
+
+  if (platform === 'twitter') {
+    const result = await downloadXMedia(url)
+    try {
+      const total = result.files.reduce((sum, file) => sum + file.size, 0)
+      await progress.update('sending', `${result.files.length} archivo(s) · ${size(total)} · ${result.provider}`)
+      for (const [index, file] of result.files.entries()) {
+        if (file.kind === 'image') {
+          await ctx.socket.sendMessage(ctx.chatId, {
+            image: { url: file.filePath },
+            caption: index === 0 ? `X/Twitter · ${result.provider} · ${size(total)}` : undefined,
+          }, { quoted: ctx.message })
+        } else {
+          await ctx.socket.sendMessage(ctx.chatId, {
+            video: { url: file.filePath },
+            mimetype: 'video/mp4',
+            caption: index === 0 ? `X/Twitter · ${result.provider} · ${size(total)}` : undefined,
+          }, { quoted: ctx.message })
+        }
+      }
+      recordSubbotDownload(ctx.instanceId, total)
+      await progress.update('done', `${result.files.length} archivo(s) enviados.`)
+    } finally {
+      await result.cleanup()
+    }
+    return
+  }
+
   const result = await downloadSocialVideo(url, platform)
   try {
     await progress.update('sending', `${size(result.size)} · enviando a WhatsApp`)
@@ -74,4 +104,5 @@ export const downloadProgressV2Commands: BotCommand[] = [
   { name: 'mediafire', aliases: ['mf'], category: 'downloads', description: 'Descarga un archivo MediaFire con progreso editable.', handler: mediafire },
   { name: 'apkdl', aliases: ['appdl', 'apkdownload'], category: 'downloads', description: 'Descarga una APK seleccionada con progreso editable.', handler: apkdl },
   { name: 'ytsearch', aliases: ['buscarvideo', 'ytm'], category: 'downloads', description: 'Alias retirado: la búsqueda de YouTube usa únicamente yts.', async handler(ctx) { throw new Error(`La búsqueda de YouTube se centralizó. Usa ${ctx.prefix}yts <texto>.`) } },
+  ...downloadProvidersV3Commands,
 ]

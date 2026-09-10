@@ -9,6 +9,7 @@ on:
       - 'scripts/v2-ui-compat-audit.mjs'
       - 'scripts/whatsapp-adapter-v2-smoke.mjs'
       - 'scripts/v2-phase1-command-regression.mjs'
+      - 'scripts/v2-phase3-command-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'docs/v2/**'
       - 'package.json'
@@ -58,8 +59,8 @@ jobs:
       - name: Generate current command inventory
         run: node scripts/v2-baseline-report.mjs --output=v2-phase2-inventory.json
 
-      - name: Verify frozen V1 command/provider parity
-        run: node scripts/v2-phase1-command-regression.mjs --input=v2-phase2-inventory.json
+      - name: Verify frozen V1 surface plus approved Phase 3 delta
+        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase2-inventory.json
 
       - name: Upload Phase 2 UI audit
         uses: actions/upload-artifact@v4
