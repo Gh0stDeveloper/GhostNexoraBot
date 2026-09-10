@@ -1,6 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { config } from '../../config.js'
 import { ingestTelegramChannelPost, initTelegramBridgeCache } from '../../services/telegram-bridge-v7.js'
 import { logger } from '../../utils/logger.js'
 import { TelegramAdapter } from './adapter.js'
@@ -65,13 +64,9 @@ export class TelegramRuntime {
   }
 
   private async callback(query: TelegramCallbackQuery) {
-    await this.client!.answerCallbackQuery(query.id).catch(() => undefined)
-    if (!query.message) return
     const command = this.adapter!.resolveCallbackData(query.data)
-    if (!command) {
-      await this.client!.answerCallbackQuery(query.id, 'Esta acción expiró. Ejecuta de nuevo el comando.').catch(() => undefined)
-      return
-    }
+    await this.client!.answerCallbackQuery(query.id, command ? undefined : 'Esta acción expiró. Ejecuta de nuevo el comando.').catch(() => undefined)
+    if (!query.message || !command) return
     const synthetic: TelegramMessage = {
       ...query.message,
       from: query.from,
@@ -111,10 +106,11 @@ export class TelegramRuntime {
         this.lastError = error instanceof Error ? error.message : String(error)
         if (error instanceof TelegramApiError && error.errorCode === 409) {
           this.state = 'error'
+          this.running = false
           logger.error({ error: this.lastError }, 'Telegram getUpdates conflict; another poller or webhook is active')
-        } else {
-          logger.warn({ error }, 'Telegram long poll failed; retrying')
+          break
         }
+        logger.warn({ error }, 'Telegram long poll failed; retrying')
         await new Promise((resolve) => setTimeout(resolve, telegramConfig.reconnectDelayMs))
       }
     }
@@ -128,7 +124,6 @@ export class TelegramRuntime {
     }
 
     this.state = 'starting'
-    await restoreSettingsIfNeeded()
     await this.restoreState()
     await initTelegramBridgeCache()
     this.client = new TelegramBotApiClient(telegramConfig.token)
@@ -170,16 +165,8 @@ export class TelegramRuntime {
     if (this.state === 'running' || this.state === 'starting') this.state = 'stopped'
     await this.persistState().catch(() => undefined)
     await this.adapter?.stop().catch(() => undefined)
-    // No esperamos indefinidamente un getUpdates abierto; el timeout de Bot API lo
-    // libera por sí solo. El proceso puede finalizar inmediatamente si recibe señal.
+    void this.loopPromise
   }
-}
-
-async function restoreSettingsIfNeeded() {
-  // index.ts ya inicializa settings antes de arrancar Telegram. El import queda aquí
-  // documentado como frontera: Telegram comparte el prefijo/identidad de producto,
-  // no una segunda configuración de comandos.
-  void config.defaultPrefix
 }
 
 export async function startTelegramPlatform() {
