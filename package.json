@@ -21,7 +21,8 @@
     "v2:ui-compat": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase2-ui-smoke.mjs && node scripts/v2-ui-compat-audit.mjs",
     "v2:providers": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase3-provider-smoke.mjs && node scripts/v2-phase3-provider-http-smoke.mjs && node scripts/v2-phase3-provider-lease-smoke.mjs",
     "v2:providers:live": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase3-live-provider-audit.mjs",
-    "v2:telegram": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase4-telegram-smoke.mjs && node scripts/v2-phase4-telegram-audit.mjs"
+    "v2:telegram": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase4-telegram-smoke.mjs && node scripts/v2-phase4-telegram-audit.mjs",
+    "v2:discord": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase5-discord-smoke.mjs && node scripts/v2-phase5-discord-rest-smoke.mjs && node scripts/v2-phase5-discord-gateway-smoke.mjs && node scripts/v2-phase5-discord-runtime-smoke.mjs && node scripts/v2-phase5-discord-audit.mjs"
   },
   "overrides": {
     "redstar": {
