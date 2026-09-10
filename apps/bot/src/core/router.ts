@@ -10,6 +10,7 @@ import { resolveStoredIdentity } from '../services/identity.js'
 import { settings } from './settings.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
+import { createWhatsAppAdapter } from '../platform/whatsapp/adapter.js'
 import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 
 function normalizeJid(value?: string | null) {
@@ -115,10 +116,31 @@ export class CommandRouter {
     const locale = resolveChatLocale(chatId)
     const localizedSocket = createLocalizedSocket(socket, locale)
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
+    const pushName = message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser'))
+
+    // V2 adapter: encapsula toda salida común del router, pero el socket localizado
+    // sigue presente en CommandContext como puente para comandos WhatsApp-only V1.
+    const adapter = createWhatsAppAdapter(socket, this.options.instanceId)
+    const normalizedMessage = adapter.normalizeMessage(message, {
+      senderId: sender,
+      text,
+      isGroup,
+      pushName,
+    })
     performanceAudit.recordStage('03', performance.now() - stateStarted)
 
-    const reply = (replyText: string) => localizedSocket.sendMessage(chatId, { text: replyText }, { quoted: message })
-    const react = (emoji: string) => localizedSocket.sendMessage(chatId, { react: { text: emoji, key: message.key } })
+    const reply = async (replyText: string) => {
+      const sent = await adapter.sendText(chatId, replyText, { replyTo: message.key.id ?? undefined })
+      // V1 compatibility: varios comandos guardan `ctx.reply()` para editar después
+      // usando la key de Baileys. El envío ya pasa por el adapter, pero el retorno
+      // continúa siendo el WAMessage crudo hasta migrar esos comandos.
+      return sent.raw
+    }
+    const react = async (emoji: string) => {
+      const messageId = message.key.id
+      if (!messageId) return undefined
+      return adapter.react(chatId, messageId, emoji)
+    }
 
     let senderIsGroupAdmin = false
     if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner) {
@@ -144,7 +166,10 @@ export class CommandRouter {
         const messageText = result.accepted
           ? t('router.relationship.accepted', { proposer: result.proposerJid.split('@')[0] ?? '', target: result.targetJid.split('@')[0] ?? '', kind })
           : t('router.relationship.rejected', { proposer: result.proposerJid.split('@')[0] ?? '', target: result.targetJid.split('@')[0] ?? '' })
-        await localizedSocket.sendMessage(chatId, { text: messageText, mentions: [result.proposerJid, result.targetJid] }, { quoted: message })
+        await adapter.sendText(chatId, messageText, {
+          replyTo: message.key.id ?? undefined,
+          mentions: [result.proposerJid, result.targetJid],
+        })
         await react(result.accepted ? '💞' : '💔').catch(() => undefined)
         return true
       } catch (error) {
@@ -225,13 +250,29 @@ export class CommandRouter {
       finishFilters()
 
       const context: CommandContext = {
-        socket: localizedSocket, message, chatId, sender,
-        pushName: message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser')),
-        commandName: command.name, args, argText: args.join(' '), prefix, settings, locale, t,
-        isOwner, isBotStaff, isGroup, isSubbotOwner,
+        platform: 'whatsapp',
+        adapter,
+        normalizedMessage,
+        socket: localizedSocket,
+        message,
+        chatId,
+        sender,
+        pushName,
+        commandName: command.name,
+        args,
+        argText: args.join(' '),
+        prefix,
+        settings,
+        locale,
+        t,
+        isOwner,
+        isBotStaff,
+        isGroup,
+        isSubbotOwner,
         instanceId: this.options.instanceId,
         instanceOwnerJid: this.options.instanceOwnerJid,
-        reply, react,
+        reply,
+        react,
       }
 
       const executionStarted = performance.now()

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "kind": "ghost-nexora-v2-phase1-command-regression",
+  "sourceSha": "f50f27a4438bb3bd7958e5d28956d3aed4b11997",
+  "sourceArtifactId": 10135146185,
+  "algorithm": {
+    "canonicalNamesSha256": "sha256(sorted(unique(command.name)).join('\\n') + '\\n')",
+    "commandRowsSha256": "sha256(commands.map(JSON.stringify).join('\\n') + '\\n')",
+    "allTokensSha256": "sha256(sorted(unique(name + aliases)).join('\\n') + '\\n')"
+  },
+  "providerCount": 18,
+  "profiles": {
+    "minimal": {
+      "commandCount": 508,
+      "canonicalCommandCount": 403,
+      "duplicateCanonicalNameCount": 71,
+      "aliasCollisionCount": 37,
+      "allTokenCount": 1033,
+      "canonicalNamesSha256": "025db05c48a560381823b34afb58293718be9de3c95ec034c23892d2c10e973a",
+      "commandRowsSha256": "d10fc8cca6a7f035dbf5d7c502d2c912babb313fa52fe7a6533f98af00ba3129",
+      "allTokensSha256": "95e24da35287c08d7da6bbdc146ce215a4b39e5737449f49c2939deb3e5a2e82"
+    },
+    "full": {
+      "commandCount": 509,
+      "canonicalCommandCount": 404,
+      "duplicateCanonicalNameCount": 71,
+      "aliasCollisionCount": 37,
+      "allTokenCount": 1035,
+      "canonicalNamesSha256": "bcce45b16062700f13f61e519cc49d5c0b8ec1b3c7290f366919a6e1bfe46f32",
+      "commandRowsSha256": "d9709967f9db42d8278151f8fc47bd041568c6b517ffbc3669679c69d52e4a78",
+      "allTokensSha256": "cbad931da27b1493d9ca21704b284e5b557dc0c2de4ad75597d082fbcece1de2"
+    }
+  }
+}

@@ -18,7 +18,7 @@ try {
   assert.ok(Buffer.isBuffer(local), 'local artwork must be materialized as a Buffer before WhatsApp use')
   assert.deepEqual(local, sample, 'preloaded local artwork must preserve bytes')
 
-  const interactive = await read('apps/bot/src/services/interactive.ts')
+  const interactive = await read('apps/bot/src/platform/whatsapp/interactive.ts')
   const richPreview = await read('apps/bot/src/services/rich-link-preview.ts')
   const moderation = await read('apps/bot/src/services/moderation-v2.ts')
   const menu = await read('apps/bot/src/commands/menu-v5.ts')
@@ -32,7 +32,8 @@ try {
   const stickers = await read('apps/bot/src/commands/stickers.ts')
   const privatePolicy = await read('apps/bot/src/services/private-chat-policy.ts')
 
-  // Interactive cards/carousels preload media for their own headers.
+  // Interactive cards/carousels preload media for their own headers. V2 moves
+  // the implementation to the WhatsApp transport boundary without changing it.
   assert.match(interactive, /preloadWhatsAppMedia\(imageUrl/, 'interactive cards must preload their image source')
   assert.match(interactive, /generateWAMessageContent\(\{ image \}/, 'interactive cards must upload the materialized media')
   assert.doesNotMatch(interactive, /generateWAMessageContent\(\{ image: \{ url: imageUrl \} \}/, 'old direct-url interactive upload must not return')

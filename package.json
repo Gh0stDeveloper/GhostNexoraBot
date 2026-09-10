@@ -16,7 +16,8 @@
     "web": "npm run start --workspace=@ghostnexora/web",
     "llm:train": "npm run llm:train --workspace=@ghostnexora/bot",
     "v2:contracts": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/core && npm run build --workspace=@ghostnexora/runtime && node scripts/platform-contracts-v2-smoke.mjs",
-    "v2:inventory": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-baseline-report.mjs"
+    "v2:inventory": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-baseline-report.mjs",
+    "v2:whatsapp-adapter": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/whatsapp-adapter-v2-smoke.mjs"
   },
   "overrides": {
     "redstar": {
