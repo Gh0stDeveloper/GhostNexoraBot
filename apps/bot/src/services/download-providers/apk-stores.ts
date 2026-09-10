@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { load } from 'cheerio'
-import { downloadProviderFile, fetchProviderHtml, ProviderHttpSession } from './http.js'
+import { downloadProviderFile, ProviderHttpSession } from './http.js'
 import { withProviderTelemetry } from './runtime.js'
 
 export type Phase3ApkStore = 'apkmirror' | 'apkpure'
@@ -25,12 +25,18 @@ export type Phase3ApkDirect = {
   waitMs?: number
 }
 
+type CachedApkItem = {
+  item: Phase3ApkItem
+  expiresAt: number
+  session?: ProviderHttpSession
+}
+
 const APKMIRROR_HOSTS = [/(^|\.)apkmirror\.com$/i]
 const APKPURE_HOSTS = [/(^|\.)apkpure\.net$/i]
 const APKPURE_DOWNLOAD_HOSTS = [/^d\.apkpure\.net$/i, /(^|\.)apkpure\.net$/i]
 const CACHE_TTL_MS = 30 * 60_000
 const MAX_RESULTS = 8
-const cache = new Map<string, { item: Phase3ApkItem; expiresAt: number }>()
+const cache = new Map<string, CachedApkItem>()
 
 function absolute(base: string, value?: string | null) {
   if (!value) return undefined
@@ -62,15 +68,19 @@ function relevance(query: string, name: string, extra = '') {
   return score
 }
 
-function remember(store: Phase3ApkStore, input: Omit<Phase3ApkItem, 'token' | 'store'>) {
+function remember(
+  store: Phase3ApkStore,
+  input: Omit<Phase3ApkItem, 'token' | 'store'>,
+  session?: ProviderHttpSession,
+) {
   const prefix = store === 'apkmirror' ? 'am' : 'ap'
   const token = `${prefix}_${createHash('sha256').update(`${store}:${input.pageUrl}`).digest('hex').slice(0, 18)}`
   const item: Phase3ApkItem = { token, store, ...input }
-  cache.set(token, { item, expiresAt: Date.now() + CACHE_TTL_MS })
+  cache.set(token, { item, expiresAt: Date.now() + CACHE_TTL_MS, session })
   return item
 }
 
-export function getPhase3ApkItem(token: string, expected?: Phase3ApkStore) {
+function getCacheRow(token: string, expected?: Phase3ApkStore) {
   const key = token.trim()
   const row = cache.get(key)
   if (!row || row.expiresAt <= Date.now()) {
@@ -78,7 +88,11 @@ export function getPhase3ApkItem(token: string, expected?: Phase3ApkStore) {
     throw new Error('Ese resultado expiró. Repite la búsqueda de la tienda.')
   }
   if (expected && row.item.store !== expected) throw new Error('Ese resultado pertenece a otra tienda.')
-  return row.item
+  return row
+}
+
+export function getPhase3ApkItem(token: string, expected?: Phase3ApkStore) {
+  return getCacheRow(token, expected).item
 }
 
 export function apkMirrorSearchUrl(query: string) {
@@ -120,11 +134,12 @@ export async function searchApkMirror(query: string) {
   const clean = query.trim().slice(0, 120)
   if (clean.length < 2) throw new Error('Indica una aplicación para buscar en APKMirror.')
   return withProviderTelemetry('apkmirror-html', 'search', async () => {
+    const session = new ProviderHttpSession()
     const endpoint = apkMirrorSearchUrl(clean)
-    const page = await fetchProviderHtml(endpoint, APKMIRROR_HOSTS)
+    const page = await session.fetchHtml(endpoint, APKMIRROR_HOSTS)
     const parsed = parseApkMirrorSearchHtml(clean, page.html, page.finalUrl)
     if (!parsed.length) throw new Error('APKMirror no devolvió releases compatibles con esa búsqueda.')
-    return parsed.map((item) => remember('apkmirror', item))
+    return parsed.map((item) => remember('apkmirror', item, session))
   })
 }
 
@@ -182,11 +197,12 @@ export async function searchApkPure(query: string) {
   const clean = query.trim().slice(0, 120)
   if (clean.length < 2) throw new Error('Indica una aplicación o package para buscar en APKPure.')
   return withProviderTelemetry('apkpure-html', 'search', async () => {
+    const session = new ProviderHttpSession()
     const endpoint = apkPureLookupUrl(clean)
-    const page = await fetchProviderHtml(endpoint, APKPURE_HOSTS)
+    const page = await session.fetchHtml(endpoint, APKPURE_HOSTS)
     const parsed = parseApkPureLookupHtml(clean, page.html, page.finalUrl)
     if (!parsed.length) throw new Error('APKPure no devolvió aplicaciones compatibles con esa búsqueda.')
-    return parsed.map((item) => remember('apkpure', item))
+    return parsed.map((item) => remember('apkpure', item, session))
   })
 }
 
@@ -219,11 +235,6 @@ export function findApkMirrorIntermediateUrl(html: string, baseUrl: string) {
   return candidates.find((item) => /download\s+apk/i.test(item.text))?.href ?? candidates[0]?.href
 }
 
-/**
- * APKMirror muestra actualmente un contador antes de habilitar el enlace
- * `/download/?...&key=...`. El key ya está en el DOM, pero el servidor puede
- * rechazarlo si se consume antes de que termine el contador.
- */
 export function apkMirrorRequiredWaitMs(html: string) {
   const text = load(html).text().replace(/\s+/g, ' ').trim()
   const candidates = [
@@ -257,10 +268,10 @@ function retryableApkMirrorError(error: unknown) {
   return /HTTP\s+(?:403|429)|anti-bot|cloudflare|access denied/i.test(message)
 }
 
-async function resolveApkMirrorSignedUrl(item: Phase3ApkItem) {
+async function resolveApkMirrorSignedUrl(item: Phase3ApkItem, seedSession?: ProviderHttpSession) {
   let lastError: unknown
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const session = new ProviderHttpSession()
+    const session = attempt === 1 && seedSession ? seedSession : new ProviderHttpSession()
     try {
       let variantUrl = /-android-apk-download\/?$/i.test(new URL(item.pageUrl).pathname) ? item.pageUrl : undefined
       let variantReferer = item.pageUrl
@@ -321,13 +332,13 @@ function packageExtension(url: string, html = ''): 'apk' | 'xapk' | 'apks' {
   return 'apk'
 }
 
-export async function resolvePhase3ApkDirect(item: Phase3ApkItem): Promise<Phase3ApkDirect> {
+export async function resolvePhase3ApkDirect(item: Phase3ApkItem, seedSession?: ProviderHttpSession): Promise<Phase3ApkDirect> {
   if (item.store === 'apkmirror') {
-    const { signed, referer, headers, waitMs } = await resolveApkMirrorSignedUrl(item)
+    const { signed, referer, headers, waitMs } = await resolveApkMirrorSignedUrl(item, seedSession)
     return { store: item.store, url: signed, referer, extension: 'apk', headers, waitMs }
   }
 
-  const session = new ProviderHttpSession()
+  const session = seedSession ?? new ProviderHttpSession()
   const detailPath = new URL(item.pageUrl)
   detailPath.hash = ''
   detailPath.search = ''
@@ -349,8 +360,9 @@ export async function resolvePhase3ApkDirect(item: Phase3ApkItem): Promise<Phase
 }
 
 export async function downloadPhase3Apk(token: string) {
-  const item = getPhase3ApkItem(token)
-  const direct = await withProviderTelemetry(item.store === 'apkmirror' ? 'apkmirror-html' : 'apkpure-html', 'resolve', () => resolvePhase3ApkDirect(item))
+  const row = getCacheRow(token)
+  const item = row.item
+  const direct = await withProviderTelemetry(item.store === 'apkmirror' ? 'apkmirror-html' : 'apkpure-html', 'resolve', () => resolvePhase3ApkDirect(item, row.session))
   const allowedHosts = item.store === 'apkmirror' ? APKMIRROR_HOSTS : APKPURE_DOWNLOAD_HOSTS
   const provider = item.store === 'apkmirror' ? 'APKMirror' : 'APKPure'
   return withProviderTelemetry(item.store === 'apkmirror' ? 'apkmirror-html' : 'apkpure-html', 'download', async () => {
