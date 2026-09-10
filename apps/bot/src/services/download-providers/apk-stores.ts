@@ -16,6 +16,13 @@ export type Phase3ApkItem = {
   icon?: string
 }
 
+export type Phase3ApkDirect = {
+  store: Phase3ApkStore
+  url: string
+  referer: string
+  extension: 'apk' | 'xapk' | 'apks'
+}
+
 const APKMIRROR_HOSTS = [/(^|\.)apkmirror\.com$/i]
 const APKPURE_HOSTS = [/(^|\.)apkpure\.net$/i]
 const APKPURE_DOWNLOAD_HOSTS = [/^d\.apkpure\.net$/i, /(^|\.)apkpure\.net$/i]
@@ -118,8 +125,7 @@ export async function searchApkMirror(query: string) {
 function apkPurePackageFromUrl(value: string) {
   try {
     const parts = new URL(value).pathname.split('/').filter(Boolean)
-    const packageName = parts.findLast((part) => /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+){1,}$/.test(part))
-    return packageName
+    return [...parts].reverse().find((part) => /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+){1,}$/.test(part))
   } catch { return undefined }
 }
 
@@ -196,8 +202,11 @@ export function findApkMirrorIntermediateUrl(html: string, baseUrl: string) {
   const candidates = $('a[href]')
     .map((_index, element) => {
       const href = absolute(baseUrl, $(element).attr('href'))
+      if (!href) return null
+      const parsed = new URL(href)
+      if (!parsed.pathname.endsWith('/download/') || !parsed.searchParams.has('key')) return null
       const text = $(element).text().replace(/\s+/g, ' ').trim()
-      return href && /\/download\/(?:\?|$)/i.test(new URL(href).pathname + new URL(href).search) ? { href, text } : null
+      return { href, text }
     })
     .get()
     .filter(Boolean) as Array<{ href: string; text: string }>
@@ -248,7 +257,7 @@ export function findApkPureDirectUrl(html: string, baseUrl: string) {
   return links.find((item) => /descargar|download|reiniciar|click/i.test(item.text))?.href ?? links[0]?.href
 }
 
-function packageExtension(url: string, html = '') {
+function packageExtension(url: string, html = ''): 'apk' | 'xapk' | 'apks' {
   const pathname = new URL(url).pathname.toLowerCase()
   if (pathname.endsWith('.xapk')) return 'xapk'
   if (pathname.endsWith('.apks')) return 'apks'
@@ -257,40 +266,41 @@ function packageExtension(url: string, html = '') {
   return 'apk'
 }
 
-export async function downloadPhase3Apk(token: string) {
-  const item = getPhase3ApkItem(token)
+export async function resolvePhase3ApkDirect(item: Phase3ApkItem): Promise<Phase3ApkDirect> {
   if (item.store === 'apkmirror') {
-    return withProviderTelemetry('apkmirror-html', 'download', async () => {
-      const { signed, referer } = await resolveApkMirrorSignedUrl(item)
-      const file = await downloadProviderFile(signed, {
-        allowedHosts: APKMIRROR_HOSTS,
-        provider: 'APKMirror',
-        fileBase: `${item.name}-${item.version ?? 'latest'}`,
-        extension: 'apk',
-        referer,
-        requireZipMagic: true,
-      })
-      return { ...file, store: item.store as const, item, packageKind: 'APK' as const }
-    })
+    const { signed, referer } = await resolveApkMirrorSignedUrl(item)
+    return { store: item.store, url: signed, referer, extension: 'apk' }
   }
 
-  return withProviderTelemetry('apkpure-html', 'download', async () => {
-    const detailPath = new URL(item.pageUrl)
-    detailPath.hash = ''
-    detailPath.search = ''
-    detailPath.pathname = `${detailPath.pathname.replace(/\/+$/, '')}/download`
-    const page = await fetchProviderHtml(detailPath.toString(), APKPURE_HOSTS, { referer: item.pageUrl })
-    const direct = findApkPureDirectUrl(page.html, page.finalUrl)
-    if (!direct) throw new Error('APKPure no expuso su enlace firmado d.apkpure.net en la página de descarga.')
-    const ext = packageExtension(direct, page.html)
-    const file = await downloadProviderFile(direct, {
-      allowedHosts: APKPURE_DOWNLOAD_HOSTS,
-      provider: 'APKPure',
+  const detailPath = new URL(item.pageUrl)
+  detailPath.hash = ''
+  detailPath.search = ''
+  detailPath.pathname = `${detailPath.pathname.replace(/\/+$/, '')}/download`
+  const page = await fetchProviderHtml(detailPath.toString(), APKPURE_HOSTS, { referer: item.pageUrl })
+  const direct = findApkPureDirectUrl(page.html, page.finalUrl)
+  if (!direct) throw new Error('APKPure no expuso su enlace firmado d.apkpure.net en la página de descarga.')
+  return { store: item.store, url: direct, referer: page.finalUrl, extension: packageExtension(direct, page.html) }
+}
+
+export async function downloadPhase3Apk(token: string) {
+  const item = getPhase3ApkItem(token)
+  const direct = await withProviderTelemetry(item.store === 'apkmirror' ? 'apkmirror-html' : 'apkpure-html', 'resolve', () => resolvePhase3ApkDirect(item))
+  const allowedHosts = item.store === 'apkmirror' ? APKMIRROR_HOSTS : APKPURE_DOWNLOAD_HOSTS
+  const provider = item.store === 'apkmirror' ? 'APKMirror' : 'APKPure'
+  return withProviderTelemetry(item.store === 'apkmirror' ? 'apkmirror-html' : 'apkpure-html', 'download', async () => {
+    const file = await downloadProviderFile(direct.url, {
+      allowedHosts,
+      provider,
       fileBase: `${item.name}-${item.version ?? 'latest'}`,
-      extension: ext,
-      referer: page.finalUrl,
+      extension: direct.extension,
+      referer: direct.referer,
       requireZipMagic: true,
     })
-    return { ...file, store: item.store as const, item, packageKind: ext.toUpperCase() as 'APK' | 'XAPK' | 'APKS' }
+    return {
+      ...file,
+      store: item.store,
+      item,
+      packageKind: direct.extension.toUpperCase() as 'APK' | 'XAPK' | 'APKS',
+    }
   })
 }
