@@ -1,10 +1,10 @@
-import { config } from '../../config.js'
 import { downloadSocialVideo } from '../downloader.js'
 import { downloadProviderFile } from './http.js'
 import { withProviderTelemetry } from './runtime.js'
 
 const X_INPUT_HOSTS = [/^(?:www\.)?x\.com$/i, /^(?:www\.)?twitter\.com$/i]
 const X_MEDIA_HOSTS = [/^(?:video|pbs)\.twimg\.com$/i, /\.twimg\.com$/i]
+const xBearerToken = () => process.env.X_BEARER_TOKEN?.trim() ?? ''
 
 export type XResolvedMedia = {
   kind: 'video' | 'image'
@@ -68,7 +68,8 @@ export async function resolveXOfficial(input: string): Promise<XResolvedMedia[]>
   const url = validateXUrl(input)
   const postId = xPostIdFromUrl(url)
   if (!postId) throw new Error('No pude extraer el ID del Post de X.')
-  if (!config.xBearerToken) throw new Error('X_BEARER_TOKEN no está configurado.')
+  const token = xBearerToken()
+  if (!token) throw new Error('X_BEARER_TOKEN no está configurado.')
 
   return withProviderTelemetry('x-official', 'resolve', async () => {
     const endpoint = new URL(`https://api.x.com/2/tweets/${postId}`)
@@ -78,7 +79,7 @@ export async function resolveXOfficial(input: string): Promise<XResolvedMedia[]>
 
     const response = await fetch(endpoint, {
       headers: {
-        authorization: `Bearer ${config.xBearerToken}`,
+        authorization: `Bearer ${token}`,
         accept: 'application/json',
         'user-agent': 'GhostNexoraBot/2.0',
       },
@@ -122,7 +123,7 @@ export async function downloadXMedia(input: string): Promise<XDownloadBundle> {
   const url = validateXUrl(input)
   const officialErrors: string[] = []
 
-  if (config.xBearerToken) {
+  if (xBearerToken()) {
     try {
       const resolved = await resolveXOfficial(url)
       const downloads = [] as Array<Awaited<ReturnType<typeof downloadProviderFile>> & { kind: 'video' | 'image' }>
