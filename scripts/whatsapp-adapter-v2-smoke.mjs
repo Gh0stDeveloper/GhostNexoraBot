@@ -151,7 +151,8 @@ try {
   assert.match(mediaShim, /platform\/whatsapp\/media\.js/)
   assert.match(localizedShim, /platform\/whatsapp\/localized-socket\.js/)
   assert.match(interactive, /NativeFlowMessage/)
-  assert.match(interactive, /carouselMessage/)
+  assert.match(interactive, /planCarousel/)
+  assert.doesNotMatch(interactive, /carouselMessage|CarouselMessage/, 'stable transport must not restore native carousel payloads')
   assert.match(interactive, /interactiveRelayNodes/)
   assert.match(interactive, /sendTextFallback/)
 
