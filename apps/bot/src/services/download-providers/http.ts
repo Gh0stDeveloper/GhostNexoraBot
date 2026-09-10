@@ -6,7 +6,40 @@ import os from 'node:os'
 import path from 'node:path'
 import { config } from '../../config.js'
 
-const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 GhostNexoraBot/2.0'
+const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+
+type StoredCookie = {
+  name: string
+  value: string
+  domain: string
+  path: string
+  secure: boolean
+  hostOnly: boolean
+  expiresAt?: number
+}
+
+function setCookieValues(headers: Headers) {
+  const extended = headers as Headers & { getSetCookie?: () => string[] }
+  if (typeof extended.getSetCookie === 'function') return extended.getSetCookie()
+  const raw = headers.get('set-cookie')
+  if (!raw) return []
+  return raw.split(/,(?=\s*[^;,=\s]+=[^;,]*)/g).map((value) => value.trim()).filter(Boolean)
+}
+
+function cookieDefaultPath(pathname: string) {
+  if (!pathname.startsWith('/') || pathname === '/') return '/'
+  const index = pathname.lastIndexOf('/')
+  return index <= 0 ? '/' : pathname.slice(0, index + 1)
+}
+
+function sameSiteHint(target: URL, referer?: string) {
+  if (!referer) return 'none'
+  try {
+    return new URL(referer).origin === target.origin ? 'same-origin' : 'cross-site'
+  } catch {
+    return 'none'
+  }
+}
 
 export function assertProviderUrl(value: string, allowedHosts: readonly RegExp[]) {
   let url: URL
@@ -17,26 +50,126 @@ export function assertProviderUrl(value: string, allowedHosts: readonly RegExp[]
   return url.toString()
 }
 
+/**
+ * Sesión HTTP acotada para proveedores que firman enlaces en varias etapas.
+ * Conserva únicamente cookies recibidas por HTTP(S) y solo las vuelve a enviar
+ * cuando dominio/path/secure coinciden. No persiste datos entre comandos.
+ */
+export class ProviderHttpSession {
+  private readonly cookies = new Map<string, StoredCookie>()
+
+  private captureCookies(headers: Headers, requestUrl: string) {
+    const url = new URL(requestUrl)
+    for (const raw of setCookieValues(headers)) {
+      const parts = raw.split(';').map((part) => part.trim()).filter(Boolean)
+      const pair = parts.shift()
+      if (!pair) continue
+      const equals = pair.indexOf('=')
+      if (equals <= 0) continue
+      const name = pair.slice(0, equals).trim()
+      const value = pair.slice(equals + 1).trim()
+      if (!name) continue
+
+      let domain = url.hostname.toLowerCase()
+      let hostOnly = true
+      let cookiePath = cookieDefaultPath(url.pathname)
+      let secure = false
+      let expiresAt: number | undefined
+
+      for (const attribute of parts) {
+        const separator = attribute.indexOf('=')
+        const key = (separator < 0 ? attribute : attribute.slice(0, separator)).trim().toLowerCase()
+        const attributeValue = separator < 0 ? '' : attribute.slice(separator + 1).trim()
+        if (key === 'domain' && attributeValue) {
+          domain = attributeValue.replace(/^\./, '').toLowerCase()
+          hostOnly = false
+        } else if (key === 'path' && attributeValue.startsWith('/')) {
+          cookiePath = attributeValue
+        } else if (key === 'secure') {
+          secure = true
+        } else if (key === 'max-age' && /^-?\d+$/.test(attributeValue)) {
+          expiresAt = Date.now() + Number(attributeValue) * 1000
+        } else if (key === 'expires' && attributeValue && expiresAt === undefined) {
+          const parsed = Date.parse(attributeValue)
+          if (Number.isFinite(parsed)) expiresAt = parsed
+        }
+      }
+
+      const cookie: StoredCookie = { name, value, domain, path: cookiePath, secure, hostOnly, expiresAt }
+      const cacheKey = `${domain}|${cookiePath}|${name}`
+      if (!value || (expiresAt !== undefined && expiresAt <= Date.now())) this.cookies.delete(cacheKey)
+      else this.cookies.set(cacheKey, cookie)
+    }
+  }
+
+  cookieHeader(input: string) {
+    const target = new URL(input)
+    const now = Date.now()
+    const values: string[] = []
+    for (const [key, cookie] of this.cookies) {
+      if (cookie.expiresAt !== undefined && cookie.expiresAt <= now) {
+        this.cookies.delete(key)
+        continue
+      }
+      const host = target.hostname.toLowerCase()
+      const domainMatches = cookie.hostOnly ? host === cookie.domain : (host === cookie.domain || host.endsWith(`.${cookie.domain}`))
+      if (!domainMatches || !target.pathname.startsWith(cookie.path)) continue
+      if (cookie.secure && target.protocol !== 'https:') continue
+      values.push(`${cookie.name}=${cookie.value}`)
+    }
+    return values.join('; ')
+  }
+
+  headersFor(input: string, options: { referer?: string; accept?: string; navigation?: boolean } = {}) {
+    const target = new URL(input)
+    const cookies = this.cookieHeader(target.toString())
+    const navigation = options.navigation === true
+    return {
+      'user-agent': UA,
+      accept: options.accept ?? (navigation ? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' : '*/*'),
+      'accept-language': 'es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7',
+      ...(navigation ? {
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': sameSiteHint(target, options.referer),
+        'upgrade-insecure-requests': '1',
+      } : {}),
+      ...(options.referer ? { referer: options.referer } : {}),
+      ...(cookies ? { cookie: cookies } : {}),
+    } as Record<string, string>
+  }
+
+  async fetchHtml(
+    input: string,
+    allowedHosts: readonly RegExp[],
+    options: { referer?: string; timeoutMs?: number } = {},
+  ) {
+    const url = assertProviderUrl(input, allowedHosts)
+    const response = await fetch(url, {
+      redirect: 'follow',
+      headers: this.headersFor(url, { referer: options.referer, navigation: true }),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 25_000),
+    })
+    const finalUrl = response.url || url
+    assertProviderUrl(finalUrl, allowedHosts)
+    this.captureCookies(response.headers, finalUrl)
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      const challenge = /cloudflare|attention required|just a moment|captcha|access denied/i.test(body)
+      throw new Error(`HTTP ${response.status} al consultar ${new URL(finalUrl).hostname}${challenge ? ' (protección anti-bot activa)' : ''}.`)
+    }
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType && !/html|text\//i.test(contentType)) throw new Error(`El proveedor devolvió ${contentType} cuando se esperaba HTML.`)
+    return { html: await response.text(), finalUrl }
+  }
+}
+
 export async function fetchProviderHtml(
   input: string,
   allowedHosts: readonly RegExp[],
   options: { referer?: string; timeoutMs?: number } = {},
 ) {
-  const url = assertProviderUrl(input, allowedHosts)
-  const response = await fetch(url, {
-    redirect: 'follow',
-    headers: {
-      'user-agent': UA,
-      accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
-      'accept-language': 'es-MX,es;q=0.9,en;q=0.8',
-      ...(options.referer ? { referer: options.referer } : {}),
-    },
-    signal: AbortSignal.timeout(options.timeoutMs ?? 25_000),
-  })
-  if (!response.ok) throw new Error(`HTTP ${response.status} al consultar ${new URL(url).hostname}.`)
-  const contentType = response.headers.get('content-type') ?? ''
-  if (contentType && !/html|text\//i.test(contentType)) throw new Error(`El proveedor devolvió ${contentType} cuando se esperaba HTML.`)
-  return { html: await response.text(), finalUrl: response.url || url }
+  return new ProviderHttpSession().fetchHtml(input, allowedHosts, options)
 }
 
 function safeFileBase(value: string) {
@@ -61,6 +194,7 @@ export async function downloadProviderFile(
     extension: string
     referer?: string
     requireZipMagic?: boolean
+    headers?: Record<string, string>
   },
 ): Promise<ProviderDownloadedFile> {
   const url = assertProviderUrl(input, options.allowedHosts)
@@ -75,6 +209,7 @@ export async function downloadProviderFile(
         'user-agent': UA,
         accept: '*/*',
         ...(options.referer ? { referer: options.referer } : {}),
+        ...(options.headers ?? {}),
       },
       signal: AbortSignal.timeout(20 * 60_000),
     })
