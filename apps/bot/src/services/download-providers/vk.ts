@@ -20,6 +20,7 @@ const VK_MEDIA_HOSTS = [
   /(^|\.)vk\.com$/i,
   /(^|\.)vkvideo\.ru$/i,
 ]
+const vkAccessToken = () => process.env.VK_ACCESS_TOKEN?.trim() ?? ''
 
 function validateVkUrl(input: string) {
   let url: URL
@@ -70,12 +71,13 @@ export async function resolveVkOfficial(input: string) {
   const url = validateVkUrl(input)
   const ref = vkVideoRefFromUrl(url)
   if (!ref) throw new Error('La URL no contiene un identificador owner_id/video_id compatible con video.get.')
-  if (!config.vkAccessToken) throw new Error('VK_ACCESS_TOKEN no está configurado.')
+  const token = vkAccessToken()
+  if (!token) throw new Error('VK_ACCESS_TOKEN no está configurado.')
 
   return withProviderTelemetry('vk-official', 'resolve', async () => {
     const endpoint = new URL('https://api.vk.com/method/video.get')
     endpoint.searchParams.set('videos', ref.id)
-    endpoint.searchParams.set('access_token', config.vkAccessToken)
+    endpoint.searchParams.set('access_token', token)
     endpoint.searchParams.set('v', '5.199')
     const response = await fetch(endpoint, {
       headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/2.0' },
@@ -144,7 +146,7 @@ export async function downloadVkVideo(input: string): Promise<VkDownloadBundle> 
   const url = validateVkUrl(input)
   const officialErrors: string[] = []
 
-  if (config.vkAccessToken && vkVideoRefFromUrl(url)) {
+  if (vkAccessToken() && vkVideoRefFromUrl(url)) {
     try {
       const resolved = await resolveVkOfficial(url)
       const file = await withProviderTelemetry('vk-official', 'download', () => downloadProviderFile(resolved.url, {
