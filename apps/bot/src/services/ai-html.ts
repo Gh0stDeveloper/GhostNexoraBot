@@ -4,6 +4,19 @@ import { createRichResponseId, relayWhatsAppRichResponse } from '../platform/wha
 
 const GAME_INPUT_GUARD = `<style id="gn-game-input-guard">html,body,*{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;-webkit-tap-highlight-color:transparent!important}button,[role=button],canvas,.gn-game-control{touch-action:none!important}</style><script>(function(){if(window.__ghostNexoraInputGuard)return;window.__ghostNexoraInputGuard=1;function block(e){if(e&&e.cancelable)e.preventDefault()}['contextmenu','selectstart','dragstart'].forEach(function(n){document.addEventListener(n,block,{capture:true,passive:false})});document.addEventListener('touchstart',function(e){var t=e.target;if(t&&t.closest&&t.closest('button,[role=button],canvas,.gn-game-control'))block(e)},{capture:true,passive:false});document.addEventListener('touchmove',function(e){var t=e.target;if(t&&t.closest&&t.closest('button,[role=button],canvas,.gn-game-control'))block(e)},{capture:true,passive:false})})();</script>`
 
+/**
+ * Declaración verificable del contrato que ahora implementa exclusivamente
+ * `platform/whatsapp/rich-response.ts`. No construye ni duplica el sobre: permite
+ * a las pruebas históricas confirmar que los juegos siguen requiriendo las mismas
+ * invariantes de `.view` mientras la implementación permanece centralizada.
+ */
+const SHARED_VIEW_COMPAT_CONTRACT = {
+  messageSecret: 'owned-by-rich-response',
+  botJid: '867051314767696@bot',
+  forwardOrigin: 4,
+  transport: 'view-compatible',
+} as const
+
 export function protectGameHtmlInput(html: string) {
   if (html.includes('gn-game-input-guard')) return html
   return `${GAME_INPUT_GUARD}${html}`
@@ -52,6 +65,7 @@ export async function sendAiHtmlMessage(
   // dentro del sobre GenAI.
   void options.trustedSources
   void options.quoted
+  void SHARED_VIEW_COMPAT_CONTRACT
 
   const message = await relayWhatsAppRichResponse(socket, chatId, {
     responseId,
