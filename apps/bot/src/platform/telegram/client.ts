@@ -91,7 +91,9 @@ export class TelegramBotApiClient {
       fileName = media.fileName
       mimeType = media.mimeType
     }
-    const blob = new Blob([bytes], mimeType ? { type: mimeType } : undefined)
+    const owned = new Uint8Array(bytes.byteLength)
+    owned.set(bytes)
+    const blob = new Blob([owned.buffer], mimeType ? { type: mimeType } : undefined)
     form.append(fieldName, blob, fileName)
 
     const response = await fetch(this.endpoint(method), {
