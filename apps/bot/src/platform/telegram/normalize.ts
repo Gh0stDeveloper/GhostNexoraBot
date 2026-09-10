@@ -11,7 +11,7 @@ function displayName(message: TelegramMessage) {
 function media(message: TelegramMessage): NormalizedMedia | undefined {
   if (message.photo?.length) {
     const item = message.photo.at(-1)!
-    return { kind: 'image', mimeType: 'image/jpeg', sizeBytes: item.file_size, fileName: undefined }
+    return { kind: 'image', mimeType: 'image/jpeg', sizeBytes: item.file_size }
   }
   if (message.video) return { kind: 'video', mimeType: message.video.mime_type, sizeBytes: message.video.file_size, fileName: message.video.file_name }
   if (message.audio) return { kind: 'audio', mimeType: message.audio.mime_type, sizeBytes: message.audio.file_size, fileName: message.audio.file_name }
@@ -35,7 +35,7 @@ export function normalizeTelegramMessage(message: TelegramMessage, botInstanceId
     messageId: String(message.message_id),
     text: message.text ?? message.caption ?? '',
     isGroup: message.chat.type === 'group' || message.chat.type === 'supergroup',
-    replyToMessageId: message.reply_to_message ? String(message.reply_to_message.message_id) : undefined,
+    replyTo: message.reply_to_message ? String(message.reply_to_message.message_id) : undefined,
     pushName: displayName(message),
     media: media(message),
     raw: message,
