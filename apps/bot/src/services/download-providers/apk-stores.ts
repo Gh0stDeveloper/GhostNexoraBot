@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { load } from 'cheerio'
-import { downloadProviderFile, fetchProviderHtml } from './http.js'
+import { downloadProviderFile, fetchProviderHtml, ProviderHttpSession } from './http.js'
 import { withProviderTelemetry } from './runtime.js'
 
 export type Phase3ApkStore = 'apkmirror' | 'apkpure'
@@ -21,6 +21,8 @@ export type Phase3ApkDirect = {
   url: string
   referer: string
   extension: 'apk' | 'xapk' | 'apks'
+  headers?: Record<string, string>
+  waitMs?: number
 }
 
 const APKMIRROR_HOSTS = [/(^|\.)apkmirror\.com$/i]
@@ -33,6 +35,10 @@ const cache = new Map<string, { item: Phase3ApkItem; expiresAt: number }>()
 function absolute(base: string, value?: string | null) {
   if (!value) return undefined
   try { return new URL(value, base).toString() } catch { return undefined }
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
 function normalize(value: string) {
@@ -213,6 +219,25 @@ export function findApkMirrorIntermediateUrl(html: string, baseUrl: string) {
   return candidates.find((item) => /download\s+apk/i.test(item.text))?.href ?? candidates[0]?.href
 }
 
+/**
+ * APKMirror muestra actualmente un contador antes de habilitar el enlace
+ * `/download/?...&key=...`. El key ya está en el DOM, pero el servidor puede
+ * rechazarlo si se consume antes de que termine el contador.
+ */
+export function apkMirrorRequiredWaitMs(html: string) {
+  const text = load(html).text().replace(/\s+/g, ' ').trim()
+  const candidates = [
+    /wait\s+(\d{1,2})\s+(?:more\s+)?sec(?:ond)?s?/i,
+    /(?:countdown|counter|seconds?)\s*[:=]\s*["']?(\d{1,2})/i,
+  ]
+  for (const pattern of candidates) {
+    const match = pattern.exec(`${text}\n${html}`)
+    const seconds = Number(match?.[1] ?? 0)
+    if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds, 30) * 1000 + 1250
+  }
+  return 0
+}
+
 export function findApkMirrorSignedDownloadUrl(html: string, baseUrl: string) {
   const $ = load(html)
   const preferred = $('a#download-link[href]').first().attr('href')
@@ -227,21 +252,51 @@ export function findApkMirrorSignedDownloadUrl(html: string, baseUrl: string) {
   return parsed.toString()
 }
 
-async function resolveApkMirrorSignedUrl(item: Phase3ApkItem) {
-  let variantUrl = /-android-apk-download\/?$/i.test(new URL(item.pageUrl).pathname) ? item.pageUrl : undefined
-  if (!variantUrl) {
-    const release = await fetchProviderHtml(item.pageUrl, APKMIRROR_HOSTS)
-    variantUrl = findApkMirrorVariantUrl(release.html, release.finalUrl)
-  }
-  if (!variantUrl) throw new Error('APKMirror no expuso una variante APK descargable.')
+function retryableApkMirrorError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /HTTP\s+(?:403|429)|anti-bot|cloudflare|access denied/i.test(message)
+}
 
-  const variant = await fetchProviderHtml(variantUrl, APKMIRROR_HOSTS, { referer: item.pageUrl })
-  const intermediateUrl = findApkMirrorIntermediateUrl(variant.html, variant.finalUrl)
-  if (!intermediateUrl) throw new Error('APKMirror no expuso el enlace intermedio firmado.')
-  const intermediate = await fetchProviderHtml(intermediateUrl, APKMIRROR_HOSTS, { referer: variant.finalUrl })
-  const signed = findApkMirrorSignedDownloadUrl(intermediate.html, intermediate.finalUrl)
-  if (!signed) throw new Error('APKMirror no expuso download.php con id y key vigentes.')
-  return { signed, referer: intermediate.finalUrl }
+async function resolveApkMirrorSignedUrl(item: Phase3ApkItem) {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const session = new ProviderHttpSession()
+    try {
+      let variantUrl = /-android-apk-download\/?$/i.test(new URL(item.pageUrl).pathname) ? item.pageUrl : undefined
+      let variantReferer = item.pageUrl
+      if (!variantUrl) {
+        const release = await session.fetchHtml(item.pageUrl, APKMIRROR_HOSTS)
+        variantUrl = findApkMirrorVariantUrl(release.html, release.finalUrl)
+        variantReferer = release.finalUrl
+      } else {
+        variantReferer = new URL('../', variantUrl).toString()
+      }
+      if (!variantUrl) throw new Error('APKMirror no expuso una variante APK descargable.')
+
+      const variant = await session.fetchHtml(variantUrl, APKMIRROR_HOSTS, { referer: variantReferer })
+      const intermediateUrl = findApkMirrorIntermediateUrl(variant.html, variant.finalUrl)
+      if (!intermediateUrl) throw new Error('APKMirror no expuso el enlace intermedio firmado.')
+
+      const waitMs = apkMirrorRequiredWaitMs(variant.html)
+      if (waitMs > 0) await sleep(waitMs)
+
+      const intermediate = await session.fetchHtml(intermediateUrl, APKMIRROR_HOSTS, { referer: variant.finalUrl })
+      const signed = findApkMirrorSignedDownloadUrl(intermediate.html, intermediate.finalUrl)
+      if (!signed) throw new Error('APKMirror no expuso download.php con id y key vigentes.')
+
+      const headers = session.headersFor(signed, {
+        referer: intermediate.finalUrl,
+        navigation: true,
+        accept: 'application/vnd.android.package-archive,application/zip,application/octet-stream,*/*',
+      })
+      return { signed, referer: intermediate.finalUrl, headers, waitMs }
+    } catch (error) {
+      lastError = error
+      if (attempt >= 2 || !retryableApkMirrorError(error)) throw error
+      await sleep(1750)
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('APKMirror no pudo completar el flujo firmado.')
 }
 
 export function findApkPureDirectUrl(html: string, baseUrl: string) {
@@ -268,18 +323,29 @@ function packageExtension(url: string, html = ''): 'apk' | 'xapk' | 'apks' {
 
 export async function resolvePhase3ApkDirect(item: Phase3ApkItem): Promise<Phase3ApkDirect> {
   if (item.store === 'apkmirror') {
-    const { signed, referer } = await resolveApkMirrorSignedUrl(item)
-    return { store: item.store, url: signed, referer, extension: 'apk' }
+    const { signed, referer, headers, waitMs } = await resolveApkMirrorSignedUrl(item)
+    return { store: item.store, url: signed, referer, extension: 'apk', headers, waitMs }
   }
 
+  const session = new ProviderHttpSession()
   const detailPath = new URL(item.pageUrl)
   detailPath.hash = ''
   detailPath.search = ''
   detailPath.pathname = `${detailPath.pathname.replace(/\/+$/, '')}/download`
-  const page = await fetchProviderHtml(detailPath.toString(), APKPURE_HOSTS, { referer: item.pageUrl })
+  const page = await session.fetchHtml(detailPath.toString(), APKPURE_HOSTS, { referer: item.pageUrl })
   const direct = findApkPureDirectUrl(page.html, page.finalUrl)
   if (!direct) throw new Error('APKPure no expuso su enlace firmado d.apkpure.net en la página de descarga.')
-  return { store: item.store, url: direct, referer: page.finalUrl, extension: packageExtension(direct, page.html) }
+  return {
+    store: item.store,
+    url: direct,
+    referer: page.finalUrl,
+    extension: packageExtension(direct, page.html),
+    headers: session.headersFor(direct, {
+      referer: page.finalUrl,
+      navigation: true,
+      accept: 'application/vnd.android.package-archive,application/zip,application/octet-stream,*/*',
+    }),
+  }
 }
 
 export async function downloadPhase3Apk(token: string) {
@@ -294,6 +360,7 @@ export async function downloadPhase3Apk(token: string) {
       fileBase: `${item.name}-${item.version ?? 'latest'}`,
       extension: direct.extension,
       referer: direct.referer,
+      headers: direct.headers,
       requireZipMagic: true,
     })
     return {
