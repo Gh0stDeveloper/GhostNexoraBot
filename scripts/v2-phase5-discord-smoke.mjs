@@ -105,6 +105,22 @@ assert.ok(Buffer.byteLength(customId, 'utf8') <= 100)
 assert.equal(adapter.resolveComponentCustomId(customId), hugeCommand)
 assert.equal(uiCall[2].components[0].components[1].url, 'https://github.com/Gh0stDeveloper/GhostNexoraBot')
 
+await adapter.sendUi('44', {
+  kind: 'carousel',
+  cards: Array.from({ length: 10 }, (_, index) => ({
+    id: String(index),
+    title: `Card ${index} ${'t'.repeat(240)}`,
+    body: 'b'.repeat(4096),
+    footer: 'f'.repeat(2048),
+  })),
+})
+const aggregateCall = [...rest.calls].reverse().find((call) => call[0] === 'createMessage' && Array.isArray(call[2]?.embeds) && call[2].embeds.length === 10)
+assert.ok(aggregateCall, 'carousel fallback must preserve up to 10 embeds')
+const aggregateChars = aggregateCall[2].embeds.reduce((total, embed) => total +
+  (embed.title?.length || 0) + (embed.description?.length || 0) + (embed.footer?.text?.length || 0), 0)
+assert.ok(aggregateChars <= 6000, `aggregate embed text exceeded Discord limit: ${aggregateChars}`)
+assert.ok(aggregateCall[2].embeds.every((embed) => (embed.description?.length || 0) <= 4096))
+
 await adapter.sendMedia('44', {
   kind: 'document',
   source: { kind: 'bytes', value: new Uint8Array([1, 2, 3, 4]) },
@@ -137,4 +153,4 @@ assert.ok(pingCalls.some((call) => call[0] === 'editMessage' && String(call[3].c
 const ignored = { ...incoming, id: '666', content: 'ping' }
 assert.equal(await router.handleMessage(ignored), false, 'plain guild text without prefix/mention must be ignored')
 
-console.log('[V2 PHASE 5] OK — Discord adapter/router normalize messages and support text, files, embeds, components, edits, typing and reactions.')
+console.log('[V2 PHASE 5] OK — Discord adapter/router normalize messages and enforce text, embed, component, file, edit, typing and reaction limits.')
