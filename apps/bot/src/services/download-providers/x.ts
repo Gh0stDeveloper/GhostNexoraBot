@@ -58,7 +58,10 @@ type XApiResponse = {
   errors?: Array<{ title?: string; detail?: string }>
 }
 
-function chooseVideoVariant(variants: NonNullable<NonNullable<XApiResponse['includes']>['media']>[number]['variants']) {
+type XMedia = NonNullable<NonNullable<XApiResponse['includes']>['media']>[number]
+type XVideoVariant = NonNullable<XMedia['variants']>[number]
+
+function chooseVideoVariant(variants: XVideoVariant[]) {
   return variants
     .filter((item) => item.url && /video\/mp4/i.test(item.content_type ?? ''))
     .sort((a, b) => (b.bit_rate ?? 0) - (a.bit_rate ?? 0))[0]
