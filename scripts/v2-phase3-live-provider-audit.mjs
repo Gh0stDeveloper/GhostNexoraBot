@@ -8,7 +8,7 @@ const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) 
 const apk = await import('../apps/bot/dist/services/download-providers/apk-stores.js')
 
 const report = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   checkedAt: new Date().toISOString(),
   required: {},
   advisory: {},
@@ -68,6 +68,7 @@ async function required(name, work) {
     const value = await retry(name, work)
     report.required[name] = { ok: true, ...value }
     console.log(`[phase3-live] ${name}: OK`)
+    return value
   } catch (error) {
     report.required[name] = { ok: false, error: compactError(error) }
     throw error
@@ -86,6 +87,7 @@ async function advisory(name, work) {
 }
 
 let fatal
+let liveMirrorRows = []
 try {
   await required('x-api-v2-endpoint', async () => {
     const endpoint = new URL('https://api.x.com/2/tweets/1263145271946551300')
@@ -117,33 +119,44 @@ try {
   })
 
   await required('apkmirror-search', async () => {
-    const rows = await apk.searchApkMirror('com.google.android.appsearch.apk')
-    if (!rows.length) throw new Error('APKMirror live search parsed zero releases')
-    return { endpoint: apk.apkMirrorSearchUrl('com.google.android.appsearch.apk'), results: rows.length, firstUrl: rows[0].pageUrl }
+    liveMirrorRows = await apk.searchApkMirror('Google Chrome')
+    if (!liveMirrorRows.length) throw new Error('APKMirror live search parsed zero current releases')
+    return {
+      endpoint: apk.apkMirrorSearchUrl('Google Chrome'),
+      results: liveMirrorRows.length,
+      firstUrl: liveMirrorRows[0].pageUrl,
+      fixtureMode: 'live-search-result',
+    }
   })
 
   await required('apkmirror-signed-download', async () => {
-    const variantUrl = 'https://www.apkmirror.com/apk/google-inc/com-google-android-appsearch-apk/com-google-android-appsearch-apk-17-release/com-google-android-appsearch-apk-17-android-apk-download/'
-    const direct = await apk.resolvePhase3ApkDirect({
-      token: 'live-apkmirror',
-      store: 'apkmirror',
-      name: 'Google AppSearch APK',
-      pageUrl: variantUrl,
-      version: '17 beta',
-    })
-    const parsed = new URL(direct.url)
-    if (!parsed.pathname.includes('/wp-content/themes/APKMirror/download.php')) throw new Error('APKMirror did not resolve through download.php')
-    if (!parsed.searchParams.get('id') || !parsed.searchParams.get('key')) throw new Error('APKMirror signed URL missing id/key')
-    const binary = await probeZip(direct.url, direct.referer, direct.headers)
-    return {
-      variantUrl,
-      signedPath: parsed.pathname,
-      hasDynamicId: true,
-      hasDynamicKey: true,
-      observedWaitMs: direct.waitMs ?? 0,
-      sessionHeadersForwarded: Boolean(direct.headers?.cookie),
-      binary,
+    if (!liveMirrorRows.length) liveMirrorRows = await apk.searchApkMirror('Google Chrome')
+    let lastError
+    for (const candidate of liveMirrorRows.slice(0, 2)) {
+      try {
+        const direct = await apk.resolvePhase3ApkDirect({
+          ...candidate,
+          token: 'live-apkmirror',
+          store: 'apkmirror',
+        })
+        const parsed = new URL(direct.url)
+        if (!parsed.pathname.includes('/wp-content/themes/APKMirror/download.php')) throw new Error('APKMirror did not resolve through download.php')
+        if (!parsed.searchParams.get('id') || !parsed.searchParams.get('key')) throw new Error('APKMirror signed URL missing id/key')
+        const binary = await probeZip(direct.url, direct.referer, direct.headers)
+        return {
+          releaseUrl: candidate.pageUrl,
+          signedPath: parsed.pathname,
+          hasDynamicId: true,
+          hasDynamicKey: true,
+          observedWaitMs: direct.waitMs ?? 0,
+          sessionHeadersForwarded: Boolean(direct.headers?.cookie),
+          binary,
+        }
+      } catch (error) {
+        lastError = error
+      }
     }
+    throw lastError ?? new Error('APKMirror live search did not expose a resolvable APK release')
   })
 
   await required('apkpure-online-downloader', async () => {
