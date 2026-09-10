@@ -7,6 +7,8 @@ import path from 'node:path'
 import { config } from '../../config.js'
 
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+const HTML_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+const MAX_HTML_REDIRECTS = 8
 
 type StoredCookie = {
   name: string
@@ -81,7 +83,10 @@ export class ProviderHttpSession {
         const key = (separator < 0 ? attribute : attribute.slice(0, separator)).trim().toLowerCase()
         const attributeValue = separator < 0 ? '' : attribute.slice(separator + 1).trim()
         if (key === 'domain' && attributeValue) {
-          domain = attributeValue.replace(/^\./, '').toLowerCase()
+          const requestedDomain = attributeValue.replace(/^\./, '').toLowerCase()
+          const host = url.hostname.toLowerCase()
+          if (!(host === requestedDomain || host.endsWith(`.${requestedDomain}`))) continue
+          domain = requestedDomain
           hostOnly = false
         } else if (key === 'path' && attributeValue.startsWith('/')) {
           cookiePath = attributeValue
@@ -144,23 +149,40 @@ export class ProviderHttpSession {
     allowedHosts: readonly RegExp[],
     options: { referer?: string; timeoutMs?: number } = {},
   ) {
-    const url = assertProviderUrl(input, allowedHosts)
-    const response = await fetch(url, {
-      redirect: 'follow',
-      headers: this.headersFor(url, { referer: options.referer, navigation: true }),
-      signal: AbortSignal.timeout(options.timeoutMs ?? 25_000),
-    })
-    const finalUrl = response.url || url
-    assertProviderUrl(finalUrl, allowedHosts)
-    this.captureCookies(response.headers, finalUrl)
-    if (!response.ok) {
-      const body = await response.text().catch(() => '')
-      const challenge = /cloudflare|attention required|just a moment|captcha|access denied/i.test(body)
-      throw new Error(`HTTP ${response.status} al consultar ${new URL(finalUrl).hostname}${challenge ? ' (protección anti-bot activa)' : ''}.`)
+    let currentUrl = assertProviderUrl(input, allowedHosts)
+    let referer = options.referer
+
+    for (let redirectCount = 0; redirectCount <= MAX_HTML_REDIRECTS; redirectCount += 1) {
+      const response = await fetch(currentUrl, {
+        redirect: 'manual',
+        headers: this.headersFor(currentUrl, { referer, navigation: true }),
+        signal: AbortSignal.timeout(options.timeoutMs ?? 25_000),
+      })
+      this.captureCookies(response.headers, currentUrl)
+
+      if (HTML_REDIRECT_STATUSES.has(response.status)) {
+        const location = response.headers.get('location')
+        if (!location) throw new Error(`El proveedor respondió HTTP ${response.status} sin Location.`)
+        if (redirectCount >= MAX_HTML_REDIRECTS) throw new Error(`El proveedor superó ${MAX_HTML_REDIRECTS} redirecciones HTML.`)
+        const nextUrl = assertProviderUrl(new URL(location, currentUrl).toString(), allowedHosts)
+        try { await response.body?.cancel() } catch {}
+        referer = currentUrl
+        currentUrl = nextUrl
+        continue
+      }
+
+      const finalUrl = assertProviderUrl(response.url || currentUrl, allowedHosts)
+      if (!response.ok) {
+        const body = await response.text().catch(() => '')
+        const challenge = /cloudflare|attention required|just a moment|captcha|access denied/i.test(body)
+        throw new Error(`HTTP ${response.status} al consultar ${new URL(finalUrl).hostname}${challenge ? ' (protección anti-bot activa)' : ''}.`)
+      }
+      const contentType = response.headers.get('content-type') ?? ''
+      if (contentType && !/html|text\//i.test(contentType)) throw new Error(`El proveedor devolvió ${contentType} cuando se esperaba HTML.`)
+      return { html: await response.text(), finalUrl }
     }
-    const contentType = response.headers.get('content-type') ?? ''
-    if (contentType && !/html|text\//i.test(contentType)) throw new Error(`El proveedor devolvió ${contentType} cuando se esperaba HTML.`)
-    return { html: await response.text(), finalUrl }
+
+    throw new Error('El proveedor superó el límite de redirecciones HTML.')
   }
 }
 
