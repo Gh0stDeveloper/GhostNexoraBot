@@ -6,6 +6,7 @@ on:
       - 'apps/bot/**'
       - 'packages/**'
       - 'scripts/v2-phase3-provider-smoke.mjs'
+      - 'scripts/v2-phase3-provider-http-smoke.mjs'
       - 'scripts/v2-phase3-provider-lease-smoke.mjs'
       - 'scripts/v2-phase3-live-provider-audit.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
@@ -53,7 +54,7 @@ jobs:
       - name: Phase 2 UI compatibility remains valid
         run: npm run v2:ui-compat
 
-      - name: Phase 3 provider contracts and lease smoke
+      - name: Phase 3 provider contracts, redirect transport and lease smokes
         run: npm run v2:providers
 
       - name: Termux Lite build
