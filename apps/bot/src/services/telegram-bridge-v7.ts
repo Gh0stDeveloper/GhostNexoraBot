@@ -80,15 +80,16 @@ export async function ingestTelegramChannelPost(message: TelegramMessage) {
   return true
 }
 
-// Compatibilidad V7: ya no inicia un segundo getUpdates. El consumidor único es
-// TelegramRuntime; esta función únicamente restaura la caché heredada.
+// Compatibilidad V7: index.ts conserva este nombre, pero desde Phase 4 ya no
+// existe un segundo poller. El arranque se delega al runtime Telegram nativo.
 export async function startTelegramBridge() {
-  if (!token() || !channelId()) return false
+  if (!token()) return false
   await initTelegramBridgeCache()
-  return true
+  const { startTelegramPlatform } = await import('../platform/telegram/runtime.js')
+  return startTelegramPlatform()
 }
 
-export function stopTelegramBridge() { /* no poller since Phase 4 */ }
+export function stopTelegramBridge() { /* el shutdown nativo se maneja en runtime */ }
 export function telegramBridgeConfigured() { return Boolean(token() && channelId()) }
 export function telegramBridgeStatus() {
   return { configured: telegramBridgeConfigured(), initialized, cachedMessages: cache.size, channelId: channelId() || null }
