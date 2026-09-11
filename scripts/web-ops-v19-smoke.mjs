@@ -15,6 +15,7 @@ const subbotPage = read('apps/web/app/subbot/page.tsx')
 const consoleSource = read('apps/web/components/ops-console.tsx')
 const quickStart = read('apps/web/components/PublicQuickStart.tsx')
 const home = read('apps/web/app/page.tsx')
+const webI18n = read('apps/web/lib/i18n.ts')
 const subbotCommands = read('apps/bot/src/commands/subbots.ts')
 const subbotCore = read('apps/bot/src/core/subbots.ts')
 
@@ -45,9 +46,12 @@ assert.match(consoleSource, /view === 'audit'/, 'command audit must have a dedic
 
 assert.match(quickStart, /className="ops-button-primary fixed bottom-5 right-5/, 'quick-start button must reuse the site primary button theme')
 assert.doesNotMatch(quickStart, /cyan-300|violet-300|violet-400/, 'quick-start UI must not keep the old cyan/violet theme')
-assert.match(home, /PROPÓSITO Y OPERACIÓN/, 'public page must explain the bot purpose')
-assert.match(home, /Administrar comunidades/, 'public page must explain group administration')
-assert.match(home, /FLUJO NORMAL/, 'public page must explain the request/response flow')
+assert.match(home, /t\('home\.purposeEyebrow'\)/, 'public page must source its purpose heading from i18n')
+assert.match(home, /t\('home\.purpose\.adminTitle'\)/, 'public page must source group administration copy from i18n')
+assert.match(home, /t\('home\.flowEyebrow'\)/, 'public page must source request/response flow copy from i18n')
+assert.match(webI18n, /'home\.purposeEyebrow': 'PROPÓSITO Y OPERACIÓN'/, 'Spanish catalog must preserve the purpose copy')
+assert.match(webI18n, /'home\.purpose\.adminTitle': 'Administrar comunidades'/, 'Spanish catalog must preserve group administration copy')
+assert.match(webI18n, /'home\.flowEyebrow': 'FLUJO NORMAL'/, 'Spanish catalog must preserve the request/response heading')
 
 assert.match(subbotCommands, /name: 'subbotdelete'/, 'subbot cleanup command must be registered')
 assert.match(subbotCommands, /vencidos\|pendientes\|activos/, 'cleanup command must support status selectors')
