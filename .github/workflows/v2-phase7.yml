@@ -1,6 +1,9 @@
 name: V2 Phase 7
 
 on:
+  push:
+    branches:
+      - 'feat/v2-phase-7-official-apps'
   pull_request:
     paths:
       - 'apps/bot/**'
