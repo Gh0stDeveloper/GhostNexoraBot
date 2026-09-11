@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost Nexora Manager</string>
+    <string name="subtitle">Control oficial del runtime</string>
+    <string name="server_url">URL de Control API</string>
+    <string name="access_token">Token de acceso</string>
+    <string name="connect">Conectar</string>
+    <string name="refresh">Actualizar</string>
+    <string name="platforms">Plataformas</string>
+    <string name="pairing">Vinculación WhatsApp</string>
+    <string name="request_qr">Solicitar QR</string>
+    <string name="request_code">Solicitar código</string>
+    <string name="phone">Número con código de país</string>
+    <string name="logs">Logs</string>
+    <string name="settings">Configuración</string>
+    <string name="save">Guardar</string>
+    <string name="status">Estado</string>
+    <string name="remote_https">Las conexiones remotas requieren HTTPS. HTTP solo se permite en loopback/emulador.</string>
+    <string name="remote_only">Remote Manager controla una instalación existente. No ejecuta Node/Baileys dentro de Android.</string>
+</resources>
