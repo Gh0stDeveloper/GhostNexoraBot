@@ -7,6 +7,8 @@ import { messages as esSystem } from './locales/es/system.js'
 import { messages as enSystem } from './locales/en/system.js'
 import { messages as esPhase6 } from './locales/es/phase6.js'
 import { messages as enPhase6 } from './locales/en/phase6.js'
+import { messages as esPlatform } from './locales/es/platform.js'
+import { messages as enPlatform } from './locales/en/platform.js'
 import { localePreferences, type LocalePreferenceScope } from './preferences.js'
 import {
   DEFAULT_LOCALE,
@@ -17,8 +19,8 @@ import {
 } from './types.js'
 
 export const catalogs = {
-  es: { ...esDefault, ...esSystem, ...esPhase6 },
-  en: { ...enDefault, ...enSystem, ...enPhase6 },
+  es: { ...esDefault, ...esSystem, ...esPhase6, ...esPlatform },
+  en: { ...enDefault, ...enSystem, ...enPhase6, ...enPlatform },
 } as const
 const replacements = { es: esLegacy, en: enLegacy } as const
 
