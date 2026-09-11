@@ -9,6 +9,7 @@ import {
 import { logger } from '../../utils/logger.js'
 import { withTimeout } from '../../utils/timeout.js'
 import { localizeLegacyText, resolveChatLocale, translate, type LocaleCode } from '../../i18n/index.js'
+import { localizedSocketContext } from './localized-socket.js'
 import { preloadWhatsAppMedia } from './media.js'
 import {
   cardFallbackText,
@@ -25,6 +26,12 @@ export type {
   InteractiveSelectRow,
   InteractiveSelectSection,
 } from './ui-compat.js'
+
+function interactiveLocale(socket: WASocket, chatId: string): LocaleCode {
+  const context = localizedSocketContext(socket)
+  if (context?.chatId === chatId) return context.locale
+  return resolveChatLocale(chatId, undefined, context?.botInstanceId ?? 'main')
+}
 
 function localizedButton(button: InteractiveButton, locale: LocaleCode): InteractiveButton {
   if (button.type === 'reply') return { ...button, text: localizeLegacyText(button.text, locale) }
@@ -185,7 +192,7 @@ export async function sendInteractiveCard(
   quoted: WAMessage | undefined,
   input: { title: string; body: string; footer?: string; imageUrl?: string; buttons?: InteractiveButton[] },
 ): Promise<string> {
-  const locale = resolveChatLocale(chatId)
+  const locale = interactiveLocale(socket, chatId)
   const userJid = socket.user?.id
   if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
 
@@ -276,7 +283,7 @@ export async function sendCarousel(
   quoted: WAMessage | undefined,
   input: { title: string; body?: string; footer?: string; cards: CarouselCard[] },
 ): Promise<string> {
-  const locale = resolveChatLocale(chatId)
+  const locale = interactiveLocale(socket, chatId)
   const localizedInput = {
     title: localizeLegacyText(input.title, locale),
     body: input.body ? localizeLegacyText(input.body, locale) : undefined,
