@@ -32,6 +32,18 @@ export interface ControlApiV2Deps {
 
 function now() { return new Date().toISOString() }
 
+function pairedState(detail?: string | null): PairStatusResponse {
+  return {
+    ok: true,
+    platform: 'whatsapp',
+    state: 'paired',
+    expiresAt: null,
+    qr: null,
+    pairingCode: null,
+    ...(detail ? { detail } : {}),
+  }
+}
+
 export function recordControlLog(level: LogEntry['level'], message: string) {
   const entry: LogEntry = { cursor: `${Date.now()}-${logEntries.length}`, timestamp: now(), level, message: redact(message) }
   logEntries.push(entry)
@@ -45,7 +57,7 @@ export function setControlPairQr(qr: string | null) {
 }
 
 export function markControlPairConnected() {
-  pairState = { ok: true, platform: 'whatsapp', state: 'paired', expiresAt: null, qr: null, pairingCode: null }
+  pairState = pairedState()
 }
 
 export function markControlPairError(detail: string) {
@@ -229,16 +241,25 @@ export async function handleControlApiV2(req: http.IncomingMessage, res: http.Se
         return true
       }
       const result = await deps.startWhatsAppPairing(request)
-      pairState = {
-        ok: true, platform: 'whatsapp', state: deps.whatsappConnected() ? 'paired' : 'waiting',
-        expiresAt: deps.whatsappConnected() ? null : new Date(Date.now() + 60_000).toISOString(),
-        qr: pairState.qr ?? null, pairingCode: result.pairingCode ?? pairState.pairingCode ?? null, detail: result.detail ?? null,
+      if (deps.whatsappConnected()) {
+        pairState = pairedState(result.detail ?? null)
+      } else {
+        pairState = {
+          ok: true,
+          platform: 'whatsapp',
+          state: 'waiting',
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          qr: pairState.qr ?? null,
+          pairingCode: result.pairingCode ?? pairState.pairingCode ?? null,
+          detail: result.detail ?? null,
+        }
       }
       json(res, 202, pairState)
       return true
     }
     if (req.method === 'GET' && url.pathname === '/v2/pair/status') {
-      json(res, 200, deps.whatsappConnected() ? { ...pairState, state: 'paired', qr: null, pairingCode: null, expiresAt: null } : pairState)
+      if (deps.whatsappConnected()) pairState = pairedState(pairState.detail ?? null)
+      json(res, 200, pairState)
       return true
     }
 
