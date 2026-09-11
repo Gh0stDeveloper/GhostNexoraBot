@@ -1,12 +1,20 @@
+import type { PlatformId } from '@ghostnexora/platform-contracts'
 import { community } from '../services/community.js'
 import { settings } from '../core/settings.js'
 import { messages as esDefault, legacyReplacements as esLegacy } from './locales/es/default.js'
 import { messages as enDefault, legacyReplacements as enLegacy } from './locales/en/default.js'
 import { messages as esSystem } from './locales/es/system.js'
 import { messages as enSystem } from './locales/en/system.js'
-import { normalizeLocale, type LocaleCode, type TranslationValues } from './types.js'
+import { localePreferences, type LocalePreferenceScope } from './preferences.js'
+import {
+  DEFAULT_LOCALE,
+  localeFromLanguageTag,
+  normalizeLocale,
+  type LocaleCode,
+  type TranslationValues,
+} from './types.js'
 
-const catalogs = {
+export const catalogs = {
   es: { ...esDefault, ...esSystem },
   en: { ...enDefault, ...enSystem },
 } as const
@@ -29,11 +37,110 @@ export function localeName(locale: LocaleCode, displayLocale: LocaleCode = local
   return translate(displayLocale, `language.name.${locale}`)
 }
 
-export function resolveChatLocale(chatId?: string | null): LocaleCode {
-  const globalLocale = normalizeLocale(settings.language, 'es')
-  if (!chatId?.endsWith('@g.us')) return globalLocale
-  const groupLocale = community.getGroupSettings(chatId).language
-  return groupLocale ? normalizeLocale(groupLocale, globalLocale) : globalLocale
+export type PlatformLocaleContext = {
+  platform: PlatformId
+  botInstanceId: string
+  chatId?: string | number | null
+  userId?: string | number | null
+  clientLocale?: string | null
+  fallback?: LocaleCode
+}
+
+function storedLocale(
+  context: PlatformLocaleContext,
+  scope: LocalePreferenceScope,
+  scopeId: string | number | null | undefined,
+) {
+  const id = String(scopeId ?? '').trim()
+  if (!id) return null
+  return localePreferences.get({
+    platform: context.platform,
+    botInstanceId: context.botInstanceId,
+    scope,
+    scopeId: id,
+  })
+}
+
+/**
+ * Phase 6 locale policy. Explicit preferences always win over inferred locale:
+ * user -> chat -> legacy WhatsApp group -> bot/platform -> client hint -> global -> es.
+ */
+export function resolvePlatformLocale(context: PlatformLocaleContext): LocaleCode {
+  const globalLocale = normalizeLocale(settings.language, context.fallback ?? DEFAULT_LOCALE)
+  const userLocale = storedLocale(context, 'user', context.userId)
+  if (userLocale) return userLocale
+
+  const chatLocale = storedLocale(context, 'chat', context.chatId)
+  if (chatLocale) return chatLocale
+
+  if (context.platform === 'whatsapp') {
+    const chatId = String(context.chatId ?? '')
+    if (chatId.endsWith('@g.us')) {
+      const legacyGroupLocale = community.getGroupSettings(chatId).language
+      if (legacyGroupLocale) return normalizeLocale(legacyGroupLocale, globalLocale)
+    }
+  }
+
+  const botLocale = storedLocale(context, 'bot', 'self')
+  if (botLocale) return botLocale
+
+  const clientLocale = localeFromLanguageTag(context.clientLocale)
+  if (clientLocale) return clientLocale
+  return globalLocale
+}
+
+/** Backward-compatible WhatsApp resolver used by V1 services. */
+export function resolveChatLocale(
+  chatId?: string | null,
+  userId?: string | null,
+  botInstanceId = 'main',
+): LocaleCode {
+  return resolvePlatformLocale({
+    platform: 'whatsapp',
+    botInstanceId,
+    chatId,
+    userId,
+  })
+}
+
+export function setPlatformLocale(
+  context: Pick<PlatformLocaleContext, 'platform' | 'botInstanceId'>,
+  scope: LocalePreferenceScope,
+  scopeId: string | number,
+  locale: LocaleCode,
+) {
+  return localePreferences.set({
+    platform: context.platform,
+    botInstanceId: context.botInstanceId,
+    scope,
+    scopeId: String(scopeId),
+  }, locale)
+}
+
+export function clearPlatformLocale(
+  context: Pick<PlatformLocaleContext, 'platform' | 'botInstanceId'>,
+  scope: LocalePreferenceScope,
+  scopeId: string | number,
+) {
+  return localePreferences.clear({
+    platform: context.platform,
+    botInstanceId: context.botInstanceId,
+    scope,
+    scopeId: String(scopeId),
+  })
+}
+
+export function platformLocalePreference(
+  context: Pick<PlatformLocaleContext, 'platform' | 'botInstanceId'>,
+  scope: LocalePreferenceScope,
+  scopeId: string | number,
+) {
+  return localePreferences.get({
+    platform: context.platform,
+    botInstanceId: context.botInstanceId,
+    scope,
+    scopeId: String(scopeId),
+  })
 }
 
 function applyLegacyReplacements(text: string, locale: LocaleCode) {
@@ -46,8 +153,8 @@ function applyLegacyReplacements(text: string, locale: LocaleCode) {
 
 export function localizeLegacyText(text: string, locale: LocaleCode) {
   if (!text || locale === 'es') return text
-  // No traducir bloques Markdown de código: pueden contener strings, comandos o
-  // ejemplos exactos que deben conservarse byte por byte.
+  // Do not translate Markdown code blocks: they can contain literal commands,
+  // source code or examples that must remain byte-for-byte compatible.
   const segments = text.split(/(```[\s\S]*?```)/g)
   return segments.map((segment) => segment.startsWith('```') ? segment : applyLegacyReplacements(segment, locale)).join('')
 }
@@ -56,4 +163,24 @@ export function translateForChat(chatId: string | null | undefined, key: string,
   return translate(resolveChatLocale(chatId), key, values)
 }
 
+export function catalogParityReport() {
+  const es = new Set(Object.keys(catalogs.es))
+  const en = new Set(Object.keys(catalogs.en))
+  return {
+    esKeys: es.size,
+    enKeys: en.size,
+    missingInEs: [...en].filter((key) => !es.has(key)).sort(),
+    missingInEn: [...es].filter((key) => !en.has(key)).sort(),
+  }
+}
+
+export function assertCatalogParity() {
+  const report = catalogParityReport()
+  if (report.missingInEs.length || report.missingInEn.length) {
+    throw new Error(`i18n catalog mismatch: missingInEs=${report.missingInEs.join(',')} missingInEn=${report.missingInEn.join(',')}`)
+  }
+  return report
+}
+
 export type { LocaleCode, TranslationValues } from './types.js'
+export { DEFAULT_LOCALE, SUPPORTED_LOCALES, isSupportedLocale, localeFromLanguageTag, normalizeLocale } from './types.js'
