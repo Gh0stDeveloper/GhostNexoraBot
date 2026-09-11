@@ -149,7 +149,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -157,8 +157,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
-      - name: Install Android SDK 37
-        run: sdkmanager --channel=3 'platforms;android-37' 'build-tools;36.0.0'
+      - name: Install Android 17 SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - name: Android lint and unit tests
         run: gradle -p apps/android lintDebug testDebugUnitTest
       - name: Build debug and unsigned release APKs
