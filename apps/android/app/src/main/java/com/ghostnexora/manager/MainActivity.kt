@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +50,7 @@ private fun ManagerScreen(vm: ManagerViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     var phone by remember { mutableStateOf("") }
     val scroll = rememberScrollState()
+    val runtimeOffline = state.runtimeState == "offline"
 
     Column(
         Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 18.dp, vertical = 24.dp),
@@ -78,6 +78,35 @@ private fun ManagerScreen(vm: ManagerViewModel) {
         }
 
         ManagerCard {
+            Header(stringResource(R.string.runtime_control))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { vm.runtime("start") },
+                    enabled = state.connected && !state.busy && runtimeOffline,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.start_runtime)) }
+                FilledTonalButton(
+                    onClick = { vm.runtime("stop") },
+                    enabled = state.connected && !state.busy && !runtimeOffline,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.stop_runtime)) }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { vm.runtime("restart") },
+                    enabled = state.connected && !state.busy && !runtimeOffline,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.restart_runtime)) }
+                OutlinedButton(
+                    onClick = vm::requestUpdate,
+                    enabled = state.connected && !state.busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.update_runtime)) }
+            }
+        }
+
+        ManagerCard {
             Header(stringResource(R.string.platforms))
             if (state.platforms.isEmpty()) Text("—", color = Color(0xFF71717A))
             state.platforms.forEach { platform ->
@@ -88,7 +117,7 @@ private fun ManagerScreen(vm: ManagerViewModel) {
                     }
                     Text(if (platform.connected) "ONLINE" else "OFFLINE", color = if (platform.connected) Color(0xFF86EFAC) else Color(0xFFA1A1AA), style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = { vm.platform(platform.id, !platform.connected) }, enabled = !state.busy && (platform.enabled || platform.connected)) {
+                    FilledTonalButton(onClick = { vm.platform(platform.id, !platform.connected) }, enabled = state.connected && !runtimeOffline && !state.busy && (platform.enabled || platform.connected)) {
                         Text(if (platform.connected) stringResource(R.string.disconnect) else stringResource(R.string.connect))
                     }
                 }
@@ -100,8 +129,8 @@ private fun ManagerScreen(vm: ManagerViewModel) {
             OutlinedTextField(phone, { phone = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.phone)) }, singleLine = true)
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { vm.pair("qr", phone) }, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.request_qr)) }
-                FilledTonalButton(onClick = { vm.pair("code", phone) }, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.request_code)) }
+                FilledTonalButton(onClick = { vm.pair("qr", phone) }, enabled = state.connected && !runtimeOffline && !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.request_qr)) }
+                FilledTonalButton(onClick = { vm.pair("code", phone) }, enabled = state.connected && !runtimeOffline && !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.request_code)) }
             }
             if (state.pairState != "idle") {
                 Spacer(Modifier.height(12.dp)); Text(state.pairState.uppercase(), color = Color(0xFF93C5FD), style = MaterialTheme.typography.labelSmall)
@@ -116,18 +145,16 @@ private fun ManagerScreen(vm: ManagerViewModel) {
 
         ManagerCard {
             Header(stringResource(R.string.settings))
-            OutlinedTextField(state.botName, vm::setBotName, Modifier.fillMaxWidth(), label = { Text("Bot") }, singleLine = true)
+            OutlinedTextField(state.botName, vm::setBotName, Modifier.fillMaxWidth(), label = { Text("Bot") }, singleLine = true, enabled = state.connected && !runtimeOffline)
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(state.prefix, vm::setPrefix, Modifier.fillMaxWidth(), label = { Text("Prefix") }, singleLine = true)
+            OutlinedTextField(state.prefix, vm::setPrefix, Modifier.fillMaxWidth(), label = { Text("Prefix") }, singleLine = true, enabled = state.connected && !runtimeOffline)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = state.language == "es", onClick = { vm.setLanguage("es") }, label = { Text("Español") })
-                FilterChip(selected = state.language == "en", onClick = { vm.setLanguage("en") }, label = { Text("English") })
+                FilterChip(selected = state.language == "es", onClick = { vm.setLanguage("es") }, enabled = state.connected && !runtimeOffline, label = { Text("Español") })
+                FilterChip(selected = state.language == "en", onClick = { vm.setLanguage("en") }, enabled = state.connected && !runtimeOffline, label = { Text("English") })
             }
             Spacer(Modifier.height(10.dp))
-            Button(onClick = vm::saveConfig, enabled = state.connected && !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save)) }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = vm::requestUpdate, enabled = state.connected && !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Runtime update") }
+            Button(onClick = vm::saveConfig, enabled = state.connected && !runtimeOffline && !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save)) }
         }
 
         ManagerCard {
