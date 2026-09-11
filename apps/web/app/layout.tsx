@@ -1,31 +1,41 @@
 import type { Metadata } from 'next'
 import PublicQuickStart from '../components/PublicQuickStart'
+import { LanguageSwitcher, WebI18nProvider } from '../components/i18n-provider'
+import { getWebLocale } from '../lib/i18n-server'
+import { webT } from '../lib/i18n'
 import './globals.css'
 
-export const metadata: Metadata = {
-  title: 'Ghost Nexora Bot | Ecosistema para WhatsApp',
-  description: 'Ghost Nexora Bot reúne inteligencia artificial, descargas, economía, juegos, moderación, stickers, colecciones, personalización y subbots para comunidades de WhatsApp.',
-  applicationName: 'Ghost Nexora Bot',
-  keywords: ['Ghost Nexora Bot', 'WhatsApp bot', 'Nexora', 'Ghost Developer', 'subbots', 'economía NXC', 'moderación de grupos'],
-  openGraph: {
-    title: 'Ghost Nexora Bot',
-    description: 'Un ecosistema completo para comunidades de WhatsApp: IA, descargas, economía, juegos, moderación, personalización y subbots.',
-    type: 'website',
-    locale: 'es_MX',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Ghost Nexora Bot',
-    description: 'IA, descargas, economía, juegos, moderación y subbots dentro de WhatsApp.',
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getWebLocale()
+  return {
+    title: webT(locale, 'meta.title'),
+    description: webT(locale, 'meta.description'),
+    applicationName: 'Ghost Nexora Bot',
+    keywords: ['Ghost Nexora Bot', 'WhatsApp bot', 'Telegram bot', 'Discord bot', 'Nexora', 'Ghost Developer', 'subbots', 'NXC'],
+    openGraph: {
+      title: 'Ghost Nexora Bot',
+      description: webT(locale, 'meta.ogDescription'),
+      type: 'website',
+      locale: locale === 'en' ? 'en_US' : 'es_MX',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'Ghost Nexora Bot',
+      description: webT(locale, 'meta.twitterDescription'),
+    },
+  }
 }
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getWebLocale()
   return (
-    <html lang="es">
+    <html lang={locale}>
       <body>
-        {children}
-        <PublicQuickStart />
+        <WebI18nProvider locale={locale}>
+          {children}
+          <PublicQuickStart />
+          <LanguageSwitcher />
+        </WebI18nProvider>
       </body>
     </html>
   )
