@@ -39,7 +39,7 @@ class SecureTokenStore(context: Context) {
             .apply()
     }
 
-    fun baseUrl(): String = prefs.getString("base_url", "") ?: ""
+    fun baseUrl(): String = prefs.getString("base_url", "http://10.0.2.2:3002") ?: "http://10.0.2.2:3002"
 
     fun token(): String {
         val iv = prefs.getString("token_iv", null) ?: return ""
