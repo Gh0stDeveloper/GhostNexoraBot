@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, Bot, CircleDot, Languages, RefreshCw, Save, Server, ShieldCheck, Terminal, Unplug, Wifi } from 'lucide-react'
-import type { ConfigResponse, LogsResponse, PairStatusResponse, RuntimeMetricsResponse, RuntimeStatusResponse } from '@ghostnexora/control-api-contracts'
+import { Activity, Bot, CircleDot, Languages, Play, RefreshCw, RotateCw, Save, Server, ShieldCheck, Square, Terminal, Unplug, Wifi } from 'lucide-react'
+import type { ConfigResponse, LogsResponse, PairStatusResponse, RuntimeAction, RuntimeMetricsResponse, RuntimeStatusResponse } from '@ghostnexora/control-api-contracts'
 import { control, type ConnectionProfile } from './control'
 import { makeTranslator, type Locale } from './i18n'
 
-const initial: ConnectionProfile = { baseUrl: 'http://127.0.0.1:3001', token: '' }
+const initial: ConnectionProfile = { baseUrl: 'http://127.0.0.1:3002', token: '' }
 
 export default function App() {
   const [locale, setLocale] = useState<Locale>('es')
@@ -23,10 +23,19 @@ export default function App() {
   async function refresh(profile = connection) {
     setBusy(true); setError('')
     try {
-      const [s, m, l, c] = await Promise.all([control.status(profile), control.metrics(profile), control.logs(profile), control.config(profile)])
-      setStatus(s); setMetrics(m); setLogs(l); setConfig(c.config); setConnected(true)
+      const s = await control.status(profile)
+      setStatus(s); setConnected(true)
+      if (s.runtime.state === 'offline') {
+        setMetrics(null); setLogs(null); setConfig(null)
+        return
+      }
+      const [m, l, c] = await Promise.allSettled([control.metrics(profile), control.logs(profile), control.config(profile)])
+      if (m.status === 'fulfilled') setMetrics(m.value)
+      if (l.status === 'fulfilled') setLogs(l.value)
+      if (c.status === 'fulfilled') setConfig(c.value.config)
     } catch (e) {
-      setConnected(false); setError(e instanceof Error ? e.message : String(e))
+      setConnected(false); setStatus(null); setMetrics(null); setLogs(null); setConfig(null)
+      setError(e instanceof Error ? e.message : String(e))
     } finally { setBusy(false) }
   }
 
@@ -35,6 +44,17 @@ export default function App() {
     const id = window.setInterval(() => void refresh(), 10_000)
     return () => window.clearInterval(id)
   }, [connected, connection.baseUrl, connection.token])
+
+  async function runtime(action: RuntimeAction) {
+    setBusy(true); setError('')
+    try {
+      const result = await control.runtime(connection, action)
+      if (!result.accepted && result.managerRequired) throw new Error(t('managerRequired'))
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e)); setBusy(false)
+    }
+  }
 
   async function platform(id: 'whatsapp' | 'telegram' | 'discord', next: boolean) {
     setBusy(true); setError('')
@@ -60,6 +80,8 @@ export default function App() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); setBusy(false) }
   }
 
+  const runtimeOffline = status?.runtime.state === 'offline'
+
   return <main className="app-shell">
     <header className="topbar">
       <div><p className="eyebrow">NEXORA / V2</p><h1>{t('title')}</h1><p>{t('subtitle')}</p></div>
@@ -81,29 +103,38 @@ export default function App() {
       <Metric icon={<Bot/>} label={t('subbots')} value={status ? `${status.subbots.online}/${status.subbots.total}` : '—'}/>
     </section>
 
+    <section className="glass panel">
+      <div className="panel-title"><h2>{t('runtimeControl')}</h2><Server size={17}/></div>
+      <div className="actions">
+        <button className="secondary" disabled={!connected || busy || !runtimeOffline} onClick={() => void runtime('start')}><Play size={15}/>{t('start')}</button>
+        <button className="secondary" disabled={!connected || busy || runtimeOffline} onClick={() => void runtime('stop')}><Square size={15}/>{t('stop')}</button>
+        <button className="secondary" disabled={!connected || busy || runtimeOffline} onClick={() => void runtime('restart')}><RotateCw size={15}/>{t('restart')}</button>
+        <button className="secondary" disabled={!connected || busy} onClick={() => void runtime('update')}><RefreshCw size={15}/>{t('update')}</button>
+      </div>
+    </section>
+
     <section className="grid two-column">
       <article className="glass panel"><div className="panel-title"><h2>{t('platforms')}</h2><button className="icon-button" onClick={() => void refresh()}><RefreshCw size={16}/></button></div>
         <div className="platform-list">{status?.platforms.map((item) => <div className="platform-row" key={item.id}>
           <div><strong>{item.id[0]?.toUpperCase()}{item.id.slice(1)}</strong><small>{item.accountLabel || item.state}</small></div>
           <span className={item.connected ? 'badge online' : 'badge'}>{item.connected ? t('online') : t('offline')}</span>
-          <button className="secondary" disabled={busy || (!item.enabled && !item.connected)} onClick={() => void platform(item.id, !item.connected)}>{item.connected ? <Unplug size={15}/> : <Wifi size={15}/>} {item.connected ? t('disconnect') : t('connect')}</button>
+          <button className="secondary" disabled={busy || runtimeOffline || (!item.enabled && !item.connected)} onClick={() => void platform(item.id, !item.connected)}>{item.connected ? <Unplug size={15}/> : <Wifi size={15}/>} {item.connected ? t('disconnect') : t('connect')}</button>
         </div>) ?? <p>{t('noData')}</p>}</div>
       </article>
 
       <article className="glass panel"><div className="panel-title"><h2>{t('pairing')}</h2></div>
         <label><span>{t('phone')}</span><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+52 55 1234 5678"/></label>
-        <div className="actions"><button className="secondary" onClick={() => void pairStart('qr')}>{t('pairQr')}</button><button className="secondary" onClick={() => void pairStart('code')}>{t('pairCode')}</button></div>
+        <div className="actions"><button className="secondary" disabled={runtimeOffline || busy} onClick={() => void pairStart('qr')}>{t('pairQr')}</button><button className="secondary" disabled={runtimeOffline || busy} onClick={() => void pairStart('code')}>{t('pairCode')}</button></div>
         {pair && <div className="pair-result"><strong>{pair.state}</strong>{pair.pairingCode && <code>{pair.pairingCode}</code>}{pair.qr && <textarea readOnly value={pair.qr}/>}<small>{pair.detail}</small></div>}
       </article>
     </section>
 
     <section className="grid two-column">
       <article className="glass panel"><div className="panel-title"><h2>{t('settings')}</h2><Save size={17}/></div>
-        <label><span>{t('botName')}</span><input value={config?.botName ?? ''} onChange={(e) => config && setConfig({ ...config, botName: e.target.value })}/></label>
-        <label><span>{t('prefix')}</span><input value={config?.prefix ?? ''} onChange={(e) => config && setConfig({ ...config, prefix: e.target.value })}/></label>
-        <label><span>{t('language')}</span><select value={config?.language ?? 'es'} onChange={(e) => config && setConfig({ ...config, language: e.target.value as 'es' | 'en' })}><option value="es">Español</option><option value="en">English</option></select></label>
+        <label><span>{t('botName')}</span><input value={config?.botName ?? ''} disabled={!config} onChange={(e) => config && setConfig({ ...config, botName: e.target.value })}/></label>
+        <label><span>{t('prefix')}</span><input value={config?.prefix ?? ''} disabled={!config} onChange={(e) => config && setConfig({ ...config, prefix: e.target.value })}/></label>
+        <label><span>{t('language')}</span><select value={config?.language ?? 'es'} disabled={!config} onChange={(e) => config && setConfig({ ...config, language: e.target.value as 'es' | 'en' })}><option value="es">Español</option><option value="en">English</option></select></label>
         <button className="primary" disabled={!config || busy} onClick={() => void saveConfig()}><Save size={16}/>{t('save')}</button>
-        <button className="secondary danger-space" disabled={!connected || busy} onClick={async () => { setBusy(true); try { await control.update(connection); setError('') } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) } }}><RefreshCw size={16}/>{t('update')}</button>
       </article>
 
       <article className="glass panel terminal"><div className="panel-title"><h2>{t('logs')}</h2><Terminal size={17}/></div>
