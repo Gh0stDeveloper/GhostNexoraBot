@@ -8,7 +8,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json",
     "build:termux": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.termux.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
     "pair": "node dist/pair.js",
     "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite node dist-termux/termux-lite.js",
@@ -29,7 +29,7 @@
     "pdf-parse": "^2.4.5",
     "pino": "^9.9.0",
     "qrcode": "^1.5.4",
-    "qrcode-terminal": "^0.12.0",
+    "qrcode-terminal": "^0.12.2",
     "yt-search": "^2.13.1",
     "zod": "^4.1.5"
   },
