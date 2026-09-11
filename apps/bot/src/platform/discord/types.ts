@@ -109,6 +109,10 @@ export interface DiscordInteraction {
   token: string
   version: number
   message?: DiscordMessage
+  /** BCP-47/Discord locale hint for the invoking user, for example es-ES or en-US. */
+  locale?: string
+  /** Guild locale configured by Discord. User locale keeps higher precedence. */
+  guild_locale?: string
 }
 
 export type DiscordButtonComponent =
@@ -143,12 +147,14 @@ export interface DiscordCreateMessageBody {
 export interface DiscordApplicationCommandDefinition {
   name: string
   description: string
+  description_localizations?: Record<string, string>
   type?: 1
   dm_permission?: boolean
   options?: Array<{
     type: 3
     name: string
     description: string
+    description_localizations?: Record<string, string>
     required?: boolean
     max_length?: number
   }>
