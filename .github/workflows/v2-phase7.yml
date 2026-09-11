@@ -1,0 +1,168 @@
+name: V2 Phase 7
+
+on:
+  pull_request:
+    paths:
+      - 'apps/bot/**'
+      - 'apps/desktop/**'
+      - 'apps/android/**'
+      - 'packages/**'
+      - 'scripts/v2-phase7-*.mjs'
+      - 'scripts/v2-phase6-*.mjs'
+      - 'scripts/v2-phase3-command-regression.mjs'
+      - 'scripts/v2-baseline-report.mjs'
+      - 'package.json'
+      - 'docs/v2/**'
+      - '.github/workflows/v2-phase7.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+      - name: Build all workspaces
+        run: npm run build
+      - name: Phase 0 contracts
+        run: npm run v2:contracts
+      - name: Phase 1 WhatsApp
+        run: npm run v2:whatsapp-adapter
+      - name: Phase 2 UI
+        run: npm run v2:ui-compat
+      - name: Phase 3 providers
+        run: npm run v2:providers
+      - name: Phase 4 Telegram
+        run: npm run v2:telegram
+      - name: Phase 5 Discord
+        run: npm run v2:discord
+      - name: Phase 6 i18n
+        run: npm run v2:i18n
+      - name: Phase 7 Control API and app boundary
+        run: npm run v2:official-apps
+      - name: Termux Lite build
+        run: npm run build:termux --workspace=@ghostnexora/bot
+      - name: Termux Lite smoke
+        run: node scripts/termux-lite-smoke.mjs
+      - name: Generate command inventory
+        run: node scripts/v2-baseline-report.mjs --output=v2-phase7-inventory.json
+      - name: Preserve WhatsApp command surface
+        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase7-inventory.json
+      - name: Upload Phase 7 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase7-evidence
+          path: |
+            v2-phase7-inventory.json
+            v2-phase6-i18n-audit.json
+            i18n-user-facing-audit.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  desktop-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - name: Install dependencies
+        run: npm install
+      - name: Frontend build
+        run: npm run build --workspace=@ghostnexora/desktop
+      - name: Rust check
+        run: npm run tauri:check --workspace=@ghostnexora/desktop
+      - name: Build deb and AppImage
+        run: npm run tauri --workspace=@ghostnexora/desktop -- build --bundles deb,appimage
+      - name: Checksums
+        run: find apps/desktop/src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0 | sort -z | xargs -0 sha256sum | tee phase7-linux-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-nexora-manager-linux
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/deb/*.deb
+            apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            phase7-linux-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  desktop-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: npm install
+      - name: Frontend build
+        run: npm run build --workspace=@ghostnexora/desktop
+      - name: Rust check
+        run: npm run tauri:check --workspace=@ghostnexora/desktop
+      - name: Build NSIS installer
+        run: npm run tauri --workspace=@ghostnexora/desktop -- build --bundles nsis
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem 'apps/desktop/src-tauri/target/release/bundle/nsis/*.exe' | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Add-Content phase7-windows-sha256.txt
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-nexora-manager-windows
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            phase7-windows-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  android-remote-manager:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Install Android SDK 37
+        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+      - name: Android lint and unit tests
+        run: gradle -p apps/android lintDebug testDebugUnitTest
+      - name: Build debug and unsigned release APKs
+        run: gradle -p apps/android assembleDebug assembleRelease
+      - name: Checksums
+        run: find apps/android/app/build/outputs/apk -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum | tee phase7-android-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-nexora-manager-android
+          path: |
+            apps/android/app/build/outputs/apk/debug/*.apk
+            apps/android/app/build/outputs/apk/release/*.apk
+            phase7-android-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
