@@ -23,7 +23,8 @@
     "v2:providers:live": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase3-live-provider-audit.mjs",
     "v2:telegram": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase4-telegram-smoke.mjs && node scripts/v2-phase4-telegram-audit.mjs",
     "v2:discord": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/v2-phase5-discord-smoke.mjs && node scripts/v2-phase5-discord-rest-smoke.mjs && node scripts/v2-phase5-discord-gateway-smoke.mjs && node scripts/v2-phase5-discord-runtime-smoke.mjs && node scripts/v2-phase5-discord-audit.mjs",
-    "v2:i18n": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && npm run build --workspace=@ghostnexora/web && node scripts/i18n-user-facing-audit.mjs && node scripts/v2-phase6-i18n-smoke.mjs && node scripts/v2-phase6-i18n-boundary-audit.mjs"
+    "v2:i18n": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && npm run build --workspace=@ghostnexora/web && node scripts/i18n-user-facing-audit.mjs && node scripts/v2-phase6-i18n-smoke.mjs && node scripts/v2-phase6-i18n-boundary-audit.mjs",
+    "v2:official-apps": "npm run build --workspace=@ghostnexora/control-api-contracts && npm run build --workspace=@ghostnexora/bot && npm run build --workspace=@ghostnexora/desktop && node scripts/v2-phase7-control-api-smoke.mjs && node scripts/v2-phase7-official-apps-audit.mjs"
   },
   "overrides": {
     "redstar": {
