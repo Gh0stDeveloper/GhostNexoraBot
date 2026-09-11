@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json --noEmit",
     "tauri": "tauri",
     "tauri:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "tauri:build": "tauri build"
