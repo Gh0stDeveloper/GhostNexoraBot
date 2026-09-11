@@ -8,6 +8,8 @@ import {
   type PairStartRequest,
   type PairStatusResponse,
   type PlatformsResponse,
+  type RuntimeAction,
+  type RuntimeActionResponse,
   type RuntimeMetricsResponse,
   type RuntimeStatusResponse,
 } from '@ghostnexora/control-api-contracts'
@@ -37,6 +39,13 @@ async function request<T>(connection: ConnectionProfile, method: string, path: s
   return parsed
 }
 
+function runtimePath(action: RuntimeAction) {
+  if (action === 'start') return CONTROL_API_PATHS.runtimeStart
+  if (action === 'stop') return CONTROL_API_PATHS.runtimeStop
+  if (action === 'restart') return CONTROL_API_PATHS.runtimeRestart
+  return CONTROL_API_PATHS.runtimeUpdate
+}
+
 export const control = {
   status: (c: ConnectionProfile) => request<RuntimeStatusResponse>(c, 'GET', CONTROL_API_PATHS.status),
   metrics: (c: ConnectionProfile) => request<RuntimeMetricsResponse>(c, 'GET', CONTROL_API_PATHS.metrics),
@@ -48,5 +57,6 @@ export const control = {
     request<{ ok: true }>(c, 'POST', connect ? CONTROL_API_PATHS.platformConnect(id) : CONTROL_API_PATHS.platformDisconnect(id)),
   pairStart: (c: ConnectionProfile, payload: PairStartRequest) => request<PairStatusResponse>(c, 'POST', CONTROL_API_PATHS.pairStart, payload),
   pairStatus: (c: ConnectionProfile) => request<PairStatusResponse>(c, 'GET', CONTROL_API_PATHS.pairStatus),
-  update: (c: ConnectionProfile) => request<{ ok: true; accepted: boolean }>(c, 'POST', CONTROL_API_PATHS.runtimeUpdate),
+  runtime: (c: ConnectionProfile, action: RuntimeAction) => request<RuntimeActionResponse>(c, 'POST', runtimePath(action)),
+  update: (c: ConnectionProfile) => request<RuntimeActionResponse>(c, 'POST', CONTROL_API_PATHS.runtimeUpdate),
 }
