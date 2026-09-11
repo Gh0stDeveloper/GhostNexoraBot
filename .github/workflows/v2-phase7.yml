@@ -9,7 +9,12 @@ on:
       - 'apps/bot/**'
       - 'apps/desktop/**'
       - 'apps/android/**'
+      - 'apps/manager-agent/**'
       - 'packages/**'
+      - 'systemd/ghost-nexora-manager.service'
+      - 'scripts/install-manager-api.sh'
+      - 'scripts/install.sh'
+      - 'scripts/update.sh'
       - 'scripts/v2-phase7-*.mjs'
       - 'scripts/v2-phase6-*.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
@@ -153,7 +158,7 @@ jobs:
         with:
           gradle-version: '9.6.0'
       - name: Install Android SDK 37
-        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+        run: sdkmanager --channel=3 'platforms;android-37' 'build-tools;36.0.0'
       - name: Android lint and unit tests
         run: gradle -p apps/android lintDebug testDebugUnitTest
       - name: Build debug and unsigned release APKs
