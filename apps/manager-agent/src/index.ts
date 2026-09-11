@@ -89,7 +89,7 @@ async function botFetch(pathname: string, method = 'GET', body?: Buffer) {
       authorization: `Bearer ${TOKEN}`,
       ...(body?.length ? { 'content-type': 'application/json' } : {}),
     },
-    body: body?.length ? body : undefined,
+    body: body?.length ? new Uint8Array(body) : undefined,
     signal: AbortSignal.timeout(method === 'GET' ? 5_000 : 30_000),
   }).catch(() => null)
 }
