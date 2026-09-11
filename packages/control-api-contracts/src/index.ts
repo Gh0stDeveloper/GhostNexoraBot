@@ -20,6 +20,7 @@ export const CONTROL_API_PATHS = {
 
 export type PlatformId = 'whatsapp' | 'telegram' | 'discord'
 export type RuntimeState = 'online' | 'offline' | 'starting' | 'stopping' | 'degraded'
+export type RuntimeAction = 'start' | 'stop' | 'restart' | 'update'
 export type PairState = 'idle' | 'waiting' | 'paired' | 'expired' | 'error'
 
 export interface ControlError {
@@ -143,7 +144,7 @@ export interface PairStatusResponse {
 
 export interface RuntimeActionResponse {
   ok: true
-  action: 'start' | 'stop' | 'restart' | 'update'
+  action: RuntimeAction
   accepted: boolean
   managerRequired?: boolean
   detail?: string
