@@ -49,6 +49,18 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
     fun connect() = launchAction(saveConnection = true) { refreshInternal(client()) }
     fun refresh() = launchAction { refreshInternal(client()) }
 
+    fun runtime(action: String) = launchAction {
+        val safeAction = when (action) {
+            "start", "stop", "restart", "update" -> action
+            else -> error("invalid_runtime_action")
+        }
+        val result = client().post("/v2/runtime/$safeAction")
+        if (!result.optBoolean("accepted", false) && result.optBoolean("managerRequired", false)) {
+            error("manager_agent_required")
+        }
+        refreshInternal(client())
+    }
+
     fun platform(id: String, connect: Boolean) = launchAction {
         val safeId = when (id) { "whatsapp", "telegram", "discord" -> id; else -> error("invalid_platform") }
         client().post("/v2/platforms/$safeId/${if (connect) "connect" else "disconnect"}")
@@ -76,7 +88,7 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
         refreshInternal(client())
     }
 
-    fun requestUpdate() = launchAction { client().post("/v2/runtime/update") }
+    fun requestUpdate() = runtime("update")
 
     private fun launchAction(saveConnection: Boolean = false, block: suspend () -> Unit) {
         viewModelScope.launch {
@@ -85,7 +97,7 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
                 withContext(Dispatchers.IO) { block() }
                 if (saveConnection) store.save(_state.value.baseUrl.trim(), _state.value.token.trim())
             } catch (error: Throwable) {
-                _state.value = _state.value.copy(connected = false, error = error.message ?: "control_failed")
+                _state.value = _state.value.copy(error = error.message ?: "control_failed")
             } finally {
                 _state.value = _state.value.copy(busy = false)
             }
@@ -94,25 +106,38 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
 
     private fun refreshInternal(api: ControlApiClient) {
         val status = api.get("/v2/status")
-        val config = api.get("/v2/config").getJSONObject("config")
-        val logs = api.get("/v2/logs").optJSONArray("entries") ?: JSONArray()
         val runtime = status.getJSONObject("runtime")
         val platformRows = status.optJSONArray("platforms") ?: JSONArray()
+        val runtimeState = runtime.optString("state", "offline")
+
         _state.value = _state.value.copy(
             connected = true,
-            runtimeState = runtime.optString("state", "offline"),
+            runtimeState = runtimeState,
             uptimeSeconds = runtime.optLong("uptimeSeconds", 0),
-            botName = config.optString("botName", "Ghost Nexora Bot"),
-            prefix = config.optString("prefix", "."),
-            language = config.optString("language", "es"),
+            botName = runtime.optString("botName", _state.value.botName),
+            prefix = runtime.optString("prefix", _state.value.prefix),
             platforms = List(platformRows.length()) { index ->
                 val item = platformRows.getJSONObject(index)
                 PlatformUi(item.getString("id"), item.optBoolean("connected"), item.optBoolean("enabled"), item.optString("state"), item.optString("accountLabel").takeIf { it.isNotBlank() && it != "null" })
             },
-            logs = List(logs.length()) { index ->
-                val item = logs.getJSONObject(index)
-                LogUi(item.optString("cursor", index.toString()), item.optString("timestamp"), item.optString("level"), item.optString("message"))
-            },
+            logs = if (runtimeState == "offline") emptyList() else _state.value.logs,
+        )
+
+        if (runtimeState == "offline") return
+
+        val config = runCatching { api.get("/v2/config").getJSONObject("config") }.getOrNull()
+        val logs = runCatching { api.get("/v2/logs").optJSONArray("entries") ?: JSONArray() }.getOrNull()
+
+        _state.value = _state.value.copy(
+            botName = config?.optString("botName", _state.value.botName) ?: _state.value.botName,
+            prefix = config?.optString("prefix", _state.value.prefix) ?: _state.value.prefix,
+            language = config?.optString("language", _state.value.language) ?: _state.value.language,
+            logs = logs?.let { rows ->
+                List(rows.length()) { index ->
+                    val item = rows.getJSONObject(index)
+                    LogUi(item.optString("cursor", index.toString()), item.optString("timestamp"), item.optString("level"), item.optString("message"))
+                }
+            } ?: _state.value.logs,
         )
     }
 }
