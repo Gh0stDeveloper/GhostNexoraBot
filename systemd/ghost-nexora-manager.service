@@ -1,0 +1,32 @@
+[Unit]
+Description=Ghost Nexora Manager Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=__INSTALL_DIR__
+Environment=NODE_ENV=production
+EnvironmentFile=-__INSTALL_DIR__/.env
+Environment=MANAGER_PORT=__MANAGER_PORT__
+ExecStart=/usr/bin/env node __INSTALL_DIR__/apps/manager-agent/dist/index.js
+Restart=always
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=__STATE_DIR__
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
