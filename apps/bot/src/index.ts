@@ -1,6 +1,7 @@
 import http from 'node:http'
 import { Boom } from '@hapi/boom'
 import { DisconnectReason, type WASocket } from 'baileys'
+import type { PairStartRequest } from '@ghostnexora/control-api-contracts'
 import qrcode from 'qrcode-terminal'
 import { config } from './config.js'
 import { createSocket } from './core/session.js'
@@ -13,6 +14,13 @@ import { createWhatsAppAdapter } from './platform/whatsapp/adapter.js'
 import { discordRuntimeStatus, startDiscordPlatform } from './platform/discord/runtime.js'
 import { economy } from './services/economy.js'
 import { executeAdminWebControl } from './services/admin-web-control.js'
+import {
+  handleControlApiV2,
+  markControlPairConnected,
+  markControlPairError,
+  recordControlLog,
+  setControlPairQr,
+} from './services/control-api-v2.js'
 import { installAtomicWalletBridge } from './services/wallet-atomic.js'
 import { handleParticipantUpdateV2, moderateIncomingV2 } from './services/moderation-v2.js'
 import { observeMessageIdentity, resolveStoredIdentity } from './services/identity.js'
@@ -45,6 +53,14 @@ let reconnectTimer: NodeJS.Timeout | null = null
 let reconnectAttempts = 0
 let mainSocket: WASocket | null = null
 let socketGeneration = 0
+let whatsappPaused = false
+let pendingPairRequest: {
+  mode: 'qr' | 'code'
+  phoneNumber?: string
+  resolve: (value: { pairingCode?: string | null; detail?: string | null }) => void
+  reject: (reason?: unknown) => void
+  timeout: NodeJS.Timeout
+} | null = null
 
 function mainSocketConnected() {
   return Boolean(mainSocket && mainSocket.authState.creds.registered && mainSocket.user?.id)
@@ -82,8 +98,69 @@ async function executeControl(body: Record<string, unknown>) {
   return executeAdminWebControl(body, effectiveMainConnected() ? mainSocket : null)
 }
 
+async function controlConnectWhatsApp() {
+  whatsappPaused = false
+  if (effectiveMainConnected()) return
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  await connect()
+}
+
+async function controlDisconnectWhatsApp() {
+  whatsappPaused = true
+  connected = false
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  const socket = mainSocket
+  mainSocket = null
+  socketGeneration += 1
+  if (socket) {
+    try { socket.end(new Error('Control API requested WhatsApp disconnect')) } catch {}
+  }
+  recordControlLog('info', 'WhatsApp transport paused by Control API V2')
+}
+
+async function controlStartWhatsAppPairing(request: PairStartRequest) {
+  whatsappPaused = false
+  if (effectiveMainConnected()) return { detail: 'already_paired' }
+  if (!mainSocket) await connect()
+
+  if ((request.mode ?? 'qr') === 'qr') {
+    return { detail: 'wait_for_qr' }
+  }
+
+  const phoneNumber = String(request.phoneNumber ?? '').replace(/\D/g, '')
+  if (phoneNumber.length < 8 || phoneNumber.length > 15) throw new Error('invalid_phone_number')
+  if (pendingPairRequest) throw new Error('pairing_already_pending')
+
+  return await new Promise<{ pairingCode?: string | null; detail?: string | null }>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      if (pendingPairRequest?.resolve === resolve) pendingPairRequest = null
+      reject(new Error('pairing_code_timeout'))
+    }, 30_000)
+    timeout.unref?.()
+    pendingPairRequest = { mode: 'code', phoneNumber, resolve, reject, timeout }
+  })
+}
+
+function controlApiDeps() {
+  return {
+    whatsappConnected: effectiveMainConnected,
+    whatsappAccountLabel: () => mainSocket?.user?.id ?? activeJid,
+    connectWhatsApp: controlConnectWhatsApp,
+    disconnectWhatsApp: controlDisconnectWhatsApp,
+    startWhatsAppPairing: controlStartWhatsAppPairing,
+  }
+}
+
 function startHealthServer() {
   const server = http.createServer(async (req, res) => {
+    if (await handleControlApiV2(req, res, controlApiDeps())) return
+
     if (req.method === 'POST' && req.url === '/control') {
       const auth = req.headers.authorization ?? ''
       if (!config.adminWebToken || auth !== `Bearer ${config.adminWebToken}`) {
@@ -117,6 +194,7 @@ function startHealthServer() {
     json(res, live ? 200 : 503, {
       ok: live,
       service: 'ghost-nexora-bot',
+      apiVersion: 'v2',
       botName: config.botName,
       prefix: settings.prefix,
       connected: live,
@@ -281,7 +359,7 @@ async function routeMessage(
 }
 
 function scheduleMainReconnect(reason: string) {
-  if (reconnectTimer) return
+  if (whatsappPaused || reconnectTimer) return
   reconnectAttempts += 1
   const exponent = Math.min(5, Math.max(0, reconnectAttempts - 1))
   const delay = Math.min(60_000, 2000 * (2 ** exponent)) + Math.floor(Math.random() * 1000)
@@ -289,6 +367,7 @@ function scheduleMainReconnect(reason: string) {
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
+    if (whatsappPaused) return
     void connect().catch((error) => {
       logger.error({ error, reconnectAttempts }, 'main WhatsApp reconnect failed')
       scheduleMainReconnect('connect_failed')
@@ -298,6 +377,7 @@ function scheduleMainReconnect(reason: string) {
 }
 
 async function connect() {
+  whatsappPaused = false
   const generation = ++socketGeneration
   const { socket } = await createSocket()
   if (generation !== socketGeneration) {
@@ -328,6 +408,19 @@ async function connect() {
   socket.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     if (generation !== socketGeneration) return
     if (qr && !socket.authState.creds.registered) {
+      setControlPairQr(qr)
+      if (pendingPairRequest?.mode === 'code' && pendingPairRequest.phoneNumber) {
+        const pending = pendingPairRequest
+        pendingPairRequest = null
+        clearTimeout(pending.timeout)
+        void socket.requestPairingCode(pending.phoneNumber).then((code) => {
+          const prettyCode = code.match(/.{1,4}/g)?.join('-') ?? code
+          pending.resolve({ pairingCode: prettyCode, detail: 'pairing_code_ready' })
+        }).catch((error) => {
+          markControlPairError(error instanceof Error ? error.message : String(error))
+          pending.reject(error)
+        })
+      }
       logger.warn('session is not linked; showing QR fallback in terminal')
       qrcode.generate(qr, { small: true })
       logger.warn('recommended: run `npm run pair` to link with a phone-number pairing code')
@@ -338,6 +431,8 @@ async function connect() {
       activeJid = socket.user?.id ?? null
       mainSocket = socket
       reconnectAttempts = 0
+      markControlPairConnected()
+      recordControlLog('info', 'WhatsApp MainBot connected')
       logger.info({ jid: activeJid, prefix: settings.prefix, generation }, config.botName + ' connected')
     }
     if (connection === 'close') {
@@ -347,10 +442,11 @@ async function connect() {
       const loggedOut = statusCode === DisconnectReason.loggedOut
       logger.warn({ statusCode, loggedOut, generation }, 'WhatsApp connection closed')
       if (loggedOut) {
+        markControlPairError('session_logged_out')
         logger.error('session logged out; run `npm run pair` to link again')
         return
       }
-      scheduleMainReconnect(`connection_close:${statusCode ?? 'unknown'}`)
+      if (!whatsappPaused) scheduleMainReconnect(`connection_close:${statusCode ?? 'unknown'}`)
     }
   })
 }
