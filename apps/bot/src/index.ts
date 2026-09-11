@@ -56,7 +56,7 @@ let socketGeneration = 0
 let whatsappPaused = false
 let pendingPairRequest: {
   mode: 'qr' | 'code'
-  phoneNumber?: string
+  phoneNumber: string
   resolve: (value: { pairingCode?: string | null; detail?: string | null }) => void
   reject: (reason?: unknown) => void
   timeout: NodeJS.Timeout
