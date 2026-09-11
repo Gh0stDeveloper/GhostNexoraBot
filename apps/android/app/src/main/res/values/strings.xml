@@ -5,6 +5,7 @@
     <string name="server_url">URL de Control API</string>
     <string name="access_token">Token de acceso</string>
     <string name="connect">Conectar</string>
+    <string name="disconnect">Desconectar</string>
     <string name="refresh">Actualizar</string>
     <string name="platforms">Plataformas</string>
     <string name="pairing">Vinculación WhatsApp</string>
