@@ -71,7 +71,10 @@ const webEnKeys = objectKeys(webCatalog, 'en')
 check('Web ES catalog exists', webEsKeys.length >= 200, `keys=${webEsKeys.length}`)
 check('Web ES/EN catalog parity', JSON.stringify(webEsKeys) === JSON.stringify(webEnKeys), `es=${webEsKeys.length} en=${webEnKeys.length}`)
 
-const spanishHints = /(?:\b(?:el|la|los|las|una|para|por|con|sin|grupo|grupos|usuario|usuarios|comando|comandos|mensaje|mensajes|error|disponible|selecciona|descargar|buscar|página|perfil|tienda|saldo|bienvenido|advertencia|expulsado|activado|desactivado|uso|solo|necesitas|puedes|ahora|estado|actualizado|configurado|idioma|cerrar|abrir|volver|sesión|vincular|administración|auditoría|gestión|número|tráfico|vencimiento|resumen|cuenta)\b|[áéíóúñ¿¡])/i
+// Hints deliberately exclude language-neutral technical tokens such as "error".
+// Paths/URLs are also excluded before language classification because query keys
+// are protocol/navigation data, not user-facing copy.
+const spanishHints = /(?:\b(?:el|la|los|las|una|para|por|con|sin|grupo|grupos|usuario|usuarios|comando|comandos|mensaje|mensajes|disponible|selecciona|descargar|buscar|página|perfil|tienda|saldo|bienvenido|advertencia|expulsado|activado|desactivado|uso|solo|necesitas|puedes|ahora|estado|actualizado|configurado|idioma|cerrar|abrir|volver|sesión|vincular|administración|auditoría|gestión|número|tráfico|vencimiento|resumen|cuenta)\b|[áéíóúñ¿¡])/i
 const webRoots = ['apps/web/app', 'apps/web/components']
 const webSkipParts = [
   `${path.sep}api${path.sep}`,
@@ -97,8 +100,11 @@ function literalText(node) {
 
 function isExemptLiteral(node, sf) {
   const text = literalText(node) ?? ''
-  if (!text.trim()) return true
-  if (/^(?:https?:|\/|\.|#|[a-z0-9_-]+(?:\s+[a-z0-9_:[\]()./'"=;-]+)*)$/i.test(text.trim()) && !spanishHints.test(text)) return true
+  const trimmed = text.trim()
+  if (!trimmed) return true
+  if (/^(?:https?:|\/|#)/i.test(trimmed)) return true
+  if (/^Error:?$/i.test(trimmed)) return true
+  if (/^(?:\.|[a-z0-9_-]+(?:\s+[a-z0-9_:[\]()./'"=;-]+)*)$/i.test(trimmed) && !spanishHints.test(trimmed)) return true
   let current = node.parent
   for (let depth = 0; current && depth < 6; depth += 1, current = current.parent) {
     if (ts.isCallExpression(current)) {
