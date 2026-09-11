@@ -1,10 +1,12 @@
-import type { PlatformId } from '@ghostnexora/platform-contracts'
+import type { NormalizedUi, PlatformId } from '@ghostnexora/platform-contracts'
 import { community } from '../services/community.js'
 import { settings } from '../core/settings.js'
 import { messages as esDefault, legacyReplacements as esLegacy } from './locales/es/default.js'
 import { messages as enDefault, legacyReplacements as enLegacy } from './locales/en/default.js'
 import { messages as esSystem } from './locales/es/system.js'
 import { messages as enSystem } from './locales/en/system.js'
+import { messages as esPhase6 } from './locales/es/phase6.js'
+import { messages as enPhase6 } from './locales/en/phase6.js'
 import { localePreferences, type LocalePreferenceScope } from './preferences.js'
 import {
   DEFAULT_LOCALE,
@@ -15,8 +17,8 @@ import {
 } from './types.js'
 
 export const catalogs = {
-  es: { ...esDefault, ...esSystem },
-  en: { ...enDefault, ...enSystem },
+  es: { ...esDefault, ...esSystem, ...esPhase6 },
+  en: { ...enDefault, ...enSystem, ...enPhase6 },
 } as const
 const replacements = { es: esLegacy, en: enLegacy } as const
 
@@ -95,11 +97,12 @@ export function resolveChatLocale(
   userId?: string | null,
   botInstanceId = 'main',
 ): LocaleCode {
+  const privateUser = chatId && !chatId.endsWith('@g.us') ? chatId : undefined
   return resolvePlatformLocale({
     platform: 'whatsapp',
     botInstanceId,
     chatId,
-    userId,
+    userId: userId ?? privateUser,
   })
 }
 
@@ -157,6 +160,41 @@ export function localizeLegacyText(text: string, locale: LocaleCode) {
   // source code or examples that must remain byte-for-byte compatible.
   const segments = text.split(/(```[\s\S]*?```)/g)
   return segments.map((segment) => segment.startsWith('```') ? segment : applyLegacyReplacements(segment, locale)).join('')
+}
+
+/** Localizes legacy NormalizedUi labels while preserving action IDs/URLs. */
+export function localizeNormalizedUi(ui: NormalizedUi, locale: LocaleCode): NormalizedUi {
+  if (locale === 'es') return ui
+  if (ui.kind === 'text') return { ...ui, text: localizeLegacyText(ui.text, locale) }
+  if (ui.kind === 'card') return {
+    ...ui,
+    title: localizeLegacyText(ui.title, locale),
+    body: ui.body ? localizeLegacyText(ui.body, locale) : ui.body,
+    footer: ui.footer ? localizeLegacyText(ui.footer, locale) : ui.footer,
+    buttons: ui.buttons?.map((button) => ({ ...button, label: localizeLegacyText(button.label, locale) })),
+  }
+  if (ui.kind === 'list') return {
+    ...ui,
+    title: ui.title ? localizeLegacyText(ui.title, locale) : ui.title,
+    body: ui.body ? localizeLegacyText(ui.body, locale) : ui.body,
+    items: ui.items.map((item) => ({
+      ...item,
+      title: localizeLegacyText(item.title, locale),
+      description: item.description ? localizeLegacyText(item.description, locale) : item.description,
+      action: item.action ? { ...item.action, label: localizeLegacyText(item.action.label, locale) } : item.action,
+    })),
+  }
+  return {
+    ...ui,
+    title: ui.title ? localizeLegacyText(ui.title, locale) : ui.title,
+    cards: ui.cards.map((card) => ({
+      ...card,
+      title: localizeLegacyText(card.title, locale),
+      body: card.body ? localizeLegacyText(card.body, locale) : card.body,
+      footer: card.footer ? localizeLegacyText(card.footer, locale) : card.footer,
+      buttons: card.buttons?.map((button) => ({ ...button, label: localizeLegacyText(button.label, locale) })),
+    })),
+  }
 }
 
 export function translateForChat(chatId: string | null | undefined, key: string, values: TranslationValues = {}) {
