@@ -54,7 +54,7 @@ assert.match(contracts, /RuntimeAction = 'start' \| 'stop' \| 'restart' \| 'upda
 // Bot-side Control API never becomes a shell/process execution boundary.
 assert.match(server, /authorization/i)
 assert.match(server, /update-request/)
-assert.doesNotMatch(server, /exec\(|execSync\(|spawn\(/, 'Control API server must not execute shell/process commands')
+assert.doesNotMatch(server, /(?:node:)?child_process|Command::new|ProcessBuilder|Runtime\.getRuntime|shell\s*:\s*true/i, 'Control API server must not import or expose process execution APIs')
 assert.match(server, /pairedState/)
 assert.match(index, /handleControlApiV2/)
 assert.match(index, /whatsappPaused/)
