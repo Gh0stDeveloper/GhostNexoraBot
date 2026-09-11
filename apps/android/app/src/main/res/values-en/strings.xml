@@ -5,6 +5,7 @@
     <string name="server_url">Control API URL</string>
     <string name="access_token">Access token</string>
     <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
     <string name="refresh">Refresh</string>
     <string name="platforms">Platforms</string>
     <string name="pairing">WhatsApp pairing</string>
