@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Check, Clipboard, Code2, Copy, X } from 'lucide-react'
 import hljs from 'highlight.js/lib/common'
 import { languageLabel } from './parse-code-blocks'
+import { useWebI18n } from '../i18n-provider'
 
 export type CodeModalProps = {
   open: boolean
@@ -20,17 +21,15 @@ function highlight(code: string, language: string) {
       ? hljs.highlight(code, { language, ignoreIllegals: true }).value
       : hljs.highlightAuto(code).value
   } catch {
-    return code
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
+    return code.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
   }
 }
 
 export function CodeModal({ open, code, language, onClose }: CodeModalProps) {
+  const { t, intlLocale } = useWebI18n()
   const [copied, setCopied] = useState(false)
   const html = useMemo(() => highlight(code, language), [code, language])
-  const title = languageLabel(language)
+  const title = languageLabel(language, t('code.plaintext'), t('code.fallback'))
 
   useEffect(() => {
     if (!open) return
@@ -73,23 +72,23 @@ export function CodeModal({ open, code, language, onClose }: CodeModalProps) {
   }
 
   return createPortal(
-    <div className="nx-code-modal" role="dialog" aria-modal="true" aria-label={`Código de ${title}`}>
-      <button className="nx-code-modal__backdrop" onClick={onClose} aria-label="Cerrar visor de código" />
+    <div className="nx-code-modal" role="dialog" aria-modal="true" aria-label={t('code.dialogAria', { language: title })}>
+      <button className="nx-code-modal__backdrop" onClick={onClose} aria-label={t('code.closeViewer')} />
       <section className="nx-code-modal__panel">
         <header className="nx-code-modal__header">
           <div className="nx-code-modal__heading">
             <span className="nx-code-modal__brand"><Code2 size={19} /></span>
             <div>
-              <p className="nx-code-modal__eyebrow">Código</p>
+              <p className="nx-code-modal__eyebrow">{t('code.eyebrow')}</p>
               <h2>{title}</h2>
             </div>
           </div>
           <div className="nx-code-modal__controls">
             <button type="button" onClick={copyCode} className="nx-code-modal__copy">
               {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? 'Copiado' : 'Copiar código'}
+              {copied ? t('code.copied') : t('code.copy')}
             </button>
-            <button type="button" onClick={onClose} className="nx-code-modal__close" aria-label="Cerrar">
+            <button type="button" onClick={onClose} className="nx-code-modal__close" aria-label={t('code.close')}>
               <X size={19} />
             </button>
           </div>
@@ -98,7 +97,7 @@ export function CodeModal({ open, code, language, onClose }: CodeModalProps) {
           <pre><code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: html }} /></pre>
         </div>
         <footer className="nx-code-modal__footer">
-          <span><Clipboard size={14} /> {code.split('\n').length} líneas</span>
+          <span><Clipboard size={14} /> {t('code.lines', { count: code.split('\n').length.toLocaleString(intlLocale) })}</span>
           <span>{title}</span>
         </footer>
       </section>
