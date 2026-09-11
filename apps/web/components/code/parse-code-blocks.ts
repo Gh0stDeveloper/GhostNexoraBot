@@ -46,58 +46,28 @@ export function parseCodeBlocks(markdown: string): CodeSegment[] {
     const [whole, language, code] = match
     const start = match.index
 
-    if (start > cursor) {
-      segments.push({ type: 'text', content: input.slice(cursor, start) })
-    }
-
+    if (start > cursor) segments.push({ type: 'text', content: input.slice(cursor, start) })
     segments.push({
       type: 'code',
       content: code.replace(/^\n/, '').replace(/\n$/, ''),
       language: normalizeLanguage(language),
     })
-
     cursor = start + whole.length
   }
 
-  if (cursor < input.length) {
-    segments.push({ type: 'text', content: input.slice(cursor) })
-  }
-
+  if (cursor < input.length) segments.push({ type: 'text', content: input.slice(cursor) })
   return segments.length ? segments : [{ type: 'text', content: input }]
 }
 
-export function languageLabel(language: string): string {
+export function languageLabel(language: string, plaintextLabel = 'Text', fallbackLabel = 'Code'): string {
   const labels: Record<string, string> = {
-    typescript: 'TypeScript',
-    javascript: 'JavaScript',
-    python: 'Python',
-    bash: 'Bash',
-    shell: 'Shell',
-    sql: 'SQL',
-    json: 'JSON',
-    yaml: 'YAML',
-    html: 'HTML',
-    css: 'CSS',
-    java: 'Java',
-    kotlin: 'Kotlin',
-    php: 'PHP',
-    c: 'C',
-    cpp: 'C++',
-    csharp: 'C#',
-    go: 'Go',
-    rust: 'Rust',
-    markdown: 'Markdown',
-    plaintext: 'Texto',
-    text: 'Texto',
+    typescript: 'TypeScript', javascript: 'JavaScript', python: 'Python', bash: 'Bash', shell: 'Shell', sql: 'SQL',
+    json: 'JSON', yaml: 'YAML', html: 'HTML', css: 'CSS', java: 'Java', kotlin: 'Kotlin', php: 'PHP', c: 'C', cpp: 'C++',
+    csharp: 'C#', go: 'Go', rust: 'Rust', markdown: 'Markdown', plaintext: plaintextLabel, text: plaintextLabel,
   }
-
-  return labels[language.toLowerCase()] ?? (language ? language.replace(/[-_]/g, ' ') : 'Código')
+  return labels[language.toLowerCase()] ?? (language ? language.replace(/[-_]/g, ' ') : fallbackLabel)
 }
 
 export function summarizeCode(code: string, maxLines = 3): string {
-  return code
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .slice(0, maxLines)
-    .join('\n')
+  return code.split('\n').filter((line) => line.trim().length > 0).slice(0, maxLines).join('\n')
 }

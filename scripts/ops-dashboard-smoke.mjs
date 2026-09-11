@@ -82,6 +82,7 @@ try {
   const adminSource = await readFile(new URL('../apps/web/app/admin/page.tsx', import.meta.url), 'utf8')
   const subbotSource = await readFile(new URL('../apps/web/app/subbot/page.tsx', import.meta.url), 'utf8')
   const publicSource = await readFile(new URL('../apps/web/app/page.tsx', import.meta.url), 'utf8')
+  const webI18nSource = await readFile(new URL('../apps/web/lib/i18n.ts', import.meta.url), 'utf8')
 
   assert.ok(routerSource.includes('performanceAudit.recordCommand'), 'router must audit every command execution')
   assert.ok(routerSource.includes("performanceAudit.recordStage('06'"), 'router must instrument plugin execution stage')
@@ -96,7 +97,9 @@ try {
   assert.ok(adminControlSource.includes("action === 'broadcast'"), 'bot control must implement web broadcast')
   assert.ok(adminSource.includes('<OpsConsole'), 'admin must render shared operations console')
   assert.ok(subbotSource.includes('<OpsConsole'), 'subbot portal must render shared operations console')
-  assert.ok(publicSource.includes('PIPELINE DAG'), 'public page must use the same operations design language')
+  assert.ok(publicSource.includes("t('home.archEyebrow')"), 'public page must source the operations design language from i18n')
+  assert.ok(webI18nSource.includes("'home.archEyebrow': 'PIPELINE DAG'"), 'Spanish web catalog must preserve the public operations design language')
+  assert.ok(webI18nSource.includes("'home.archEyebrow': 'PIPELINE DAG'"), 'English web catalog must preserve the public operations design language')
   assert.equal(publicSource.includes('ops_groups'), false, 'public page must not expose private group registry internals')
 
   console.log('operations dashboard smoke: OK')

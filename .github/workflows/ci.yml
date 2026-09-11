@@ -72,12 +72,21 @@ jobs:
       - name: User-facing i18n audit report
         run: node scripts/i18n-user-facing-audit.mjs
 
+      - name: V2 Phase 6 locale isolation smoke
+        run: node scripts/v2-phase6-i18n-smoke.mjs
+
+      - name: V2 Phase 6 i18n boundary audit
+        run: node scripts/v2-phase6-i18n-boundary-audit.mjs
+
       - name: Upload i18n audit
+        if: always()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: i18n-user-facing-audit
-          path: i18n-user-facing-audit.json
+          path: |
+            i18n-user-facing-audit.json
+            v2-phase6-i18n-audit.json
           retention-days: 3
 
       - name: Upload bot source snapshot
@@ -89,8 +98,11 @@ jobs:
             apps/bot/src
             apps/bot/package.json
             apps/bot/tsconfig.json
+            apps/web/lib/i18n.ts
             package.json
             scripts/i18n-smoke.mjs
+            scripts/v2-phase6-i18n-smoke.mjs
+            scripts/v2-phase6-i18n-boundary-audit.mjs
             scripts/private-chat-policy-smoke.mjs
             scripts/group-inactivity-smoke.mjs
             scripts/v18-runtime-smoke.mjs

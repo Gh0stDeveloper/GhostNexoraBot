@@ -10,7 +10,7 @@ import { resolveStoredIdentity } from '../services/identity.js'
 import { settings } from './settings.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
-import { createWhatsAppAdapter } from '../platform/whatsapp/adapter.js'
+import { createWhatsAppAdapter, whatsappBotInstanceId } from '../platform/whatsapp/adapter.js'
 import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 
 function normalizeJid(value?: string | null) {
@@ -113,8 +113,9 @@ export class CommandRouter {
     const isSubbotOwner = Boolean(this.options.instanceOwnerJid) && sameIdentity(sender, this.options.instanceOwnerJid)
     const isGroup = chatId.endsWith('@g.us')
     const prefix = settings.prefix
-    const locale = resolveChatLocale(chatId)
-    const localizedSocket = createLocalizedSocket(socket, locale)
+    const botInstanceId = whatsappBotInstanceId(this.options.instanceId)
+    const locale = resolveChatLocale(chatId, sender, botInstanceId)
+    const localizedSocket = createLocalizedSocket(socket, locale, { contextChatId: chatId, botInstanceId })
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
     const pushName = message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser'))
 

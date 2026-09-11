@@ -137,6 +137,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
   readonly id = 'whatsapp' as const
   readonly capabilities = WHATSAPP_CAPABILITIES
   private readonly messageCache = new Map<string, WAMessage>()
+  private activeUserId?: string
 
   constructor(
     private readonly socket: WASocket,
@@ -163,7 +164,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   normalizeMessage(message: WAMessage, overrides: NormalizeOverrides = {}) {
     this.rememberMessage(message)
-    return normalizeWhatsAppMessage(message, this.botInstanceId, overrides)
+    const normalized = normalizeWhatsAppMessage(message, this.botInstanceId, overrides)
+    this.activeUserId = normalized.senderId
+    return normalized
   }
 
   private quotedMessage(replyTo?: string) {
@@ -171,7 +174,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
   }
 
   private localizedSocket(chatId: string) {
-    return createLocalizedSocket(this.socket, resolveChatLocale(chatId))
+    const locale = resolveChatLocale(chatId, this.activeUserId, this.botInstanceId)
+    return createLocalizedSocket(this.socket, locale, {
+      contextChatId: chatId,
+      botInstanceId: this.botInstanceId,
+    })
   }
 
   private rememberSent(sent: WAMessage | undefined) {
@@ -229,9 +236,10 @@ export class WhatsAppAdapter implements PlatformAdapter {
   async sendUi(chatId: string, ui: NormalizedUi, options: SendOptions = {}): Promise<SentMessage> {
     if (ui.kind === 'text') return this.sendText(chatId, ui.text, options)
     const quoted = this.quotedMessage(options.replyTo)
+    const localizedSocket = this.localizedSocket(chatId)
 
     if (ui.kind === 'card') {
-      const messageId = await sendInteractiveCard(this.socket, chatId, quoted, {
+      const messageId = await sendInteractiveCard(localizedSocket, chatId, quoted, {
         title: ui.title,
         body: ui.body ?? '',
         imageUrl: ui.imageUrl,
@@ -242,7 +250,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
 
     if (ui.kind === 'carousel') {
-      const messageId = await sendCarousel(this.socket, chatId, quoted, {
+      const messageId = await sendCarousel(localizedSocket, chatId, quoted, {
         title: ui.title ?? '',
         cards: ui.cards.map((card) => ({
           title: card.title,
@@ -257,7 +265,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
     const commandRows = ui.items.every((item) => item.action?.kind === 'command')
     if (commandRows && ui.items.length > 0) {
-      const messageId = await sendInteractiveCard(this.socket, chatId, quoted, {
+      const messageId = await sendInteractiveCard(localizedSocket, chatId, quoted, {
         title: ui.title ?? '',
         body: ui.body ?? '',
         buttons: [{
