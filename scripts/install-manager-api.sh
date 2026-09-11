@@ -2,8 +2,11 @@
 set -Eeuo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/ghost-nexora-bot}"
-MANAGER_PORT="${MANAGER_PORT:-3002}"
+STATE_DIR="${STATE_DIR:-/var/lib/ghost-nexora-bot}"
+MANAGER_PORT="${MANAGER_PORT:-}"
 DOMAIN="${MANAGER_DOMAIN:-}"
+UNIT_SOURCE="${INSTALL_DIR}/systemd/ghost-nexora-manager.service"
+UNIT_TARGET="/etc/systemd/system/ghost-nexora-manager.service"
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 ok() { printf '[%s] [ OK ] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -12,8 +15,12 @@ fail() { printf '[%s] [FAIL] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
 
 if [[ "${EUID}" -ne 0 ]]; then fail 'Ejecuta este script como root/sudo.'; exit 1; fi
 [[ -f "${INSTALL_DIR}/.env" ]] || { fail "No existe ${INSTALL_DIR}/.env"; exit 1; }
+[[ -f "${UNIT_SOURCE}" ]] || { fail "No existe ${UNIT_SOURCE}"; exit 1; }
+command -v node >/dev/null 2>&1 || { fail 'Node.js no está instalado.'; exit 1; }
+command -v npm >/dev/null 2>&1 || { fail 'npm no está instalado.'; exit 1; }
 command -v nginx >/dev/null 2>&1 || { fail 'Nginx no está instalado.'; exit 1; }
 command -v python3 >/dev/null 2>&1 || { fail 'python3 no está instalado.'; exit 1; }
+command -v systemctl >/dev/null 2>&1 || { fail 'systemd/systemctl no está disponible.'; exit 1; }
 
 read_env() {
   grep -E "^${1}=" "${INSTALL_DIR}/.env" 2>/dev/null | tail -n1 | cut -d= -f2- || true
@@ -29,8 +36,19 @@ set_env() {
 
 [[ -n "${MANAGER_PORT}" ]] || MANAGER_PORT="$(read_env MANAGER_PORT)"
 MANAGER_PORT="${MANAGER_PORT:-3002}"
-if ! [[ "${MANAGER_PORT}" =~ ^[0-9]+$ ]] || (( MANAGER_PORT < 1 || MANAGER_PORT > 65535 )); then
-  fail "MANAGER_PORT inválido: ${MANAGER_PORT}"
+BOT_PORT="$(read_env BOT_HEALTH_PORT)"
+BOT_PORT="${BOT_PORT:-3001}"
+WEB_PORT="$(read_env WEB_PORT)"
+WEB_PORT="${WEB_PORT:-3000}"
+
+for port in "${MANAGER_PORT}" "${BOT_PORT}" "${WEB_PORT}"; do
+  if ! [[ "${port}" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    fail "Puerto interno inválido: ${port}"
+    exit 1
+  fi
+done
+if [[ "${MANAGER_PORT}" == "${BOT_PORT}" || "${MANAGER_PORT}" == "${WEB_PORT}" ]]; then
+  fail 'MANAGER_PORT debe ser distinto de BOT_HEALTH_PORT y WEB_PORT.'
   exit 1
 fi
 
@@ -46,6 +64,37 @@ if [[ ! "${DOMAIN}" =~ ^[A-Za-z0-9.-]+$ ]]; then fail "Dominio inválido: ${DOMA
 set_env MANAGER_PORT "${MANAGER_PORT}"
 set_env MANAGER_PUBLIC_URL "https://${DOMAIN}/manager"
 chmod 0640 "${INSTALL_DIR}/.env" || true
+
+info 'Sincronizando dependencias del Manager Agent.'
+cd "${INSTALL_DIR}"
+npm install --workspace=@ghostnexora/manager-agent --include=dev --ignore-scripts >/tmp/ghost-nexora-manager-npm.log 2>&1
+npm run build --workspace=@ghostnexora/manager-agent >/tmp/ghost-nexora-manager-build.log 2>&1
+ok 'Manager Agent compilado.'
+
+install -m 0644 "${UNIT_SOURCE}" "${UNIT_TARGET}"
+sed -i \
+  -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
+  -e "s|__STATE_DIR__|${STATE_DIR}|g" \
+  -e "s|__MANAGER_PORT__|${MANAGER_PORT}|g" \
+  "${UNIT_TARGET}"
+
+systemctl daemon-reload
+systemctl enable ghost-nexora-manager.service >/dev/null 2>&1 || true
+systemctl restart ghost-nexora-manager.service
+
+for _ in {1..20}; do
+  if curl -fsS --max-time 2 "http://127.0.0.1:${MANAGER_PORT}/health" >/tmp/ghost-nexora-manager-health.json 2>/dev/null; then
+    break
+  fi
+  sleep 0.25
+done
+if ! curl -fsS --max-time 3 "http://127.0.0.1:${MANAGER_PORT}/health" >/tmp/ghost-nexora-manager-health.json 2>/dev/null; then
+  fail 'ghost-nexora-manager.service no respondió después del reinicio.'
+  systemctl --no-pager --full status ghost-nexora-manager.service || true
+  journalctl -u ghost-nexora-manager.service -n 60 --no-pager || true
+  exit 1
+fi
+ok "Manager Agent activo en 127.0.0.1:${MANAGER_PORT}."
 
 NGINX_DUMP="$(nginx -T 2>/dev/null)" || { fail 'No se pudo leer nginx -T.'; exit 1; }
 mapfile -t CONFIG_FILES < <(
@@ -121,16 +170,10 @@ PY
 done
 
 if [[ -z "${UPDATED}" ]]; then
-  fail "No se encontró un server_name=${DOMAIN} editable. Configura primero Nginx/HTTPS para ese dominio."
+  fail "No se encontró un server_name=${DOMAIN} editable. Configura primero Nginx para ese dominio."
   exit 1
 fi
 
 nginx -t
 systemctl reload nginx
-
-if curl -fsS --max-time 5 "http://127.0.0.1:${MANAGER_PORT}/health" >/tmp/ghost-nexora-manager-health.json 2>/dev/null; then
-  ok "Manager Agent responde en 127.0.0.1:${MANAGER_PORT}."
-else
-  warn "Manager Agent aún no responde en ${MANAGER_PORT}; verifica ghost-nexora-manager.service tras el build."
-fi
 ok "Control remoto: https://${DOMAIN}/manager"
