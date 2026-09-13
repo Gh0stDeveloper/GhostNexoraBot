@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Ghost Nexora Manager</title>
+  <desc id="desc">Ghost Nexora mark used to generate native desktop application icons.</desc>
+  <defs>
+    <linearGradient id="bg" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="160" y1="126" x2="350" y2="394" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#CBD5E1"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path d="M256 108c-82.84 0-150 67.16-150 150v133.5c0 10.69 12.38 16.65 20.74 9.98L165 371l38.26 30.48a12.8 12.8 0 0 0 15.96 0L256 372.16l36.78 29.32a12.8 12.8 0 0 0 15.96 0L347 371l38.26 30.48c8.36 6.67 20.74.71 20.74-9.98V258c0-82.84-67.16-150-150-150Z" fill="url(#mark)"/>
+  <circle cx="205" cy="252" r="22" fill="#0F172A"/>
+  <circle cx="307" cy="252" r="22" fill="#0F172A"/>
+  <path d="M205 316c14.2 15.34 31.2 23 51 23s36.8-7.66 51-23" fill="none" stroke="#0F172A" stroke-width="18" stroke-linecap="round"/>
+  <path d="M379 132 333 178" stroke="#38BDF8" stroke-width="18" stroke-linecap="round"/>
+  <path d="M397 172h-64" stroke="#38BDF8" stroke-width="18" stroke-linecap="round"/>
+</svg>
