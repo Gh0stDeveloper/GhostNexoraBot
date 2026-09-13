@@ -5,7 +5,7 @@
 **Phase 7 is complete.**
 
 Validated implementation branch: `feat/v2-phase-7-official-apps`  
-Base branch: `feat/v2-phase-6-complete-i18n`  
+Base branch: `feat/v2-phase-6-i18n`  
 Validated implementation HEAD: `67afd98304922f4b218086b7cd5c86ee72c5be76`  
 Validated Phase 7 workflow run: `34780941051`
 
@@ -347,7 +347,7 @@ Use this repository and branch as the source of truth:
 
 - repository: `Gh0stDeveloper/GhostNexoraBot`;
 - Phase 7 branch: `feat/v2-phase-7-official-apps`;
-- Phase 7 base: `feat/v2-phase-6-complete-i18n`;
+- Phase 7 base: `feat/v2-phase-6-i18n`;
 - validated implementation HEAD: `67afd98304922f4b218086b7cd5c86ee72c5be76`;
 - validated Phase 7 run: `34780941051`;
 - read this file first: `docs/v2/PHASE_7.md`.
