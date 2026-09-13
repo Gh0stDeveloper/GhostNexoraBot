@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimal capabilities for Ghost Nexora Manager",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

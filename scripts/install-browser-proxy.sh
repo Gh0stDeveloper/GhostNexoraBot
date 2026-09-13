@@ -8,6 +8,7 @@ PORT="${BROWSER_PROXY_PORT:-3847}"
 NGINX_NAME="ghost-nexora-browser-proxy"
 SITE_AVAILABLE="/etc/nginx/sites-available/${NGINX_NAME}"
 SITE_ENABLED="/etc/nginx/sites-enabled/${NGINX_NAME}"
+MANAGER_INSTALLER="${INSTALL_DIR}/scripts/install-manager-api.sh"
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 ok() { printf '[%s] [ OK ] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -230,3 +231,13 @@ else
 fi
 
 ok "Nginx configurado: https://${DOMAIN}/proxy → http://127.0.0.1:${PORT}/proxy"
+
+# Install/update always passes through this script. Chaining the manager here
+# keeps the persistent control plane synchronized for both first installs and
+# upgrades without duplicating state/session handling in install.sh/update.sh.
+if [[ -f "${MANAGER_INSTALLER}" ]]; then
+  INSTALL_DIR="${INSTALL_DIR}" MANAGER_DOMAIN="${DOMAIN}" bash "${MANAGER_INSTALLER}"
+  ok 'Manager Agent persistente instalado y ruta /manager/ verificada.'
+else
+  warn "No existe ${MANAGER_INSTALLER}; las apps oficiales no podrán administrar un Bot detenido."
+fi
