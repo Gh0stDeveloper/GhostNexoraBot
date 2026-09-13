@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json --noEmit",
-    "icons": "tauri icon src-tauri/icons/icon.png",
+    "icons": "tauri icon app-icon.svg",
     "tauri": "tauri",
     "tauri:check": "npm run icons && cargo check --manifest-path src-tauri/Cargo.toml",
     "tauri:build": "npm run icons && tauri build"
