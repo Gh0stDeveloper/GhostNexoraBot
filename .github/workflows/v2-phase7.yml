@@ -95,10 +95,10 @@ jobs:
         run: npm install
       - name: Frontend build
         run: npm run build --workspace=@ghostnexora/desktop
-      - name: Rust check
+      - name: Rust check and icon generation
         run: npm run tauri:check --workspace=@ghostnexora/desktop
       - name: Build deb and AppImage
-        run: npm run tauri --workspace=@ghostnexora/desktop -- build --bundles deb,appimage
+        run: npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles deb,appimage
       - name: Checksums
         run: find apps/desktop/src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.AppImage' \) -print0 | sort -z | xargs -0 sha256sum | tee phase7-linux-sha256.txt
       - uses: actions/upload-artifact@v4
@@ -124,10 +124,10 @@ jobs:
         run: npm install
       - name: Frontend build
         run: npm run build --workspace=@ghostnexora/desktop
-      - name: Rust check
+      - name: Rust check and icon generation
         run: npm run tauri:check --workspace=@ghostnexora/desktop
       - name: Build NSIS installer
-        run: npm run tauri --workspace=@ghostnexora/desktop -- build --bundles nsis
+        run: npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles nsis
       - name: Checksums
         shell: pwsh
         run: |
