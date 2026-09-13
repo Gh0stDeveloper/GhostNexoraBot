@@ -18,6 +18,8 @@ const [
   desktopApp,
   desktopControl,
   desktopConfig,
+  desktopPackage,
+  phase7Workflow,
   androidClient,
   androidStore,
   androidManifest,
@@ -38,6 +40,8 @@ const [
   read('apps/desktop/src/App.tsx'),
   read('apps/desktop/src/control.ts'),
   read('apps/desktop/src-tauri/tauri.conf.json'),
+  read('apps/desktop/package.json'),
+  read('.github/workflows/v2-phase7.yml'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ControlApiClient.kt'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/SecureTokenStore.kt'),
   read('apps/android/app/src/main/AndroidManifest.xml'),
@@ -107,6 +111,19 @@ assert.match(desktopConfig, /com\.ghostnexora\.manager/)
 assert.match(desktopConfig, /currentUser/)
 await access('apps/desktop/src-tauri/icons/icon.png')
 
+// Tauri packaging must be reproducible from the committed square source icon.
+// The generated icon set is intentionally build output, not binary source churn.
+const desktopPackageJson = JSON.parse(desktopPackage)
+const tauriConfig = JSON.parse(desktopConfig)
+assert.match(desktopPackageJson.scripts?.icons ?? '', /tauri icon src-tauri\/icons\/icon\.png/)
+assert.match(desktopPackageJson.scripts?.['tauri:check'] ?? '', /npm run icons/)
+assert.match(desktopPackageJson.scripts?.['tauri:build'] ?? '', /npm run icons/)
+assert.ok(Array.isArray(tauriConfig.bundle?.icon), 'Tauri bundle.icon must declare generated desktop icons')
+assert.ok(tauriConfig.bundle.icon.includes('icons/icon.ico'), 'Tauri Windows bundle must declare icon.ico')
+assert.ok(tauriConfig.bundle.icon.includes('icons/128x128.png'), 'Tauri Linux bundle must declare a square PNG icon')
+assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles nsis/)
+assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles deb,appimage/)
+
 // Android remains a Remote Manager: secrets are Keystore-backed, remote HTTP
 // is rejected, and start/stop/restart are HTTP Control API operations only.
 assert.match(androidStore, /AndroidKeyStore/)
@@ -125,4 +142,4 @@ assert.match(androidUi, /vm\.runtime\("restart"\)/)
 assert.match(androidViewModel, /\/v2\/runtime\/\$safeAction/)
 assert.doesNotMatch(androidUi + androidViewModel, /Termux|Runtime\.getRuntime|ProcessBuilder/)
 
-console.log('[V2 PHASE 7 AUDIT] OK — Control API, persistent Manager Agent, Desktop/Tauri and Android Remote Manager are explicit, authenticated and shell-safe.')
+console.log('[V2 PHASE 7 AUDIT] OK — Control API, persistent Manager Agent, reproducible Desktop/Tauri bundles and Android Remote Manager are explicit, authenticated and shell-safe.')
