@@ -109,13 +109,13 @@ assert.match(desktopControl, /runtimeStart/)
 assert.match(desktopControl, /RuntimeActionResponse/)
 assert.match(desktopConfig, /com\.ghostnexora\.manager/)
 assert.match(desktopConfig, /currentUser/)
-await access('apps/desktop/src-tauri/icons/icon.png')
+await access('apps/desktop/app-icon.svg')
 
-// Tauri packaging must be reproducible from the committed square source icon.
-// The generated icon set is intentionally build output, not binary source churn.
+// Tauri packaging must be reproducible from the committed vector source icon.
+// PNG/ICO/ICNS files are generated build output, avoiding corrupt binary source churn.
 const desktopPackageJson = JSON.parse(desktopPackage)
 const tauriConfig = JSON.parse(desktopConfig)
-assert.match(desktopPackageJson.scripts?.icons ?? '', /tauri icon src-tauri\/icons\/icon\.png/)
+assert.match(desktopPackageJson.scripts?.icons ?? '', /tauri icon app-icon\.svg/)
 assert.match(desktopPackageJson.scripts?.['tauri:check'] ?? '', /npm run icons/)
 assert.match(desktopPackageJson.scripts?.['tauri:build'] ?? '', /npm run icons/)
 assert.ok(Array.isArray(tauriConfig.bundle?.icon), 'Tauri bundle.icon must declare generated desktop icons')
