@@ -99,6 +99,14 @@ If activation fails after the cutover begins, an `ERR` trap resets the installat
 
 The updater never accepts arbitrary shell fragments or executable paths from user input.
 
+Production upgrade command after `v2.0.0` passes every production gate:
+
+```bash
+sudo bash /opt/ghost-nexora-bot/scripts/release-update.sh v2.0.0
+```
+
+Using `bash` explicitly keeps the procedure valid even on checkouts where Git file-mode metadata is unavailable.
+
 ## 4. Rollback/recovery
 
 Snapshots are stored under:
@@ -110,13 +118,13 @@ with directory mode `0700` and a manifest containing the original commit SHA.
 Rollback command:
 
 ```bash
-sudo /opt/ghost-nexora-bot/scripts/release-rollback.sh latest
+sudo bash /opt/ghost-nexora-bot/scripts/release-rollback.sh latest
 ```
 
 or, for a specific retained snapshot:
 
 ```bash
-sudo /opt/ghost-nexora-bot/scripts/release-rollback.sh <snapshot-id>
+sudo bash /opt/ghost-nexora-bot/scripts/release-rollback.sh <snapshot-id>
 ```
 
 Rollback only accepts snapshot IDs matching a constrained identifier grammar and only restores a Git commit recorded by a generated snapshot manifest.
