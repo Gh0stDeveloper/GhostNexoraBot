@@ -1,0 +1,128 @@
+name: V2 Phase 8
+
+on:
+  push:
+    branches:
+      - 'feat/v2-phase-8-production-release'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'scripts/release-*.sh'
+      - 'scripts/v2-phase8-*.mjs'
+      - 'package.json'
+      - 'docs/v2/**'
+      - '.github/workflows/v2-phase8.yml'
+      - '.github/workflows/v2-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install
+      - name: Shell syntax
+        run: bash -n scripts/release-state.sh scripts/release-update.sh scripts/release-rollback.sh
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+      - name: Build all workspaces
+        run: npm run build
+      - name: Preserve Phase 0 contracts
+        run: npm run v2:contracts
+      - name: Preserve WhatsApp adapter
+        run: npm run v2:whatsapp-adapter
+      - name: Preserve UI compatibility
+        run: npm run v2:ui-compat
+      - name: Preserve providers
+        run: npm run v2:providers
+      - name: Preserve Telegram
+        run: npm run v2:telegram
+      - name: Preserve Discord
+        run: npm run v2:discord
+      - name: Preserve i18n
+        run: npm run v2:i18n
+      - name: Preserve official app boundary
+        run: npm run v2:official-apps
+      - name: Phase 8 release invariants
+        run: npm run v2:release-gate
+      - name: Termux Lite build
+        run: npm run build:termux --workspace=@ghostnexora/bot
+      - name: Termux Lite smoke
+        run: node scripts/termux-lite-smoke.mjs
+      - name: Command surface inventory
+        run: node scripts/v2-baseline-report.mjs --output=v2-phase8-inventory.json
+      - name: Preserve WhatsApp command surface
+        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase8-inventory.json
+      - name: Upload Phase 8 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase8-evidence
+          path: |
+            v2-phase8-release-gate.json
+            v2-phase8-inventory.json
+            v2-phase6-i18n-audit.json
+            i18n-user-facing-audit.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  android-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - name: Lint and tests
+        run: gradle -p apps/android lintDebug testDebugUnitTest
+      - name: Build debug and unsigned regression release
+        run: gradle -p apps/android assembleDebug assembleRelease
+
+  desktop-linux-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm install
+      - run: npm run tauri:check --workspace=@ghostnexora/desktop
+      - name: Build Linux bundles
+        run: npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles deb,appimage
+
+  desktop-windows-regression:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm install
+      - run: npm run tauri:check --workspace=@ghostnexora/desktop
+      - name: Build NSIS installer
+        run: npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles nsis
