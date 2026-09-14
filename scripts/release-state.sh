@@ -47,13 +47,17 @@ EOF
     cp -a "${INSTALL_DIR}/.env" "${snapshot}/persistent/.env"
   fi
 
+  # Compatibility with older layouts that kept runtime data inside INSTALL_DIR.
   for rel in data auth downloads; do
     if [[ -e "${INSTALL_DIR}/${rel}" ]]; then
       cp -a "${INSTALL_DIR}/${rel}" "${snapshot}/persistent/${rel}"
     fi
   done
 
-  for rel in session sessions db sqlite; do
+  # Current VPS installations keep persistent session/database data in STATE_DIR.
+  # The services must be stopped before this function is called so SQLite/WAL and
+  # session files are copied from a quiescent state.
+  for rel in data session sessions db sqlite downloads; do
     if [[ -e "${STATE_DIR}/${rel}" ]]; then
       mkdir -p "${snapshot}/state"
       cp -a "${STATE_DIR}/${rel}" "${snapshot}/state/${rel}"
