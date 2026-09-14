@@ -24,6 +24,10 @@ function check(condition, label) {
 }
 
 const rootPackage = json('package.json');
+const botPackage = json('apps/bot/package.json');
+const webPackage = json('apps/web/package.json');
+const desktopPackage = json('apps/desktop/package.json');
+const managerAgentPackage = json('apps/manager-agent/package.json');
 const android = read('apps/android/app/build.gradle.kts');
 const tauri = json('apps/desktop/src-tauri/tauri.conf.json');
 const cargo = read('apps/desktop/src-tauri/Cargo.toml');
@@ -33,8 +37,13 @@ const state = read('scripts/release-state.sh');
 const releaseWorkflow = read('.github/workflows/v2-release.yml');
 const phase8Workflow = read('.github/workflows/v2-phase8.yml');
 const phase8Doc = read('docs/v2/PHASE_8.md');
+const releaseDoc = read('docs/v2/RELEASE_2_0.md');
 
 check(rootPackage.version === expectedVersion, `root package version is ${expectedVersion}`);
+check(botPackage.version === expectedVersion, `bot runtime version is ${expectedVersion}`);
+check(webPackage.version === expectedVersion, `web console version is ${expectedVersion}`);
+check(desktopPackage.version === expectedVersion, `desktop package version is ${expectedVersion}`);
+check(managerAgentPackage.version === expectedVersion, `manager agent version is ${expectedVersion}`);
 check(/versionName\s*=\s*"2\.0\.0"/.test(android), 'Android versionName is 2.0.0');
 check(/versionCode\s*=\s*2000000/.test(android), 'Android versionCode is 2000000');
 check(tauri.version === expectedVersion, 'Tauri version is 2.0.0');
@@ -47,12 +56,16 @@ check(updater.includes('npm run v2:release-gate -- --mode=install'), 'release up
 check(rollback.includes('release_state_restore_persistent'), 'rollback restores persistent state');
 check(state.includes('chmod 0700'), 'release snapshots are private by default');
 check(releaseWorkflow.includes('attest-build-provenance'), 'release workflow generates build provenance');
-check(releaseWorkflow.includes('sbom'), 'release workflow publishes SBOM evidence');
+check(releaseWorkflow.includes('npm sbom --sbom-format cyclonedx'), 'release workflow generates CycloneDX SBOM');
 check(releaseWorkflow.includes('WINDOWS_CERTIFICATE_BASE64'), 'Windows Authenticode signing requires a certificate secret');
+check(releaseWorkflow.includes('Get-AuthenticodeSignature'), 'Windows Authenticode signature is verified');
 check(releaseWorkflow.includes('GPG_PRIVATE_KEY'), 'Linux checksum signing requires a GPG key');
+check(releaseWorkflow.includes('gpg --verify'), 'Linux checksum signature is verified');
 check(releaseWorkflow.includes('GHOST_NEXORA_ANDROID_KEYSTORE_BASE64'), 'Android signing requires a keystore secret');
+check(releaseWorkflow.includes('apksigner') && releaseWorkflow.includes('verify'), 'Android APK signature is verified');
 check(phase8Workflow.includes('v2:release-gate'), 'Phase 8 CI executes the production release gate');
 check(phase8Doc.includes('72'), 'Phase 8 documentation records the 72h soak requirement');
+check(releaseDoc.includes('2.0.0'), '2.0.0 release notes exist');
 
 if (mode === 'release') {
   const startRaw = process.env.GHOST_NEXORA_SOAK_STARTED_AT || args.get('soak-started-at');
@@ -75,6 +88,7 @@ if (mode === 'release') {
     'WINDOWS_CERTIFICATE_BASE64',
     'WINDOWS_CERTIFICATE_PASSWORD',
     'GPG_PRIVATE_KEY',
+    'GPG_SIGNING_KEY_ID',
   ];
   for (const name of required) check(Boolean(process.env[name]), `release secret present: ${name}`);
 }
