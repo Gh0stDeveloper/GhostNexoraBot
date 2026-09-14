@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ghost_background">#05060A</color>
+    <color name="ghost_surface">#0D1017</color>
+    <color name="ghost_primary">#7C6CFF</color>
+    <color name="ghost_cyan">#55D7FF</color>
+    <color name="ghost_icon_background">#090B12</color>
+</resources>
