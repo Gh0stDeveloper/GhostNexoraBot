@@ -34,6 +34,7 @@ const cargo = read('apps/desktop/src-tauri/Cargo.toml');
 const updater = read('scripts/release-update.sh');
 const rollback = read('scripts/release-rollback.sh');
 const state = read('scripts/release-state.sh');
+const stateSmoke = read('scripts/v2-phase8-release-state-smoke.sh');
 const releaseWorkflow = read('.github/workflows/v2-release.yml');
 const phase8Workflow = read('.github/workflows/v2-phase8.yml');
 const phase8Doc = read('docs/v2/PHASE_8.md');
@@ -61,6 +62,9 @@ check(rollback.includes('release_state_restore_persistent'), 'rollback restores 
 check(rollback.includes('RESCUE_SNAPSHOT'), 'manual rollback preserves a rescue snapshot');
 check(state.includes('chmod 0700'), 'release snapshots are private by default');
 check(/for rel in data session sessions db sqlite downloads/.test(state), 'snapshot covers VPS data, sessions, databases and downloads');
+check(stateSmoke.includes('nexora-economy.sqlite'), 'snapshot smoke exercises VPS database state');
+check(stateSmoke.includes('release_state_restore_persistent'), 'snapshot smoke exercises restore path');
+check(phase8Workflow.includes('v2-phase8-release-state-smoke.sh'), 'Phase 8 CI runs snapshot/restore smoke');
 check(releaseWorkflow.includes('attest-build-provenance'), 'release workflow generates build provenance');
 check(releaseWorkflow.includes('npm sbom --sbom-format cyclonedx'), 'release workflow generates CycloneDX SBOM');
 check(releaseWorkflow.includes('WINDOWS_CERTIFICATE_BASE64'), 'Windows Authenticode signing requires a certificate secret');
