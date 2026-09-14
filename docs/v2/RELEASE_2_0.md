@@ -20,7 +20,7 @@ Ghost Nexora Bot 2.0.0 is the production release target for the V2 multi-platfor
 For a production release upgrade, use the release updater after `v2.0.0` has passed all Phase 8 production gates:
 
 ```bash
-sudo /opt/ghost-nexora-bot/scripts/release-update.sh v2.0.0
+sudo bash /opt/ghost-nexora-bot/scripts/release-update.sh v2.0.0
 ```
 
 The updater validates the release before activation and preserves existing `.env`, runtime state, sessions and application data in a protected rollback snapshot.
@@ -28,8 +28,10 @@ The updater validates the release before activation and preserves existing `.env
 If recovery is required:
 
 ```bash
-sudo /opt/ghost-nexora-bot/scripts/release-rollback.sh latest
+sudo bash /opt/ghost-nexora-bot/scripts/release-rollback.sh latest
 ```
+
+Using `bash` explicitly keeps both commands valid even if the checkout does not preserve executable file-mode metadata.
 
 Do not delete `/var/lib/ghost-nexora-bot/releases` until the upgraded installation has been verified and an appropriate retention window has passed.
 
