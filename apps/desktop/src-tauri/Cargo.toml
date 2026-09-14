@@ -1,6 +1,6 @@
 [package]
 name = "ghost-nexora-manager"
-version = "0.1.0"
+version = "2.0.0"
 description = "Official Ghost Nexora Bot desktop manager"
 authors = ["Ghost Developer / Nexora"]
 edition = "2021"
