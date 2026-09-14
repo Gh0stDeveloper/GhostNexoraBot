@@ -46,7 +46,7 @@ const [
   read('apps/android/app/src/main/java/com/ghostnexora/manager/SecureTokenStore.kt'),
   read('apps/android/app/src/main/AndroidManifest.xml'),
   read('apps/android/app/build.gradle.kts'),
-  read('apps/android/app/src/main/java/com/ghostnexora/manager/MainActivity.kt'),
+  read('apps/android/app/src/main/java/com/ghostnexora/manager/ui/ManagerApp.kt'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ManagerViewModel.kt'),
 ])
 
@@ -126,6 +126,8 @@ assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desk
 
 // Android remains a Remote Manager: secrets are Keystore-backed, remote HTTP
 // is rejected, and start/stop/restart are HTTP Control API operations only.
+// The actual Compose UI lives in ui/ManagerApp.kt; MainActivity is intentionally
+// only an edge-to-edge Activity shell that installs the theme and app root.
 assert.match(androidStore, /AndroidKeyStore/)
 assert.match(androidStore, /AES\/GCM\/NoPadding/)
 assert.match(androidStore, /10\.0\.2\.2:3002/)
