@@ -10,6 +10,7 @@ on:
       - 'packages/**'
       - 'scripts/release-*.sh'
       - 'scripts/v2-phase8-*.mjs'
+      - 'scripts/v2-phase8-*.sh'
       - 'package.json'
       - 'docs/v2/**'
       - '.github/workflows/v2-phase8.yml'
@@ -31,7 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Shell syntax
-        run: bash -n scripts/release-state.sh scripts/release-update.sh scripts/release-rollback.sh
+        run: bash -n scripts/release-state.sh scripts/release-update.sh scripts/release-rollback.sh scripts/v2-phase8-release-state-smoke.sh
+      - name: Snapshot and restore smoke
+        run: sudo bash scripts/v2-phase8-release-state-smoke.sh
       - name: Typecheck all workspaces
         run: npm run typecheck
       - name: Build all workspaces
