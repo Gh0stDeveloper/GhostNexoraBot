@@ -84,18 +84,21 @@ The production release updater accepts only:
 - a semantic release tag such as `v2.0.0`; or
 - an explicit full 40-character commit SHA.
 
-Before touching the active installation it:
+Before changing the active checkout it:
 
 1. verifies the configured Git origin;
-2. fetches the target;
+2. fetches and resolves the requested release target;
 3. creates an isolated checkout;
 4. installs dependencies there;
-5. runs typecheck/build;
+5. runs full typecheck/build;
 6. runs the Phase 8 release gate in install mode;
-7. creates a protected snapshot of `.env`, application data and runtime state;
-8. only then stops the live services and activates the target.
+7. records which Bot/Web/Manager services were active;
+8. stops those runtime services so SQLite/session state is quiescent;
+9. creates a protected snapshot of `.env`, legacy install-local state and current VPS state under `/var/lib/ghost-nexora-bot`, including `data`, sessions, database paths and downloads;
+10. activates and builds the target;
+11. restores persistent state and the previous service enablement/activity behavior.
 
-If activation fails after the cutover begins, an `ERR` trap resets the installation to the previous SHA, rebuilds it, restores the persistent snapshot and restarts the services.
+If activation fails after the cutover begins, an `ERR` trap resets the installation to the previous SHA, rebuilds it, restores the persistent snapshot and restores the services that were active before the update.
 
 The updater never accepts arbitrary shell fragments or executable paths from user input.
 
@@ -129,7 +132,11 @@ sudo bash /opt/ghost-nexora-bot/scripts/release-rollback.sh <snapshot-id>
 
 Rollback only accepts snapshot IDs matching a constrained identifier grammar and only restores a Git commit recorded by a generated snapshot manifest.
 
-Before release, perform at least one staging exercise covering:
+Before manual rollback changes the current installation, it stops the runtime services and creates a **rescue snapshot of the current state**. If the requested rollback itself fails, the script attempts to restore that rescue SHA/state and the services that were active before rollback. The rescue snapshot is retained after a successful rollback for an additional recovery path.
+
+CI also runs `scripts/v2-phase8-release-state-smoke.sh`, which creates temporary install/VPS state, snapshots `.env`, legacy data, VPS database data and WhatsApp session data, mutates them, restores the snapshot and verifies byte-level test contents are back to the originals.
+
+Before public release, perform at least one staging exercise covering:
 
 1. upgrade from the current production version to the candidate;
 2. verification that `.env`, sessions, database/data and downloads remain present;
@@ -167,7 +174,7 @@ Two workflows are introduced:
 
 ### `V2 Phase 8`
 
-PR/push validation. It runs without production secrets and protects the code-level release invariants, regression surface and platform buildability.
+PR/push validation. It runs without production secrets and protects the code-level release invariants, snapshot/restore behavior, regression surface and platform buildability.
 
 ### `V2 Production Release`
 
@@ -195,6 +202,7 @@ Code/CI gates:
 - [ ] full workspace typecheck/build succeeds;
 - [ ] Phase 0–7 regression gates remain green;
 - [ ] `npm run v2:release-gate` succeeds;
+- [ ] release snapshot/restore smoke succeeds;
 - [ ] Android lint/tests/build succeeds;
 - [ ] Linux Tauri bundles build;
 - [ ] Windows NSIS bundle builds;
