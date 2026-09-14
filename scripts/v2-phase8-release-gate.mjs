@@ -53,8 +53,14 @@ check(android.includes('signingConfig = signingConfigs.getByName("release")'), '
 check(updater.includes('release_state_create_snapshot'), 'release updater snapshots persistent state');
 check(updater.includes('trap rollback ERR'), 'release updater has automatic rollback trap');
 check(updater.includes('npm run v2:release-gate -- --mode=install'), 'release updater validates the target before activation');
+check(
+  updater.indexOf('systemctl stop ghost-nexora-bot.service') < updater.indexOf('release_state_create_snapshot'),
+  'release updater quiesces runtime before snapshot',
+);
 check(rollback.includes('release_state_restore_persistent'), 'rollback restores persistent state');
+check(rollback.includes('RESCUE_SNAPSHOT'), 'manual rollback preserves a rescue snapshot');
 check(state.includes('chmod 0700'), 'release snapshots are private by default');
+check(/for rel in data session sessions db sqlite downloads/.test(state), 'snapshot covers VPS data, sessions, databases and downloads');
 check(releaseWorkflow.includes('attest-build-provenance'), 'release workflow generates build provenance');
 check(releaseWorkflow.includes('npm sbom --sbom-format cyclonedx'), 'release workflow generates CycloneDX SBOM');
 check(releaseWorkflow.includes('WINDOWS_CERTIFICATE_BASE64'), 'Windows Authenticode signing requires a certificate secret');
