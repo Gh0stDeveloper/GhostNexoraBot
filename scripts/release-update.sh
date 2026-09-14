@@ -6,14 +6,19 @@ STATE_DIR="${STATE_DIR:-/var/lib/ghost-nexora-bot}"
 REPO_URL="${REPO_URL:-https://github.com/Gh0stDeveloper/GhostNexoraBot.git}"
 TARGET_REF="${1:-}"
 LOCK_FILE="${LOCK_FILE:-/run/lock/ghost-nexora-release-update.lock}"
-SERVICE_USER="${SERVICE_USER:-ghostbot}"
+SERVICE_USER="${SERVICE_USER:-}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*"; }
 fail() { printf '[%s] [FAIL] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; exit 1; }
+was_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
+restart_if_was_active() {
+  local unit="$1" state="$2"
+  if [[ "${state}" -eq 1 ]]; then systemctl restart "${unit}"; fi
+}
 
 [[ "${EUID}" -eq 0 ]] || fail 'Run with sudo/root.'
-[[ -n "${TARGET_REF}" ]] || fail 'Usage: sudo scripts/release-update.sh <v2.x.y|40-char-sha>'
+[[ -n "${TARGET_REF}" ]] || fail 'Usage: sudo bash scripts/release-update.sh <v2.x.y|40-char-sha>'
 [[ "${TARGET_REF}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "${TARGET_REF}" =~ ^[0-9a-f]{40}$ ]] || fail 'Target must be a SemVer release tag or full commit SHA.'
 [[ -d "${INSTALL_DIR}/.git" ]] || fail "${INSTALL_DIR} is not a Git checkout."
 
@@ -31,9 +36,22 @@ case "${REMOTE_URL}" in
 esac
 
 OLD_SHA="$(git rev-parse HEAD)"
+if [[ -z "${SERVICE_USER}" ]]; then
+  SERVICE_USER="$(systemctl show -p User --value ghost-nexora-bot.service 2>/dev/null || true)"
+  [[ -n "${SERVICE_USER}" ]] || SERVICE_USER='ghostbot'
+fi
+
+BOT_WAS_ACTIVE=0
+WEB_WAS_ACTIVE=0
+MANAGER_WAS_ACTIVE=0
+was_active ghost-nexora-bot.service && BOT_WAS_ACTIVE=1 || true
+was_active ghost-nexora-web.service && WEB_WAS_ACTIVE=1 || true
+was_active ghost-nexora-manager.service && MANAGER_WAS_ACTIVE=1 || true
+
 STAGE_DIR="$(mktemp -d /tmp/ghost-nexora-release.XXXXXX)"
 SNAPSHOT=""
 ACTIVATED=0
+SERVICES_STOPPED=0
 cleanup() { rm -rf "${STAGE_DIR}"; }
 trap cleanup EXIT
 
@@ -47,9 +65,11 @@ rollback() {
     npm run build >/tmp/ghost-nexora-rollback-build.log 2>&1 || true
     release_state_restore_persistent "${SNAPSHOT}" || true
     systemctl daemon-reload || true
-    systemctl restart ghost-nexora-bot.service || true
-    systemctl restart ghost-nexora-web.service 2>/dev/null || true
-    systemctl restart ghost-nexora-manager.service 2>/dev/null || true
+  fi
+  if [[ "${SERVICES_STOPPED}" -eq 1 ]]; then
+    restart_if_was_active ghost-nexora-bot.service "${BOT_WAS_ACTIVE}" || true
+    restart_if_was_active ghost-nexora-web.service "${WEB_WAS_ACTIVE}" || true
+    restart_if_was_active ghost-nexora-manager.service "${MANAGER_WAS_ACTIVE}" || true
   fi
   printf '[FAIL] Release update aborted (exit %s). Previous installation was restored where possible.\n' "${status}" >&2
   exit "${status}"
@@ -77,13 +97,15 @@ git -C "${STAGE_DIR}/repo" checkout --detach "${TARGET_SHA}" >/dev/null 2>&1
   npm run v2:release-gate -- --mode=install
 ) >/tmp/ghost-nexora-release-preflight.log 2>&1
 
-SNAPSHOT="$(release_state_create_snapshot "release-update-${TARGET_REF}")"
-log "Persistent snapshot: ${SNAPSHOT}"
-ACTIVATED=1
-
+log 'Preflight passed. Quiescing runtime before the persistent snapshot.'
 systemctl stop ghost-nexora-bot.service 2>/dev/null || true
 systemctl stop ghost-nexora-web.service 2>/dev/null || true
 systemctl stop ghost-nexora-manager.service 2>/dev/null || true
+SERVICES_STOPPED=1
+
+SNAPSHOT="$(release_state_create_snapshot "release-update-${TARGET_REF}")"
+log "Persistent snapshot: ${SNAPSHOT}"
+ACTIVATED=1
 
 git reset --hard "${TARGET_SHA}"
 npm install >/tmp/ghost-nexora-release-install.log 2>&1
@@ -98,13 +120,23 @@ if [[ -f "${INSTALL_DIR}/scripts/install-manager-api.sh" ]]; then
 fi
 
 systemctl daemon-reload
-systemctl restart ghost-nexora-bot.service
-systemctl restart ghost-nexora-web.service 2>/dev/null || true
-systemctl restart ghost-nexora-manager.service 2>/dev/null || true
-sleep 3
-systemctl is-active --quiet ghost-nexora-bot.service
+restart_if_was_active ghost-nexora-bot.service "${BOT_WAS_ACTIVE}"
+restart_if_was_active ghost-nexora-web.service "${WEB_WAS_ACTIVE}" || true
+# install-manager-api may have started the manager; if it was previously disabled,
+# preserve the previous operator choice.
+if [[ "${MANAGER_WAS_ACTIVE}" -eq 1 ]]; then
+  systemctl restart ghost-nexora-manager.service
+else
+  systemctl stop ghost-nexora-manager.service 2>/dev/null || true
+fi
+
+if [[ "${BOT_WAS_ACTIVE}" -eq 1 ]]; then
+  sleep 3
+  systemctl is-active --quiet ghost-nexora-bot.service
+fi
 
 ACTIVATED=0
+SERVICES_STOPPED=0
 trap - ERR
 log "Release update complete: ${OLD_SHA:0:12} -> ${TARGET_SHA:0:12}."
 log "Rollback snapshot retained at ${SNAPSHOT}."
