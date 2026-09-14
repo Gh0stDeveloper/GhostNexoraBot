@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,7 +35,6 @@ import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -61,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -77,7 +78,7 @@ import com.ghostnexora.manager.R
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
-enum class ManagerDestination(@StringRes val labelRes: Int, val icon: ImageVector) {
+private enum class ManagerDestination(@StringRes val labelRes: Int, val icon: ImageVector) {
     Home(R.string.nav_home, Icons.Rounded.Home),
     Pair(R.string.nav_pair, Icons.Rounded.Link),
     Activity(R.string.nav_activity, Icons.Rounded.List),
@@ -94,7 +95,7 @@ fun ManagerApp(vm: ManagerViewModel) {
         bottomBar = {
             NavigationBar(
                 modifier = Modifier.navigationBarsPadding(),
-                containerColor = GhostSurface.copy(alpha = 0.98f),
+                containerColor = GhostSurface,
                 tonalElevation = 0.dp,
             ) {
                 ManagerDestination.entries.forEach { item ->
@@ -115,11 +116,7 @@ fun ManagerApp(vm: ManagerViewModel) {
             }
         },
     ) { innerPadding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
             when (destination) {
                 ManagerDestination.Home -> HomeScreen(state, vm)
                 ManagerDestination.Pair -> PairScreen(state, vm)
@@ -158,40 +155,26 @@ private fun HomeScreen(state: ManagerUiState, vm: ManagerViewModel) {
             )
         }
 
-        state.error?.let { error ->
-            item { ErrorBanner(error) }
-        }
+        state.error?.let { error -> item { ErrorBanner(error) } }
 
         if (!state.connected) {
-            item {
-                ConnectionCard(
-                    state = state,
-                    vm = vm,
-                    compact = false,
-                )
-            }
+            item { ConnectionCard(state, vm) }
         }
 
-        item {
-            RuntimeHeroCard(
-                state = state,
-                runtimeOffline = runtimeOffline,
-                vm = vm,
-            )
-        }
+        item { RuntimeHeroCard(state, runtimeOffline, vm) }
 
         item {
             SectionTitle(
-                title = stringResource(R.string.platforms),
-                subtitle = stringResource(R.string.platforms_subtitle),
+                stringResource(R.string.platforms),
+                stringResource(R.string.platforms_subtitle),
             )
         }
 
         if (state.platforms.isEmpty()) {
             item {
                 EmptyStateCard(
-                    title = if (state.connected) stringResource(R.string.no_platforms) else stringResource(R.string.connect_to_load),
-                    subtitle = stringResource(R.string.platforms_empty_hint),
+                    if (state.connected) stringResource(R.string.no_platforms) else stringResource(R.string.connect_to_load),
+                    stringResource(R.string.platforms_empty_hint),
                 )
             }
         } else {
@@ -199,8 +182,8 @@ private fun HomeScreen(state: ManagerUiState, vm: ManagerViewModel) {
                 PlatformCard(
                     platform = platform,
                     runtimeOffline = runtimeOffline,
-                    busy = state.busy,
                     managerConnected = state.connected,
+                    busy = state.busy,
                     onToggle = { vm.platform(platform.id, !platform.connected) },
                 )
             }
@@ -216,16 +199,11 @@ private fun HomeScreen(state: ManagerUiState, vm: ManagerViewModel) {
 }
 
 @Composable
-private fun RuntimeHeroCard(
-    state: ManagerUiState,
-    runtimeOffline: Boolean,
-    vm: ManagerViewModel,
-) {
+private fun RuntimeHeroCard(state: ManagerUiState, runtimeOffline: Boolean, vm: ManagerViewModel) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = GhostSurfaceElevated),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(GhostBorder)),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(
@@ -234,16 +212,8 @@ private fun RuntimeHeroCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.runtime_control),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = GhostTextMuted,
-                    )
-                    Text(
-                        state.botName,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(top = 3.dp),
-                    )
+                    Text(stringResource(R.string.runtime_control), style = MaterialTheme.typography.labelMedium, color = GhostTextMuted)
+                    Text(state.botName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 3.dp))
                 }
                 StatusPill(
                     text = if (runtimeOffline) stringResource(R.string.offline) else stringResource(R.string.online),
@@ -251,26 +221,12 @@ private fun RuntimeHeroCard(
                 )
             }
 
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Metric(
-                    label = stringResource(R.string.status),
-                    value = state.runtimeState.replaceFirstChar { it.uppercase() },
-                    modifier = Modifier.weight(1f),
-                )
-                Metric(
-                    label = stringResource(R.string.uptime),
-                    value = formatUptime(state.uptimeSeconds),
-                    modifier = Modifier.weight(1f),
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Metric(stringResource(R.string.status), state.runtimeState.replaceFirstChar { it.uppercase() }, Modifier.weight(1f))
+                Metric(stringResource(R.string.uptime), formatUptime(state.uptimeSeconds), Modifier.weight(1f))
             }
 
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = { vm.runtime("start") },
                     enabled = state.connected && !state.busy && runtimeOffline,
@@ -310,21 +266,14 @@ private fun RuntimeHeroCard(
 private fun PlatformCard(
     platform: PlatformUi,
     runtimeOffline: Boolean,
-    busy: Boolean,
     managerConnected: Boolean,
+    busy: Boolean,
     onToggle: () -> Unit,
 ) {
     val platformName = platform.id.replaceFirstChar { it.uppercase() }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = GhostSurface),
-        shape = RoundedCornerShape(22.dp),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    AppCard {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -341,25 +290,25 @@ private fun PlatformCard(
 
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(platformName, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    platform.label ?: platform.state,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = GhostTextMuted,
-                    maxLines = 1,
-                )
+                Text(platform.label ?: platform.state, style = MaterialTheme.typography.bodySmall, color = GhostTextMuted, maxLines = 1)
             }
 
             Column(horizontalAlignment = Alignment.End) {
                 StatusPill(
-                    text = if (platform.connected) stringResource(R.string.online) else stringResource(R.string.offline),
-                    active = platform.connected,
+                    if (platform.connected) stringResource(R.string.online) else stringResource(R.string.offline),
+                    platform.connected,
                 )
                 Spacer(Modifier.height(7.dp))
-                TextButtonCompact(
-                    text = if (platform.connected) stringResource(R.string.disconnect) else stringResource(R.string.connect),
-                    enabled = managerConnected && !runtimeOffline && !busy && (platform.enabled || platform.connected),
+                OutlinedButton(
                     onClick = onToggle,
-                )
+                    enabled = managerConnected && !runtimeOffline && !busy && (platform.enabled || platform.connected),
+                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        if (platform.connected) stringResource(R.string.disconnect) else stringResource(R.string.connect),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -425,16 +374,14 @@ private fun PairScreen(state: ManagerUiState, vm: ManagerViewModel) {
         if (!state.connected || runtimeOffline) {
             item {
                 EmptyStateCard(
-                    title = stringResource(R.string.pairing_unavailable),
-                    subtitle = stringResource(R.string.pairing_unavailable_hint),
+                    stringResource(R.string.pairing_unavailable),
+                    stringResource(R.string.pairing_unavailable_hint),
                 )
             }
         }
 
         if (state.pairState != "idle" || state.pairingCode != null || state.qr != null) {
-            item {
-                PairingResultCard(state)
-            }
+            item { PairingResultCard(state) }
         }
     }
 }
@@ -457,22 +404,10 @@ private fun PairingResultCard(state: ManagerUiState) {
 
         state.pairingCode?.let { code ->
             Spacer(Modifier.height(18.dp))
-            Surface(
-                color = GhostSurfaceSoft,
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    Modifier.padding(18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
+            Surface(color = GhostSurfaceSoft, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(stringResource(R.string.pairing_code), style = MaterialTheme.typography.labelMedium, color = GhostTextMuted)
-                    Text(
-                        code,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
+                    Text(code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -480,16 +415,17 @@ private fun PairingResultCard(state: ManagerUiState) {
         state.qr?.let { raw ->
             remember(raw) { qrBitmap(raw) }?.let { bitmap ->
                 Spacer(Modifier.height(18.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    shape = RoundedCornerShape(22.dp),
-                ) {
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = stringResource(R.string.whatsapp_qr),
-                        modifier = Modifier.padding(18.dp).size(240.dp).align(Alignment.CenterHorizontally),
-                    )
+                Surface(color = Color.White, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = stringResource(R.string.whatsapp_qr),
+                            modifier = Modifier.size(240.dp),
+                        )
+                    }
                 }
             }
         }
@@ -521,14 +457,12 @@ private fun ActivityScreen(state: ManagerUiState, vm: ManagerViewModel) {
         if (visibleLogs.isEmpty()) {
             item {
                 EmptyStateCard(
-                    title = stringResource(R.string.no_activity),
-                    subtitle = if (state.runtimeState == "offline") stringResource(R.string.runtime_offline_logs) else stringResource(R.string.no_activity_hint),
+                    stringResource(R.string.no_activity),
+                    if (state.runtimeState == "offline") stringResource(R.string.runtime_offline_logs) else stringResource(R.string.no_activity_hint),
                 )
             }
         } else {
-            items(visibleLogs, key = { it.cursor }) { row ->
-                LogRow(row)
-            }
+            items(visibleLogs, key = { it.cursor }) { row -> LogRow(row) }
         }
     }
 }
@@ -542,27 +476,12 @@ private fun LogRow(row: LogUi) {
         else -> GhostCyan
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = GhostSurface),
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            Box(
-                Modifier
-                    .padding(top = 5.dp)
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(accent),
-            )
+    AppCard {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Box(Modifier.padding(top = 5.dp).size(7.dp).clip(CircleShape).background(accent))
             Column(Modifier.padding(start = 11.dp).weight(1f)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(
-                        row.level.uppercase(),
-                        color = accent,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
+                    Text(row.level.uppercase(), color = accent, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
                     if (row.timestamp.isNotBlank()) {
                         Text(row.timestamp.takeLast(8), color = GhostTextSubtle, style = MaterialTheme.typography.labelSmall)
                     }
@@ -599,9 +518,7 @@ private fun SettingsScreen(state: ManagerUiState, vm: ManagerViewModel) {
 
         state.error?.let { error -> item { ErrorBanner(error) } }
 
-        item {
-            SectionTitle(stringResource(R.string.bot_configuration), stringResource(R.string.bot_configuration_hint))
-        }
+        item { SectionTitle(stringResource(R.string.bot_configuration), stringResource(R.string.bot_configuration_hint)) }
 
         item {
             AppCard {
@@ -625,10 +542,7 @@ private fun SettingsScreen(state: ManagerUiState, vm: ManagerViewModel) {
 
                 Spacer(Modifier.height(14.dp))
                 Text(stringResource(R.string.language), style = MaterialTheme.typography.labelMedium, color = GhostTextMuted)
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = state.language == "es",
                         onClick = { vm.setLanguage("es") },
@@ -656,23 +570,13 @@ private fun SettingsScreen(state: ManagerUiState, vm: ManagerViewModel) {
             }
         }
 
-        item {
-            SectionTitle(stringResource(R.string.manager_connection), stringResource(R.string.manager_connection_hint))
-        }
-
-        item {
-            ConnectionCard(state = state, vm = vm, compact = true)
-        }
+        item { SectionTitle(stringResource(R.string.manager_connection), stringResource(R.string.manager_connection_hint)) }
+        item { ConnectionCard(state, vm) }
 
         item {
             AppCard {
                 Text(stringResource(R.string.security_note), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.remote_https),
-                    color = GhostTextMuted,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
+                Text(stringResource(R.string.remote_https), color = GhostTextMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
                 HorizontalDivider(Modifier.padding(vertical = 12.dp), color = GhostBorder)
                 Text(stringResource(R.string.remote_only), color = GhostTextMuted, style = MaterialTheme.typography.bodySmall)
             }
@@ -681,7 +585,7 @@ private fun SettingsScreen(state: ManagerUiState, vm: ManagerViewModel) {
 }
 
 @Composable
-private fun ConnectionCard(state: ManagerUiState, vm: ManagerViewModel, compact: Boolean) {
+private fun ConnectionCard(state: ManagerUiState, vm: ManagerViewModel) {
     AppCard {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -694,12 +598,12 @@ private fun ConnectionCard(state: ManagerUiState, vm: ManagerViewModel, compact:
                 )
             }
             StatusPill(
-                text = if (state.connected) stringResource(R.string.connected) else stringResource(R.string.disconnected),
-                active = state.connected,
+                if (state.connected) stringResource(R.string.connected) else stringResource(R.string.disconnected),
+                state.connected,
             )
         }
 
-        Spacer(Modifier.height(if (compact) 14.dp else 18.dp))
+        Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = state.baseUrl,
             onValueChange = vm::setBaseUrl,
@@ -735,10 +639,7 @@ private fun QuickUpdateCard(enabled: Boolean, onUpdate: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = GhostPrimary.copy(alpha = 0.11f)),
         shape = RoundedCornerShape(22.dp),
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.update_runtime), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.update_runtime_hint), color = GhostTextMuted, style = MaterialTheme.typography.bodySmall)
@@ -772,9 +673,7 @@ private fun ScreenHeader(
                     Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.refresh), tint = if (refreshEnabled) Color.White else GhostTextSubtle)
                 }
             } else {
-                Box(Modifier.padding(top = 2.dp)) {
-                    StatusDot(active = connected)
-                }
+                StatusDot(connected)
             }
         }
     }
@@ -801,11 +700,7 @@ private fun AppCard(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun Metric(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        color = GhostSurfaceSoft,
-        shape = RoundedCornerShape(18.dp),
-    ) {
+    Surface(modifier = modifier, color = GhostSurfaceSoft, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(14.dp)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = GhostTextMuted)
             Text(value, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 5.dp), maxLines = 1)
@@ -819,16 +714,8 @@ private fun StatusPill(text: String, active: Boolean) {
         color = if (active) GhostSuccess.copy(alpha = 0.13f) else GhostSurfaceSoft,
         shape = RoundedCornerShape(100.dp),
     ) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(if (active) GhostSuccess else GhostTextSubtle),
-            )
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(if (active) GhostSuccess else GhostTextSubtle))
             Spacer(Modifier.width(6.dp))
             Text(
                 text,
@@ -844,24 +731,8 @@ private fun StatusPill(text: String, active: Boolean) {
 private fun StatusDot(active: Boolean) {
     Surface(color = GhostSurface, shape = CircleShape) {
         Box(Modifier.padding(11.dp)) {
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(if (active) GhostSuccess else GhostTextSubtle),
-            )
+            Box(Modifier.size(9.dp).clip(CircleShape).background(if (active) GhostSuccess else GhostTextSubtle))
         }
-    }
-}
-
-@Composable
-private fun TextButtonCompact(text: String, enabled: Boolean, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 11.dp, vertical = 3.dp),
-    ) {
-        Text(text, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -883,11 +754,7 @@ private fun ErrorBanner(error: String) {
 
 @Composable
 private fun EmptyStateCard(title: String, subtitle: String) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = GhostSurface,
-        shape = RoundedCornerShape(22.dp),
-    ) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = GhostSurface, shape = RoundedCornerShape(22.dp)) {
         Column(Modifier.padding(18.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = GhostTextMuted, modifier = Modifier.padding(top = 5.dp))
