@@ -178,15 +178,28 @@ jobs:
       - run: npm run tauri:check --workspace=@ghostnexora/desktop
       - name: Build Windows RC installer
         run: npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles nsis
-      - name: Install isolated Authenticode verifier
+      - name: Install pinned Authenticode verifier
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          choco install osslsigncode --version=2.6.0 -y --no-progress
-          if ($LASTEXITCODE -notin @(0, 1641, 3010)) { throw "Chocolatey failed to install osslsigncode: $LASTEXITCODE" }
-          $tool = Get-Command osslsigncode.exe -ErrorAction Stop
-          & $tool.Source --version
-          if ($LASTEXITCODE -ne 0) { throw 'osslsigncode is not runnable' }
+          $version = '2.14'
+          $expectedSha256 = '9a1722aaf62a27852c4eb9c35749a0248065052d0ae0a93d4ed6bb49def027f2'
+          $zip = Join-Path $env:RUNNER_TEMP "osslsigncode-$version-windows-x64-mingw.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "osslsigncode-$version"
+          $url = "https://github.com/mtrojnar/osslsigncode/releases/download/$version/osslsigncode-$version-windows-x64-mingw.zip"
+
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          $actualSha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "osslsigncode archive checksum mismatch: $actualSha256"
+          }
+
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          $tool = Get-ChildItem $dir -Recurse -File -Filter 'osslsigncode.exe' | Select-Object -First 1
+          if (-not $tool) { throw 'osslsigncode.exe not found in pinned archive' }
+          "OSSLSIGNCODE_EXE=$($tool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $tool.FullName --version
+          if ($LASTEXITCODE -ne 0) { throw 'osslsigncode 2.14 is not runnable' }
       - name: Generate ephemeral Windows PFX, sign and verify Authenticode
         shell: pwsh
         run: |
@@ -194,7 +207,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path rc-windows | Out-Null
 
           $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
-          $osslsigncode = (Get-Command osslsigncode.exe -ErrorAction Stop).Source
+          $osslsigncode = $env:OSSLSIGNCODE_EXE
+          if (-not $osslsigncode -or -not (Test-Path $osslsigncode)) { throw 'Pinned osslsigncode executable is unavailable' }
+
           $key = Join-Path $env:RUNNER_TEMP 'ghost-nexora-rc.key.pem'
           $certPem = Join-Path $env:RUNNER_TEMP 'ghost-nexora-rc-cert.pem'
           $pfx = Join-Path $env:RUNNER_TEMP 'ghost-nexora-rc.pfx'
@@ -203,54 +218,60 @@ jobs:
           Write-Output "::add-mask::$password"
           [IO.File]::WriteAllText($passwordFile, $password, [Text.Encoding]::ASCII)
 
-          & $openssl req -x509 -newkey rsa:3072 -sha256 -days 7 -nodes `
-            -keyout $key `
-            -out $certPem `
-            -subj "/C=MX/O=Ghost Developer/CN=Ghost Nexora Bot RC $env:GITHUB_RUN_NUMBER" `
-            -addext 'extendedKeyUsage=codeSigning'
-          if ($LASTEXITCODE -ne 0) { throw 'OpenSSL failed to generate the RC code-signing identity' }
+          try {
+            & $openssl req -x509 -newkey rsa:3072 -sha256 -days 7 -nodes `
+              -keyout $key `
+              -out $certPem `
+              -subj "/C=MX/O=Ghost Developer/CN=Ghost Nexora Bot RC $env:GITHUB_RUN_NUMBER" `
+              -addext 'basicConstraints=critical,CA:FALSE' `
+              -addext 'keyUsage=critical,digitalSignature' `
+              -addext 'extendedKeyUsage=codeSigning'
+            if ($LASTEXITCODE -ne 0) { throw 'OpenSSL failed to generate the RC code-signing identity' }
 
-          & $openssl pkcs12 -export `
-            -out $pfx `
-            -inkey $key `
-            -in $certPem `
-            -name 'Ghost Nexora Bot RC' `
-            -passout "pass:$password"
-          if ($LASTEXITCODE -ne 0) { throw 'OpenSSL failed to create the RC PFX' }
+            & $openssl pkcs12 -export `
+              -out $pfx `
+              -inkey $key `
+              -in $certPem `
+              -name 'Ghost Nexora Bot RC' `
+              -passout "pass:$password"
+            if ($LASTEXITCODE -ne 0) { throw 'OpenSSL failed to create the RC PFX' }
 
-          $installer = Get-ChildItem 'apps/desktop/src-tauri/target/release/bundle/nsis/*.exe' | Select-Object -First 1
-          if (-not $installer) { throw 'NSIS installer not found' }
-          $signed = Join-Path $env:RUNNER_TEMP 'GhostNexoraManager-2.0.0-rc-signed.exe'
+            $installer = Get-ChildItem 'apps/desktop/src-tauri/target/release/bundle/nsis/*.exe' | Select-Object -First 1
+            if (-not $installer) { throw 'NSIS installer not found' }
+            $signed = Join-Path $env:RUNNER_TEMP 'GhostNexoraManager-2.0.0-rc-signed.exe'
 
-          $signOutput = & $osslsigncode sign `
-            -pkcs12 $pfx `
-            -readpass $passwordFile `
-            -h sha256 `
-            -n 'Ghost Nexora Manager 2.0.0 RC' `
-            -in $installer.FullName `
-            -out $signed 2>&1
-          $signExit = $LASTEXITCODE
-          $signOutput | Set-Content 'rc-windows/windows-rc-signing.txt'
-          if ($signExit -ne 0) { throw "osslsigncode failed to sign NSIS installer: $signExit" }
+            $signOutput = & $osslsigncode sign `
+              -pkcs12 $pfx `
+              -readpass $passwordFile `
+              -h sha256 `
+              -n 'Ghost Nexora Manager 2.0.0 RC' `
+              -in $installer.FullName `
+              -out $signed 2>&1
+            $signExit = $LASTEXITCODE
+            $signOutput | Tee-Object -FilePath 'rc-windows/windows-rc-signing.txt'
+            if ($signExit -ne 0) { throw "osslsigncode failed to sign NSIS installer: $signExit" }
 
-          $verifyOutput = & $osslsigncode verify `
-            -CAfile $certPem `
-            -ignore-cdp `
-            -ignore-crl `
-            -in $signed 2>&1
-          $verifyExit = $LASTEXITCODE
-          $verifyOutput | Set-Content 'rc-windows/windows-rc-signature.txt'
-          if ($verifyExit -ne 0) { throw "osslsigncode failed to verify signed NSIS installer: $verifyExit" }
+            $verifyOutput = & $osslsigncode verify `
+              -CAfile $certPem `
+              -ignore-cdp `
+              -ignore-crl `
+              -verbose `
+              -in $signed 2>&1
+            $verifyExit = $LASTEXITCODE
+            $verifyOutput | Tee-Object -FilePath 'rc-windows/windows-rc-signature.txt'
+            if ($verifyExit -ne 0) { throw "osslsigncode failed to verify signed NSIS installer: $verifyExit" }
 
-          $out = 'rc-windows/GhostNexoraManager-2.0.0-rc-setup.exe'
-          Copy-Item $signed $out
-          Copy-Item $certPem 'rc-windows/windows-rc-signing-public.pem'
-          & $openssl x509 -in $certPem -noout -subject -issuer -serial -fingerprint -sha256 -dates | Set-Content 'rc-windows/windows-rc-certificate.txt'
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to describe RC signing certificate' }
-          $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()
-          "$hash  $(Split-Path $out -Leaf)" | Set-Content 'rc-windows/windows-rc-sha256.txt' -Encoding ascii
-
-          Remove-Item $key, $pfx, $passwordFile -Force -ErrorAction SilentlyContinue
+            $out = 'rc-windows/GhostNexoraManager-2.0.0-rc-setup.exe'
+            Copy-Item $signed $out
+            Copy-Item $certPem 'rc-windows/windows-rc-signing-public.pem'
+            & $openssl x509 -in $certPem -noout -subject -issuer -serial -fingerprint -sha256 -dates | Set-Content 'rc-windows/windows-rc-certificate.txt'
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to describe RC signing certificate' }
+            $hash = (Get-FileHash $out -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path $out -Leaf)" | Set-Content 'rc-windows/windows-rc-sha256.txt' -Encoding ascii
+          }
+          finally {
+            Remove-Item $key, $pfx, $passwordFile -Force -ErrorAction SilentlyContinue
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: ghost-nexora-rc-windows
