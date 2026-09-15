@@ -5,6 +5,7 @@ REPO_URL="https://github.com/Gh0stDeveloper/GhostNexoraBot.git"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/GhostNexoraBot}"
 STATE_DIR="${STATE_DIR:-$HOME/.ghostnexora}"
+SOURCE_REF_FILE="${STATE_DIR}/source-ref"
 START_TS="$(date +%s)"
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -21,9 +22,12 @@ fi
 if [[ "$(id -u)" -eq 0 ]]; then
   fail 'No ejecutes Ghost Nexora Lite como root dentro de Termux.'
 fi
+if [[ ! "${BRANCH}" =~ ^[A-Za-z0-9._/-]{1,120}$ ]]; then
+  fail 'La referencia Git solicitada no es válida.'
+fi
 
 section 'Ghost Nexora Bot · TERMUX LITE'
-info "Rama: ${BRANCH}"
+info "Referencia: ${BRANCH}"
 info "Código: ${INSTALL_DIR}"
 info "Datos: ${STATE_DIR}"
 info 'Perfil: termux-lite · sin Ollama/LLM, Next.js, Nginx ni systemd'
@@ -49,15 +53,21 @@ else
 fi
 
 section '3/7 · Código fuente'
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-  git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
-  git -C "${INSTALL_DIR}" checkout "${BRANCH}"
-  git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"
-else
-  git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+mkdir -p "${STATE_DIR}"
+if [[ ! -d "${INSTALL_DIR}/.git" ]]; then
+  mkdir -p "${INSTALL_DIR}"
+  git -C "${INSTALL_DIR}" init -q
+  git -C "${INSTALL_DIR}" remote add origin "${REPO_URL}"
 fi
+if ! git -C "${INSTALL_DIR}" remote get-url origin >/dev/null 2>&1; then
+  git -C "${INSTALL_DIR}" remote add origin "${REPO_URL}"
+fi
+git -C "${INSTALL_DIR}" fetch --depth 1 origin "${BRANCH}"
+git -C "${INSTALL_DIR}" checkout --detach --force FETCH_HEAD
+printf '%s\n' "${BRANCH}" >"${SOURCE_REF_FILE}"
+chmod 600 "${SOURCE_REF_FILE}"
 cd "${INSTALL_DIR}"
-ok "Repositorio listo: $(git rev-parse --short HEAD)"
+ok "Repositorio listo: $(git rev-parse --short HEAD) · ref ${BRANCH}"
 
 section '4/7 · Datos persistentes y perfil Lite'
 mkdir -p "${STATE_DIR}/session" "${STATE_DIR}/data/subbots" "${STATE_DIR}/logs" "${STATE_DIR}/run"
@@ -146,6 +156,7 @@ printf ' Ghost Nexora Bot · Termux Lite listo\n'
 printf '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
 printf ' Tiempo: %ss\n' "${ELAPSED}"
 printf ' Perfil: termux-lite\n'
+printf ' Ref: %s\n' "${BRANCH}"
 printf ' Runtime: JavaScript compilado Lite\n'
 printf ' LLM/Ollama: desactivado\n'
 printf ' Sharp/Playwright: no instalados\n'
