@@ -7,6 +7,12 @@ val releaseKeystorePath = providers.environmentVariable("GHOST_NEXORA_ANDROID_KE
 val releaseKeyAlias = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEY_ALIAS").orNull
 val releaseStorePassword = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEYSTORE_PASSWORD").orNull
 val releaseKeyPassword = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEY_PASSWORD").orNull
+val sourceRef = providers.environmentVariable("GHOST_NEXORA_SOURCE_REF")
+    .orElse(providers.environmentVariable("GITHUB_HEAD_REF"))
+    .orElse(providers.environmentVariable("GITHUB_REF_NAME"))
+    .orElse("main")
+    .get()
+val sourceRefLiteral = sourceRef.replace("\\", "\\\\").replace("\"", "\\\"")
 val hasReleaseSigning = listOf(
     releaseKeystorePath,
     releaseKeyAlias,
@@ -25,6 +31,7 @@ android {
         versionCode = 2000000
         versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "GHOST_NEXORA_SOURCE_REF", "\"$sourceRefLiteral\"")
     }
 
     signingConfigs {
@@ -42,7 +49,10 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     buildTypes {
         release {
