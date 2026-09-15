@@ -168,6 +168,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     env:
+      GHOST_NEXORA_SOURCE_REF: ${{ inputs.release_ref }}
       GPG_SIGNING_KEY_ID: ${{ secrets.GPG_SIGNING_KEY_ID }}
     steps:
       - uses: actions/checkout@v4
