@@ -120,10 +120,12 @@ web_running() {
 
 missing_system_dependencies() {
   local missing=() cmd
-  for cmd in git curl ffmpeg python3 tar xz sha256sum; do
+  for cmd in git curl ffmpeg python3 tar xz sha256sum cwebp; do
     command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
   done
-  printf '%s\n' "${missing[@]:-}"
+  if (( ${#missing[@]} > 0 )); then
+    printf '%s\n' "${missing[@]}"
+  fi
 }
 
 missing_json() {
