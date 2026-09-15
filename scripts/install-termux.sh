@@ -5,6 +5,7 @@ REPO_URL="https://github.com/Gh0stDeveloper/GhostNexoraBot.git"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/GhostNexoraBot}"
 STATE_DIR="${STATE_DIR:-$HOME/.ghostnexora}"
+SOURCE_REF_FILE="${STATE_DIR}/source-ref"
 START_TS="$(date +%s)"
 
 info() { printf '[%s] [INFO] %s\n' "$(date '+%H:%M:%S')" "$*"; }
@@ -21,12 +22,15 @@ fi
 if [[ "$(id -u)" -eq 0 ]]; then
   fail 'No ejecutes Ghost Nexora Lite como root dentro de Termux.'
 fi
+if [[ ! "${BRANCH}" =~ ^[A-Za-z0-9._/-]{1,120}$ ]]; then
+  fail 'La referencia Git solicitada no es válida.'
+fi
 
 section 'Ghost Nexora Bot · TERMUX LITE'
-info "Rama: ${BRANCH}"
+info "Referencia: ${BRANCH}"
 info "Código: ${INSTALL_DIR}"
 info "Datos: ${STATE_DIR}"
-info 'Perfil: termux-lite · sin Ollama/LLM, panel web, Nginx ni systemd'
+info 'Perfil: termux-lite · sin Ollama/LLM, Next.js, Nginx ni systemd'
 
 section '1/7 · Paquetes de Termux'
 pkg update -y >/dev/null
@@ -49,15 +53,21 @@ else
 fi
 
 section '3/7 · Código fuente'
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-  git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
-  git -C "${INSTALL_DIR}" checkout "${BRANCH}"
-  git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"
-else
-  git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+mkdir -p "${STATE_DIR}"
+if [[ ! -d "${INSTALL_DIR}/.git" ]]; then
+  mkdir -p "${INSTALL_DIR}"
+  git -C "${INSTALL_DIR}" init -q
+  git -C "${INSTALL_DIR}" remote add origin "${REPO_URL}"
 fi
+if ! git -C "${INSTALL_DIR}" remote get-url origin >/dev/null 2>&1; then
+  git -C "${INSTALL_DIR}" remote add origin "${REPO_URL}"
+fi
+git -C "${INSTALL_DIR}" fetch --depth 1 origin "${BRANCH}"
+git -C "${INSTALL_DIR}" checkout --detach --force FETCH_HEAD
+printf '%s\n' "${BRANCH}" >"${SOURCE_REF_FILE}"
+chmod 600 "${SOURCE_REF_FILE}"
 cd "${INSTALL_DIR}"
-ok "Repositorio listo: $(git rev-parse --short HEAD)"
+ok "Repositorio listo: $(git rev-parse --short HEAD) · ref ${BRANCH}"
 
 section '4/7 · Datos persistentes y perfil Lite'
 mkdir -p "${STATE_DIR}/session" "${STATE_DIR}/data/subbots" "${STATE_DIR}/logs" "${STATE_DIR}/run"
@@ -79,10 +89,11 @@ set_env MAX_DOWNLOAD_MB "450"
 set_env BOT_HEALTH_PORT "3001"
 set_env BOT_HEALTH_URL "http://127.0.0.1:3001/health"
 set_env OLLAMA_ENABLED "false"
+set_env TERMUX_LOCAL_WEB_ENABLED "false"
 set_env TELEGRAM_BOT_TOKEN ""
 set_env TELEGRAM_CHANNEL_ID ""
 set_env TELEGRAM_CHANNEL_URL ""
-set_env PUBLIC_WEB_URL "http://127.0.0.1:3000"
+set_env PUBLIC_WEB_URL "http://127.0.0.1:3001"
 set_env OFFICIAL_CHANNEL_URL "https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i"
 
 CURRENT_ADMIN_TOKEN="$(grep '^ADMIN_WEB_TOKEN=' .env | cut -d= -f2- || true)"
@@ -90,7 +101,7 @@ if [[ -z "${CURRENT_ADMIN_TOKEN}" || "${CURRENT_ADMIN_TOKEN}" == 'change-this-ad
   set_env ADMIN_WEB_TOKEN "$(node -e "process.stdout.write(require('crypto').randomBytes(24).toString('hex'))")"
 fi
 chmod 600 .env
-ok '.env configurado para Termux Lite; la sesión y la base quedan fuera del árbol Git.'
+ok '.env configurado para Termux Lite; sesión, datos y logs quedan fuera del árbol Git.'
 
 section '5/7 · Dependencias y build Lite'
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -104,7 +115,7 @@ npm run build:termux --workspace=@ghostnexora/bot >/tmp/ghostnexora-termux-build
   tail -n 80 /tmp/ghostnexora-termux-build.log >&2 || true
   exit 1
 }
-ok 'Runtime Lite compilado sin Sharp/Playwright; el workspace web no se inicia ni se usa.'
+ok 'Runtime Lite compilado sin Sharp/Playwright; Next.js no se instala ni se ejecuta.'
 
 section '6/7 · Comando ghostnexora'
 install -m 0755 "${INSTALL_DIR}/scripts/termux/ghostnexora" "${PREFIX}/bin/ghostnexora"
@@ -118,7 +129,7 @@ if [[ -f "${SESSION_CREDS}" ]]; then
   REGISTERED="$(node -e "try{const x=require(process.argv[1]);process.stdout.write(String(Boolean(x.registered)))}catch{process.stdout.write('false')}" "${SESSION_CREDS}" 2>/dev/null || echo false)"
 fi
 
-if [[ "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
+if [[ "${GHOST_NEXORA_NONINTERACTIVE:-0}" != '1' && "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
   PHONE=''
   printf 'Número principal de WhatsApp con código de país (Enter para vincular después): ' >/dev/tty
   IFS= read -r PHONE </dev/tty || true
@@ -133,6 +144,8 @@ if [[ "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
       PAIRING_NUMBER="${PHONE}" \
       node "${INSTALL_DIR}/apps/bot/dist-termux/pair.js" || warn 'La vinculación no terminó. Repite con: ghostnexora pair 52XXXXXXXXXX'
   fi
+elif [[ "${GHOST_NEXORA_NONINTERACTIVE:-0}" == '1' && "${REGISTERED}" != 'true' ]]; then
+  info 'Instalación no interactiva: la vinculación se realizará desde la aplicación Android.'
 fi
 
 ghostnexora start || warn 'El bot no pudo arrancar. Ejecuta ghostnexora logs para revisar el motivo.'
@@ -143,17 +156,20 @@ printf ' Ghost Nexora Bot · Termux Lite listo\n'
 printf '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
 printf ' Tiempo: %ss\n' "${ELAPSED}"
 printf ' Perfil: termux-lite\n'
+printf ' Ref: %s\n' "${BRANCH}"
 printf ' Runtime: JavaScript compilado Lite\n'
 printf ' LLM/Ollama: desactivado\n'
 printf ' Sharp/Playwright: no instalados\n'
 printf ' Subbots: habilitados\n'
-printf ' Panel web/Nginx/systemd: no incluidos\n\n'
+printf ' Web Lite: desactivada por defecto (ghostnexora web on)\n'
+printf ' Next.js/Nginx/systemd: no incluidos\n\n'
 printf ' Comandos:\n'
 printf '   ghostnexora status\n'
 printf '   ghostnexora logs\n'
 printf '   ghostnexora pair 52XXXXXXXXXX\n'
 printf '   ghostnexora restart\n'
 printf '   ghostnexora update\n'
+printf '   ghostnexora web on\n'
 printf '   ghostnexora doctor\n\n'
 printf ' Para evitar que Android suspenda Termux, opcionalmente instala Termux:API\n'
 printf ' y usa: ghostnexora wakelock on\n'

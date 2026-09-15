@@ -6,8 +6,14 @@ import qrcode from 'qrcode-terminal'
 import { createSocket } from './core/session.js'
 
 const cleanPhone = (value: string) => value.replace(/\D/g, '')
+const machineOutput = process.env.PAIRING_OUTPUT_MODE === 'machine'
 
 type PairingMethod = 'qr' | 'code'
+
+function emitPairEvent(type: string, payload: Record<string, unknown> = {}) {
+  if (!machineOutput) return
+  process.stdout.write(`GHOST_NEXORA_PAIR_EVENT:${JSON.stringify({ type, ...payload, at: new Date().toISOString() })}\n`)
+}
 
 function normalizeMethod(value: string): PairingMethod | undefined {
   const normalized = value.trim().toLowerCase()
@@ -57,6 +63,7 @@ async function main() {
   if (method === 'qr') {
     console.log('Abre WhatsApp → Dispositivos vinculados → Vincular un dispositivo y escanea el QR.\n')
   }
+  emitPairEvent('starting', { method })
 
   let pairingCodeRequested = false
   let lastQr = ''
@@ -67,7 +74,9 @@ async function main() {
   const timeout = setTimeout(() => {
     if (finished) return
     finished = true
-    console.error('❌ Tiempo agotado esperando la vinculación. Ejecuta de nuevo `npm run pair`.')
+    const message = 'Tiempo agotado esperando la vinculación. Ejecuta de nuevo `npm run pair`.'
+    emitPairEvent('error', { message })
+    console.error(`❌ ${message}`)
     process.exit(1)
   }, 300_000)
 
@@ -75,6 +84,7 @@ async function main() {
     if (finished) return
     finished = true
     clearTimeout(timeout)
+    emitPairEvent(code === 0 ? 'linked' : 'error', { message })
     console.log(message)
     setTimeout(() => process.exit(code), 500)
   }
@@ -93,12 +103,14 @@ async function main() {
 
       if (isNewLogin) {
         pairingStarted = true
+        emitPairEvent('accepted')
         console.log('✅ WhatsApp aceptó el emparejamiento. Reiniciando conexión...')
       }
 
       if (qr && method === 'qr' && !socket.authState.creds.registered && qr !== lastQr) {
         pairingStarted = true
         lastQr = qr
+        emitPairEvent('qr', { value: qr })
         console.log('\n🔳 Escanea este QR desde WhatsApp:\n')
         qrcode.generate(qr, { small: true })
         console.log('\nEl QR se renueva automáticamente si expira. No cierres esta terminal.\n')
@@ -110,6 +122,7 @@ async function main() {
         try {
           const code = await socket.requestPairingCode(phone)
           const prettyCode = code.match(/.{1,4}/g)?.join('-') ?? code
+          emitPairEvent('code', { value: prettyCode })
           console.log(`\n🔗 Código de vinculación:\n\n   ${prettyCode}\n`)
           console.log('WhatsApp → Dispositivos vinculados → Vincular un dispositivo → Vincular con número de teléfono.\n')
           console.log('Nota: WhatsApp/Baileys presenta actualmente incidencias con pairing por código. Si el teléfono rechaza un código recién generado, usa PAIRING_METHOD=qr.\n')
@@ -154,6 +167,7 @@ async function main() {
 
 main().catch((error) => {
   const detail = describeDisconnect(error)
+  emitPairEvent('error', { message: detail.message, statusCode: detail.statusCode ?? null })
   console.error(`❌ Error de vinculación · status=${detail.statusCode ?? 'N/D'} · ${detail.message}`)
   process.exit(1)
 })
