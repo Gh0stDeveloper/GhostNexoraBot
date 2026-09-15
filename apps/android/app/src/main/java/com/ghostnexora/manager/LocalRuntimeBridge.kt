@@ -200,7 +200,7 @@ class LocalRuntimeBridge(private val context: Context) {
                   git clone --depth 1 --branch "${'$'}BRANCH" "${'$'}REPO_URL" "${'$'}INSTALL_DIR"
                 fi
                 cd "${'$'}INSTALL_DIR"
-                BRANCH="${'$'}BRANCH" INSTALL_DIR="${'$'}INSTALL_DIR" STATE_DIR="${'$'}STATE_DIR" bash scripts/install-termux.sh </dev/null
+                GHOST_NEXORA_NONINTERACTIVE=1 BRANCH="${'$'}BRANCH" INSTALL_DIR="${'$'}INSTALL_DIR" STATE_DIR="${'$'}STATE_DIR" bash scripts/install-termux.sh </dev/null
             """.trimIndent()
         }
 
