@@ -26,6 +26,11 @@ const [
   androidBuild,
   androidUi,
   androidViewModel,
+  androidLocalRuntime,
+  termuxManager,
+  termuxInstaller,
+  termuxRuntime,
+  termuxPair,
 ] = await Promise.all([
   read('packages/control-api-contracts/src/index.ts'),
   read('apps/bot/src/services/control-api-v2.ts'),
@@ -48,6 +53,11 @@ const [
   read('apps/android/app/build.gradle.kts'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ui/ManagerApp.kt'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ManagerViewModel.kt'),
+  read('apps/android/app/src/main/java/com/ghostnexora/manager/LocalRuntimeBridge.kt'),
+  read('scripts/termux/ghostnexora'),
+  read('scripts/install-termux.sh'),
+  read('apps/bot/src/termux-lite.ts'),
+  read('apps/bot/src/pair.ts'),
 ])
 
 for (const endpoint of ['/v2/status', '/v2/metrics', '/v2/logs', '/v2/runtime/start', '/v2/runtime/stop', '/v2/runtime/restart', '/v2/runtime/update', '/v2/pair/start', '/v2/pair/status', '/v2/config', '/v2/platforms']) {
@@ -65,7 +75,7 @@ assert.match(index, /whatsappPaused/)
 assert.match(index, /requestPairingCode/)
 assert.match(index, /setControlPairQr/)
 
-// Persistent manager is the only host lifecycle boundary. It binds loopback,
+// Persistent manager remains the remote host lifecycle boundary. It binds loopback,
 // authenticates before /v2, and can address one fixed systemd unit only.
 assert.match(agent, /const BOT_SERVICE = 'ghost-nexora-bot\.service'/)
 assert.match(agent, /timingSafeEqual/)
@@ -90,7 +100,7 @@ assert.match(browserInstaller, /install-manager-api\.sh/)
 assert.match(browserInstaller, /MANAGER_DOMAIN="\$\{DOMAIN\}"/)
 assert.match(installScript, /install-browser-proxy\.sh/)
 assert.match(updateScript, /install-browser-proxy\.sh/)
-for (const script of ['scripts/install-manager-api.sh', 'scripts/install-browser-proxy.sh']) {
+for (const script of ['scripts/install-manager-api.sh', 'scripts/install-browser-proxy.sh', 'scripts/install-termux.sh', 'scripts/termux/ghostnexora']) {
   const syntax = spawnSync('bash', ['-n', script], { encoding: 'utf8' })
   assert.equal(syntax.status, 0, `${script} must pass bash -n: ${syntax.stderr}`)
 }
@@ -112,7 +122,6 @@ assert.match(desktopConfig, /currentUser/)
 await access('apps/desktop/app-icon.svg')
 
 // Tauri packaging must be reproducible from the committed vector source icon.
-// PNG/ICO/ICNS files are generated build output, avoiding corrupt binary source churn.
 const desktopPackageJson = JSON.parse(desktopPackage)
 const tauriConfig = JSON.parse(desktopConfig)
 assert.match(desktopPackageJson.scripts?.icons ?? '', /tauri icon app-icon\.svg/)
@@ -124,24 +133,57 @@ assert.ok(tauriConfig.bundle.icon.includes('icons/128x128.png'), 'Tauri Linux bu
 assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles nsis/)
 assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles deb,appimage/)
 
-// Android remains a Remote Manager: secrets are Keystore-backed, remote HTTP
-// is rejected, and start/stop/restart are HTTP Control API operations only.
-// The actual Compose UI lives in ui/ManagerApp.kt; MainActivity is intentionally
-// only an edge-to-edge Activity shell that installs the theme and app root.
+// Android Phase 1 is now local-first. Termux is the execution engine; the
+// Compose app only invokes the fixed Ghost Nexora CLI surface through the
+// official RUN_COMMAND service. Remote Manager support remains optional and
+// retains its Keystore/HTTPS restrictions.
 assert.match(androidStore, /AndroidKeyStore/)
 assert.match(androidStore, /AES\/GCM\/NoPadding/)
-assert.match(androidStore, /10\.0\.2\.2:3002/)
 assert.match(androidClient, /https_required_for_remote_control/)
 assert.match(androidClient, /host == "10\.0\.2\.2"/)
 assert.match(androidManifest, /usesCleartextTraffic="false"/)
+assert.match(androidManifest, /com\.termux\.permission\.RUN_COMMAND/)
+assert.match(androidManifest, /<package android:name="com\.termux"/)
+assert.match(androidManifest, /android:name="\.TermuxResultService"/)
+assert.match(androidManifest, /android:exported="false"/)
 assert.match(androidBuild, /compileSdk = 37/)
 assert.match(androidBuild, /targetSdk = 36/)
 assert.match(androidBuild, /minSdk = 33/)
-assert.match(androidUi, /Remote Manager|remote_only|R\.string\.remote_only/)
-assert.match(androidUi, /vm\.runtime\("start"\)/)
-assert.match(androidUi, /vm\.runtime\("stop"\)/)
-assert.match(androidUi, /vm\.runtime\("restart"\)/)
-assert.match(androidViewModel, /\/v2\/runtime\/\$safeAction/)
-assert.doesNotMatch(androidUi + androidViewModel, /Termux|Runtime\.getRuntime|ProcessBuilder/)
+assert.match(androidBuild, /GHOST_NEXORA_SOURCE_REF/)
 
-console.log('[V2 PHASE 7 AUDIT] OK — Control API, persistent Manager Agent, reproducible Desktop/Tauri bundles and Android Remote Manager are explicit, authenticated and shell-safe.')
+assert.match(androidLocalRuntime, /com\.termux\.app\.RunCommandService/)
+assert.match(androidLocalRuntime, /\/data\/data\/com\.termux\/files\/usr\/bin\/ghostnexora/)
+assert.match(androidLocalRuntime, /app-status/)
+assert.match(androidLocalRuntime, /app-pair-start/)
+assert.match(androidLocalRuntime, /app-pair-status/)
+assert.match(androidLocalRuntime, /app-config-set/)
+assert.match(androidLocalRuntime, /https:\/\/github\.com\/Gh0stDeveloper\/GhostNexoraBot\.git/)
+assert.match(androidLocalRuntime, /BuildConfig\.GHOST_NEXORA_SOURCE_REF/)
+assert.doesNotMatch(androidLocalRuntime, /Runtime\.getRuntime|ProcessBuilder/, 'Android app must not expose Java process execution')
+
+assert.match(androidViewModel, /localRuntime\.start\(\)/)
+assert.match(androidViewModel, /localRuntime\.stop\(\)/)
+assert.match(androidViewModel, /localRuntime\.restart\(\)/)
+assert.match(androidViewModel, /localRuntime\.update\(\)/)
+assert.match(androidViewModel, /localRuntime\.pairStart/)
+assert.match(androidViewModel, /localRuntime\.setWebEnabled/)
+assert.match(androidUi, /installLocalRuntime/)
+assert.match(androidUi, /RUN_COMMAND_PERMISSION/)
+assert.match(androidUi, /setWebEnabled/)
+assert.match(androidUi, /remote_optional|R\.string\.remote_optional/)
+assert.doesNotMatch(androidUi + androidViewModel, /Runtime\.getRuntime|ProcessBuilder/)
+
+// The Termux CLI is the constrained Android runtime surface. Web is disabled
+// on install and only a loopback Lite page can be enabled explicitly.
+for (const subcommand of ['app-status', 'app-logs', 'app-pair-start', 'app-pair-status', 'app-pair-cancel', 'app-config-set']) {
+  assert.ok(termuxManager.includes(subcommand), `missing Android local runtime command ${subcommand}`)
+}
+assert.match(termuxManager, /web on\|off/)
+assert.match(termuxInstaller, /TERMUX_LOCAL_WEB_ENABLED "false"/)
+assert.match(termuxInstaller, /NEXORA_RUNTIME_PROFILE 'termux-lite'/)
+assert.match(termuxRuntime, /127\.0\.0\.1/)
+assert.match(termuxRuntime, /localWebEnabled/)
+assert.match(termuxPair, /PAIRING_OUTPUT_MODE/)
+assert.match(termuxPair, /GHOST_NEXORA_PAIR_EVENT/)
+
+console.log('[V2 PHASE 7 AUDIT] OK — remote Control API boundaries remain hardened; Android is local-first through a fixed Termux/Ghost Nexora command surface with optional remote management.')
