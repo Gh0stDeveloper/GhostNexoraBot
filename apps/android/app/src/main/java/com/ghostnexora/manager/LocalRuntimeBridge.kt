@@ -138,7 +138,7 @@ class LocalRuntimeBridge(private val context: Context) {
     private fun managerCommand(kind: String, vararg args: String): Int = runCommand(
         kind = kind,
         commandPath = GHOST_NEXORA_COMMAND,
-        arguments = args as Array<String>,
+        arguments = arrayOf(*args),
     )
 
     private fun runCommand(
@@ -212,9 +212,9 @@ class LocalRuntimeBridge(private val context: Context) {
         private const val EXTRA_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT"
         private const val EXTRA_COMMAND_LABEL = "com.termux.RUN_COMMAND_COMMAND_LABEL"
         private const val EXTRA_COMMAND_DESCRIPTION = "com.termux.RUN_COMMAND_COMMAND_DESCRIPTION"
-        private const val TERMUX_HOME = "~/"
-        private const val TERMUX_BASH = "${'$'}PREFIX/bin/bash"
-        private const val GHOST_NEXORA_COMMAND = "${'$'}PREFIX/bin/ghostnexora"
+        private const val TERMUX_HOME = "/data/data/com.termux/files/home"
+        private const val TERMUX_BASH = "/data/data/com.termux/files/usr/bin/bash"
+        private const val GHOST_NEXORA_COMMAND = "/data/data/com.termux/files/usr/bin/ghostnexora"
         private const val TERMUX_DOWNLOAD_URL = "https://f-droid.org/packages/com.termux/"
     }
 }
