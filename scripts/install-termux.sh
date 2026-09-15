@@ -119,7 +119,7 @@ if [[ -f "${SESSION_CREDS}" ]]; then
   REGISTERED="$(node -e "try{const x=require(process.argv[1]);process.stdout.write(String(Boolean(x.registered)))}catch{process.stdout.write('false')}" "${SESSION_CREDS}" 2>/dev/null || echo false)"
 fi
 
-if [[ "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
+if [[ "${GHOST_NEXORA_NONINTERACTIVE:-0}" != '1' && "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
   PHONE=''
   printf 'Número principal de WhatsApp con código de país (Enter para vincular después): ' >/dev/tty
   IFS= read -r PHONE </dev/tty || true
@@ -134,6 +134,8 @@ if [[ "${REGISTERED}" != 'true' && -r /dev/tty ]]; then
       PAIRING_NUMBER="${PHONE}" \
       node "${INSTALL_DIR}/apps/bot/dist-termux/pair.js" || warn 'La vinculación no terminó. Repite con: ghostnexora pair 52XXXXXXXXXX'
   fi
+elif [[ "${GHOST_NEXORA_NONINTERACTIVE:-0}" == '1' && "${REGISTERED}" != 'true' ]]; then
+  info 'Instalación no interactiva: la vinculación se realizará desde la aplicación Android.'
 fi
 
 ghostnexora start || warn 'El bot no pudo arrancar. Ejecuta ghostnexora logs para revisar el motivo.'
