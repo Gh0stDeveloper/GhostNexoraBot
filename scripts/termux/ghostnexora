@@ -10,6 +10,11 @@ LOG_FILE="${LOG_DIR}/bot.log"
 ENV_FILE="${INSTALL_DIR}/.env"
 LITE_ENTRY="${INSTALL_DIR}/apps/bot/dist-termux/termux-lite.js"
 PAIR_ENTRY="${INSTALL_DIR}/apps/bot/dist-termux/pair.js"
+LOCAL_MANAGER_ENTRY="${INSTALL_DIR}/apps/bot/dist-termux/local-manager.js"
+PAIR_LOG="${RUN_DIR}/pair.log"
+PAIR_PID_FILE="${RUN_DIR}/pair.pid"
+PAIR_EXIT_FILE="${RUN_DIR}/pair.exit"
+PAIR_RESTART_FILE="${RUN_DIR}/pair.restart"
 
 mkdir -p "${RUN_DIR}" "${LOG_DIR}"
 
@@ -32,6 +37,20 @@ is_running() {
   [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
 }
 
+pair_pid_value() {
+  [[ -f "${PAIR_PID_FILE}" ]] || return 1
+  local pid
+  pid="$(cat "${PAIR_PID_FILE}" 2>/dev/null || true)"
+  [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "${pid}"
+}
+
+is_pairing() {
+  local pid
+  pid="$(pair_pid_value 2>/dev/null || true)"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
 require_install() {
   [[ -d "${INSTALL_DIR}/.git" ]] || fail "No encuentro Ghost Nexora Bot en ${INSTALL_DIR}. Ejecuta primero install-termux.sh."
   [[ -f "${ENV_FILE}" ]] || fail "Falta ${ENV_FILE}."
@@ -40,6 +59,7 @@ require_install() {
 require_runtime() {
   require_install
   [[ -f "${LITE_ENTRY}" ]] || fail 'Falta el runtime compilado de Termux Lite. Ejecuta: ghostnexora update'
+  [[ -f "${LOCAL_MANAGER_ENTRY}" ]] || fail 'Falta el gestor local compilado. Ejecuta: ghostnexora update'
 }
 
 start_bot() {
@@ -55,6 +75,8 @@ start_bot() {
     cd "${INSTALL_DIR}"
     nohup env \
       ENV_FILE="${ENV_FILE}" \
+      GHOSTNEXORA_HOME="${INSTALL_DIR}" \
+      GHOSTNEXORA_STATE="${STATE_DIR}" \
       NEXORA_RUNTIME_PROFILE=termux-lite \
       OLLAMA_ENABLED=false \
       node "${LITE_ENTRY}" \
@@ -114,6 +136,24 @@ status_bot() {
   fi
 }
 
+app_status() {
+  require_runtime
+  local running=false pid=''
+  if is_running; then
+    running=true
+    pid="$(pid_value)"
+  fi
+  cd "${INSTALL_DIR}"
+  env ENV_FILE="${ENV_FILE}" GHOSTNEXORA_HOME="${INSTALL_DIR}" GHOSTNEXORA_STATE="${STATE_DIR}" NEXORA_RUNTIME_PROFILE=termux-lite OLLAMA_ENABLED=false \
+    node "${LOCAL_MANAGER_ENTRY}" status "${running}" "${pid}"
+}
+
+app_logs() {
+  require_install
+  touch "${LOG_FILE}"
+  tail -n 120 "${LOG_FILE}"
+}
+
 pair_bot() {
   require_runtime
   [[ -f "${PAIR_ENTRY}" ]] || fail 'Falta el runtime de pairing. Ejecuta: ghostnexora update'
@@ -133,6 +173,8 @@ pair_bot() {
     cd "${INSTALL_DIR}"
     env \
       ENV_FILE="${ENV_FILE}" \
+      GHOSTNEXORA_HOME="${INSTALL_DIR}" \
+      GHOSTNEXORA_STATE="${STATE_DIR}" \
       NEXORA_RUNTIME_PROFILE=termux-lite \
       OLLAMA_ENABLED=false \
       PAIRING_NUMBER="${phone}" \
@@ -141,6 +183,107 @@ pair_bot() {
   local result=$?
   if [[ "${restart}" -eq 1 && "${result}" -eq 0 ]]; then start_bot; fi
   return "${result}"
+}
+
+pair_start() {
+  require_runtime
+  [[ -f "${PAIR_ENTRY}" ]] || fail 'Falta el runtime de pairing. Ejecuta: ghostnexora update'
+  local method="${1:-qr}" phone="${2:-}"
+  case "${method}" in qr|code) ;; *) fail 'Método inválido: usa qr o code.' ;; esac
+  phone="$(printf '%s' "${phone}" | tr -cd '0-9')"
+  if [[ "${method}" == 'code' ]]; then
+    [[ ${#phone} -ge 8 && ${#phone} -le 15 ]] || fail 'Número inválido. Usa formato internacional completo.'
+  fi
+  if is_pairing; then
+    printf '{"ok":true,"state":"already_running"}\n'
+    return 0
+  fi
+
+  local restart=0
+  if is_running; then
+    restart=1
+    stop_bot >&2
+  fi
+  printf '%s\n' "${restart}" >"${PAIR_RESTART_FILE}"
+  : >"${PAIR_LOG}"
+  rm -f "${PAIR_EXIT_FILE}" "${PAIR_PID_FILE}"
+
+  (
+    set +e
+    cd "${INSTALL_DIR}"
+    env \
+      ENV_FILE="${ENV_FILE}" \
+      GHOSTNEXORA_HOME="${INSTALL_DIR}" \
+      GHOSTNEXORA_STATE="${STATE_DIR}" \
+      NEXORA_RUNTIME_PROFILE=termux-lite \
+      OLLAMA_ENABLED=false \
+      PAIRING_METHOD="${method}" \
+      PAIRING_NUMBER="${phone}" \
+      PAIRING_OUTPUT_MODE=machine \
+      node "${PAIR_ENTRY}" >>"${PAIR_LOG}" 2>&1
+    result=$?
+    printf '%s\n' "${result}" >"${PAIR_EXIT_FILE}"
+    if [[ "$(cat "${PAIR_RESTART_FILE}" 2>/dev/null || echo 0)" == '1' ]]; then
+      start_bot >>"${PAIR_LOG}" 2>&1 || true
+    fi
+    exit "${result}"
+  ) &
+  printf '%s\n' "$!" >"${PAIR_PID_FILE}"
+  printf '{"ok":true,"state":"starting","method":"%s"}\n' "${method}"
+}
+
+pair_status_app() {
+  require_runtime
+  cd "${INSTALL_DIR}"
+  env ENV_FILE="${ENV_FILE}" GHOSTNEXORA_HOME="${INSTALL_DIR}" GHOSTNEXORA_STATE="${STATE_DIR}" NEXORA_RUNTIME_PROFILE=termux-lite OLLAMA_ENABLED=false \
+    node "${LOCAL_MANAGER_ENTRY}" pair-status
+}
+
+pair_cancel() {
+  local pid
+  pid="$(pair_pid_value 2>/dev/null || true)"
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+    kill -TERM "${pid}" 2>/dev/null || true
+  fi
+  rm -f "${PAIR_PID_FILE}"
+  if [[ "$(cat "${PAIR_RESTART_FILE}" 2>/dev/null || echo 0)" == '1' ]] && ! is_running; then
+    start_bot >&2 || true
+  fi
+  printf '{"ok":true,"state":"cancelled"}\n'
+}
+
+config_set_app() {
+  require_runtime
+  local bot_name="${1:-}" prefix="${2:-.}" language="${3:-es}" output was_running=0
+  [[ -n "${bot_name}" ]] || fail 'El nombre del bot no puede estar vacío.'
+  if is_running; then was_running=1; fi
+  cd "${INSTALL_DIR}"
+  output="$(env ENV_FILE="${ENV_FILE}" GHOSTNEXORA_HOME="${INSTALL_DIR}" GHOSTNEXORA_STATE="${STATE_DIR}" NEXORA_RUNTIME_PROFILE=termux-lite OLLAMA_ENABLED=false \
+    node "${LOCAL_MANAGER_ENTRY}" config-set "${bot_name}" "${prefix}" "${language}")"
+  if [[ "${was_running}" -eq 1 ]]; then
+    stop_bot >&2
+    start_bot >&2
+  fi
+  printf '%s\n' "${output}"
+}
+
+web_mode() {
+  require_runtime
+  local action="${1:-status}" output was_running=0
+  case "${action}" in
+    on|enable|true) action=on ;;
+    off|disable|false) action=off ;;
+    *) fail 'Uso: ghostnexora web on|off' ;;
+  esac
+  if is_running; then was_running=1; fi
+  cd "${INSTALL_DIR}"
+  output="$(env ENV_FILE="${ENV_FILE}" GHOSTNEXORA_HOME="${INSTALL_DIR}" GHOSTNEXORA_STATE="${STATE_DIR}" NEXORA_RUNTIME_PROFILE=termux-lite OLLAMA_ENABLED=false \
+    node "${LOCAL_MANAGER_ENTRY}" web-set "${action}")"
+  if [[ "${was_running}" -eq 1 ]]; then
+    stop_bot >&2
+    start_bot >&2
+  fi
+  printf '%s\n' "${output}"
 }
 
 show_logs() {
@@ -155,6 +298,8 @@ foreground_bot() {
   cd "${INSTALL_DIR}"
   exec env \
     ENV_FILE="${ENV_FILE}" \
+    GHOSTNEXORA_HOME="${INSTALL_DIR}" \
+    GHOSTNEXORA_STATE="${STATE_DIR}" \
     NEXORA_RUNTIME_PROFILE=termux-lite \
     OLLAMA_ENABLED=false \
     node "${LITE_ENTRY}"
@@ -172,7 +317,7 @@ doctor() {
   printf 'yt-dlp      : %s\n' "$(yt-dlp --version 2>/dev/null || echo NO INSTALADO)"
   printf 'Perfil      : %s\n' "$(grep '^NEXORA_RUNTIME_PROFILE=' "${ENV_FILE}" | cut -d= -f2- || echo termux-lite)"
   printf 'Ollama      : DESACTIVADO EN LITE\n'
-  printf 'Panel web   : NO INCLUIDO\n'
+  printf 'Panel web   : %s\n' "$(grep '^TERMUX_LOCAL_WEB_ENABLED=' "${ENV_FILE}" | cut -d= -f2- || echo false)"
   printf 'Subbots     : HABILITADOS\n'
   status_bot
 }
@@ -201,11 +346,20 @@ Uso: ghostnexora <comando>
   status                Estado + health local
   logs                  Sigue el log en tiempo real
   pair <numero>         Vincula WhatsApp por código
+  web on|off            Activa/desactiva el panel web Lite local
   foreground            Ejecuta el bot en primer plano
   update                Actualiza sin borrar sesión ni datos
   doctor                Diagnóstico de Termux Lite
   wakelock on|off       Evita suspensión si tienes Termux:API
   help                  Muestra esta ayuda
+
+Comandos para la app Android:
+  app-status
+  app-logs
+  app-pair-start qr|code [numero]
+  app-pair-status
+  app-pair-cancel
+  app-config-set <nombre> <prefijo> <es|en>
 EOF
 }
 
@@ -214,8 +368,15 @@ case "${1:-help}" in
   stop) stop_bot ;;
   restart) stop_bot; start_bot ;;
   status) status_bot ;;
+  app-status) app_status ;;
+  app-logs) app_logs ;;
   logs|log) show_logs ;;
   pair|link) shift; pair_bot "${1:-}" ;;
+  app-pair-start) shift; pair_start "${1:-qr}" "${2:-}" ;;
+  app-pair-status) pair_status_app ;;
+  app-pair-cancel) pair_cancel ;;
+  app-config-set) shift; config_set_app "${1:-}" "${2:-.}" "${3:-es}" ;;
+  web) shift; web_mode "${1:-}" ;;
   foreground|fg) foreground_bot ;;
   update|upgrade) require_install; exec bash "${INSTALL_DIR}/scripts/update-termux.sh" ;;
   doctor|check) doctor ;;
