@@ -1,8 +1,11 @@
 use serde::Deserialize;
 use serde_json::Value;
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 use url::Url;
+
+const LINUX_RUNTIME_SCRIPT: &str = include_str!("../resources/linux-local-runtime.sh");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +53,7 @@ async fn control_request(request: ControlRequest) -> Result<String, String> {
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(25))
-        .user_agent("GhostNexoraManager/0.1")
+        .user_agent("GhostNexoraManager/2.0")
         .build()
         .map_err(|_| "http_client_failed".to_string())?;
 
@@ -117,10 +120,86 @@ fn local_runtime_action(action: String) -> Result<String, String> {
     }
 }
 
+fn source_ref() -> &'static str {
+    option_env!("GHOST_NEXORA_SOURCE_REF").unwrap_or("main")
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_runtime_script(action: &str, extra: Option<&str>) -> Result<String, String> {
+    if !matches!(action, "probe" | "install" | "start" | "stop" | "restart" | "update" | "repair" | "web-on" | "web-off" | "connection" | "owner-set") {
+        return Err("unsupported_linux_runtime_action".into());
+    }
+    let mut child = Command::new("bash")
+        .args(["-s", "--", action, source_ref(), extra.unwrap_or("")])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|_| "linux_runtime_shell_unavailable".to_string())?;
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin.write_all(LINUX_RUNTIME_SCRIPT.as_bytes()).map_err(|_| "linux_runtime_script_write_failed".to_string())?;
+    }
+    let output = child.wait_with_output().map_err(|_| "linux_runtime_script_failed".to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(if stderr.is_empty() { "linux_runtime_action_failed".into() } else { stderr.chars().take(4000).collect() })
+    }
+}
+
+#[tauri::command]
+fn desktop_platform() -> String {
+    std::env::consts::OS.to_string()
+}
+
+#[tauri::command]
+async fn linux_runtime_probe() -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    { return tauri::async_runtime::spawn_blocking(|| run_linux_runtime_script("probe", None)).await.map_err(|_| "linux_runtime_probe_join_failed".to_string())?; }
+    #[cfg(not(target_os = "linux"))]
+    { Err("linux_runtime_unsupported".into()) }
+}
+
+#[tauri::command]
+async fn linux_runtime_action(action: String) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    { return tauri::async_runtime::spawn_blocking(move || run_linux_runtime_script(&action, None)).await.map_err(|_| "linux_runtime_action_join_failed".to_string())?; }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = action; Err("linux_runtime_unsupported".into()) }
+}
+
+#[tauri::command]
+async fn linux_runtime_connection() -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    { return tauri::async_runtime::spawn_blocking(|| run_linux_runtime_script("connection", None)).await.map_err(|_| "linux_runtime_connection_join_failed".to_string())?; }
+    #[cfg(not(target_os = "linux"))]
+    { Err("linux_runtime_unsupported".into()) }
+}
+
+#[tauri::command]
+async fn linux_runtime_set_owner(phone: String) -> Result<String, String> {
+    let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 8 || digits.len() > 20 { return Err("invalid_owner_number".into()); }
+    #[cfg(target_os = "linux")]
+    { return tauri::async_runtime::spawn_blocking(move || run_linux_runtime_script("owner-set", Some(&digits))).await.map_err(|_| "linux_runtime_owner_join_failed".to_string())?; }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = digits; Err("linux_runtime_unsupported".into()) }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![control_request, local_runtime_action])
+        .invoke_handler(tauri::generate_handler![
+            control_request,
+            local_runtime_action,
+            desktop_platform,
+            linux_runtime_probe,
+            linux_runtime_action,
+            linux_runtime_connection,
+            linux_runtime_set_owner,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Ghost Nexora Manager");
 }
