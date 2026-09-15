@@ -192,13 +192,16 @@ class LocalRuntimeBridge(private val context: Context) {
                 mkdir -p "${'$'}STATE_DIR"
                 pkg update -y
                 pkg install -y git nodejs ffmpeg python curl unzip procps coreutils
-                if [ -d "${'$'}INSTALL_DIR/.git" ]; then
-                  git -C "${'$'}INSTALL_DIR" fetch origin "${'$'}BRANCH"
-                  git -C "${'$'}INSTALL_DIR" checkout "${'$'}BRANCH"
-                  git -C "${'$'}INSTALL_DIR" pull --ff-only origin "${'$'}BRANCH"
-                else
-                  git clone --depth 1 --branch "${'$'}BRANCH" "${'$'}REPO_URL" "${'$'}INSTALL_DIR"
+                if [ ! -d "${'$'}INSTALL_DIR/.git" ]; then
+                  mkdir -p "${'$'}INSTALL_DIR"
+                  git -C "${'$'}INSTALL_DIR" init -q
+                  git -C "${'$'}INSTALL_DIR" remote add origin "${'$'}REPO_URL"
                 fi
+                if ! git -C "${'$'}INSTALL_DIR" remote get-url origin >/dev/null 2>&1; then
+                  git -C "${'$'}INSTALL_DIR" remote add origin "${'$'}REPO_URL"
+                fi
+                git -C "${'$'}INSTALL_DIR" fetch --depth 1 origin "${'$'}BRANCH"
+                git -C "${'$'}INSTALL_DIR" checkout --detach --force FETCH_HEAD
                 cd "${'$'}INSTALL_DIR"
                 GHOST_NEXORA_NONINTERACTIVE=1 BRANCH="${'$'}BRANCH" INSTALL_DIR="${'$'}INSTALL_DIR" STATE_DIR="${'$'}STATE_DIR" bash scripts/install-termux.sh </dev/null
             """.trimIndent()
