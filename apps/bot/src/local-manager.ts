@@ -34,11 +34,16 @@ async function readEnvMap() {
 async function setEnvValue(key: string, value: string) {
   let raw = ''
   try { raw = await readFile(envFile, 'utf8') } catch { /* created below */ }
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matcher = new RegExp(`^${escapedKey}=.*$`, 'm')
-  const next = matcher.test(raw)
-    ? raw.replace(matcher, `${key}=${value}`)
-    : `${raw.trimEnd()}${raw.trim() ? '\n' : ''}${key}=${value}\n`
+  const lines = raw.split(/\r?\n/)
+  const prefix = `${key}=`
+  let replaced = false
+  const nextLines = lines.map((line) => {
+    if (!line.startsWith(prefix)) return line
+    replaced = true
+    return `${key}=${value}`
+  })
+  if (!replaced) nextLines.push(`${key}=${value}`)
+  const next = `${nextLines.join('\n').replace(/\n+$/, '')}\n`
   await writeFile(envFile, next, { mode: 0o600 })
 }
 
