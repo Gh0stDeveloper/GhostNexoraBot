@@ -112,6 +112,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
+      GHOST_NEXORA_SOURCE_REF: ${{ inputs.release_ref }}
       GHOST_NEXORA_ANDROID_KEY_ALIAS: ${{ secrets.GHOST_NEXORA_ANDROID_KEY_ALIAS }}
       GHOST_NEXORA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.GHOST_NEXORA_ANDROID_KEYSTORE_PASSWORD }}
       GHOST_NEXORA_ANDROID_KEY_PASSWORD: ${{ secrets.GHOST_NEXORA_ANDROID_KEY_PASSWORD }}
@@ -124,6 +125,8 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
