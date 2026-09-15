@@ -180,12 +180,12 @@ install_system_dependencies() {
   command -v pkexec >/dev/null 2>&1 || fail "system_dependencies_missing:${missing[*]}:pkexec_unavailable"
   log "Instalando dependencias del sistema: ${missing[*]}"
   if [[ -x /usr/bin/apt-get ]]; then
-    pkexec env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get update
-    pkexec env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install -y ca-certificates curl git ffmpeg python3 xz-utils build-essential webp
+    pkexec env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get update || return 1
+    pkexec env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install -y ca-certificates curl git ffmpeg python3 xz-utils build-essential webp || return 1
   elif [[ -x /usr/bin/dnf ]]; then
-    pkexec /usr/bin/dnf install -y ca-certificates curl git ffmpeg python3 xz gcc gcc-c++ make libwebp-tools
+    pkexec /usr/bin/dnf install -y ca-certificates curl git ffmpeg python3 xz gcc gcc-c++ make libwebp-tools || return 1
   elif [[ -x /usr/bin/pacman ]]; then
-    pkexec /usr/bin/pacman -Sy --needed --noconfirm ca-certificates curl git ffmpeg python xz base-devel libwebp
+    pkexec /usr/bin/pacman -Sy --needed --noconfirm ca-certificates curl git ffmpeg python xz base-devel libwebp || return 1
   else
     fail "unsupported_package_manager:${missing[*]}"
   fi
@@ -208,13 +208,13 @@ install_node_runtime() {
   [[ -n "${filename}" ]] || fail 'node_archive_not_found'
   expected="$(printf '%s\n' "${sums}" | awk -v file="${filename}" '$2==file {print $1; exit}')"
   tmp="$(mktemp -d "${RUNTIME_DIR}/node-download.XXXXXX")"
-  curl -fL "https://nodejs.org/dist/latest-v24.x/${filename}" -o "${tmp}/${filename}"
+  curl -fL "https://nodejs.org/dist/latest-v24.x/${filename}" -o "${tmp}/${filename}" || return 1
   printf '%s  %s\n' "${expected}" "${tmp}/${filename}" | sha256sum -c - >/dev/null || fail 'node_checksum_failed'
-  tar -xJf "${tmp}/${filename}" -C "${tmp}"
+  tar -xJf "${tmp}/${filename}" -C "${tmp}" || return 1
   extracted="$(find "${tmp}" -maxdepth 1 -type d -name 'node-v*-linux-*' | head -n1)"
   [[ -n "${extracted}" ]] || fail 'node_extract_failed'
   rm -rf "${NODE_DIR}"
-  mv "${extracted}" "${NODE_DIR}"
+  mv "${extracted}" "${NODE_DIR}" || return 1
   rm -rf "${tmp}"
   node_ok && npm_ok || fail 'node_runtime_invalid'
 }
@@ -222,8 +222,8 @@ install_node_runtime() {
 install_ytdlp() {
   local target="${BIN_DIR}/yt-dlp"
   log 'Preparando yt-dlp local…'
-  curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o "${target}"
-  chmod 755 "${target}"
+  curl -fL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o "${target}" || return 1
+  chmod 755 "${target}" || return 1
 }
 
 checkout_source() {
@@ -231,19 +231,19 @@ checkout_source() {
   if [[ ! -d "${REPO_DIR}/.git" ]]; then
     rm -rf "${REPO_DIR}"
     log 'Clonando Ghost Nexora Bot…'
-    git clone --filter=blob:none --no-checkout "${REPO_URL}" "${REPO_DIR}"
+    git clone --filter=blob:none --no-checkout "${REPO_URL}" "${REPO_DIR}" || return 1
   fi
   log "Sincronizando ref ${SOURCE_REF}…"
-  git -C "${REPO_DIR}" fetch --depth 1 origin "${SOURCE_REF}"
-  git -C "${REPO_DIR}" checkout --detach FETCH_HEAD
-  printf '%s\n' "${SOURCE_REF}" > "${SOURCE_REF_FILE}"
-  chmod 600 "${SOURCE_REF_FILE}"
+  git -C "${REPO_DIR}" fetch --depth 1 origin "${SOURCE_REF}" || return 1
+  git -C "${REPO_DIR}" checkout --detach FETCH_HEAD || return 1
+  printf '%s\n' "${SOURCE_REF}" > "${SOURCE_REF_FILE}" || return 1
+  chmod 600 "${SOURCE_REF_FILE}" || return 1
 }
 
 prepare_env() {
   ensure_dirs
   if [[ ! -f "${ENV_FILE}" ]]; then
-    cp "${REPO_DIR}/.env.example" "${ENV_FILE}"
+    cp "${REPO_DIR}/.env.example" "${ENV_FILE}" || return 1
   fi
   set_env NEXORA_RUNTIME_PROFILE full
   set_env BOT_NAME "$(get_env BOT_NAME || true)"
@@ -268,11 +268,11 @@ prepare_env() {
   token="$(get_env ADMIN_WEB_TOKEN)"
   if [[ -z "${token}" || "${token}" == 'change-this-admin-token' ]]; then
     node="$(node_bin)"
-    token="$(${node} -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")"
+    token="$(${node} -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")" || return 1
     set_env ADMIN_WEB_TOKEN "${token}"
   fi
   set_env MANAGER_API_TOKEN "${token}"
-  chmod 600 "${ENV_FILE}"
+  chmod 600 "${ENV_FILE}" || return 1
 }
 
 with_runtime_path() {
@@ -283,11 +283,11 @@ build_bot() {
   local npm
   npm="$(npm_bin)"; [[ -n "${npm}" ]] || fail 'npm_unavailable'
   log 'Instalando dependencias Node del bot…'
-  (cd "${REPO_DIR}" && with_runtime_path "${npm}" install --workspace=@ghostnexora/bot --include=dev)
+  (cd "${REPO_DIR}" && with_runtime_path "${npm}" install --workspace=@ghostnexora/bot --include=dev) || return 1
   log 'Preparando assets…'
-  (cd "${REPO_DIR}" && with_runtime_path "${npm}" run assets:waifus)
+  (cd "${REPO_DIR}" && with_runtime_path "${npm}" run assets:waifus) || return 1
   log 'Compilando runtime…'
-  (cd "${REPO_DIR}" && with_runtime_path "${npm}" run build --workspace=@ghostnexora/bot)
+  (cd "${REPO_DIR}" && with_runtime_path "${npm}" run build --workspace=@ghostnexora/bot) || return 1
 }
 
 write_bot_unit() {
@@ -315,24 +315,24 @@ ReadWritePaths=${ROOT_DIR}
 [Install]
 WantedBy=default.target
 EOF
-  chmod 600 "${BOT_UNIT}"
+  chmod 600 "${BOT_UNIT}" || return 1
   if systemd_user_available; then
-    systemctl --user daemon-reload
-    systemctl --user enable ghost-nexora-bot.service >/dev/null
+    systemctl --user daemon-reload || return 1
+    systemctl --user enable ghost-nexora-bot.service >/dev/null || return 1
   fi
 }
 
 start_bot() {
   ensure_dirs
   [[ -f "${REPO_DIR}/apps/bot/dist/index.js" && -f "${ENV_FILE}" ]] || fail 'runtime_not_installed'
-  write_bot_unit
+  write_bot_unit || return 1
   if systemd_user_available; then
-    systemctl --user start ghost-nexora-bot.service
+    systemctl --user start ghost-nexora-bot.service || return 1
   else
     if pid_running "${BOT_PID_FILE}"; then return 0; fi
     local node
     node="$(node_bin)"; [[ -n "${node}" ]] || fail 'node_unavailable'
-    (cd "${REPO_DIR}" && nohup env ENV_FILE="${ENV_FILE}" PATH="${NODE_DIR}/bin:${BIN_DIR}:${PATH}" "${node}" apps/bot/dist/index.js >> "${BOT_LOG}" 2>&1 & echo $! > "${BOT_PID_FILE}")
+    (cd "${REPO_DIR}" && nohup env ENV_FILE="${ENV_FILE}" PATH="${NODE_DIR}/bin:${BIN_DIR}:${PATH}" "${node}" apps/bot/dist/index.js >> "${BOT_LOG}" 2>&1 & echo $! > "${BOT_PID_FILE}") || return 1
   fi
   local attempt
   for attempt in $(seq 1 50); do
@@ -359,9 +359,9 @@ build_web() {
   local npm
   npm="$(npm_bin)"; [[ -n "${npm}" ]] || fail 'npm_unavailable'
   log 'Instalando dependencias Web…'
-  (cd "${REPO_DIR}" && with_runtime_path "${npm}" install --workspace=@ghostnexora/web --include=dev)
+  (cd "${REPO_DIR}" && with_runtime_path "${npm}" install --workspace=@ghostnexora/web --include=dev) || return 1
   log 'Compilando dashboard Web…'
-  (cd "${REPO_DIR}" && with_runtime_path "${npm}" run build --workspace=@ghostnexora/web)
+  (cd "${REPO_DIR}" && with_runtime_path "${npm}" run build --workspace=@ghostnexora/web) || return 1
 }
 
 write_web_unit() {
@@ -388,23 +388,23 @@ ReadWritePaths=${ROOT_DIR} ${REPO_DIR}/apps/web/.next
 [Install]
 WantedBy=default.target
 EOF
-  chmod 600 "${WEB_UNIT}"
+  chmod 600 "${WEB_UNIT}" || return 1
   if systemd_user_available; then
-    systemctl --user daemon-reload
-    systemctl --user enable ghost-nexora-web.service >/dev/null
+    systemctl --user daemon-reload || return 1
+    systemctl --user enable ghost-nexora-web.service >/dev/null || return 1
   fi
 }
 
 start_web() {
   [[ -d "${REPO_DIR}/apps/web/.next" ]] || fail 'web_not_built'
-  write_web_unit
+  write_web_unit || return 1
   if systemd_user_available; then
-    systemctl --user start ghost-nexora-web.service
+    systemctl --user start ghost-nexora-web.service || return 1
   else
     if pid_running "${WEB_PID_FILE}"; then return 0; fi
     local npm
     npm="$(npm_bin)"; [[ -n "${npm}" ]] || fail 'npm_unavailable'
-    (cd "${REPO_DIR}" && nohup env ENV_FILE="${ENV_FILE}" PATH="${NODE_DIR}/bin:${BIN_DIR}:${PATH}" "${npm}" run start --workspace=@ghostnexora/web -- --hostname 127.0.0.1 --port "${WEB_PORT}" >> "${WEB_LOG}" 2>&1 & echo $! > "${WEB_PID_FILE}")
+    (cd "${REPO_DIR}" && nohup env ENV_FILE="${ENV_FILE}" PATH="${NODE_DIR}/bin:${BIN_DIR}:${PATH}" "${npm}" run start --workspace=@ghostnexora/web -- --hostname 127.0.0.1 --port "${WEB_PORT}" >> "${WEB_LOG}" 2>&1 & echo $! > "${WEB_PID_FILE}") || return 1
   fi
 }
 
@@ -420,20 +420,21 @@ stop_web() {
 
 install_runtime() {
   ensure_dirs
-  install_system_dependencies
-  install_node_runtime
-  install_ytdlp
-  checkout_source
-  prepare_env
-  build_bot
-  write_bot_unit
-  start_bot
+  install_system_dependencies || fail 'system_dependency_install_failed'
+  install_node_runtime || fail 'node_runtime_install_failed'
+  install_ytdlp || fail 'ytdlp_install_failed'
+  checkout_source || fail 'source_checkout_failed'
+  prepare_env || fail 'environment_prepare_failed'
+  build_bot || fail 'bot_build_failed'
+  write_bot_unit || fail 'bot_unit_prepare_failed'
+  start_bot || fail 'bot_start_failed'
 }
 
 update_runtime() {
   [[ -d "${REPO_DIR}/.git" ]] || fail 'runtime_not_installed'
-  local old_sha was_running=false
+  local old_sha old_ref was_running=false
   old_sha="$(git -C "${REPO_DIR}" rev-parse HEAD)"
+  old_ref="$(stored_source_ref)"
   bot_running && was_running=true || true
   stop_bot
   if checkout_source && build_bot && write_bot_unit; then
@@ -442,6 +443,7 @@ update_runtime() {
   fi
   log 'Actualización falló; revirtiendo código anterior…'
   git -C "${REPO_DIR}" checkout --detach "${old_sha}" || true
+  printf '%s\n' "${old_ref}" > "${SOURCE_REF_FILE}" || true
   build_bot || true
   write_bot_unit || true
   [[ "${was_running}" == true ]] && start_bot || true
@@ -450,27 +452,27 @@ update_runtime() {
 
 repair_runtime() {
   [[ -d "${REPO_DIR}/.git" ]] || fail 'runtime_not_installed'
-  install_system_dependencies
-  install_node_runtime
-  install_ytdlp
-  prepare_env
-  build_bot
-  write_bot_unit
+  install_system_dependencies || fail 'system_dependency_install_failed'
+  install_node_runtime || fail 'node_runtime_install_failed'
+  install_ytdlp || fail 'ytdlp_install_failed'
+  prepare_env || fail 'environment_prepare_failed'
+  build_bot || fail 'bot_build_failed'
+  write_bot_unit || fail 'bot_unit_prepare_failed'
 }
 
 enable_web() {
   [[ -d "${REPO_DIR}/.git" ]] || fail 'runtime_not_installed'
-  build_web
+  build_web || fail 'web_build_failed'
   set_env WEB_ENABLED true
   set_env PUBLIC_WEB_URL "http://127.0.0.1:${WEB_PORT}"
-  start_web
-  if bot_running; then stop_bot; start_bot; fi
+  start_web || fail 'web_start_failed'
+  if bot_running; then stop_bot; start_bot || fail 'bot_restart_failed'; fi
 }
 
 disable_web() {
   stop_web
   [[ -f "${ENV_FILE}" ]] && set_env WEB_ENABLED false
-  if bot_running; then stop_bot; start_bot; fi
+  if bot_running; then stop_bot; start_bot || fail 'bot_restart_failed'; fi
 }
 
 connection_json() {
