@@ -12,16 +12,23 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Ghost Nexora Manager",
-        "width": 1180,
-        "height": 780,
-        "minWidth": 820,
-        "minHeight": 600,
+        "width": 1280,
+        "height": 820,
+        "minWidth": 880,
+        "minHeight": 620,
         "center": true,
-        "resizable": true
+        "resizable": true,
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true,
+        "theme": "Dark"
       }
     ],
-    "security": { "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost" }
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost"
+    }
   },
   "bundle": {
     "active": true,
@@ -35,7 +42,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "windows": { "nsis": { "installMode": "currentUser" } },
-    "linux": { "deb": { "depends": [] } }
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
   }
 }
