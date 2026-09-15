@@ -183,7 +183,7 @@ async fn linux_runtime_set_owner(phone: String) -> Result<String, String> {
     let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.len() < 8 || digits.len() > 20 { return Err("invalid_owner_number".into()); }
     #[cfg(target_os = "linux")]
-    { return tauri::async_runtime::spawn_blocking(move || run_linux_runtime_script("owner-set", Some(&digits))).await.map_err(|_| "linux_runtime_owner_join_failed".to_string())?; }
+    { return tauri::async_runtime::spawn_blocking(move || run_linux_runtime_script("owner-set", Some(digits.as_str()))).await.map_err(|_| "linux_runtime_owner_join_failed".to_string())?; }
     #[cfg(not(target_os = "linux"))]
     { let _ = digits; Err("linux_runtime_unsupported".into()) }
 }
