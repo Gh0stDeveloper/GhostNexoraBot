@@ -179,25 +179,30 @@ class LocalRuntimeBridge(private val context: Context) {
     }
 
     private val bootstrapScript: String
-        get() = """
-            set -Eeuo pipefail
-            REPO_URL='https://github.com/Gh0stDeveloper/GhostNexoraBot.git'
-            BRANCH='main'
-            INSTALL_DIR="${'$'}HOME/GhostNexoraBot"
-            STATE_DIR="${'$'}HOME/.ghostnexora"
-            mkdir -p "${'$'}STATE_DIR"
-            pkg update -y
-            pkg install -y git nodejs ffmpeg python curl unzip procps coreutils
-            if [ -d "${'$'}INSTALL_DIR/.git" ]; then
-              git -C "${'$'}INSTALL_DIR" fetch origin "${'$'}BRANCH"
-              git -C "${'$'}INSTALL_DIR" checkout "${'$'}BRANCH"
-              git -C "${'$'}INSTALL_DIR" pull --ff-only origin "${'$'}BRANCH"
-            else
-              git clone --depth 1 --branch "${'$'}BRANCH" "${'$'}REPO_URL" "${'$'}INSTALL_DIR"
-            fi
-            cd "${'$'}INSTALL_DIR"
-            BRANCH="${'$'}BRANCH" INSTALL_DIR="${'$'}INSTALL_DIR" STATE_DIR="${'$'}STATE_DIR" bash scripts/install-termux.sh </dev/null
-        """.trimIndent()
+        get() {
+            val ref = BuildConfig.GHOST_NEXORA_SOURCE_REF
+                .takeIf { it.matches(Regex("^[A-Za-z0-9._/-]{1,120}$")) }
+                ?: "main"
+            return """
+                set -Eeuo pipefail
+                REPO_URL='https://github.com/Gh0stDeveloper/GhostNexoraBot.git'
+                BRANCH='$ref'
+                INSTALL_DIR="${'$'}HOME/GhostNexoraBot"
+                STATE_DIR="${'$'}HOME/.ghostnexora"
+                mkdir -p "${'$'}STATE_DIR"
+                pkg update -y
+                pkg install -y git nodejs ffmpeg python curl unzip procps coreutils
+                if [ -d "${'$'}INSTALL_DIR/.git" ]; then
+                  git -C "${'$'}INSTALL_DIR" fetch origin "${'$'}BRANCH"
+                  git -C "${'$'}INSTALL_DIR" checkout "${'$'}BRANCH"
+                  git -C "${'$'}INSTALL_DIR" pull --ff-only origin "${'$'}BRANCH"
+                else
+                  git clone --depth 1 --branch "${'$'}BRANCH" "${'$'}REPO_URL" "${'$'}INSTALL_DIR"
+                fi
+                cd "${'$'}INSTALL_DIR"
+                BRANCH="${'$'}BRANCH" INSTALL_DIR="${'$'}INSTALL_DIR" STATE_DIR="${'$'}STATE_DIR" bash scripts/install-termux.sh </dev/null
+            """.trimIndent()
+        }
 
     companion object {
         const val RUN_COMMAND_PERMISSION = "com.termux.permission.RUN_COMMAND"
