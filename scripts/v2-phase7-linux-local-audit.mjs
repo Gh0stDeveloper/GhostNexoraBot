@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 
-const [rust, bridge, app, script] = await Promise.all([
+const [rust, bridge, app, script, releaseWorkflow] = await Promise.all([
   readFile('apps/desktop/src-tauri/src/lib.rs', 'utf8'),
   readFile('apps/desktop/src/linuxRuntime.ts', 'utf8'),
   readFile('apps/desktop/src/App.tsx', 'utf8'),
   readFile('apps/desktop/src-tauri/resources/linux-local-runtime.sh', 'utf8'),
+  readFile('.github/workflows/v2-release.yml', 'utf8'),
 ])
 
 const syntax = spawnSync('bash', ['-n', 'apps/desktop/src-tauri/resources/linux-local-runtime.sh'], { encoding: 'utf8' })
@@ -20,6 +21,7 @@ assert.match(rust, /\.args\(\["-s", "--", action, source_ref\(\), extra\.unwrap_
 assert.doesNotMatch(rust, /bash\s+-c|sh\s+-c|cmd\.exe|powershell/i, 'Linux local runtime bridge must not open a general shell')
 assert.match(rust, /linux_runtime_set_owner/)
 assert.match(rust, /digits\.len\(\) < 8 \|\| digits\.len\(\) > 20/)
+assert.match(rust, /Some\(digits\.as_str\(\)\)/)
 
 assert.match(bridge, /linux_runtime_probe/)
 assert.match(bridge, /linux_runtime_action/)
@@ -31,8 +33,12 @@ assert.match(app, /platform === 'linux' && !remoteMode/)
 assert.match(app, /linuxRuntime\.probe\(\)/)
 assert.match(app, /linuxRuntime\.connection\(\)/)
 assert.match(app, /linuxRuntime\.setOwner\(phone\)/)
-assert.match(app, /switchRemote/)
-assert.match(app, /switchLocal/)
+assert.match(app, /function useRemoteMode\(\)/)
+assert.match(app, /async function useLocalMode\(\)/)
+assert.match(app, /setRemoteMode\(true\)/)
+assert.match(app, /setRemoteMode\(false\)/)
+assert.match(app, /onUseRemote=\{useRemoteMode\}/)
+assert.match(app, /onUseLocal=\{\(\) => void useLocalMode\(\)\}/)
 
 assert.match(script, /XDG_DATA_HOME/)
 assert.match(script, /\.local\/share/)
@@ -51,9 +57,14 @@ assert.match(script, /Environment="ENV_FILE=/)
 assert.match(script, /NoNewPrivileges=true/)
 assert.match(script, /ProtectSystem=strict/)
 assert.match(script, /update_failed_rolled_back/)
+assert.match(script, /old_sha="\$\(git -C "\$\{REPO_DIR\}" rev-parse HEAD\)"/)
+assert.match(script, /git -C "\$\{REPO_DIR\}" checkout --detach "\$\{old_sha\}"/)
+assert.match(script, /build_bot \|\| true/)
 assert.match(script, /pkexec/)
 assert.match(script, /ADMIN_WEB_TOKEN/)
 assert.match(script, /chmod 600 "\$\{ENV_FILE\}"/)
 assert.doesNotMatch(script, /eval\s|bash\s+-c|sh\s+-c/i, 'Bundled Linux runtime script must not evaluate arbitrary shell input')
+
+assert.match(releaseWorkflow, /linux:\n[\s\S]*?GHOST_NEXORA_SOURCE_REF: \$\{\{ inputs\.release_ref \}\}/)
 
 console.log('[V2 LINUX LOCAL AUDIT] OK — Linux desktop is local-first, per-user, web-off-by-default and constrained to fixed runtime actions.')
