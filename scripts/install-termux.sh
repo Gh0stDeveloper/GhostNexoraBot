@@ -26,7 +26,7 @@ section 'Ghost Nexora Bot · TERMUX LITE'
 info "Rama: ${BRANCH}"
 info "Código: ${INSTALL_DIR}"
 info "Datos: ${STATE_DIR}"
-info 'Perfil: termux-lite · sin Ollama/LLM, panel web, Nginx ni systemd'
+info 'Perfil: termux-lite · sin Ollama/LLM, Next.js, Nginx ni systemd'
 
 section '1/7 · Paquetes de Termux'
 pkg update -y >/dev/null
@@ -79,10 +79,11 @@ set_env MAX_DOWNLOAD_MB "450"
 set_env BOT_HEALTH_PORT "3001"
 set_env BOT_HEALTH_URL "http://127.0.0.1:3001/health"
 set_env OLLAMA_ENABLED "false"
+set_env TERMUX_LOCAL_WEB_ENABLED "false"
 set_env TELEGRAM_BOT_TOKEN ""
 set_env TELEGRAM_CHANNEL_ID ""
 set_env TELEGRAM_CHANNEL_URL ""
-set_env PUBLIC_WEB_URL "http://127.0.0.1:3000"
+set_env PUBLIC_WEB_URL "http://127.0.0.1:3001"
 set_env OFFICIAL_CHANNEL_URL "https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i"
 
 CURRENT_ADMIN_TOKEN="$(grep '^ADMIN_WEB_TOKEN=' .env | cut -d= -f2- || true)"
@@ -90,7 +91,7 @@ if [[ -z "${CURRENT_ADMIN_TOKEN}" || "${CURRENT_ADMIN_TOKEN}" == 'change-this-ad
   set_env ADMIN_WEB_TOKEN "$(node -e "process.stdout.write(require('crypto').randomBytes(24).toString('hex'))")"
 fi
 chmod 600 .env
-ok '.env configurado para Termux Lite; la sesión y la base quedan fuera del árbol Git.'
+ok '.env configurado para Termux Lite; sesión, datos y logs quedan fuera del árbol Git.'
 
 section '5/7 · Dependencias y build Lite'
 export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -104,7 +105,7 @@ npm run build:termux --workspace=@ghostnexora/bot >/tmp/ghostnexora-termux-build
   tail -n 80 /tmp/ghostnexora-termux-build.log >&2 || true
   exit 1
 }
-ok 'Runtime Lite compilado sin Sharp/Playwright; el workspace web no se inicia ni se usa.'
+ok 'Runtime Lite compilado sin Sharp/Playwright; Next.js no se instala ni se ejecuta.'
 
 section '6/7 · Comando ghostnexora'
 install -m 0755 "${INSTALL_DIR}/scripts/termux/ghostnexora" "${PREFIX}/bin/ghostnexora"
@@ -147,13 +148,15 @@ printf ' Runtime: JavaScript compilado Lite\n'
 printf ' LLM/Ollama: desactivado\n'
 printf ' Sharp/Playwright: no instalados\n'
 printf ' Subbots: habilitados\n'
-printf ' Panel web/Nginx/systemd: no incluidos\n\n'
+printf ' Web Lite: desactivada por defecto (ghostnexora web on)\n'
+printf ' Next.js/Nginx/systemd: no incluidos\n\n'
 printf ' Comandos:\n'
 printf '   ghostnexora status\n'
 printf '   ghostnexora logs\n'
 printf '   ghostnexora pair 52XXXXXXXXXX\n'
 printf '   ghostnexora restart\n'
 printf '   ghostnexora update\n'
+printf '   ghostnexora web on\n'
 printf '   ghostnexora doctor\n\n'
 printf ' Para evitar que Android suspenda Termux, opcionalmente instala Termux:API\n'
 printf ' y usa: ghostnexora wakelock on\n'
