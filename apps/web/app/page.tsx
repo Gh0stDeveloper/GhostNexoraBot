@@ -1,4 +1,4 @@
-import { Activity, Android, Bot, BrainCircuit, CheckCircle2, Coins, Download, FileCheck2, Gamepad2, GitBranch, Laptop, LayoutDashboard, LockKeyhole, LogIn, MessageSquareMore, PackageCheck, ServerCog, ShieldCheck, TerminalSquare, UsersRound } from 'lucide-react'
+import { Activity, Bot, BrainCircuit, CheckCircle2, Coins, Download, FileCheck2, Gamepad2, GitBranch, Laptop, LayoutDashboard, LockKeyhole, LogIn, MessageSquareMore, PackageCheck, ServerCog, ShieldCheck, Smartphone, TerminalSquare, UsersRound } from 'lucide-react'
 import { getWebLocale } from '../lib/i18n-server'
 import { webT } from '../lib/i18n'
 import { downloadT } from '../lib/downloads-i18n'
@@ -53,7 +53,7 @@ export default async function Home() {
   ]
   const downloads = [
     [Laptop, dt('platform.windows'), 'NSIS · x64', has('nsis')],
-    [Android, dt('platform.android'), 'APK', has('apk')],
+    [Smartphone, dt('platform.android'), 'APK', has('apk')],
     [PackageCheck, dt('platform.debian'), 'DEB · amd64', has('deb')],
     [TerminalSquare, dt('platform.appimage'), 'AppImage · x64', has('appimage')],
   ] as const
