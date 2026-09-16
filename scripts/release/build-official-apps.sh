@@ -106,8 +106,8 @@ provision_toolchain() {
     mv "${tools_tmp}/cmdline-tools" "${android_home}/cmdline-tools/latest"
     rm -rf "${tools_tmp}" "${tools_zip}"
   fi
-  yes | "${android_home}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
-  "${android_home}/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-37' 'build-tools;37.0.0' >/tmp/ghost-nexora-android-sdk.log
+  yes 2>/dev/null | "${android_home}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+  "${android_home}/cmdline-tools/latest/bin/sdkmanager" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0' >/tmp/ghost-nexora-android-sdk.log
 }
 
 prepare_signing_identities() {
