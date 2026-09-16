@@ -40,10 +40,13 @@ function publicWebUrl(configured: string, browserProxy: string) {
 const fileEnv = loadEnvFile()
 const configuredPublicWebUrl = process.env.PUBLIC_WEB_URL ?? fileEnv.PUBLIC_WEB_URL ?? 'http://127.0.0.1:3000'
 const browserProxyPublicUrl = process.env.BROWSER_PROXY_PUBLIC_URL ?? fileEnv.BROWSER_PROXY_PUBLIC_URL ?? ''
+const dataDir = process.env.DATA_DIR ?? fileEnv.DATA_DIR ?? path.resolve(process.cwd(), '../../data')
+const defaultReleaseDir = path.resolve(dataDir, '..', 'releases')
 
 export const runtime = {
   adminToken: process.env.ADMIN_WEB_TOKEN ?? fileEnv.ADMIN_WEB_TOKEN ?? '',
-  dataDir: process.env.DATA_DIR ?? fileEnv.DATA_DIR ?? path.resolve(process.cwd(), '../../data'),
+  dataDir,
+  releaseDir: process.env.OFFICIAL_RELEASE_DIR ?? fileEnv.OFFICIAL_RELEASE_DIR ?? defaultReleaseDir,
   publicWebUrl: publicWebUrl(configuredPublicWebUrl, browserProxyPublicUrl),
   botHealthUrl: process.env.BOT_HEALTH_URL ?? fileEnv.BOT_HEALTH_URL ?? 'http://127.0.0.1:3001/health',
 }
