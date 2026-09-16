@@ -22,8 +22,13 @@ function bytes(value: number) {
 async function likee(ctx: CommandContext) {
   const sourceUrl = requireLikeeUrl(ctx)
   const progress = await createDownloadProgress(ctx, 'Likee · video')
-  await progress.update('downloading', 'Consultando LemPi /dl/likee…')
-  const result = await downloadLempiLikee(sourceUrl)
+  await progress.update('downloading', 'Preparando y descargando el video…')
+  let result
+  try {
+    result = await downloadLempiLikee(sourceUrl)
+  } catch {
+    throw new Error('No se pudo descargar ese video en este momento.')
+  }
   try {
     await progress.update('sending', `${bytes(result.size)} · enviando a WhatsApp`)
     await ctx.socket.sendMessage(ctx.chatId, {
@@ -32,7 +37,6 @@ async function likee(ctx: CommandContext) {
       caption: [
         '🎬 *LIKEE*',
         `📦 ${bytes(result.size)}`,
-        'Fuente: LemPi /dl/likee',
         '👻 Ghost Nexora Bot',
       ].join('\n'),
     }, { quoted: ctx.message })
@@ -48,7 +52,7 @@ export const likeeCommands: BotCommand[] = [
     name: 'likee',
     aliases: ['like', 'likeedl'],
     category: 'downloads',
-    description: 'Descarga videos de Likee mediante la API de LemPi.',
+    description: 'Descarga videos de Likee.',
     usage: 'likee <url>',
     handler: likee,
   },

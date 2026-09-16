@@ -24,7 +24,6 @@ async function sendFile(ctx: CommandContext, file: LempiRemoteFile, first: boole
         '📦 *TERABOX*',
         `Archivo: ${file.fileName}`,
         `Peso: ${bytes(file.size)}`,
-        'Fuente: LemPi /dl/terabox',
         '👻 Ghost Nexora Bot',
       ].join('\n')
     : undefined
@@ -55,8 +54,13 @@ async function sendFile(ctx: CommandContext, file: LempiRemoteFile, first: boole
 
 async function terabox(ctx: CommandContext) {
   const sourceUrl = requireTeraboxUrl(ctx)
-  await ctx.reply('📦 *TERABOX*\n━━━━━━━━━━━━━━\nConsultando LemPi /dl/terabox y preparando los archivos…')
-  const files = await downloadLempiTerabox(sourceUrl, 10)
+  await ctx.reply('📦 *TERABOX*\n━━━━━━━━━━━━━━\nPreparando los archivos…')
+  let files: LempiRemoteFile[]
+  try {
+    files = await downloadLempiTerabox(sourceUrl, 10)
+  } catch {
+    throw new Error('No se pudieron preparar los archivos en este momento.')
+  }
   let total = 0
   try {
     for (const [index, file] of files.entries()) {
@@ -75,7 +79,7 @@ export const teraboxCommands: BotCommand[] = [
     name: 'terabox',
     aliases: ['tera', 'teraboxdl'],
     category: 'downloads',
-    description: 'Descarga archivos compartidos de TeraBox mediante la API de LemPi.',
+    description: 'Descarga archivos compartidos de TeraBox.',
     usage: 'terabox <url>',
     handler: terabox,
   },

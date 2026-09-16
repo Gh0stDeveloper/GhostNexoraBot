@@ -38,7 +38,7 @@ function compact(value?: number) {
 }
 
 async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedMedia, label: string, quoted = true) {
-  const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\nFuente: LemPi\n👻 Ghost Nexora Bot`
+  const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\n👻 Ghost Nexora Bot`
 
   if (result.kind === 'image') {
     await ctx.socket.sendMessage(ctx.chatId, { image: { url: result.filePath }, caption }, quoted ? { quoted: ctx.message } : undefined)
@@ -87,7 +87,12 @@ async function sendPinterestAlbum(ctx: CommandContext, files: LempiDownloadedMed
 
 async function runPinterest(ctx: CommandContext) {
   const query = requireText(ctx, `Uso: ${ctx.prefix}pinterest <búsqueda>`)
-  const results = await searchLempiPinterest(query, 12)
+  let results
+  try {
+    results = await searchLempiPinterest(query, 12)
+  } catch {
+    throw new Error('No se pudo completar la búsqueda de Pinterest en este momento.')
+  }
   const candidates = results
     .map((item, index) => item.download ? { url: item.download, baseName: `pinterest-${index + 1}` } : null)
     .filter((item): item is { url: string; baseName: string } => Boolean(item))
@@ -115,11 +120,14 @@ async function runPinterest(ctx: CommandContext) {
 
 async function runInstagramDownload(ctx: CommandContext, source: string, imagesOnly: boolean) {
   const sourceUrl = requireUrl(source, `Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'ig'} <url de Instagram>`)
-  const reel = /\/(?:reel|reels)\//i.test(new URL(sourceUrl).pathname)
-  const endpoint = !imagesOnly && reel ? '/dl/igreel' : '/dl/instagram'
-  await ctx.reply(`📥 *INSTAGRAM*\n━━━━━━━━━━━━━━\nAPI: ${endpoint}\n⬇️ Descargando contenido...`)
+  await ctx.reply('📥 *INSTAGRAM*\n━━━━━━━━━━━━━━\n⬇️ Preparando la descarga...')
 
-  const files = await downloadLempiInstagramV2(sourceUrl, imagesOnly)
+  let files: LempiDownloadedMedia[]
+  try {
+    files = await downloadLempiInstagramV2(sourceUrl, imagesOnly)
+  } catch {
+    throw new Error('No se pudo descargar ese contenido de Instagram en este momento.')
+  }
   try {
     for (const [index, file] of files.entries()) await sendDownloadedMedia(ctx, file, 'INSTAGRAM', index === 0)
     recordSubbotDownload(ctx.instanceId, files.reduce((total, file) => total + file.size, 0))
@@ -131,7 +139,12 @@ async function runInstagramDownload(ctx: CommandContext, source: string, imagesO
 async function runInstagramProfile(ctx: CommandContext, input: string) {
   const target = input.trim()
   if (!target) throw new Error(`Uso: ${ctx.prefix}ig profile <usuario>`)
-  const profile = await stalkLempiInstagram(target)
+  let profile
+  try {
+    profile = await stalkLempiInstagram(target)
+  } catch {
+    throw new Error('No se pudo obtener ese perfil de Instagram en este momento.')
+  }
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: profile.name ? `${profile.name} · @${profile.username}`.slice(0, 80) : `@${profile.username}`,
     body: [
@@ -141,10 +154,8 @@ async function runInstagramProfile(ctx: CommandContext, input: string) {
       profile.posts !== undefined ? `Publicaciones: ${compact(profile.posts)}` : '',
       profile.verified !== undefined ? `Verificado: ${profile.verified ? 'sí' : 'no'}` : '',
       profile.private !== undefined ? `Privado: ${profile.private ? 'sí' : 'no'}` : '',
-      '',
-      'Fuente: LemPi /tools/stalkig',
     ].filter((value) => value !== '').join('\n'),
-    footer: 'Ghost Nexora Bot · Instagram · LemPi',
+    footer: 'Ghost Nexora Bot · Instagram',
     imageUrl: profile.avatar,
   })
 }

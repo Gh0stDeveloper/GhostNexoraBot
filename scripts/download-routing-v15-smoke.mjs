@@ -7,7 +7,28 @@ const root = process.cwd()
 const temp = mkdtempSync(path.join(os.tmpdir(), 'ghostnexora-download-routing-v15-'))
 
 const snippet = `
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const raw = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
+    const target = new URL(raw);
+    if (target.pathname.endsWith('/search/happymod')) {
+      return new Response(JSON.stringify({
+        status: true,
+        result: [{
+          name: 'Minecraft',
+          version: '1.21.90',
+          url: 'https://downloads.example.test/minecraft.apk'
+        }]
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    return originalFetch(input, init);
+  };
+
   const { commands } = await import('./apps/bot/dist/commands/index.js');
+  const { searchHappyMod } = await import('./apps/bot/dist/services/happymod.js');
   const byRoute = new Map();
   for (const command of commands) {
     for (const key of [command.name, ...(command.aliases ?? [])]) byRoute.set(String(key).toLowerCase(), command);
@@ -57,9 +78,39 @@ const snippet = `
   expectRoute('xn', 'xnxx');
   expectRoute('ph', 'pornhub');
 
+  const happy = await searchHappyMod('minecraft', 5);
+  if (happy.length !== 1) throw new Error('HappyMod result[] url payload was discarded');
+  if (happy[0]?.name !== 'Minecraft') throw new Error('HappyMod result name was not normalized');
+  if (!happy[0]?.token?.startsWith('hm_')) throw new Error('HappyMod result token was not generated');
+
+  const { readFileSync } = await import('node:fs');
+  for (const file of [
+    'apps/bot/src/commands/app-stores-v15.ts',
+    'apps/bot/src/commands/tiktok-v15.ts',
+    'apps/bot/src/commands/media-download-fixes-v2.ts',
+    'apps/bot/src/commands/likee.ts',
+    'apps/bot/src/commands/terabox.ts'
+  ]) {
+    const source = readFileSync(file, 'utf8');
+    const forbidden = [
+      /Fuente:\\s*LemPi/i,
+      /Fuente:\\s*HappyMod/i,
+      /Fuente:\\s*Aptoide/i,
+      /Fuente:\\s*\\$\\{store/i,
+      /API:\\s*\\/dl\\//i,
+      /Consultando LemPi/i,
+      /mediante la API de LemPi/i,
+      /Ghost Nexora Bot[^\\n]*· LemPi/i
+    ];
+    if (forbidden.some((pattern) => pattern.test(source))) {
+      throw new Error('download UI exposes provider/API details in ' + file);
+    }
+  }
+
   const result = {
     commandCount: commands.length,
     tiktok: byRoute.get('tt')?.name,
+    happymodPayload: happy[0]?.name,
     stores: ['uptodown','liteapks','aptoide','happymod','fdroid','apktools','androforever'].map((key) => byRoute.get(key)?.name),
     adult: ['xvideos','xnxx','pornhub'].map((key) => byRoute.get(key)?.name),
     globalApk: byRoute.has('apk'),
@@ -76,6 +127,8 @@ try {
       NEXORA_RUNTIME_PROFILE: 'full',
       WEB_ENABLED: 'false',
       OLLAMA_ENABLED: 'false',
+      LEMPI_API_KEY: 'happymod-v15-smoke-key',
+      LEMPI_API_KEYS: '',
       DATA_DIR: path.join(temp, 'data'),
       SESSION_DIR: path.join(temp, 'session'),
       ADMIN_WEB_TOKEN: 'download-routing-v15-ci-token',
