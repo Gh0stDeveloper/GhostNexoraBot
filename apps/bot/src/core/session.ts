@@ -28,6 +28,18 @@ export async function createSocket(sessionDir = config.sessionDir): Promise<{ so
     getMessage: async () => undefined,
   })
 
+  // Los recibos de lectura se gestionan en la capa de sesión para que funcionen
+  // igual en MainBot, subbots y Termux. Solo se marcan como vistos los mensajes
+  // entrantes de grupos; los mensajes propios, estados y chats privados no se tocan.
+  socket.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'notify') return
+    const keys = messages
+      .filter((message) => !message.key.fromMe && Boolean(message.key.id) && message.key.remoteJid?.endsWith('@g.us'))
+      .map((message) => message.key)
+    if (!keys.length) return
+    void socket.readMessages(keys).catch(() => undefined)
+  })
+
   // Firewall de salida: ninguna ruta interna, actual o futura, puede escribir a un
   // chat privado no autorizado saltándose el router. En subbots el owner válido
   // es exclusivamente NEXORA_SUBBOT_OWNER_JID; en MainBot se usan OWNER_NUMBERS.
