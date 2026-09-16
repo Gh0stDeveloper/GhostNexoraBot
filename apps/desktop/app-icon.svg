@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Ghost Nexora Manager</title>
+  <desc id="desc">Ghost Nexora Manager V2 desktop application icon.</desc>
+  <defs>
+    <linearGradient id="bg" x1="76" y1="48" x2="440" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#161B28"/>
+      <stop offset="0.56" stop-color="#0A0D14"/>
+      <stop offset="1" stop-color="#05060A"/>
+    </linearGradient>
+    <linearGradient id="ghost" x1="166" y1="121" x2="348" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C6C0FF"/>
+      <stop offset="0.56" stop-color="#8B7EFF"/>
+      <stop offset="1" stop-color="#6657E8"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="330" y1="128" x2="405" y2="207" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#74E5FF"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <filter id="shadow" x="80" y="78" width="352" height="366" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+  <rect x="12" y="12" width="488" height="488" rx="118" fill="url(#bg)" stroke="#252C3A" stroke-width="12"/>
+  <g filter="url(#shadow)">
+    <path d="M256 104c-78.98 0-143 64.02-143 143v145.1c0 10.24 11.86 15.95 19.87 9.56L170 372l35.96 29.31a12.2 12.2 0 0 0 15.42 0L256 373.1l34.62 28.21a12.2 12.2 0 0 0 15.42 0L342 372l37.13 29.66c8.01 6.39 19.87.68 19.87-9.56V247c0-78.98-64.02-143-143-143Z" fill="url(#ghost)"/>
+  </g>
+  <circle cx="208" cy="251" r="19" fill="#0B0E15"/>
+  <circle cx="304" cy="251" r="19" fill="#0B0E15"/>
+  <path d="M205 316c14.8 13.6 31.8 20.4 51 20.4s36.2-6.8 51-20.4" fill="none" stroke="#0B0E15" stroke-width="16" stroke-linecap="round"/>
+  <path d="M369 124v62M338 155h62" stroke="url(#spark)" stroke-width="17" stroke-linecap="round"/>
+  <circle cx="369" cy="155" r="44" fill="none" stroke="#55D7FF" stroke-opacity="0.15" stroke-width="8"/>
+</svg>

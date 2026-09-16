@@ -1,9 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -Eeuo pipefail
 
-BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/GhostNexoraBot}"
 STATE_DIR="${STATE_DIR:-$HOME/.ghostnexora}"
+SOURCE_REF_FILE="${STATE_DIR}/source-ref"
+SAVED_REF="$(cat "${SOURCE_REF_FILE}" 2>/dev/null || true)"
+BRANCH="${BRANCH:-${SAVED_REF:-main}}"
 ENV_FILE="${INSTALL_DIR}/.env"
 START_TS="$(date +%s)"
 
@@ -16,6 +18,7 @@ section() { printf '\n[%s] ===== %s =====\n' "$(date '+%H:%M:%S')" "$*"; }
 if [[ -z "${PREFIX:-}" ]] || ! command -v pkg >/dev/null 2>&1; then fail 'Este actualizador es exclusivo para Termux.'; fi
 if [[ ! -d "${INSTALL_DIR}/.git" ]]; then fail "No existe un repositorio válido en ${INSTALL_DIR}."; fi
 if [[ ! -f "${ENV_FILE}" ]]; then fail "Falta ${ENV_FILE}."; fi
+if [[ ! "${BRANCH}" =~ ^[A-Za-z0-9._/-]{1,120}$ ]]; then fail 'La referencia Git solicitada no es válida.'; fi
 
 cd "${INSTALL_DIR}"
 OLD_SHA="$(git rev-parse HEAD)"
@@ -27,7 +30,7 @@ fi
 
 section 'Ghost Nexora Bot · ACTUALIZACIÓN TERMUX LITE'
 info "Versión anterior: ${OLD_SHA:0:12}"
-info "Rama: ${BRANCH}"
+info "Referencia: ${BRANCH}"
 info "Sesión persistente: ${STATE_DIR}/session"
 info "Datos persistentes: ${STATE_DIR}/data"
 
@@ -35,11 +38,12 @@ section '1/5 · Detener proceso'
 if [[ "${WAS_RUNNING}" -eq 1 ]]; then ghostnexora stop; else info 'El bot ya estaba detenido.'; fi
 
 section '2/5 · Código'
-git fetch origin "${BRANCH}"
-git checkout "${BRANCH}"
-git pull --ff-only origin "${BRANCH}"
+git fetch --depth 1 origin "${BRANCH}"
+git checkout --detach --force FETCH_HEAD
+printf '%s\n' "${BRANCH}" >"${SOURCE_REF_FILE}"
+chmod 600 "${SOURCE_REF_FILE}"
 NEW_SHA="$(git rev-parse HEAD)"
-ok "Código actualizado: ${NEW_SHA:0:12}"
+ok "Código actualizado: ${NEW_SHA:0:12} · ref ${BRANCH}"
 
 section '3/5 · Perfil, dependencias y build Lite'
 set_env() {
@@ -97,6 +101,7 @@ ELAPSED=$(( $(date +%s) - START_TS ))
 printf '\nActualización Termux Lite finalizada en %ss.\n' "${ELAPSED}"
 printf 'Anterior: %s\n' "${OLD_SHA:0:12}"
 printf 'Actual : %s\n' "${NEW_SHA:0:12}"
+printf 'Ref    : %s\n' "${BRANCH}"
 printf 'Runtime: JavaScript compilado Lite.\n'
 printf 'Sharp/Playwright: omitidos.\n'
 printf 'Sesión y datos: conservados.\n'

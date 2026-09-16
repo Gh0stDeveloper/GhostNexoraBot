@@ -18,7 +18,7 @@ try {
   assert.ok(Buffer.isBuffer(local), 'local artwork must be materialized as a Buffer before WhatsApp use')
   assert.deepEqual(local, sample, 'preloaded local artwork must preserve bytes')
 
-  const interactive = await read('apps/bot/src/services/interactive.ts')
+  const interactive = await read('apps/bot/src/platform/whatsapp/interactive.ts')
   const richPreview = await read('apps/bot/src/services/rich-link-preview.ts')
   const moderation = await read('apps/bot/src/services/moderation-v2.ts')
   const menu = await read('apps/bot/src/commands/menu-v5.ts')
@@ -32,11 +32,15 @@ try {
   const stickers = await read('apps/bot/src/commands/stickers.ts')
   const privatePolicy = await read('apps/bot/src/services/private-chat-policy.ts')
 
-  // Interactive cards/carousels preload media for their own headers.
+  // Interactive cards still preload their media. Phase 2 intentionally removes
+  // native carouselMessage and routes legacy carousel callers through select-first
+  // or actionable text, avoiding client-side "update WhatsApp" placeholders.
   assert.match(interactive, /preloadWhatsAppMedia\(imageUrl/, 'interactive cards must preload their image source')
   assert.match(interactive, /generateWAMessageContent\(\{ image \}/, 'interactive cards must upload the materialized media')
   assert.doesNotMatch(interactive, /generateWAMessageContent\(\{ image: \{ url: imageUrl \} \}/, 'old direct-url interactive upload must not return')
-  assert.match(interactive, /const imageCache = new Map/, 'carousels must deduplicate repeated artwork uploads')
+  assert.match(interactive, /planCarousel/, 'legacy carousel callers must pass through the compatibility planner')
+  assert.match(interactive, /mode === 'text-fallback'/, 'carousel transport must expose a safe text fallback')
+  assert.doesNotMatch(interactive, /carouselMessage|CarouselMessage/, 'native carousel payload must stay out of stable transport')
 
   // externalAdReply remains available for welcome/goodbye/shop, but the menu was
   // intentionally restored to the single full interactive card that works across
@@ -111,9 +115,9 @@ try {
   assert.match(moderation, /const goodbyeImage = goodbyeAsset\?\.kind === 'image' \? goodbyeAsset\.path : visual\?\.imageUrl/, 'goodbye must fall back to the active visual image')
   assert.match(moderation, /sendPreloadedVideo/, 'welcome/goodbye GIF-video branding must still preload local media')
 
-  assert.match(shop, /sendRichLinkPreview/, 'shop may keep a clickable waifu preview before the carousel')
+  assert.match(shop, /sendRichLinkPreview/, 'shop may keep a clickable waifu preview before the compatibility carousel layer')
   assert.match(shop, /imageSource: imageUrl/, 'shop rich preview must use the active visual image')
-  assert.match(shop, /sendCarousel/, 'shop product carousel must remain available after the preview')
+  assert.match(shop, /sendCarousel/, 'shop must remain routed through the compatibility carousel API')
 
   // General Valley utilities remain safe outside the PoC scope. V22 overrides
   // only the exploit-specific msg/pv tokens after this layer.

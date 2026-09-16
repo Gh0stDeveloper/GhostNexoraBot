@@ -1,0 +1,6 @@
+{
+  "name": "@ghostnexora/android",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ghost Nexora Bot official Android Remote Manager. Built with Gradle, not npm."
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "kind": "ghost-nexora-v1-provider-baseline",
+  "sourceSha": "f50f27a4438bb3bd7958e5d28956d3aed4b11997",
+  "providers": [
+    { "id": "youtube", "family": "media", "source": "apps/bot/src/commands/youtube-v3.ts" },
+    { "id": "tiktok", "family": "social", "source": "apps/bot/src/commands/tiktok-v15.ts" },
+    { "id": "instagram", "family": "social", "source": "apps/bot/src/commands/downloads-progress-v2.ts" },
+    { "id": "facebook", "family": "social", "source": "apps/bot/src/commands/downloads-progress-v2.ts" },
+    { "id": "twitter", "family": "social", "source": "apps/bot/src/commands/downloads-progress-v2.ts" },
+    { "id": "soundcloud", "family": "audio", "source": "apps/bot/src/commands/downloads-progress-v2.ts" },
+    { "id": "mediafire", "family": "files", "source": "apps/bot/src/commands/downloads.ts" },
+    { "id": "erome", "family": "adult", "source": "apps/bot/src/commands/erome.ts" },
+    { "id": "xvideos", "family": "adult", "source": "apps/bot/src/commands/adult-download-v15.ts" },
+    { "id": "xnxx", "family": "adult", "source": "apps/bot/src/commands/adult-download-v15.ts" },
+    { "id": "pornhub", "family": "adult", "source": "apps/bot/src/commands/adult-download-v15.ts" },
+    { "id": "uptodown", "family": "apk", "source": "apps/bot/src/commands/app-stores-v15.ts" },
+    { "id": "liteapks", "family": "apk", "source": "apps/bot/src/commands/app-stores-v15.ts" },
+    { "id": "aptoide", "family": "apk", "source": "apps/bot/src/commands/app-stores-v15.ts" },
+    { "id": "happymod", "family": "apk", "source": "apps/bot/src/commands/app-stores-v15.ts" },
+    { "id": "fdroid", "family": "apk", "source": "apps/bot/src/commands/app-stores-extra-v15.ts" },
+    { "id": "apktools", "family": "apk", "source": "apps/bot/src/commands/app-stores-extra-v15.ts" },
+    { "id": "androforever", "family": "apk", "source": "apps/bot/src/commands/app-stores-extra-v15.ts" }
+  ]
+}

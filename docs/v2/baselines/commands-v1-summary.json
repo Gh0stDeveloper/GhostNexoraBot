@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "kind": "ghost-nexora-v1-command-baseline-summary",
+  "sourceSha": "f50f27a4438bb3bd7958e5d28956d3aed4b11997",
+  "generator": "scripts/v2-baseline-report.mjs",
+  "ciRunId": 34432910222,
+  "artifactId": 10135146185,
+  "artifactName": "v2-phase0-baseline",
+  "artifactZipSha256": "3fa4bcd6e8c599a8aa26ce6a7fc5848bba2a25068d21f4a91831a017e3e71f19",
+  "providerCount": 18,
+  "profiles": {
+    "minimal": {
+      "commandCount": 508,
+      "canonicalCommandCount": 403,
+      "duplicateCanonicalNameCount": 71,
+      "aliasCollisionCount": 37,
+      "canonicalNamesSha256": "025db05c48a560381823b34afb58293718be9de3c95ec034c23892d2c10e973a",
+      "commandRowsSha256": "a388007e2bfc4794ae7e05132c22b75f0b8b81e64ac491b9bee6dd4326e0988a"
+    },
+    "full": {
+      "commandCount": 509,
+      "canonicalCommandCount": 404,
+      "duplicateCanonicalNameCount": 71,
+      "aliasCollisionCount": 37,
+      "fullOnlyCanonicalCommands": ["adminpanel"],
+      "canonicalNamesSha256": "bcce45b16062700f13f61e519cc49d5c0b8ec1b3c7290f366919a6e1bfe46f32",
+      "commandRowsSha256": "d3133ccfc91000c4988910053e775b7c274e09f06c9cd6614b548ddba568b372"
+    }
+  }
+}

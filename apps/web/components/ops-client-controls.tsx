@@ -3,9 +3,11 @@
 import { Radio } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState, type ButtonHTMLAttributes } from 'react'
+import { useWebI18n } from './i18n-provider'
 
 export function OpsAutoRefresh({ seconds = 10 }: { seconds?: number }) {
   const router = useRouter()
+  const { t } = useWebI18n()
   const [enabled, setEnabled] = useState(true)
 
   useEffect(() => {
@@ -16,9 +18,9 @@ export function OpsAutoRefresh({ seconds = 10 }: { seconds?: number }) {
     return () => window.clearInterval(timer)
   }, [enabled, router, seconds])
 
-  return <button type="button" onClick={() => setEnabled((value) => !value)} className="ops-button-muted" title="Activa o pausa la actualización automática">
+  return <button type="button" onClick={() => setEnabled((value) => !value)} className="ops-button-muted" title={t('ops.liveTitle')}>
     <Radio className={`size-4 ${enabled ? 'text-emerald-400' : 'text-zinc-600'}`}/>
-    {enabled ? `Live · ${seconds}s` : 'Live pausado'}
+    {enabled ? `Live · ${seconds}s` : t('ops.livePaused')}
   </button>
 }
 

@@ -1,0 +1,88 @@
+name: V2 Phase 6
+
+on:
+  pull_request:
+    paths:
+      - 'apps/bot/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'scripts/i18n-*.mjs'
+      - 'scripts/v2-phase6-*.mjs'
+      - 'scripts/v2-phase5-discord-*.mjs'
+      - 'scripts/v2-phase4-telegram-*.mjs'
+      - 'scripts/v2-phase3-command-regression.mjs'
+      - 'scripts/v2-baseline-report.mjs'
+      - 'package.json'
+      - 'docs/v2/**'
+      - '.github/workflows/v2-phase6.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  multilingual-platform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+
+      - name: Build all workspaces
+        run: npm run build
+
+      - name: Phase 0 contracts remain valid
+        run: npm run v2:contracts
+
+      - name: Phase 1 WhatsApp adapter remains valid
+        run: npm run v2:whatsapp-adapter
+
+      - name: Phase 2 UI compatibility remains valid
+        run: npm run v2:ui-compat
+
+      - name: Phase 3 deterministic providers remain valid
+        run: npm run v2:providers
+
+      - name: Phase 4 Telegram remains valid
+        run: npm run v2:telegram
+
+      - name: Phase 5 Discord remains valid
+        run: npm run v2:discord
+
+      - name: Phase 6 ES/EN locale isolation and boundary gate
+        run: npm run v2:i18n
+
+      - name: Termux Lite build
+        run: npm run build:termux --workspace=@ghostnexora/bot
+
+      - name: Termux Lite profile smoke
+        run: node scripts/termux-lite-smoke.mjs
+
+      - name: Generate current command inventory
+        run: node scripts/v2-baseline-report.mjs --output=v2-phase6-inventory.json
+
+      - name: Verify WhatsApp command surface remains compatible
+        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase6-inventory.json
+
+      - name: Upload Phase 6 i18n evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase6-i18n
+          path: |
+            v2-phase6-i18n-audit.json
+            i18n-user-facing-audit.json
+            v2-phase6-inventory.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -6,7 +6,6 @@
  * JavaScript solo mejora la navegación entre páginas ya precargadas.
  */
 import { randomBytes } from 'node:crypto'
-import { generateWAMessageFromContent } from 'baileys'
 import type { BotCommand, CommandContext } from '../types.js'
 import {
   buildOfflineBrowserBundle,
@@ -17,8 +16,8 @@ import {
   type BrowserLabels,
   type PreparedOfflineBrowser,
 } from '../services/offline-browser.js'
+import { createRichResponseId, relayWhatsAppRichResponse } from '../platform/whatsapp/rich-response.js'
 import { logger } from '../utils/logger.js'
-import { withTimeout } from '../utils/timeout.js'
 
 function browserLabels(ctx: CommandContext): BrowserLabels {
   return {
@@ -42,42 +41,14 @@ function browserLabels(ctx: CommandContext): BrowserLabels {
 }
 
 async function relayBrowserPayload(ctx: CommandContext, responseId: string, payload: PreparedOfflineBrowser) {
-  const userJid = ctx.socket.user?.id ?? ctx.sender
-  if (!userJid) throw new Error(ctx.t('browser.botJidFailed'))
-
-  const slots: Record<string, unknown> = {
-    messageContextInfo: {
-      deviceListMetadata: {},
-      deviceListMetadataVersion: 2,
-      messageSecret: randomBytes(32).toString('base64'),
-      botMetadata: { messageDisclaimerText: '', botResponseId: responseId },
-    },
-    botForwardedMessage: {
-      message: {
-        richResponseMessage: {
-          messageType: 1,
-          submessages: [{ messageType: 2, messageText: ctx.t('browser.messageTitle') }],
-          unifiedResponse: { data: payload.unifiedData },
-          contextInfo: {
-            mentionedJid: [],
-            groupMentions: [],
-            statusAttributions: [],
-            forwardingScore: 1,
-            isForwarded: true,
-            forwardedAiBotMessageInfo: { botJid: '867051314767696@bot' },
-            forwardOrigin: 4,
-          },
-        },
-      },
-    },
-  }
-
-  const message = generateWAMessageFromContent(ctx.chatId, slots as never, { userJid })
-  await withTimeout(
-    ctx.socket.relayMessage(ctx.chatId, message.message!, { messageId: message.key.id! }),
-    25_000,
-    'offline browser relay',
-  )
+  const message = await relayWhatsAppRichResponse(ctx.socket, ctx.chatId, {
+    responseId,
+    submessages: [{ messageType: 2, messageText: ctx.t('browser.messageTitle') }],
+    unifiedData: payload.unifiedData,
+    timeoutMs: 25_000,
+    timeoutLabel: 'offline browser relay',
+    logLabel: 'offline-browser',
+  })
   return message.key.id
 }
 
@@ -107,7 +78,7 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
     return
   }
 
-  const responseId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
+  const responseId = createRichResponseId()
   const payload = prepareOfflineBrowserPayload({
     startUrl,
     bundle,
@@ -134,7 +105,7 @@ async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
     logger.warn({ error, startUrl, pages: payload.pages.length }, 'offline browser relay failed; retrying minimal payload')
   }
 
-  const retryId = `message-${Date.now()}-${randomBytes(4).toString('hex')}`
+  const retryId = createRichResponseId()
   const minimal = prepareOfflineBrowserPayload({
     startUrl,
     bundle,

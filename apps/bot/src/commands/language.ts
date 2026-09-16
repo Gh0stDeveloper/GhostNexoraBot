@@ -1,7 +1,15 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { community } from '../services/community.js'
 import { isGroupAdministrator } from '../utils/target.js'
-import { localeName, translate, type LocaleCode } from '../i18n/index.js'
+import {
+  clearPlatformLocale,
+  localeName,
+  platformLocalePreference,
+  resolvePlatformLocale,
+  setPlatformLocale,
+  translate,
+  type LocaleCode,
+} from '../i18n/index.js'
 import { isSupportedLocale } from '../i18n/types.js'
 
 function canManageGlobal(ctx: CommandContext) {
@@ -21,19 +29,32 @@ function parseLocale(raw?: string): LocaleCode | null {
   return isSupportedLocale(value) ? value : null
 }
 
+function isInherit(raw?: string) {
+  return ['inherit', 'heredar', 'default', 'global', 'auto', 'clear', 'reset'].includes(raw?.trim().toLowerCase() ?? '')
+}
+
+function platformContext(ctx: CommandContext) {
+  return { platform: 'whatsapp' as const, botInstanceId: ctx.adapter.botInstanceId }
+}
+
 async function status(ctx: CommandContext) {
+  const platform = platformContext(ctx)
   const global = ctx.settings.language
-  const group = ctx.isGroup ? community.getGroupSettings(ctx.chatId).language : null
+  const legacyGroup = ctx.isGroup ? community.getGroupSettings(ctx.chatId).language : null
+  const chat = ctx.isGroup ? platformLocalePreference(platform, 'chat', ctx.chatId) ?? legacyGroup : null
+  const user = platformLocalePreference(platform, 'user', ctx.sender)
+  const bot = platformLocalePreference(platform, 'bot', 'self')
+  const effective = resolvePlatformLocale({ ...platform, chatId: ctx.chatId, userId: ctx.sender })
   const lines = [
     ctx.t('language.status.title'),
     '━━━━━━━━━━━━━━',
-    `${ctx.t('language.status.global')}: *${localeName(global, ctx.locale)} (${global})*`,
+    `${ctx.t('language.status.global')}: *${localeName(global, effective)} (${global})*`,
+    `${ctx.t('language.status.bot')}: *${bot ? `${localeName(bot, effective)} (${bot})` : ctx.t('language.status.none')}*`,
+    `${ctx.t('language.status.user')}: *${user ? `${localeName(user, effective)} (${user})` : ctx.t('language.status.none')}*`,
   ]
-  if (ctx.isGroup) {
-    lines.push(`${ctx.t('language.status.group')}: *${group ? `${localeName(group, ctx.locale)} (${group})` : ctx.t('language.status.inherit')}*`)
-  }
-  lines.push(`${ctx.t('language.status.effective')}: *${localeName(ctx.locale, ctx.locale)} (${ctx.locale})*`)
-  lines.push('', ctx.t('language.usage', { prefix: ctx.prefix }))
+  if (ctx.isGroup) lines.push(`${ctx.t('language.status.group')}: *${chat ? `${localeName(chat, effective)} (${chat})` : ctx.t('language.status.inherit')}*`)
+  lines.push(`${ctx.t('language.status.effective')}: *${localeName(effective, effective)} (${effective})*`)
+  lines.push('', translate(effective, 'language.usage.phase6', { command: `${ctx.prefix}language` }))
   await ctx.reply(lines.join('\n'))
 }
 
@@ -47,17 +68,49 @@ async function setGlobal(ctx: CommandContext, rawLocale?: string) {
 
 async function setGroup(ctx: CommandContext, rawLocale?: string) {
   await requireGroupManager(ctx)
-  const value = rawLocale?.trim().toLowerCase() ?? ''
-  if (['inherit', 'heredar', 'default', 'global', 'auto'].includes(value)) {
+  const platform = platformContext(ctx)
+  if (isInherit(rawLocale)) {
+    clearPlatformLocale(platform, 'chat', ctx.chatId)
+    // Clear the legacy value too so old installations can migrate cleanly to the
+    // namespaced policy without an invisible fallback overriding inheritance.
     community.setGroupLanguage(ctx.chatId, null)
-    const inherited = ctx.settings.language
+    const inherited = resolvePlatformLocale({ ...platform, chatId: ctx.chatId, userId: ctx.sender })
     await ctx.reply(translate(inherited, 'language.changed.inherit', { language: localeName(inherited, inherited) }))
     return
   }
-  const locale = parseLocale(value)
+  const locale = parseLocale(rawLocale)
   if (!locale) throw new Error(ctx.t('language.error.invalid'))
-  community.setGroupLanguage(ctx.chatId, locale)
+  setPlatformLocale(platform, 'chat', ctx.chatId, locale)
   await ctx.reply(translate(locale, 'language.changed.group', { language: localeName(locale, locale) }))
+}
+
+async function setUser(ctx: CommandContext, rawLocale?: string) {
+  const platform = platformContext(ctx)
+  if (isInherit(rawLocale)) {
+    clearPlatformLocale(platform, 'user', ctx.sender)
+    const inherited = resolvePlatformLocale({ ...platform, chatId: ctx.chatId, userId: ctx.sender })
+    await ctx.reply(translate(inherited, 'language.changed.userInherit'))
+    return
+  }
+  const locale = parseLocale(rawLocale)
+  if (!locale) throw new Error(ctx.t('language.error.invalid'))
+  setPlatformLocale(platform, 'user', ctx.sender, locale)
+  await ctx.reply(translate(locale, 'language.changed.user', { language: localeName(locale, locale) }))
+}
+
+async function setBot(ctx: CommandContext, rawLocale?: string) {
+  if (!canManageGlobal(ctx)) throw new Error(ctx.t('language.error.botPermission'))
+  const platform = platformContext(ctx)
+  if (isInherit(rawLocale)) {
+    clearPlatformLocale(platform, 'bot', 'self')
+    const inherited = ctx.settings.language
+    await ctx.reply(translate(inherited, 'language.changed.botInherit'))
+    return
+  }
+  const locale = parseLocale(rawLocale)
+  if (!locale) throw new Error(ctx.t('language.error.invalid'))
+  setPlatformLocale(platform, 'bot', 'self', locale)
+  await ctx.reply(translate(locale, 'language.changed.bot', { language: localeName(locale, locale) }))
 }
 
 async function languageCommand(ctx: CommandContext) {
@@ -66,30 +119,20 @@ async function languageCommand(ctx: CommandContext) {
     await status(ctx)
     return
   }
-
-  if (['global', 'bot', 'instance', 'instancia'].includes(action)) {
-    await setGlobal(ctx, ctx.args[1])
-    return
-  }
-
-  if (['group', 'grupo', 'chat'].includes(action)) {
-    await setGroup(ctx, ctx.args[1])
-    return
-  }
-
-  if (ctx.isGroup && ['inherit', 'heredar', 'default', 'auto'].includes(action)) {
-    await setGroup(ctx, action)
-    return
-  }
+  if (['global', 'instance', 'instancia'].includes(action)) return setGlobal(ctx, ctx.args[1])
+  if (['bot', 'platform', 'plataforma'].includes(action)) return setBot(ctx, ctx.args[1])
+  if (['user', 'usuario', 'me', 'personal'].includes(action)) return setUser(ctx, ctx.args[1])
+  if (['group', 'grupo', 'chat'].includes(action)) return setGroup(ctx, ctx.args[1])
+  if (ctx.isGroup && isInherit(action)) return setGroup(ctx, action)
 
   const shorthandLocale = parseLocale(action)
   if (shorthandLocale) {
     if (ctx.isGroup) await setGroup(ctx, shorthandLocale)
-    else await setGlobal(ctx, shorthandLocale)
+    else await setUser(ctx, shorthandLocale)
     return
   }
-
-  throw new Error(ctx.t('language.usage', { prefix: ctx.prefix }))
+  if (!ctx.isGroup && isInherit(action)) return setUser(ctx, action)
+  throw new Error(ctx.t('language.usage.phase6', { command: `${ctx.prefix}language` }))
 }
 
 export const languageCommands: BotCommand[] = [

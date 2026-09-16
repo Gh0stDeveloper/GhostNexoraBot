@@ -13,9 +13,14 @@ const ytformats = effective.find((row) => row.tokens.includes('ytformats'))?.com
 assert.ok(ytformats, 'missing effective .ytformats command')
 assert.equal(ytformats.description.includes('menú interactivo'), true, '.ytformats must resolve to the interactive selector')
 
-const interactiveSource = await readFile(new URL('../apps/bot/dist/services/interactive.js', import.meta.url), 'utf8')
-assert.equal(interactiveSource.includes("name: 'single_select'"), true, 'interactive service must support WhatsApp single_select')
+// Fase 1 mueve la implementación real de Native Flow a la frontera WhatsApp.
+// El servicio histórico queda como shim para no romper imports V1.
+const interactiveSource = await readFile(new URL('../apps/bot/dist/platform/whatsapp/interactive.js', import.meta.url), 'utf8')
+assert.equal(interactiveSource.includes("name: 'single_select'"), true, 'WhatsApp transport must support single_select')
 assert.equal(interactiveSource.includes("...(row.description ? { description: row.description } : {})"), true, 'empty select descriptions must be omitted from payloads')
+
+const interactiveShim = await readFile(new URL('../apps/bot/dist/services/interactive.js', import.meta.url), 'utf8')
+assert.equal(interactiveShim.includes("../platform/whatsapp/interactive.js"), true, 'legacy interactive service must re-export the WhatsApp transport')
 
 const youtubeSource = await readFile(new URL('../apps/bot/dist/commands/youtube-v3.js', import.meta.url), 'utf8')
 for (const expected of [

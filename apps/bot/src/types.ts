@@ -1,11 +1,14 @@
 import type { WAMessage, WASocket } from 'baileys'
+import type { NormalizedMessage, PlatformAdapter, PlatformId } from '@ghostnexora/platform-contracts'
 import type { SettingsStore } from './core/settings.js'
 import type { LocaleCode, TranslationValues } from './i18n/types.js'
 
 /**
- * Project-local socket type.
- * Baileys supports message editing through the `edit` field, while the
- * installed typings in this project do not expose that field consistently.
+ * Project-local socket type retained as a V1 compatibility bridge.
+ *
+ * New shared command work must prefer `adapter` + `normalizedMessage`. Existing
+ * WhatsApp-specific commands keep `socket`/`message` until they are migrated in
+ * controlled batches, so Phase 1 does not break the current command registry.
  */
 export type NexoraSocket = Omit<WASocket, 'sendMessage'> & {
   sendMessage: (...args: any[]) => Promise<any>
@@ -27,8 +30,16 @@ export type CommandCategory =
   | 'owner'
 
 export interface CommandContext {
+  /** Neutral V2 transport surface. */
+  platform: PlatformId
+  adapter: PlatformAdapter
+  normalizedMessage: NormalizedMessage
+
+  /** @deprecated V1 WhatsApp compatibility surface. */
   socket: NexoraSocket
+  /** @deprecated V1 WhatsApp compatibility surface. */
   message: WAMessage
+
   chatId: string
   sender: string
   pushName: string
