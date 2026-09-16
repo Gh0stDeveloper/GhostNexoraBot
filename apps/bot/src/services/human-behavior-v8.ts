@@ -1,5 +1,6 @@
 import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
+import { settings } from '../core/settings.js'
 import { getMessageText } from '../utils/message.js'
 import { maybeSendHumanSticker } from './human-stickers.js'
 import { premiumStickersV18 } from './premium-stickers-v18.js'
@@ -54,7 +55,7 @@ export async function maybeHumanInteraction(socket: WASocket, message: WAMessage
   const matches = matchingRules(text)
   const reacted = await maybeReactToMessage(socket, message, text, matches.length > 0)
 
-  if (matches.length) {
+  if (settings.automaticResponsesEnabled && matches.length) {
     const rule = matches[Math.floor(Math.random() * matches.length)]!
     const direct = /como se llama|cómo se llama|tu nombre|nombre del bot|quien eres|quién eres/i.test(rule.pattern.source)
     const chance = direct ? DIRECT_REPLY_CHANCE : REPLY_CHANCE
