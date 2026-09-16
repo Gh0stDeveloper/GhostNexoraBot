@@ -100,7 +100,10 @@ switch (action) {
     const builder = path.join(repoRoot, 'scripts', 'release', 'build-official-apps.sh')
     requireFile(builder, 'compilador oficial VPS')
     const needsSudo = typeof process.getuid === 'function' && process.getuid() !== 0
-    status = needsSudo ? run('sudo', ['bash', builder, ...args]) : run('bash', [builder, ...args])
+    const activeEnv = { GHOST_NEXORA_RELEASE_BUILD_ACTIVE: '1' }
+    status = needsSudo
+      ? run('sudo', ['env', 'GHOST_NEXORA_RELEASE_BUILD_ACTIVE=1', 'bash', builder, ...args])
+      : run('bash', [builder, ...args], { env: activeEnv })
     break
   }
   case 'update': {
