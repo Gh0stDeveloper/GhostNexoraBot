@@ -340,33 +340,61 @@ npm install >/tmp/ghost-nexora-release-npm.log 2>&1
 ANDROID_ARTIFACT="GhostNexoraManager-${VERSION}-android.apk"
 LINUX_DEB="ghost-nexora-manager_${VERSION}_amd64.deb"
 LINUX_APPIMAGE="GhostNexoraManager-${VERSION}-linux-x86_64.AppImage"
+LINUX_RPM="ghost-nexora-manager-${VERSION}-1.x86_64.rpm"
 WINDOWS_ARTIFACT="GhostNexoraManager-${VERSION}-windows-x64-setup.exe"
+FAILED_PHASES=()
 
 if phase_done android "${ANDROID_ARTIFACT}"; then
   info 'Android ya estaba completado para este SHA; reutilizando artefacto validado del staging.'
 else
-  build_android
-  mark_phase android
+  rm -f "${STAGE}/${ANDROID_ARTIFACT}"
+  if ( build_android ); then
+    mark_phase android
+  else
+    FAILED_PHASES+=(android)
+    rm -f "${STAGE}/${ANDROID_ARTIFACT}"
+    info 'Android falló; continuará la compilación de las demás plataformas.'
+  fi
 fi
 
 if phase_done linux "${LINUX_DEB}" "${LINUX_APPIMAGE}"; then
   info 'Linux ya estaba completado para este SHA; reutilizando artefactos del staging.'
 else
-  build_linux
-  mark_phase linux
+  rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
+  if ( build_linux ); then
+    mark_phase linux
+  else
+    FAILED_PHASES+=(linux)
+    rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
+    info 'Linux falló; continuará la compilación de las demás plataformas.'
+  fi
 fi
 
 if phase_done windows "${WINDOWS_ARTIFACT}"; then
   info 'Windows ya estaba completado para este SHA; reutilizando instalador firmado del staging.'
 else
-  build_windows
-  mark_phase windows
+  rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
+  if ( build_windows ); then
+    mark_phase windows
+  else
+    FAILED_PHASES+=(windows)
+    rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
+    info 'Windows falló; se publicarán igualmente las aplicaciones disponibles.'
+  fi
 fi
+
+PUBLISHABLE_COUNT="$(find "${STAGE}" -maxdepth 1 -type f \( -name '*.apk' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -printf '.' | wc -c)"
+[[ "${PUBLISHABLE_COUNT}" -gt 0 ]] || fail 'Ninguna plataforma produjo un artefacto publicable.'
 
 sign_catalog_files
 publish
 mark_phase published
 
+if (( ${#FAILED_PHASES[@]} > 0 )); then
+  info "Distribución parcial publicada correctamente. Plataformas con error: ${FAILED_PHASES[*]}."
+else
+  info 'Distribución completa publicada correctamente.'
+fi
 info "Distribución oficial lista en ${RELEASE_DIR}."
 info "Android fingerprint: ${ANDROID_SIGNER_FINGERPRINT}"
 info "Windows fingerprint: ${WINDOWS_SIGNER_FINGERPRINT} (${WINDOWS_SIGNING_MODE})"
