@@ -163,15 +163,15 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     name: 'ig',
     aliases: [],
     category: 'downloads',
-    description: 'Descarga Reels/publicaciones o consulta un perfil de Instagram mediante LemPi.',
-    usage: 'ig <url> | ig profile <usuario>',
+    description: 'Descarga contenido de Instagram desde una URL.',
+    usage: 'ig <url>',
     handler: instagram,
   },
   {
     name: 'igimg',
     aliases: ['instagramimg', 'instagramimages', 'igimages'],
     category: 'downloads',
-    description: 'Descarga imágenes de una publicación de Instagram mediante LemPi.',
+    description: 'Descarga imágenes de una publicación de Instagram.',
     usage: 'igimg <url>',
     async handler(ctx) {
       await runInstagramDownload(ctx, ctx.argText.trim(), true)
