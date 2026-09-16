@@ -286,7 +286,6 @@ async function downloadWebStore(ctx: CommandContext, store: WebStore, token: str
         `📦 *${item.name}*`,
         item.version ? `Versión: ${item.version}` : '',
         `Peso: ${bytes(info.size)}`,
-        `Fuente: ${store === 'uptodown' ? 'Uptodown' : 'LiteAPKS'}`,
         `Tipo: ${kind}`,
       ].filter(Boolean).join('\n'),
     }, { quoted: ctx.message })
@@ -382,7 +381,7 @@ async function downloadAptoide(ctx: CommandContext) {
       document: { url: result.filePath },
       mimetype: 'application/vnd.android.package-archive',
       fileName: result.fileName,
-      caption: [`📦 *${result.name}*`, result.version ? `Versión: ${result.version}` : '', `Peso: ${bytes(result.size)}`, 'Fuente: Aptoide', result.trusted ? 'Verificación: TRUSTED' : result.malwareRank ? `Verificación: ${result.malwareRank}` : ''].filter(Boolean).join('\n'),
+      caption: [`📦 *${result.name}*`, result.version ? `Versión: ${result.version}` : '', `Peso: ${bytes(result.size)}`, result.trusted ? 'Verificación: TRUSTED' : result.malwareRank ? `Verificación: ${result.malwareRank}` : ''].filter(Boolean).join('\n'),
     }, { quoted: ctx.message })
     recordSubbotDownload(ctx.instanceId, result.size)
   } finally { await result.cleanup() }
@@ -394,8 +393,12 @@ function happyBody(item: HappyModItem) {
 
 async function showHappyMod(ctx: CommandContext, query: string) {
   const raw = await searchHappyMod(query, 12)
-  const results = rankRelevant(query, raw, (item) => ({ name: item.name, extra: `${item.summary ?? ''} ${item.url}` })).slice(0, MAX_RESULTS)
-  if (!results.length) throw new Error(`HappyMod no encontró resultados realmente relacionados con “${query}”.`)
+  // La búsqueda remota ya aplica la consulta. Priorizamos coincidencias fuertes,
+  // pero nunca descartamos una respuesta válida solo porque el nombre no contenga
+  // literalmente todos los términos escritos por el usuario.
+  const ranked = rankRelevant(query, raw, (item) => ({ name: item.name, extra: `${item.summary ?? ''} ${item.url}` }))
+  const results = (ranked.length ? ranked : raw).slice(0, MAX_RESULTS)
+  if (!results.length) throw new Error(`HappyMod no encontró resultados para “${query}”.`)
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '📦 HAPPYMOD · BÚSQUEDA',
     body: `Resultados relacionados con: ${query}\nDesliza y toca Seleccionar.`,
@@ -431,7 +434,7 @@ async function downloadHappyMod(ctx: CommandContext) {
       document: { url: result.filePath },
       mimetype: 'application/vnd.android.package-archive',
       fileName: result.fileName,
-      caption: [`📦 *${result.name}*`, result.version ? `Versión: ${result.version}` : '', `Peso: ${bytes(result.size)}`, 'Fuente: HappyMod'].filter(Boolean).join('\n'),
+      caption: [`📦 *${result.name}*`, result.version ? `Versión: ${result.version}` : '', `Peso: ${bytes(result.size)}`].filter(Boolean).join('\n'),
     }, { quoted: ctx.message })
     recordSubbotDownload(ctx.instanceId, result.size)
   } finally { await result.cleanup() }
