@@ -11,6 +11,7 @@ interface RuntimeSettings {
   botDisplayName: string
   currencyName: string
   language: LocaleCode
+  automaticResponsesEnabled: boolean
 }
 
 function normalizeNumber(value: string) {
@@ -27,6 +28,7 @@ export class SettingsStore {
     botDisplayName: config.botName,
     currencyName: 'Nexora Coins',
     language: 'es',
+    automaticResponsesEnabled: true,
   }
 
   async init() {
@@ -42,6 +44,7 @@ export class SettingsStore {
       if (typeof parsed.botDisplayName === 'string' && parsed.botDisplayName.trim()) this.data.botDisplayName = parsed.botDisplayName.trim().slice(0, 60)
       if (typeof parsed.currencyName === 'string' && parsed.currencyName.trim()) this.data.currencyName = parsed.currencyName.trim().slice(0, 32)
       this.data.language = normalizeLocale(parsed.language, 'es')
+      if (typeof parsed.automaticResponsesEnabled === 'boolean') this.data.automaticResponsesEnabled = parsed.automaticResponsesEnabled
       await this.save()
     } catch {
       await this.save()
@@ -55,6 +58,7 @@ export class SettingsStore {
   get botDisplayName() { return this.data.botDisplayName }
   get currencyName() { return this.data.currencyName }
   get language() { return this.data.language }
+  get automaticResponsesEnabled() { return this.data.automaticResponsesEnabled }
 
   isBotAdmin(number: string) {
     const normalized = normalizeNumber(number)
@@ -107,6 +111,12 @@ export class SettingsStore {
   async setAdultEnabled(enabled: boolean) {
     this.data.adultEnabled = enabled
     await this.save()
+  }
+
+  async setAutomaticResponsesEnabled(enabled: boolean) {
+    this.data.automaticResponsesEnabled = enabled
+    await this.save()
+    return this.data.automaticResponsesEnabled
   }
 
   async setPrivateCommandsRequireAccess(enabled: boolean) {
