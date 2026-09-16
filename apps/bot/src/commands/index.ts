@@ -140,6 +140,8 @@ const replacedDownloadCommands = new Set([
   'adultselect',
 ])
 
+const replacedHappyModV19Commands = new Set(['happymod', 'happymodselect', 'happymoddl'])
+
 // V18 reemplaza únicamente las implementaciones antiguas de estos comandos y
 // mantiene el resto del registro intacto. Las nuevas versiones se agregan al final.
 const replacedV18Commands = new Set([
@@ -242,7 +244,7 @@ const legacyCommands: BotCommand[] = [
 
 export const commands: BotCommand[] = [
   ...legacyCommands.filter((command) => !replacedDownloadCommands.has(command.name.toLowerCase()) && !replacedV18Commands.has(command.name.toLowerCase())),
-  ...appStoresV15Commands,
+  ...appStoresV15Commands.filter((command) => !replacedHappyModV19Commands.has(command.name.toLowerCase())),
   ...appStoresExtraV15Commands,
   ...tiktokV15Commands,
   ...adultDownloadV15Commands,
