@@ -82,10 +82,12 @@ for (const filename of readdirSync(stageDir).sort()) {
   })
 }
 
-for (const kind of ['apk', 'nsis', 'deb', 'appimage']) {
-  if (!artifacts.some((artifact) => artifact.kind === kind)) throw new Error(`required_artifact_missing_${kind}`)
-}
+if (artifacts.length === 0) throw new Error('no_publishable_artifacts')
 
+const expectedKinds = ['apk', 'nsis', 'deb', 'appimage']
+const availableKinds = [...new Set(artifacts.map((artifact) => artifact.kind))].sort()
+const missingKinds = expectedKinds.filter((kind) => !availableKinds.includes(kind))
+const releaseStatus = missingKinds.length === 0 ? 'complete' : 'partial'
 const publishedAt = new Date().toISOString()
 const manifest = {
   schemaVersion: 1,
@@ -95,6 +97,9 @@ const manifest = {
   sourceSha,
   sourceRef,
   publishedAt,
+  releaseStatus,
+  availableKinds,
+  missingKinds,
   signing: {
     android: process.env.ANDROID_SIGNER_FINGERPRINT || null,
     windows: process.env.WINDOWS_SIGNER_FINGERPRINT || null,
@@ -172,4 +177,13 @@ identity.run('windows', process.env.WINDOWS_SIGNER_FINGERPRINT || null, process.
 identity.run('linux', process.env.LINUX_SIGNER_FINGERPRINT || null, 'persistent-gpg', publishedAt)
 db.close()
 
-console.log(JSON.stringify({ ok: true, version, sourceSha, publishedAt, artifacts: artifacts.map(({ id, filename, sha256: hash }) => ({ id, filename, sha256: hash })) }, null, 2))
+console.log(JSON.stringify({
+  ok: true,
+  version,
+  sourceSha,
+  publishedAt,
+  releaseStatus,
+  availableKinds,
+  missingKinds,
+  artifacts: artifacts.map(({ id, filename, sha256: hash }) => ({ id, filename, sha256: hash })),
+}, null, 2))
