@@ -85,10 +85,15 @@ function getVideo(token: string) {
 async function downloadTikTok(ctx: CommandContext, source: string, title?: string, directUrl?: string) {
   if (!directUrl && !isTikTokUrl(source)) throw new Error('La URL no pertenece a TikTok.')
   const progress = await createDownloadProgress(ctx, 'TikTok · video')
-  await progress.update('downloading', title ? `Descargando: ${title.slice(0, 90)}` : 'Consultando LemPi y descargando el video…')
-  const result = directUrl
-    ? await downloadLempiMedia(directUrl, { kind: 'video', baseName: 'tiktok-video' })
-    : await downloadLempiTikTokVideo(source, 'tiktok-video')
+  await progress.update('downloading', title ? `Descargando: ${title.slice(0, 90)}` : 'Preparando y descargando el video…')
+  let result
+  try {
+    result = directUrl
+      ? await downloadLempiMedia(directUrl, { kind: 'video', baseName: 'tiktok-video' })
+      : await downloadLempiTikTokVideo(source, 'tiktok-video')
+  } catch {
+    throw new Error('No se pudo descargar ese video en este momento.')
+  }
   try {
     await progress.update('sending', `${bytes(result.size)} · enviando a WhatsApp`)
     await ctx.socket.sendMessage(ctx.chatId, {
@@ -98,7 +103,6 @@ async function downloadTikTok(ctx: CommandContext, source: string, title?: strin
         '🎵 *TIKTOK*',
         title ? `🎬 ${title.slice(0, 180)}` : '',
         `📦 ${bytes(result.size)}`,
-        'Fuente: LemPi',
         '👻 Ghost Nexora Bot',
       ].filter(Boolean).join('\n'),
     }, { quoted: ctx.message })
@@ -120,11 +124,11 @@ function videoBody(item: LempiTikTokVideo) {
 
 async function showVideos(ctx: CommandContext, title: string, body: string, rows: LempiTikTokVideo[]) {
   const unique = [...new Map(rows.map((item) => [item.url, item])).values()].slice(0, MAX_RESULTS)
-  if (!unique.length) throw new Error('LemPi no devolvió videos de TikTok para esa consulta.')
+  if (!unique.length) throw new Error('No encontré videos de TikTok para esa consulta.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title,
     body,
-    footer: 'Ghost Nexora Bot · TikTok · LemPi',
+    footer: 'Ghost Nexora Bot · TikTok',
     cards: unique.map((item, index) => {
       const token = remember(item)
       return {
@@ -138,17 +142,27 @@ async function showVideos(ctx: CommandContext, title: string, body: string, rows
 }
 
 async function searchVideos(ctx: CommandContext, query: string) {
-  const rows = await searchLempiTikTokVideosV2(query, MAX_RESULTS)
-  await showVideos(ctx, '🎵 TIKTOK · BÚSQUEDA', `Resultados para: ${query}\nFuente: LemPi`, rows)
+  let rows: LempiTikTokVideo[]
+  try {
+    rows = await searchLempiTikTokVideosV2(query, MAX_RESULTS)
+  } catch {
+    throw new Error('No se pudo completar la búsqueda de TikTok en este momento.')
+  }
+  await showVideos(ctx, '🎵 TIKTOK · BÚSQUEDA', `Resultados para: ${query}`, rows)
 }
 
 async function searchProfiles(ctx: CommandContext, query: string) {
-  const profiles = await searchLempiTikTokProfilesV2(query, MAX_RESULTS)
-  if (!profiles.length) throw new Error('LemPi no devolvió perfiles de TikTok para esa búsqueda.')
+  let profiles
+  try {
+    profiles = await searchLempiTikTokProfilesV2(query, MAX_RESULTS)
+  } catch {
+    throw new Error('No se pudo completar la búsqueda de perfiles en este momento.')
+  }
+  if (!profiles.length) throw new Error('No encontré perfiles de TikTok para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '👤 TIKTOK · PERFILES',
-    body: `Perfiles relacionados con: ${query}\nFuente: LemPi`,
-    footer: 'Ghost Nexora Bot · TikTok · LemPi',
+    body: `Perfiles relacionados con: ${query}`,
+    footer: 'Ghost Nexora Bot · TikTok',
     cards: profiles.slice(0, MAX_RESULTS).map((profile, index) => ({
       title: `#${index + 1} · @${profile.username}`.slice(0, 80),
       body: [
@@ -163,7 +177,12 @@ async function searchProfiles(ctx: CommandContext, query: string) {
 }
 
 async function showProfile(ctx: CommandContext, target: string) {
-  const profile = await getLempiTikTokProfileV2(target)
+  let profile
+  try {
+    profile = await getLempiTikTokProfileV2(target)
+  } catch {
+    throw new Error('No se pudo obtener ese perfil de TikTok en este momento.')
+  }
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: profile.nickname ? `${profile.nickname} · @${profile.username}`.slice(0, 80) : `@${profile.username}`,
     body: [
@@ -173,16 +192,11 @@ async function showProfile(ctx: CommandContext, target: string) {
       profile.likes !== undefined ? `Likes: ${compact(profile.likes)}` : '',
       profile.videos !== undefined ? `Videos: ${compact(profile.videos)}` : '',
       profile.verified !== undefined ? `Verificado: ${profile.verified ? 'sí' : 'no'}` : '',
-      '',
-      'Perfil obtenido mediante LemPi /s/tiktokprofile.',
     ].filter((value) => value !== '').join('\n'),
-    footer: 'Ghost Nexora Bot · TikTok · LemPi',
+    footer: 'Ghost Nexora Bot · TikTok',
     imageUrl: profile.avatar,
   })
 
-  // El endpoint de perfil es suficiente para que `.tt profile` tenga éxito.
-  // La búsqueda de videos relacionados es complementaria y no debe convertir
-  // una respuesta de perfil válida en error si LemPi no ofrece resultados.
   let feed: LempiTikTokVideo[] = []
   try {
     feed = (await searchLempiTikTokVideosV2(`@${profile.username}`, MAX_RESULTS * 2))
@@ -195,7 +209,7 @@ async function showProfile(ctx: CommandContext, target: string) {
   await showVideos(
     ctx,
     `🎬 @${profile.username} · VIDEOS`,
-    `Resultados públicos relacionados con @${profile.username}\nFuente: LemPi`,
+    `Resultados públicos relacionados con @${profile.username}`,
     feed,
   )
 }
@@ -210,9 +224,8 @@ async function selectVideo(ctx: CommandContext) {
       item.title.slice(0, 220),
       item.views !== undefined ? `Vistas: ${compact(item.views)}` : '',
       item.likes !== undefined ? `Likes: ${compact(item.likes)}` : '',
-      'Descarga: LemPi /s/tiktok',
     ].filter(Boolean).join('\n'),
-    footer: 'Ghost Nexora Bot · TikTok · LemPi',
+    footer: 'Ghost Nexora Bot · TikTok',
     imageUrl: item.thumbnail,
     buttons: [{ type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}tiktokdl ${token}` }],
   })
