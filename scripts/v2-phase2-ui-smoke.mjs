@@ -18,8 +18,9 @@ try {
   const interactive = await import('../apps/bot/dist/platform/whatsapp/interactive.js')
   const rich = await import('../apps/bot/dist/platform/whatsapp/rich-response.js')
 
-  assert.equal(compat.WHATSAPP_STABLE_UI_POLICY.nativeCarousel, false)
+  assert.equal(compat.WHATSAPP_STABLE_UI_POLICY.nativeCarousel, true)
   assert.equal(compat.WHATSAPP_STABLE_UI_POLICY.maxCards, 8)
+  assert.equal(compat.WHATSAPP_STABLE_UI_POLICY.maxButtonsPerCarouselCard, 2)
 
   const commandCards = [
     {
@@ -34,9 +35,9 @@ try {
     },
   ]
   const commandPlan = compat.planCarousel(commandCards)
-  assert.equal(commandPlan.mode, 'select-first')
-  assert.equal(commandPlan.sections.length, 2)
-  assert.equal(commandPlan.sections[0].rows[0].id, '.dl a')
+  assert.equal(commandPlan.mode, 'native-carousel')
+  assert.equal(commandPlan.cards.length, 2)
+  assert.equal(commandPlan.cards[0].buttons[0].id, '.dl a')
 
   const urlCards = [{
     title: 'Sitio',
@@ -44,11 +45,8 @@ try {
     buttons: [{ type: 'url', text: 'Abrir', url: 'https://example.com/result' }],
   }]
   const urlPlan = compat.planCarousel(urlCards)
-  assert.equal(urlPlan.mode, 'text-fallback')
-  assert.equal(urlPlan.reason, 'contains-url-actions')
-  const urlText = compat.carouselFallbackText({ title: 'Resultados', cards: urlCards })
-  assert.match(urlText, /https:\/\/example\.com\/result/)
-  assert.match(urlText, /Abrir/)
+  assert.equal(urlPlan.mode, 'native-carousel')
+  assert.equal(urlPlan.cards[0].buttons[0].url, 'https://example.com/result')
 
   const nestedSelect = {
     type: 'select',
@@ -77,21 +75,25 @@ try {
 
   const chatId = '120363000000000000@g.us'
   await interactive.sendCarousel(socket, chatId, undefined, {
-    title: 'Compat results',
+    title: 'Native results',
     cards: commandCards,
   })
-  assert.equal(relayed.length, 1, 'command carousel must become one select-first Native Flow relay')
-  const selectRelay = JSON.stringify(relayed[0].content)
-  assert.match(selectRelay, /single_select/)
-  assert.doesNotMatch(selectRelay, /carouselMessage|CarouselMessage/)
+  assert.equal(relayed.length, 1, 'command carousel must use one native carousel relay')
+  const commandRelay = JSON.stringify(relayed[0].content)
+  assert.match(commandRelay, /carouselMessage/)
+  assert.match(commandRelay, /quick_reply/)
+  assert.match(commandRelay, /\.dl a/)
+  assert.doesNotMatch(commandRelay, /single_select/)
 
-  const relayCount = relayed.length
   await interactive.sendCarousel(socket, chatId, undefined, {
     title: 'External results',
     cards: urlCards,
   })
-  assert.equal(relayed.length, relayCount, 'URL carousel must avoid native interactive relay')
-  assert.match(String(sent.at(-1)?.content?.text ?? ''), /https:\/\/example\.com\/result/)
+  assert.equal(relayed.length, 2, 'URL carousel must remain a native carousel relay')
+  const urlRelay = JSON.stringify(relayed[1].content)
+  assert.match(urlRelay, /carouselMessage/)
+  assert.match(urlRelay, /cta_url/)
+  assert.match(urlRelay, /https:\/\/example\.com\/result/)
 
   await interactive.sendInteractiveCard(socket, chatId, undefined, {
     title: 'Informativo',
@@ -100,12 +102,13 @@ try {
   })
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /Informativo/)
 
+  const relayCount = relayed.length
   await interactive.sendInteractiveCard(socket, chatId, undefined, {
     title: 'Mixto',
     body: 'No debe emitir select mezclado',
     buttons: [nestedSelect, { type: 'reply', text: 'Dos', id: '.two' }],
   })
-  assert.equal(relayed.length, relayCount, 'mixed select/actions must remain outside native relay')
+  assert.equal(relayed.length, relayCount, 'mixed select/actions card must remain outside native relay')
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /\.two/)
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /\.one/)
 
@@ -131,11 +134,12 @@ try {
   const browserSource = await read('apps/bot/src/commands/navegador.ts')
   const editSource = await read('apps/bot/src/commands/edit.ts')
 
-  assert.doesNotMatch(interactiveSource, /carouselMessage|CarouselMessage/)
-  assert.match(interactiveSource, /planCarousel/)
-  assert.match(interactiveSource, /single_select/)
-  assert.match(compatSource, /nativeCarousel: false/)
-  assert.match(compatSource, /contains-url-actions/)
+  assert.match(interactiveSource, /carouselMessage/)
+  assert.match(interactiveSource, /CarouselMessage/)
+  assert.match(interactiveSource, /native WhatsApp carousel relay completed/)
+  assert.match(interactiveSource, /maxButtonsPerCarouselCard/)
+  assert.match(compatSource, /nativeCarousel: true/)
+  assert.match(compatSource, /mode: 'native-carousel'/)
 
   for (const source of [gameSource, browserSource]) {
     assert.match(source, /relayWhatsAppRichResponse/)
@@ -151,7 +155,7 @@ try {
   assert.match(editSource, /executeValleyInvisibleMessageIdCollision/)
   assert.doesNotMatch(editSource, /ui-compat|planCarousel|relayWhatsAppRichResponse/)
 
-  console.log('[V2 PHASE 2] OK — stable UI removes native carousels, preserves actions and shares the .view/game rich transport.')
+  console.log('[V2 PHASE 2] OK — WhatsApp native carousels are restored while .view/game rich transport remains isolated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

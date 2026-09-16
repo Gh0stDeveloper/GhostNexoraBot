@@ -24,7 +24,7 @@ export type CarouselCard = {
 }
 
 export const WHATSAPP_STABLE_UI_POLICY = Object.freeze({
-  nativeCarousel: false,
+  nativeCarousel: true,
   maxCards: 8,
   maxNativeButtons: 3,
   maxButtonsPerCarouselCard: 2,
@@ -39,14 +39,13 @@ export type CardCompatibilityPlan =
 
 export type CarouselCompatibilityPlan =
   | {
-      mode: 'select-first'
-      reason: 'command-actions'
+      mode: 'native-carousel'
+      reason: 'supported-cards'
       cards: CarouselCard[]
-      sections: InteractiveSelectSection[]
     }
   | {
       mode: 'text-fallback'
-      reason: 'no-command-actions' | 'contains-url-actions' | 'contains-nested-select'
+      reason: 'no-cards'
       cards: CarouselCard[]
     }
 
@@ -90,20 +89,8 @@ export function planCarousel(cards: readonly CarouselCard[]): CarouselCompatibil
     ...card,
     buttons: card.buttons.slice(0, WHATSAPP_STABLE_UI_POLICY.maxButtonsPerCarouselCard),
   }))
-
-  if (source.some((card) => card.buttons.some((button) => button.type === 'select'))) {
-    return { mode: 'text-fallback', reason: 'contains-nested-select', cards: source }
-  }
-  if (source.some((card) => card.buttons.some((button) => button.type === 'url'))) {
-    return { mode: 'text-fallback', reason: 'contains-url-actions', cards: source }
-  }
-  if (!source.some((card) => card.buttons.some((button) => button.type === 'reply'))) {
-    return { mode: 'text-fallback', reason: 'no-command-actions', cards: source }
-  }
-
-  const sections = carouselSelectSections(source)
-  if (!sections.length) return { mode: 'text-fallback', reason: 'no-command-actions', cards: source }
-  return { mode: 'select-first', reason: 'command-actions', cards: source, sections }
+  if (!source.length) return { mode: 'text-fallback', reason: 'no-cards', cards: source }
+  return { mode: 'native-carousel', reason: 'supported-cards', cards: source }
 }
 
 export function interactiveButtonsToText(buttons: readonly InteractiveButton[]): string[] {

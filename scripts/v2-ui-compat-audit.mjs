@@ -25,6 +25,8 @@ const allowedRawRelays = new Set([
   'apps/bot/src/commands/valley-compat-v21.ts',
 ])
 
+const nativeCarouselTransport = 'apps/bot/src/platform/whatsapp/interactive.ts'
+
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true })
   const files = []
@@ -60,8 +62,8 @@ for (const absolute of files) {
   const total = Object.values(metrics).reduce((sum, value) => sum + value, 0)
   if (total > 0) rows.push({ file, ...metrics })
 
-  if (/\b(?:carouselMessage|CarouselMessage)\b/.test(source)) {
-    violations.push({ file, rule: 'native-carousel-forbidden', detail: 'Stable V2 source must not emit carouselMessage/CarouselMessage.' })
+  if (/\b(?:carouselMessage|CarouselMessage)\b/.test(source) && file !== nativeCarouselTransport) {
+    violations.push({ file, rule: 'native-carousel-boundary', detail: `Native carousel payloads are only allowed inside ${nativeCarouselTransport}.` })
   }
   if (/\b(?:buttonsMessage|templateMessage|listMessage)\b/.test(source)) {
     violations.push({ file, rule: 'legacy-interactive-envelope', detail: 'Legacy buttons/template/list payload detected.' })
@@ -87,9 +89,10 @@ const report = {
   generatedAt: new Date().toISOString(),
   generatedFromSha: process.env.GITHUB_SHA || null,
   stablePolicy: {
-    nativeCarousel: false,
-    commandCarousel: 'single_select',
-    urlCarousel: 'actionable_text',
+    nativeCarousel: true,
+    nativeCarouselTransport,
+    maxCarouselCards: 8,
+    maxButtonsPerCarouselCard: 2,
     htmlTransport: 'shared_view_compatible_rich_response',
   },
   allowedMessageGenerators: [...allowedMessageGenerators].sort(),
