@@ -3,6 +3,8 @@ import { sendInteractiveCard } from '../services/interactive.js'
 import { downloadLempiMedia, searchLempiPinterest, type LempiDownloadedMedia } from '../services/lempi-api.js'
 import { downloadLempiInstagramV2, stalkLempiInstagram } from '../services/lempi-media-endpoints.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+import { likeeCommands } from './likee.js'
+import { teraboxCommands } from './terabox.js'
 
 function requireUrl(value: string, usage: string) {
   const source = value.trim()
@@ -197,4 +199,6 @@ export const mediaDownloadFixCommands: BotCommand[] = [
       await runPinterest(ctx)
     },
   },
+  ...likeeCommands,
+  ...teraboxCommands,
 ]
