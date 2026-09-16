@@ -4,6 +4,7 @@ import { downloadFdroidApk, downloadGitHubRepo, downloadGoogleDrive, searchFdroi
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`
+const count = (value: number) => new Intl.NumberFormat('es-MX', { notation: value >= 10_000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
 
 export const resourceCommands: BotCommand[] = [
   {
@@ -12,7 +13,26 @@ export const resourceCommands: BotCommand[] = [
       const url = ctx.args[0]; if (!url) throw new Error('Indica la URL del repositorio.')
       const file = await downloadGitHubRepo(url)
       try {
-        await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName, mimetype: 'application/zip', caption: `🐙 GitHub · ${size(file.size)}` }, { quoted: ctx.message })
+        const repo = file.repository
+        const caption = [
+          '🐙 *GITHUB REPOSITORY*',
+          '━━━━━━━━━━━━━━',
+          `📦 Repositorio » *${repo.fullName}*`,
+          `👤 Owner » *${repo.owner}*`,
+          `⭐ Estrellas » *${count(repo.stars)}*`,
+          `🍴 Forks » *${count(repo.forks)}*`,
+          `👁️ Watchers » *${count(repo.watchers)}*`,
+          `❗ Issues abiertas » *${count(repo.openIssues)}*`,
+          `🌿 Rama » *${repo.defaultBranch}*`,
+          repo.language ? `💻 Lenguaje » *${repo.language}*` : '',
+          repo.license ? `📄 Licencia » *${repo.license}*` : '',
+          repo.fork ? '🔀 Tipo » *Fork*' : '🔀 Tipo » *Repositorio original*',
+          repo.archived ? '📚 Estado » *Archivado*' : '📚 Estado » *Activo*',
+          `🗜️ ZIP » *${size(file.size)}*`,
+          repo.description ? `\n📝 ${repo.description.slice(0, 350)}` : '',
+          `\n🔗 ${repo.url}`,
+        ].filter(Boolean).join('\n')
+        await ctx.socket.sendMessage(ctx.chatId, { document: { url: file.filePath }, fileName: file.fileName, mimetype: 'application/zip', caption }, { quoted: ctx.message })
         recordSubbotDownload(ctx.instanceId, file.size)
       } finally { await file.cleanup() }
     },
