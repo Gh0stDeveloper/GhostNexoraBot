@@ -1,20 +1,21 @@
 import type { BotCommand, CommandContext } from '../types.js'
-import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
-import {
-  downloadHappyModDirect,
-  downloadInstagramDirect,
-  getHappyModDirect,
-  searchHappyModDirect,
-  searchPinterestDirect,
-} from '../services/media-download-fixes-v2.js'
-import { downloadLempiMedia } from '../services/lempi-api.js'
+import { sendInteractiveCard } from '../services/interactive.js'
+import { downloadLempiMedia, searchLempiPinterest, type LempiDownloadedMedia } from '../services/lempi-api.js'
+import { downloadLempiInstagramV2, stalkLempiInstagram } from '../services/lempi-media-endpoints.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
-import type { LempiDownloadedMedia } from '../services/lempi-api.js'
 
-function requireUrl(ctx: CommandContext, usage: string) {
-  const value = ctx.args[0]?.trim()
-  if (!value || !/^https?:\/\//i.test(value)) throw new Error(usage)
-  return value
+function requireUrl(value: string, usage: string) {
+  const source = value.trim()
+  if (!source || !/^https?:\/\//i.test(source)) throw new Error(usage)
+  try {
+    const url = new URL(source)
+    const host = url.hostname.toLowerCase()
+    if (!(host === 'instagram.com' || host.endsWith('.instagram.com'))) throw new Error('La URL indicada no pertenece a Instagram.')
+  } catch (error) {
+    if (error instanceof Error && /Instagram/.test(error.message)) throw error
+    throw new Error(usage)
+  }
+  return source
 }
 
 function requireText(ctx: CommandContext, usage: string) {
@@ -28,28 +29,33 @@ function formatBytes(value: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
-async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedMedia, label: string) {
-  const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\n👻 Ghost Nexora Bot`
+function compact(value?: number) {
+  return value === undefined || !Number.isFinite(value)
+    ? undefined
+    : new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+}
+
+async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedMedia, label: string, quoted = true) {
+  const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\nFuente: LemPi\n👻 Ghost Nexora Bot`
 
   if (result.kind === 'image') {
-    await ctx.socket.sendMessage(ctx.chatId, { image: { url: result.filePath }, caption }, { quoted: ctx.message })
+    await ctx.socket.sendMessage(ctx.chatId, { image: { url: result.filePath }, caption }, quoted ? { quoted: ctx.message } : undefined)
     return
   }
   if (result.kind === 'video') {
-    await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption }, { quoted: ctx.message })
+    await ctx.socket.sendMessage(ctx.chatId, { video: { url: result.filePath }, mimetype: 'video/mp4', caption }, quoted ? { quoted: ctx.message } : undefined)
     return
   }
   if (result.kind === 'audio') {
-    await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, { quoted: ctx.message })
+    await ctx.socket.sendMessage(ctx.chatId, { audio: { url: result.filePath }, mimetype: 'audio/mpeg', ptt: false }, quoted ? { quoted: ctx.message } : undefined)
     return
   }
 
   await ctx.socket.sendMessage(ctx.chatId, {
     document: { url: result.filePath },
-    mimetype: 'application/vnd.android.package-archive',
-    fileName: result.fileName.endsWith('.apk') ? result.fileName : `${result.fileName}.apk`,
-    caption: `${caption}\n⚠️ Verifica permisos antes de instalar.`,
-  }, { quoted: ctx.message })
+    fileName: result.fileName,
+    caption,
+  }, quoted ? { quoted: ctx.message } : undefined)
 }
 
 async function sendPinterestAlbum(ctx: CommandContext, files: LempiDownloadedMedia[], totalFound: number) {
@@ -79,7 +85,7 @@ async function sendPinterestAlbum(ctx: CommandContext, files: LempiDownloadedMed
 
 async function runPinterest(ctx: CommandContext) {
   const query = requireText(ctx, `Uso: ${ctx.prefix}pinterest <búsqueda>`)
-  const results = await searchPinterestDirect(query, 12)
+  const results = await searchLempiPinterest(query, 12)
   const candidates = results
     .map((item, index) => item.download ? { url: item.download, baseName: `pinterest-${index + 1}` } : null)
     .filter((item): item is { url: string; baseName: string } => Boolean(item))
@@ -105,83 +111,81 @@ async function runPinterest(ctx: CommandContext) {
   }
 }
 
-async function runInstagram(ctx: CommandContext, imagesOnly: boolean) {
-  const sourceUrl = requireUrl(ctx, `Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'ig'} <url de Instagram>`)
-  await ctx.reply(`📥 *INSTAGRAM*\n━━━━━━━━━━━━━━\n⬇️ Descargando ${imagesOnly ? 'imágenes' : 'video'}...`)
+async function runInstagramDownload(ctx: CommandContext, source: string, imagesOnly: boolean) {
+  const sourceUrl = requireUrl(source, `Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'instagram'} <url de Instagram>`)
+  const reel = /\/(?:reel|reels)\//i.test(new URL(sourceUrl).pathname)
+  const endpoint = !imagesOnly && reel ? '/dl/igreel' : '/dl/instagram'
+  await ctx.reply(`📥 *INSTAGRAM*\n━━━━━━━━━━━━━━\nAPI: ${endpoint}\n⬇️ Descargando contenido...`)
 
-  const files = await downloadInstagramDirect(sourceUrl, imagesOnly)
+  const files = await downloadLempiInstagramV2(sourceUrl, imagesOnly)
   try {
-    for (const file of files) await sendDownloadedMedia(ctx, file, 'INSTAGRAM')
+    for (const [index, file] of files.entries()) await sendDownloadedMedia(ctx, file, 'INSTAGRAM', index === 0)
     recordSubbotDownload(ctx.instanceId, files.reduce((total, file) => total + file.size, 0))
   } finally {
     await Promise.all(files.map((file) => file.cleanup()))
   }
 }
 
-function happyModBody(item: Awaited<ReturnType<typeof searchHappyModDirect>>[number]) {
-  return [
-    item.version ? `Versión: ${item.version}` : '',
-    'APK modificada: revisa permisos antes de instalar.',
-  ].filter(Boolean).join('\n')
-}
-
-async function runHappyModSearch(ctx: CommandContext) {
-  const query = requireText(ctx, `Uso: ${ctx.prefix}happymod <nombre de aplicación>`)
-  const results = await searchHappyModDirect(query, 20)
-  if (!results.length) throw new Error('No encontré APKs para esa búsqueda.')
-
-  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '🧩 HAPPYMOD · RESULTADOS',
-    body: `Resultados para: ${query}`,
-    footer: 'Ghost Nexora Bot',
-    cards: results.map((item, index) => {
-      const buttons: InteractiveButton[] = [
-        { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}happymoddl ${item.tokenKey}` },
-      ]
-      if (item.url) buttons.push({ type: 'url', text: '🌐 Abrir', url: item.url })
-      return {
-        title: `#${item.numero ?? index + 1} · ${item.nombre}`.slice(0, 120),
-        body: happyModBody(item),
-        imageUrl: item.imagen,
-        footer: 'Ghost Nexora Bot',
-        buttons,
-      }
-    }),
+async function runInstagramProfile(ctx: CommandContext, input: string) {
+  const target = input.trim()
+  if (!target) throw new Error(`Uso: ${ctx.prefix}instagram profile <usuario>`)
+  const profile = await stalkLempiInstagram(target)
+  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+    title: profile.name ? `${profile.name} · @${profile.username}`.slice(0, 80) : `@${profile.username}`,
+    body: [
+      profile.bio?.slice(0, 220) ?? '',
+      profile.followers !== undefined ? `Seguidores: ${compact(profile.followers)}` : '',
+      profile.following !== undefined ? `Siguiendo: ${compact(profile.following)}` : '',
+      profile.posts !== undefined ? `Publicaciones: ${compact(profile.posts)}` : '',
+      profile.verified !== undefined ? `Verificado: ${profile.verified ? 'sí' : 'no'}` : '',
+      profile.private !== undefined ? `Privado: ${profile.private ? 'sí' : 'no'}` : '',
+      '',
+      'Fuente: LemPi /tools/stalkig',
+    ].filter((value) => value !== '').join('\n'),
+    footer: 'Ghost Nexora Bot · Instagram · LemPi',
+    imageUrl: profile.avatar,
   })
 }
 
-async function runHappyModDownload(ctx: CommandContext) {
-  const token = ctx.args[0]?.trim()
-  if (!token) throw new Error(`Uso: ${ctx.prefix}happymoddl <token>`)
-
-  const item = getHappyModDirect(token)
-  await ctx.reply(`📥 *HAPPYMOD*\n━━━━━━━━━━━━━━\n📱 ${item.nombre}\n${item.version ? `🔄 Versión: ${item.version}\n` : ''}⬇️ Descargando y validando la APK...`)
-
-  const result = await downloadHappyModDirect(item)
-  try {
-    await sendDownloadedMedia(ctx, result, 'HAPPYMOD')
-    recordSubbotDownload(ctx.instanceId, result.size)
-  } finally {
-    await result.cleanup()
+async function instagram(ctx: CommandContext) {
+  const action = (ctx.args[0] ?? '').toLowerCase()
+  if (['profile', 'perfil', 'user', 'usuario', 'stalk'].includes(action)) {
+    await runInstagramProfile(ctx, ctx.args.slice(1).join(' '))
+    return
   }
+
+  const source = ctx.argText.trim()
+  await runInstagramDownload(ctx, source, false)
 }
 
 export const mediaDownloadFixCommands: BotCommand[] = [
   {
-    name: 'ig',
-    aliases: [],
+    name: 'instagram',
+    aliases: ['ig', 'insta'],
     category: 'downloads',
-    description: 'Descarga contenido de Instagram desde una URL.',
-    usage: 'ig <url>',
-    async handler(ctx) { await runInstagram(ctx, false) },
+    description: 'Descarga Reels/publicaciones de Instagram con LemPi o consulta un perfil.',
+    usage: 'instagram <url> | instagram profile <usuario>',
+    handler: instagram,
   },
   {
     name: 'igimg',
     aliases: ['instagramimg', 'instagramimages', 'igimages'],
     category: 'downloads',
-    description: 'Descarga imágenes de una publicación de Instagram.',
+    description: 'Descarga imágenes de una publicación de Instagram mediante LemPi.',
     usage: 'igimg <url>',
-    async handler(ctx) { await runInstagram(ctx, true) },
+    async handler(ctx) {
+      await runInstagramDownload(ctx, ctx.argText.trim(), true)
+    },
+  },
+  {
+    name: 'igprofile',
+    aliases: ['instagramprofile', 'igstalk', 'stalkig'],
+    category: 'downloads',
+    description: 'Consulta el perfil público de Instagram mediante LemPi.',
+    usage: 'igprofile <usuario>',
+    async handler(ctx) {
+      await runInstagramProfile(ctx, ctx.argText)
+    },
   },
   {
     name: 'pinterest',
@@ -189,22 +193,8 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     category: 'downloads',
     description: 'Busca imágenes de Pinterest y las entrega como álbum.',
     usage: 'pinterest <búsqueda>',
-    async handler(ctx) { await runPinterest(ctx) },
-  },
-  {
-    name: 'happymod',
-    aliases: ['hm', 'hmod', 'happymods', 'happynod'],
-    category: 'downloads',
-    description: 'Busca APKs modificadas.',
-    usage: 'happymod <aplicación>',
-    async handler(ctx) { await runHappyModSearch(ctx) },
-  },
-  {
-    name: 'happymoddl',
-    aliases: ['hmdl', 'hmoddl'],
-    category: 'downloads',
-    description: 'Descarga una APK seleccionada.',
-    usage: 'happymoddl <token>',
-    async handler(ctx) { await runHappyModDownload(ctx) },
+    async handler(ctx) {
+      await runPinterest(ctx)
+    },
   },
 ]
