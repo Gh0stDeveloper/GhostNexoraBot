@@ -7,10 +7,23 @@ FILE="${1:-}"
 : "${WINDOWS_PFX:?WINDOWS_PFX is required}"
 : "${WINDOWS_PFX_PASSWORD:?WINDOWS_PFX_PASSWORD is required}"
 command -v osslsigncode >/dev/null 2>&1 || { echo '[release-sign] osslsigncode is unavailable' >&2; exit 2; }
+command -v openssl >/dev/null 2>&1 || { echo '[release-sign] openssl is unavailable' >&2; exit 2; }
 
 TMP="${FILE}.signed.$$"
-cleanup() { rm -f "${TMP}"; }
+VERIFY_CERT="${FILE}.signer-cert.$$"
+LOG="${WINDOWS_SIGN_LOG:-/tmp/ghost-nexora-osslsigncode.log}"
+cleanup() { rm -f "${TMP}" "${VERIFY_CERT}"; }
 trap cleanup EXIT
+
+# Trust the exact certificate stored in the persistent PFX for the local
+# post-sign integrity check. The default Linux CA bundle cannot validate the
+# self-signed fallback identity created by the VPS builder.
+openssl pkcs12 \
+  -in "${WINDOWS_PFX}" \
+  -clcerts -nokeys \
+  -passin "pass:${WINDOWS_PFX_PASSWORD}" \
+  -out "${VERIFY_CERT}" >/dev/null 2>&1
+chmod 0600 "${VERIFY_CERT}"
 
 COMMON=(
   sign
@@ -23,12 +36,31 @@ COMMON=(
   -out "${TMP}"
 )
 
-if ! osslsigncode "${COMMON[@]}" -ts 'http://timestamp.digicert.com' >/dev/null 2>&1; then
+: >"${LOG}"
+chmod 0600 "${LOG}" 2>/dev/null || true
+if ! osslsigncode "${COMMON[@]}" -ts 'http://timestamp.digicert.com' >>"${LOG}" 2>&1; then
   echo '[release-sign] timestamp service unavailable; signing without external timestamp' >&2
   rm -f "${TMP}"
-  osslsigncode "${COMMON[@]}" >/dev/null
+  if ! osslsigncode "${COMMON[@]}" >>"${LOG}" 2>&1; then
+    echo "[release-sign] signing failed; see ${LOG}" >&2
+    tail -n 50 "${LOG}" >&2 || true
+    exit 1
+  fi
 fi
 
-osslsigncode verify -in "${TMP}" >/dev/null
+# -ignore-timestamp keeps this local verification focused on the Authenticode
+# signature and signer identity. Timestamp-service trust is independent from
+# the persistent code-signing identity and must not make a valid local
+# signature fail on a Linux VPS.
+if ! osslsigncode verify \
+  -CAfile "${VERIFY_CERT}" \
+  -ignore-timestamp \
+  -in "${TMP}" >>"${LOG}" 2>&1; then
+  echo "[release-sign] Authenticode verification failed; see ${LOG}" >&2
+  tail -n 50 "${LOG}" >&2 || true
+  exit 1
+fi
+
 mv "${TMP}" "${FILE}"
 chmod 0644 "${FILE}"
+echo "[release-sign] signed and verified: ${FILE}"

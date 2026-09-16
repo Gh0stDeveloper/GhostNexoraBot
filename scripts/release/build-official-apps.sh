@@ -34,9 +34,27 @@ SOURCE_REF="${OFFICIAL_SOURCE_REF:-$(git branch --show-current 2>/dev/null || tr
 [[ -n "${SOURCE_REF}" ]] || SOURCE_REF="${SOURCE_SHA}"
 VERSION="${OFFICIAL_RELEASE_VERSION:-$(node -p "require('./package.json').version" 2>/dev/null || echo 2.0.0)}"
 VERSION="${VERSION#v}"
-STAGE="${BUILD_ROOT}/${SOURCE_SHA:0:12}/stage"
-rm -rf "${BUILD_ROOT:?}/${SOURCE_SHA:0:12}"
-install -d -m 0750 "${STAGE}"
+BUILD_DIR="${BUILD_ROOT}/${SOURCE_SHA:0:12}"
+STAGE="${BUILD_DIR}/stage"
+install -d -m 0750 "${BUILD_DIR}" "${STAGE}"
+
+phase_done() {
+  local phase="$1"
+  shift
+  local marker="${BUILD_DIR}/.${phase}.done" artifact
+  [[ -f "${marker}" ]] || return 1
+  [[ "$(cat "${marker}" 2>/dev/null || true)" == "${SOURCE_SHA}|${VERSION}" ]] || return 1
+  for artifact in "$@"; do
+    [[ -s "${STAGE}/${artifact}" ]] || return 1
+  done
+}
+
+mark_phase() {
+  local phase="$1" marker="${BUILD_DIR}/.${1}.done" tmp="${BUILD_DIR}/.${1}.done.$$"
+  printf '%s|%s\n' "${SOURCE_SHA}" "${VERSION}" >"${tmp}"
+  chmod 0640 "${tmp}"
+  mv -f "${tmp}" "${marker}"
+}
 
 main_env_set() {
   local key="$1" value="$2"
@@ -213,23 +231,35 @@ build_android() {
   export GHOST_NEXORA_ANDROID_KEYSTORE_PASSWORD="${ANDROID_KEYSTORE_PASSWORD}"
   export GHOST_NEXORA_ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD}"
   export GHOST_NEXORA_SOURCE_REF="${SOURCE_SHA}"
-  gradle -p apps/android clean assembleRelease >/tmp/ghost-nexora-release-android.log 2>&1
+  if ! gradle -p apps/android clean assembleRelease >/tmp/ghost-nexora-release-android.log 2>&1; then
+    tail -n 80 /tmp/ghost-nexora-release-android.log >&2 || true
+    fail 'Falló la compilación Android.'
+  fi
   local apk
   apk="$(find apps/android/app/build/outputs/apk/release -type f -name '*.apk' | head -n1 || true)"
   [[ -n "${apk}" ]] || fail 'APK release no generado.'
   "${ANDROID_HOME}/build-tools/37.0.0/apksigner" verify --verbose --print-certs "${apk}" >/tmp/ghost-nexora-release-apksigner.log
   cp "${apk}" "${STAGE}/GhostNexoraManager-${VERSION}-android.apk"
+  chmod 0644 "${STAGE}/GhostNexoraManager-${VERSION}-android.apk"
 }
 
 build_linux() {
   info 'Compilando Linux: DEB, AppImage y RPM…'
   export GHOST_NEXORA_SOURCE_REF="${SOURCE_SHA}"
-  npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles deb,appimage,rpm >/tmp/ghost-nexora-release-linux.log 2>&1
+  if ! npm run tauri:build --workspace=@ghostnexora/desktop -- --bundles deb,appimage,rpm >/tmp/ghost-nexora-release-linux.log 2>&1; then
+    tail -n 100 /tmp/ghost-nexora-release-linux.log >&2 || true
+    fail 'Falló la compilación Linux.'
+  fi
   copy_one 'apps/desktop/src-tauri/target/release/bundle/deb/*.deb' "ghost-nexora-manager_${VERSION}_amd64.deb"
   copy_one 'apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage' "GhostNexoraManager-${VERSION}-linux-x86_64.AppImage"
   local rpm
   rpm="$(find apps/desktop/src-tauri/target/release/bundle/rpm -type f -name '*.rpm' 2>/dev/null | head -n1 || true)"
-  if [[ -n "${rpm}" ]]; then cp "${rpm}" "${STAGE}/ghost-nexora-manager-${VERSION}-1.x86_64.rpm"; else info 'RPM no generado; DEB/AppImage siguen disponibles.'; fi
+  if [[ -n "${rpm}" ]]; then
+    cp "${rpm}" "${STAGE}/ghost-nexora-manager-${VERSION}-1.x86_64.rpm"
+    chmod 0644 "${STAGE}/ghost-nexora-manager-${VERSION}-1.x86_64.rpm"
+  else
+    info 'RPM no generado; DEB/AppImage siguen disponibles.'
+  fi
 }
 
 build_windows() {
@@ -238,17 +268,24 @@ build_windows() {
   export WINDOWS_PFX="${WINDOWS_PFX_PATH}"
   export WINDOWS_PFX_PASSWORD
   export PUBLIC_WEB_URL="${PUBLIC_WEB_URL:-https://github.com/Gh0stDeveloper/GhostNexoraBot}"
-  npm run tauri --workspace=@ghostnexora/desktop -- build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle >/tmp/ghost-nexora-release-windows-build.log 2>&1
+  if ! npm run tauri --workspace=@ghostnexora/desktop -- build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle >/tmp/ghost-nexora-release-windows-build.log 2>&1; then
+    tail -n 120 /tmp/ghost-nexora-release-windows-build.log >&2 || true
+    fail 'Falló la compilación del ejecutable Windows.'
+  fi
   local exe
   exe="$(find apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release -maxdepth 1 -type f -name '*.exe' | head -n1 || true)"
   [[ -n "${exe}" ]] || fail 'Ejecutable Windows no generado.'
   bash scripts/release/sign-windows.sh "${exe}"
-  npm run tauri --workspace=@ghostnexora/desktop -- bundle --target x86_64-pc-windows-msvc --bundles nsis >/tmp/ghost-nexora-release-windows-bundle.log 2>&1
+  if ! npm run tauri --workspace=@ghostnexora/desktop -- bundle --target x86_64-pc-windows-msvc --bundles nsis >/tmp/ghost-nexora-release-windows-bundle.log 2>&1; then
+    tail -n 120 /tmp/ghost-nexora-release-windows-bundle.log >&2 || true
+    fail 'Falló el empaquetado NSIS de Windows.'
+  fi
   local installer
   installer="$(find apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -type f -name '*.exe' | head -n1 || true)"
   [[ -n "${installer}" ]] || fail 'Instalador NSIS no generado.'
   bash scripts/release/sign-windows.sh "${installer}"
   cp "${installer}" "${STAGE}/GhostNexoraManager-${VERSION}-windows-x64-setup.exe"
+  chmod 0644 "${STAGE}/GhostNexoraManager-${VERSION}-windows-x64-setup.exe"
 }
 
 sign_catalog_files() {
@@ -299,12 +336,65 @@ fingerprints
 
 info "Fuente: ${SOURCE_REF} · ${SOURCE_SHA:0:12} · versión ${VERSION} · canal ${CHANNEL}"
 npm install >/tmp/ghost-nexora-release-npm.log 2>&1
-build_android
-build_linux
-build_windows
+
+ANDROID_ARTIFACT="GhostNexoraManager-${VERSION}-android.apk"
+LINUX_DEB="ghost-nexora-manager_${VERSION}_amd64.deb"
+LINUX_APPIMAGE="GhostNexoraManager-${VERSION}-linux-x86_64.AppImage"
+LINUX_RPM="ghost-nexora-manager-${VERSION}-1.x86_64.rpm"
+WINDOWS_ARTIFACT="GhostNexoraManager-${VERSION}-windows-x64-setup.exe"
+FAILED_PHASES=()
+
+if phase_done android "${ANDROID_ARTIFACT}"; then
+  info 'Android ya estaba completado para este SHA; reutilizando artefacto validado del staging.'
+else
+  rm -f "${STAGE}/${ANDROID_ARTIFACT}"
+  if ( build_android ); then
+    mark_phase android
+  else
+    FAILED_PHASES+=(android)
+    rm -f "${STAGE}/${ANDROID_ARTIFACT}"
+    info 'Android falló; continuará la compilación de las demás plataformas.'
+  fi
+fi
+
+if phase_done linux "${LINUX_DEB}" "${LINUX_APPIMAGE}"; then
+  info 'Linux ya estaba completado para este SHA; reutilizando artefactos del staging.'
+else
+  rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
+  if ( build_linux ); then
+    mark_phase linux
+  else
+    FAILED_PHASES+=(linux)
+    rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
+    info 'Linux falló; continuará la compilación de las demás plataformas.'
+  fi
+fi
+
+if phase_done windows "${WINDOWS_ARTIFACT}"; then
+  info 'Windows ya estaba completado para este SHA; reutilizando instalador firmado del staging.'
+else
+  rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
+  if ( build_windows ); then
+    mark_phase windows
+  else
+    FAILED_PHASES+=(windows)
+    rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
+    info 'Windows falló; se publicarán igualmente las aplicaciones disponibles.'
+  fi
+fi
+
+PUBLISHABLE_COUNT="$(find "${STAGE}" -maxdepth 1 -type f \( -name '*.apk' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.rpm' \) -printf '.' | wc -c)"
+[[ "${PUBLISHABLE_COUNT}" -gt 0 ]] || fail 'Ninguna plataforma produjo un artefacto publicable.'
+
 sign_catalog_files
 publish
+mark_phase published
 
+if (( ${#FAILED_PHASES[@]} > 0 )); then
+  info "Distribución parcial publicada correctamente. Plataformas con error: ${FAILED_PHASES[*]}."
+else
+  info 'Distribución completa publicada correctamente.'
+fi
 info "Distribución oficial lista en ${RELEASE_DIR}."
 info "Android fingerprint: ${ANDROID_SIGNER_FINGERPRINT}"
 info "Windows fingerprint: ${WINDOWS_SIGNER_FINGERPRINT} (${WINDOWS_SIGNING_MODE})"
