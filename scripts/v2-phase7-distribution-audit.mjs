@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const read = (file) => readFileSync(file, 'utf8')
@@ -94,6 +96,59 @@ assert.doesNotMatch(publisher, /required_artifact_missing_/)
 assert.match(publisher, /\.current\.\$\{process\.pid\}\.json/)
 assert.match(publisher, /renameSync\(tmpCurrent/)
 
+const partialRoot = mkdtempSync(path.join(tmpdir(), 'ghost-nexora-partial-release-'))
+try {
+  const stage = path.join(partialRoot, 'stage')
+  const release = path.join(partialRoot, 'release')
+  const db = path.join(partialRoot, 'db', 'releases.sqlite')
+  spawnSync(process.execPath, ['-e', `require('node:fs').mkdirSync(${JSON.stringify(stage)}, { recursive: true })`], { encoding: 'utf8' })
+  writeFileSync(path.join(stage, 'GhostNexoraManager-2.0.0-android.apk'), 'valid-android-fixture')
+  writeFileSync(path.join(stage, 'ghost-nexora-manager_2.0.0_amd64.deb'), 'valid-linux-fixture')
+  const partial = spawnSync(process.execPath, ['scripts/release/publish-official-release.mjs'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OFFICIAL_RELEASE_STAGE: stage,
+      OFFICIAL_RELEASE_DIR: release,
+      OFFICIAL_RELEASE_DB: db,
+      OFFICIAL_RELEASE_VERSION: '2.0.0',
+      OFFICIAL_RELEASE_CHANNEL: 'rc',
+      OFFICIAL_SOURCE_SHA: '0123456789abcdef0123456789abcdef01234567',
+      OFFICIAL_SOURCE_REF: 'phase7-partial-smoke',
+      ANDROID_SIGNER_FINGERPRINT: 'android-test',
+      WINDOWS_SIGNER_FINGERPRINT: 'windows-test',
+      WINDOWS_SIGNING_MODE: 'self-signed',
+      LINUX_SIGNER_FINGERPRINT: 'linux-test',
+    },
+  })
+  assert.equal(partial.status, 0, `partial release publisher must succeed: ${partial.stderr}`)
+  const current = JSON.parse(readFileSync(path.join(release, 'current.json'), 'utf8'))
+  assert.equal(current.releaseStatus, 'partial')
+  assert.deepEqual(current.availableKinds, ['apk', 'deb'])
+  assert.deepEqual(current.missingKinds, ['nsis', 'appimage'])
+  assert.equal(current.artifacts.length, 2)
+
+  const emptyStage = path.join(partialRoot, 'empty-stage')
+  spawnSync(process.execPath, ['-e', `require('node:fs').mkdirSync(${JSON.stringify(emptyStage)}, { recursive: true })`], { encoding: 'utf8' })
+  const empty = spawnSync(process.execPath, ['scripts/release/publish-official-release.mjs'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OFFICIAL_RELEASE_STAGE: emptyStage,
+      OFFICIAL_RELEASE_DIR: path.join(partialRoot, 'empty-release'),
+      OFFICIAL_RELEASE_DB: path.join(partialRoot, 'empty-db', 'releases.sqlite'),
+      OFFICIAL_RELEASE_VERSION: '2.0.0',
+      OFFICIAL_RELEASE_CHANNEL: 'rc',
+      OFFICIAL_SOURCE_SHA: 'fedcba9876543210fedcba9876543210fedcba98',
+      OFFICIAL_SOURCE_REF: 'phase7-empty-smoke',
+    },
+  })
+  assert.notEqual(empty.status, 0, 'empty release publisher must fail')
+  assert.match(`${empty.stdout}\n${empty.stderr}`, /no_publishable_artifacts/)
+} finally {
+  rmSync(partialRoot, { recursive: true, force: true })
+}
+
 // VPS installs/updates auto-schedule builds, while retaining an operator opt-out.
 assert.match(installer, /installOfficialDistributionBuilder/)
 assert.match(installer, /NEXORA_RUNTIME_PROFILE/)
@@ -110,4 +165,4 @@ assert.match(envExample, /OFFICIAL_RELEASE_DIR=/)
 assert.match(envExample, /OFFICIAL_SIGNING_ENV=/)
 assert.match(pkg, /"release:vps"/)
 
-console.log('[V2 DISTRIBUTION AUDIT] OK — VPS builds isolate platform failures, publish every healthy artifact, resume same-SHA phases, and keep signing material root-only.')
+console.log('[V2 DISTRIBUTION AUDIT] OK — VPS builds isolate platform failures, publish every healthy artifact, reject empty catalogs, resume same-SHA phases, and keep signing material root-only.')
