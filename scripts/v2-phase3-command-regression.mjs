@@ -17,14 +17,24 @@ const PHASE3_COMMANDS = new Map([
   ['providerhealth', ['dlhealth']],
 ])
 
-// Approved post-Phase-3 additions. Keeping this list explicit preserves the
-// frozen V1 fingerprint while allowing intentional new public commands.
+// This command already exists on the PR base (main, PR #67). The historical
+// Phase 1 fingerprint predates it, so it must be accounted for explicitly
+// rather than weakening or regenerating the frozen V1 baseline.
+const PREEXISTING_MAIN_COMMANDS = new Map([
+  ['game', ['games']],
+])
+
+// Intentional command additions in this change set.
 const DOWNLOAD_COMMANDS = new Map([
   ['likee', ['like', 'likeedl']],
   ['terabox', ['tera', 'teraboxdl']],
 ])
 
-const APPROVED_COMMANDS = new Map([...PHASE3_COMMANDS, ...DOWNLOAD_COMMANDS])
+const APPROVED_COMMANDS = new Map([
+  ...PHASE3_COMMANDS,
+  ...PREEXISTING_MAIN_COMMANDS,
+  ...DOWNLOAD_COMMANDS,
+])
 
 const [report, baseline, providerCatalog] = await Promise.all([
   readFile(inputPath, 'utf8').then(JSON.parse),
