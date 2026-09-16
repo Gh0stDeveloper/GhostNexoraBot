@@ -36,6 +36,7 @@ Comandos:
   repair-session               Alias de sessionrepair
   pair                          Ejecuta el pairing normal sin borrar la sesión
   update                        Actualiza Ghost Nexora Bot
+  release-build                 Compila y publica apps oficiales desde una VPS Linux
   status                        Muestra el estado del MainBot
   start                         Inicia el MainBot
   stop                          Detiene el MainBot
@@ -48,6 +49,7 @@ Ejemplos:
   ghostnexorabot sessionrepair --phone 521XXXXXXXXXX
   ghostnexorabot sessionrepair --method qr
   ghostnexorabot sessionrepair --check
+  sudo ghostnexorabot release-build
 `)
 }
 
@@ -89,6 +91,21 @@ switch (action) {
     status = run(isWindows ? 'npm.cmd' : 'npm', ['run', 'pair', '--', ...args])
     break
   }
+  case 'release-build': {
+    if (isWindows) {
+      console.error('[FAIL] release-build está diseñado para la VPS Linux oficial.')
+      status = 2
+      break
+    }
+    const builder = path.join(repoRoot, 'scripts', 'release', 'build-official-apps.sh')
+    requireFile(builder, 'compilador oficial VPS')
+    const needsSudo = typeof process.getuid === 'function' && process.getuid() !== 0
+    const activeEnv = { GHOST_NEXORA_RELEASE_BUILD_ACTIVE: '1' }
+    status = needsSudo
+      ? run('sudo', ['env', 'GHOST_NEXORA_RELEASE_BUILD_ACTIVE=1', 'bash', builder, ...args])
+      : run('bash', [builder, ...args], { env: activeEnv })
+    break
+  }
   case 'update': {
     if (isWindows) status = windowsManager('update')
     else {
@@ -106,8 +123,6 @@ switch (action) {
         break
       }
 
-      // Ejecutamos siempre mediante bash para no depender del bit ejecutable del
-      // archivo después de un checkout, copia o actualización del repositorio.
       status = needsSudo
         ? run('sudo', ['bash', updater])
         : run('bash', [updater])
