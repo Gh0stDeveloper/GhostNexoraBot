@@ -1,7 +1,9 @@
 import type { WAMessage, WASocket } from 'baileys'
 import { config } from '../config.js'
+import { settings } from '../core/settings.js'
 import { localizeLegacyText, resolveChatLocale } from '../i18n/index.js'
 import { logger } from '../utils/logger.js'
+import { sendInteractiveCard } from './interactive.js'
 import { preloadWhatsAppMedia } from './whatsapp-media.js'
 
 type RichLinkPreviewInput = {
@@ -33,17 +35,39 @@ export function richPreviewTargetUrl(preferred?: string) {
   return config.officialChannelUrl
 }
 
+function isParticipantGreeting(label?: string) {
+  return label === 'welcome-waifu-link-preview' || label === 'goodbye-waifu-link-preview'
+}
+
 /**
- * Envía el mismo tipo de bloque que WhatsApp muestra como preview de enlace:
- * imagen grande, título/descripción y zona clicable que abre sourceUrl.
- *
- * La imagen puede seguir siendo un asset local: se materializa como Buffer y se
- * coloca en externalAdReply.thumbnail. El destino del clic es una URL pública
- * independiente (normalmente PUBLIC_WEB_URL).
+ * Envía previews enriquecidos para superficies que todavía los necesitan.
+ * Bienvenidas y despedidas usan el mismo transporte interactivo estable del menú,
+ * porque los externalAdReply no se renderizan de forma consistente en todos los
+ * clientes recientes de WhatsApp.
  */
 export async function sendRichLinkPreview(socket: WASocket, chatId: string, input: RichLinkPreviewInput) {
   const locale = resolveChatLocale(chatId)
   const sourceUrl = richPreviewTargetUrl(input.url)
+  const text = localizeLegacyText(input.text, locale)
+  const title = localizeLegacyText(input.title, locale).slice(0, 80)
+  const body = localizeLegacyText(input.description ?? 'Ghost Nexora Bot', locale).slice(0, 120)
+
+  if (isParticipantGreeting(input.label)) {
+    return sendInteractiveCard(socket, chatId, input.quoted, {
+      title,
+      body: text,
+      imageUrl: input.imageSource,
+      footer: body,
+      buttons: [
+        {
+          type: 'reply',
+          text: locale === 'en' ? 'Open menu' : 'Abrir menú',
+          id: `${settings.prefix}menu`,
+        },
+      ],
+    })
+  }
+
   let thumbnail: Buffer | undefined
   let thumbnailUrl: string | undefined
 
@@ -56,10 +80,6 @@ export async function sendRichLinkPreview(socket: WASocket, chatId: string, inpu
     if (Buffer.isBuffer(prepared)) thumbnail = prepared
     else if (/^https?:\/\//i.test(prepared.url)) thumbnailUrl = prepared.url
   }
-
-  const text = localizeLegacyText(input.text, locale)
-  const title = localizeLegacyText(input.title, locale).slice(0, 80)
-  const body = localizeLegacyText(input.description ?? 'Ghost Nexora Bot', locale).slice(0, 120)
 
   try {
     return await socket.sendMessage(chatId, {
