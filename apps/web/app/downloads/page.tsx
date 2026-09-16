@@ -1,4 +1,5 @@
-import { Android, ArrowLeft, Box, CheckCircle2, Download, FileCheck2, Fingerprint, Laptop, PackageCheck, ServerCog, ShieldCheck, TerminalSquare } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ArrowLeft, Box, CheckCircle2, Download, FileCheck2, Fingerprint, Laptop, PackageCheck, ServerCog, ShieldCheck, Smartphone, TerminalSquare } from 'lucide-react'
 import { getWebLocale } from '../../lib/i18n-server'
 import { downloadT } from '../../lib/downloads-i18n'
 import { getOfficialReleaseCatalog, type OfficialReleaseArtifact, type ReleaseKind } from '../../lib/releases'
@@ -24,7 +25,7 @@ function artifactFor(artifacts: OfficialReleaseArtifact[], kind: ReleaseKind) {
 }
 
 function PlatformCard({ icon, title, text, artifact, t }: {
-  icon: React.ReactNode
+  icon: ReactNode
   title: string
   text: string
   artifact?: OfficialReleaseArtifact
@@ -62,7 +63,7 @@ export default async function DownloadsPage() {
 
   const cards = [
     [Laptop, t('platform.windows'), t('platform.windowsText'), windows],
-    [Android, t('platform.android'), t('platform.androidText'), android],
+    [Smartphone, t('platform.android'), t('platform.androidText'), android],
     [PackageCheck, t('platform.debian'), t('platform.debianText'), deb],
     [Box, t('platform.rpm'), t('platform.rpmText'), rpm],
     [TerminalSquare, t('platform.appimage'), t('platform.appimageText'), appImage],
