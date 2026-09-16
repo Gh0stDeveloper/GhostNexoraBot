@@ -80,7 +80,7 @@ function normalizeOfficialResult(value: unknown): LempiHappyModApp | null {
   }
 }
 
-function parseOfficialResults(payload: unknown, limit: number) {
+function parseOfficialResults(payload: unknown, limit?: number) {
   const root = asRecord(payload)
   const data = asRecord(root?.data)
   const resultados = Array.isArray(data?.resultados) ? data.resultados : []
@@ -89,7 +89,8 @@ function parseOfficialResults(payload: unknown, limit: number) {
     .map(normalizeOfficialResult)
     .filter((item): item is LempiHappyModApp => Boolean(item))
 
-  return [...new Map(apps.map((item) => [item.url, item])).values()].slice(0, limit)
+  const unique = [...new Map(apps.map((item) => [item.url, item])).values()]
+  return limit === undefined ? unique : unique.slice(0, limit)
 }
 
 function tokenFor(app: LempiHappyModApp) {
@@ -123,10 +124,10 @@ export function getHappyModItem(token: string): HappyModItem {
   return getCached(token).item
 }
 
-export async function searchHappyMod(query: string, limit = 10): Promise<HappyModItem[]> {
+export async function searchHappyMod(query: string, limit?: number): Promise<HappyModItem[]> {
   const text = query.trim()
   if (text.length < 2) throw new Error('Escribe al menos 2 caracteres para buscar en HappyMod.')
-  const max = Math.max(1, Math.min(20, limit))
+  const max = limit === undefined ? undefined : Math.max(1, Math.trunc(limit))
 
   let payload: unknown
   try {
