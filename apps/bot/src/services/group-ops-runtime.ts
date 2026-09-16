@@ -6,6 +6,7 @@ const instanceKey = opsInstanceKey()
 let currentSocket: WASocket | null = null
 let timer: NodeJS.Timeout | null = null
 let lastSyncAt = 0
+let lastSyncAttemptAt = 0
 let syncing = false
 let processing = false
 let connectionOpen = false
@@ -102,6 +103,19 @@ function touchRuntime(input: {
     .run(instanceKey, connected ? 1 : 0, registered ? 1 : 0, jid, groupCount, connectedAt, now, lastGroupSyncAt, now)
 }
 
+function markSocketLive(socket: WASocket) {
+  if (currentSocket !== socket || !socket.authState.creds.registered) return false
+  if (!connectionOpen) {
+    connectionOpen = true
+    // Fuerza una sincronización completa tras una reconexión o si el evento
+    // connection=open ocurrió antes de que este runtime alcanzara a observarlo.
+    lastSyncAt = 0
+    lastSyncAttemptAt = 0
+  }
+  touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null })
+  return true
+}
+
 function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
   const jid = String(group.id ?? '')
   if (!jid.endsWith('@g.us')) return false
@@ -144,12 +158,16 @@ async function syncOneGroup(groupJid: string, force = false) {
   }
 }
 
-async function syncGroups() {
+async function syncGroups(connectionProbe = false) {
   const socket = currentSocket
-  if (!socket || !connectionOpen || syncing || !socket.authState.creds.registered) return
+  if (!socket || syncing || !socket.authState.creds.registered || (!connectionOpen && !connectionProbe)) return
   syncing = true
+  lastSyncAttemptAt = Date.now()
   try {
     const raw = await socket.groupFetchAllParticipating()
+    // Si el evento connection=open se perdió por una carrera al crear el socket,
+    // una consulta de grupos exitosa confirma por sí misma que el transporte está vivo.
+    if (!connectionOpen) connectionOpen = true
     const groups = Object.values(raw) as ParticipatingGroup[]
     const stamp = Date.now()
 
@@ -165,9 +183,9 @@ async function syncGroups() {
       throw error
     }
     lastSyncAt = stamp
-    touchRuntime({ connected: true, lastGroupSyncAt: stamp, groupCount: groups.filter((group) => String(group.id ?? '').endsWith('@g.us')).length })
+    touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, lastGroupSyncAt: stamp, groupCount: groups.filter((group) => String(group.id ?? '').endsWith('@g.us')).length })
   } catch (error) {
-    logger.debug({ error, instanceKey }, 'ops group registry sync skipped')
+    logger.debug({ error, instanceKey, connectionProbe }, 'ops group registry sync skipped')
   } finally {
     syncing = false
   }
@@ -212,9 +230,20 @@ async function processOneRequest() {
 function startLoop() {
   if (timer) return
   timer = setInterval(() => {
-    if (connectionOpen && currentSocket?.authState.creds.registered) touchRuntime({ connected: true })
+    const socket = currentSocket
+    const registered = Boolean(socket?.authState.creds.registered)
+    if (connectionOpen && registered && socket) touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null })
     void processOneRequest()
-    if (Date.now() - lastSyncAt >= 120_000) void syncGroups()
+
+    if (connectionOpen && registered && Date.now() - lastSyncAt >= 120_000) {
+      void syncGroups()
+    } else if (!connectionOpen && registered && socket?.user?.id && Date.now() - lastSyncAttemptAt >= 15_000) {
+      // Autorreparación: un socket autenticado puede haber quedado vivo aunque el
+      // listener se registrara después del evento open. Probamos sin marcarlo
+      // conectado hasta que WhatsApp responda correctamente.
+      void syncGroups(true)
+    }
+
     if (Math.random() < 0.02) {
       opsDb.prepare("DELETE FROM ops_group_control_requests WHERE status IN ('completed','failed') AND completed_at < ?")
         .run(Date.now() - 7 * 86_400_000)
@@ -226,15 +255,13 @@ function startLoop() {
 export function registerOpsSocket(socket: WASocket) {
   currentSocket = socket
   connectionOpen = false
-  touchRuntime({ registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
+  lastSyncAt = 0
+  lastSyncAttemptAt = 0
+  touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
   startLoop()
 
   socket.ev.on('messages.upsert', ({ messages }) => {
-    if (currentSocket !== socket) return
-    if (socket.authState.creds.registered) {
-      connectionOpen = true
-      touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null })
-    }
+    if (!markSocketLive(socket)) return
     for (const message of messages) {
       const jid = String(message.key.remoteJid ?? '')
       if (jid.endsWith('@g.us')) void syncOneGroup(jid)
@@ -242,7 +269,8 @@ export function registerOpsSocket(socket: WASocket) {
   })
 
   socket.ev.on('group-participants.update', ({ id }) => {
-    if (currentSocket === socket) void syncOneGroup(String(id ?? ''), true)
+    if (!markSocketLive(socket)) return
+    void syncOneGroup(String(id ?? ''), true)
   })
 
   socket.ev.on('connection.update', ({ connection }) => {
@@ -251,6 +279,7 @@ export function registerOpsSocket(socket: WASocket) {
       connectionOpen = true
       currentSocket = socket
       lastSyncAt = 0
+      lastSyncAttemptAt = 0
       touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, connectedAt: Date.now() })
       void syncGroups()
     } else if (connection === 'close') {
