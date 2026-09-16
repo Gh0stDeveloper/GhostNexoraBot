@@ -9,6 +9,26 @@ import { config } from '../config.js'
 
 export type TempDownload = { filePath: string; fileName: string; size: number; contentType: string; cleanup: () => Promise<void> }
 
+export type GitHubRepoMetadata = {
+  name: string
+  fullName: string
+  owner: string
+  url: string
+  description?: string
+  defaultBranch: string
+  stars: number
+  forks: number
+  watchers: number
+  openIssues: number
+  language?: string
+  license?: string
+  archived: boolean
+  fork: boolean
+  updatedAt?: string
+}
+
+export type GitHubRepoDownload = TempDownload & { repository: GitHubRepoMetadata }
+
 async function downloadToTemp(url: string, fallbackName: string): Promise<TempDownload> {
   const response = await fetch(url, { redirect: 'follow', headers: { 'user-agent': 'GhostNexoraBot/1.0 Mozilla/5.0' }, signal: AbortSignal.timeout(60_000) })
   if (!response.ok || !response.body) throw new Error(`Descarga respondió HTTP ${response.status}.`)
@@ -36,7 +56,7 @@ async function downloadToTemp(url: string, fallbackName: string): Promise<TempDo
   }
 }
 
-export async function downloadGitHubRepo(input: string) {
+export async function downloadGitHubRepo(input: string): Promise<GitHubRepoDownload> {
   const url = new URL(input)
   if (url.hostname !== 'github.com') throw new Error('Solo se admiten repositorios públicos de GitHub.')
   const [owner, repoRaw] = url.pathname.split('/').filter(Boolean)
@@ -44,10 +64,47 @@ export async function downloadGitHubRepo(input: string) {
   if (!owner || !repo) throw new Error('URL de repositorio inválida.')
   const meta = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'GhostNexoraBot/1.0' } })
   if (!meta.ok) throw new Error('No pude consultar ese repositorio público.')
-  const data = await meta.json() as { default_branch?: string; private?: boolean }
+  const data = await meta.json() as {
+    name?: string
+    full_name?: string
+    html_url?: string
+    description?: string | null
+    default_branch?: string
+    private?: boolean
+    stargazers_count?: number
+    forks_count?: number
+    watchers_count?: number
+    open_issues_count?: number
+    language?: string | null
+    owner?: { login?: string }
+    license?: { spdx_id?: string | null } | null
+    archived?: boolean
+    fork?: boolean
+    updated_at?: string
+  }
   if (data.private) throw new Error('Solo se admiten repositorios públicos.')
   const branch = data.default_branch ?? 'main'
-  return downloadToTemp(`https://github.com/${owner}/${repo}/archive/refs/heads/${encodeURIComponent(branch)}.zip`, `${repo}-${branch}.zip`)
+  const file = await downloadToTemp(`https://github.com/${owner}/${repo}/archive/refs/heads/${encodeURIComponent(branch)}.zip`, `${repo}-${branch}.zip`)
+  return {
+    ...file,
+    repository: {
+      name: data.name ?? repo,
+      fullName: data.full_name ?? `${owner}/${repo}`,
+      owner: data.owner?.login ?? owner,
+      url: data.html_url ?? `https://github.com/${owner}/${repo}`,
+      description: data.description?.trim() || undefined,
+      defaultBranch: branch,
+      stars: Number(data.stargazers_count ?? 0),
+      forks: Number(data.forks_count ?? 0),
+      watchers: Number(data.watchers_count ?? 0),
+      openIssues: Number(data.open_issues_count ?? 0),
+      language: data.language?.trim() || undefined,
+      license: data.license?.spdx_id?.trim() || undefined,
+      archived: Boolean(data.archived),
+      fork: Boolean(data.fork),
+      updatedAt: data.updated_at,
+    },
+  }
 }
 
 function googleDriveId(input: string) {
