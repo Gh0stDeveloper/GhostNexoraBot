@@ -11,24 +11,70 @@ const snippet = `
   globalThis.fetch = async (input, init) => {
     const raw = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
     const target = new URL(raw);
+
     if (target.pathname.endsWith('/search/happymod')) {
+      if (target.searchParams.get('text') !== 'Red ball 4') {
+        throw new Error('HappyMod must use the official text query parameter');
+      }
+      if (target.searchParams.has('q') || target.searchParams.has('query') || target.searchParams.has('search')) {
+        throw new Error('HappyMod sent a legacy search parameter');
+      }
+      if (target.searchParams.get('apikey') !== 'happymod-v15-smoke-key') {
+        throw new Error('HappyMod did not reuse the configured API key');
+      }
+
       return new Response(JSON.stringify({
         status: true,
-        result: [{
-          name: 'Minecraft',
-          version: '1.21.90',
-          url: 'https://downloads.example.test/minecraft.apk'
-        }]
+        creadores: 'xrljose y Ryze',
+        publicado_por: 'xrljosedv',
+        creador: 'xrljosedv',
+        data: {
+          busqueda: 'Red ball 4',
+          total_resultados: 33,
+          resultados_mostrados: 2,
+          resultados: [
+            {
+              numero: 1,
+              nombre: 'Red Ball 4',
+              version: 'v1.17.03',
+              imagen: 'https://api.lempi.lat/Avz.webp',
+              url: 'https://download.happymod.to/red-ball-4-app-mod/com.FDGEntertainment.redball4.gp/'
+            },
+            {
+              numero: 4,
+              nombre: 'Geometry Dash Lite',
+              version: 'v2.21',
+              imagen: 'https://api.lempi.lat/sH8.webp',
+              url: 'https://api.lempi.lat/dhC'
+            }
+          ],
+          mas_resultados: 31
+        }
       }), {
         status: 200,
         headers: { 'content-type': 'application/json' }
       });
     }
+
+    if (target.hostname === 'download.happymod.to') {
+      return new Response('<html><body><a href="https://cdn.example.test/red-ball-4.apk">Download APK</a></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    }
+
+    if (target.hostname === 'cdn.example.test') {
+      return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+        status: 200,
+        headers: { 'content-type': 'application/vnd.android.package-archive' }
+      });
+    }
+
     return originalFetch(input, init);
   };
 
   const { commands } = await import('./apps/bot/dist/commands/index.js');
-  const { searchHappyMod } = await import('./apps/bot/dist/services/happymod.js');
+  const { searchHappyMod, resolveHappyModApkUrl } = await import('./apps/bot/dist/services/happymod.js');
   const byRoute = new Map();
   for (const command of commands) {
     for (const key of [command.name, ...(command.aliases ?? [])]) byRoute.set(String(key).toLowerCase(), command);
@@ -78,10 +124,17 @@ const snippet = `
   expectRoute('xn', 'xnxx');
   expectRoute('ph', 'pornhub');
 
-  const happy = await searchHappyMod('minecraft', 5);
-  if (happy.length !== 1) throw new Error('HappyMod result[] url payload was discarded');
-  if (happy[0]?.name !== 'Minecraft') throw new Error('HappyMod result name was not normalized');
+  const happy = await searchHappyMod('Red ball 4', 5);
+  if (happy.length !== 2) throw new Error('HappyMod official data.resultados payload was not parsed');
+  if (happy[0]?.name !== 'Red Ball 4') throw new Error('HappyMod nombre was not normalized');
+  if (happy[0]?.version !== 'v1.17.03') throw new Error('HappyMod version was not preserved');
+  if (happy[0]?.icon !== 'https://api.lempi.lat/Avz.webp') throw new Error('HappyMod imagen was not preserved');
   if (!happy[0]?.token?.startsWith('hm_')) throw new Error('HappyMod result token was not generated');
+
+  const resolved = await resolveHappyModApkUrl(happy[0]);
+  if (resolved !== 'https://cdn.example.test/red-ball-4.apk') {
+    throw new Error('HappyMod page URL was not resolved before download: ' + resolved);
+  }
 
   const { readFileSync } = await import('node:fs');
   for (const file of [
@@ -111,6 +164,7 @@ const snippet = `
     commandCount: commands.length,
     tiktok: byRoute.get('tt')?.name,
     happymodPayload: happy[0]?.name,
+    happymodResolved: resolved,
     stores: ['uptodown','liteapks','aptoide','happymod','fdroid','apktools','androforever'].map((key) => byRoute.get(key)?.name),
     adult: ['xvideos','xnxx','pornhub'].map((key) => byRoute.get(key)?.name),
     globalApk: byRoute.has('apk'),

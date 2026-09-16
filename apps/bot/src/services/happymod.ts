@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
-import { downloadLempiHappyModV2, type LempiHappyModApp } from './lempi-media-endpoints.js'
+import { downloadLempiMedia } from './lempi-api.js'
 import { requestLempiJson } from './lempi-client.js'
+import type { LempiHappyModApp } from './lempi-media-endpoints.js'
+import { resolveHappyModDirectUrl } from './media-download-fixes-v2.js'
 
 const CACHE_TTL_MS = 30 * 60_000
 const SEARCH_TIMEOUT_MS = 90_000
@@ -41,11 +43,9 @@ function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
-function firstString(...values: unknown[]) {
-  for (const value of values) {
-    const text = stringValue(value)
-    if (text) return text
-  }
+function numberValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
   return undefined
 }
 
@@ -54,111 +54,46 @@ function normalizeUrl(value: unknown) {
   if (!text) return undefined
   try {
     const url = new URL(text.replace(/\\u0026/gi, '&').replace(/\\\//g, '/'))
-    if (!['http:', 'https:'].includes(url.protocol)) return undefined
-    return url.toString()
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : undefined
   } catch {
     return undefined
   }
 }
 
-function firstNumber(...values: unknown[]) {
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) return value
-    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
-  }
-  return undefined
-}
-
-function walkRecords(value: unknown, visit: (record: JsonRecord) => void, depth = 0) {
-  if (depth > 10 || value === null || value === undefined) return
-  if (Array.isArray(value)) {
-    for (const item of value) walkRecords(item, visit, depth + 1)
-    return
-  }
+function normalizeOfficialResult(value: unknown): LempiHappyModApp | null {
   const record = asRecord(value)
-  if (!record) return
-  visit(record)
-  for (const child of Object.values(record)) walkRecords(child, visit, depth + 1)
-}
+  if (!record) return null
 
-function findNestedDownload(record: JsonRecord) {
-  let direct: string | undefined
-  const visit = (value: unknown, key = '', depth = 0) => {
-    if (direct || depth > 5 || value === null || value === undefined) return
-    if (typeof value === 'string') {
-      if (/download|descarga|apk|file|direct|url_download|download_url|link_download/i.test(key)) {
-        direct = normalizeUrl(value)
-      }
-      return
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, key, depth + 1)
-      return
-    }
-    const nested = asRecord(value)
-    if (!nested) return
-    for (const [nestedKey, child] of Object.entries(nested)) visit(child, nestedKey, depth + 1)
-  }
-  visit(record)
-  return direct
-}
-
-function normalizeApp(record: JsonRecord): LempiHappyModApp | null {
-  const nombre = firstString(
-    record.nombre,
-    record.name,
-    record.title,
-    record.app,
-    record.appName,
-    record.app_name,
-  )
-  if (!nombre) return null
-
-  const explicitDownload = normalizeUrl(
-    record.download
-      ?? record.descarga
-      ?? record.apk
-      ?? record.apk_url
-      ?? record.apkUrl
-      ?? record.direct
-      ?? record.download_url
-      ?? record.downloadUrl
-      ?? record.url_download
-      ?? record.urlDownload
-      ?? record.link_download
-      ?? record.linkDownload
-      ?? record.file_url
-      ?? record.fileUrl,
-  ) ?? findNestedDownload(record)
-
-  // Este buscador históricamente devuelve el enlace utilizable en `url`.
-  // Cuando existe un campo de descarga explícito se prefiere; de lo contrario
-  // `url`/`link` se conserva como destino descargable en vez de descartar el resultado.
-  const pageOrDirect = normalizeUrl(record.url ?? record.link ?? record.page ?? record.source)
-  const download = explicitDownload ?? pageOrDirect
-  if (!download) return null
+  const nombre = stringValue(record.nombre)
+  const url = normalizeUrl(record.url)
+  if (!nombre || !url) return null
 
   return {
-    numero: firstNumber(record.numero, record.number, record.id),
+    numero: numberValue(record.numero),
     nombre,
-    version: firstString(record.version, record.ver, record.appVersion, record.app_version),
-    imagen: normalizeUrl(record.imagen ?? record.image ?? record.icon ?? record.logo ?? record.thumbnail),
-    url: pageOrDirect ?? download,
-    download,
+    version: stringValue(record.version),
+    imagen: normalizeUrl(record.imagen),
+    url,
+    // El contrato oficial entrega el destino inicial en `url`. Puede ser un
+    // archivo, un enlace corto o una página que debe resolverse al descargar.
+    download: url,
   }
 }
 
-function parseApps(payload: unknown, limit: number) {
-  const rows: LempiHappyModApp[] = []
-  walkRecords(payload, (record) => {
-    const app = normalizeApp(record)
-    if (app) rows.push(app)
-  })
-  return [...new Map(rows.map((app) => [app.download, app])).values()].slice(0, limit)
+function parseOfficialResults(payload: unknown, limit: number) {
+  const root = asRecord(payload)
+  const data = asRecord(root?.data)
+  const resultados = Array.isArray(data?.resultados) ? data.resultados : []
+
+  const apps = resultados
+    .map(normalizeOfficialResult)
+    .filter((item): item is LempiHappyModApp => Boolean(item))
+
+  return [...new Map(apps.map((item) => [item.url, item])).values()].slice(0, limit)
 }
 
 function tokenFor(app: LempiHappyModApp) {
-  return `hm_${createHash('sha256').update(app.download).digest('hex').slice(0, 16)}`
+  return `hm_${createHash('sha256').update(app.url).digest('hex').slice(0, 16)}`
 }
 
 function remember(app: LempiHappyModApp) {
@@ -191,38 +126,50 @@ export function getHappyModItem(token: string): HappyModItem {
 export async function searchHappyMod(query: string, limit = 10): Promise<HappyModItem[]> {
   const text = query.trim()
   if (text.length < 2) throw new Error('Escribe al menos 2 caracteres para buscar en HappyMod.')
-  const max = Math.max(1, Math.min(12, limit))
-  const variants = [
-    { q: text, limit: max },
-    { query: text, limit: max },
-    { search: text, limit: max },
-  ]
+  const max = Math.max(1, Math.min(20, limit))
 
-  for (const params of variants) {
-    try {
-      const payload = await requestLempiJson<unknown>('/search/happymod', params, { timeoutMs: SEARCH_TIMEOUT_MS })
-      const apps = parseApps(payload, max)
-      if (apps.length) return apps.map(remember)
-    } catch {
-      // Try the next accepted search parameter before reporting a generic failure.
-    }
+  let payload: unknown
+  try {
+    payload = await requestLempiJson<unknown>(
+      '/search/happymod',
+      { text },
+      { timeoutMs: SEARCH_TIMEOUT_MS },
+    )
+  } catch {
+    throw new Error('No se pudo completar la búsqueda en este momento.')
   }
 
-  throw new Error(`No encontré resultados para “${text}”.`)
+  const apps = parseOfficialResults(payload, max)
+  if (!apps.length) throw new Error(`No encontré resultados para “${text}”.`)
+  return apps.map(remember)
 }
 
 /**
- * Compatibilidad con la interfaz anterior. El buscador ya entrega el enlace
- * necesario para iniciar la descarga, por lo que no se rastrea la página web.
+ * Conserva la interfaz histórica, pero resuelve el destino real porque `url`
+ * puede apuntar a una página o a un enlace corto antes del archivo final.
  */
 export async function resolveHappyModApkUrl(item: HappyModItem): Promise<string> {
-  return getCached(item.token).source.download
+  const cached = getCached(item.token)
+  try {
+    const resolved = await resolveHappyModDirectUrl(cached.source.url)
+    if (!resolved) throw new Error('unresolved')
+    return resolved
+  } catch {
+    throw new Error('No se pudo preparar ese archivo en este momento.')
+  }
 }
 
 export async function downloadHappyModApk(token: string): Promise<HappyModDownload> {
   const cached = getCached(token)
   try {
-    const result = await downloadLempiHappyModV2(cached.source)
+    const direct = await resolveHappyModDirectUrl(cached.source.url)
+    if (!direct) throw new Error('unresolved')
+
+    const result = await downloadLempiMedia(direct, {
+      kind: 'document',
+      baseName: `happymod-${cached.source.nombre}-${cached.source.version ?? 'mod'}`,
+    })
+
     return {
       ...cached.item,
       filePath: result.filePath,
