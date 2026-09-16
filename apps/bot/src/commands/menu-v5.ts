@@ -91,7 +91,6 @@ function renderTokens(ctx: CommandContext, command: BotCommand, tokens: string[]
   const primary = usage ? `${ctx.prefix}${usage}` : `${ctx.prefix}${command.name}`
   const aliases = tokens
     .filter((token) => token !== command.name.toLowerCase())
-    .slice(0, 8)
     .sort((a, b) => a.localeCompare(b, ctx.locale))
   const restriction = restrictionLabel(ctx, command)
   const suffix = restriction ? ` 〔${restriction}〕` : ''
@@ -205,9 +204,10 @@ async function menu(ctx: CommandContext) {
   const privateAccess = ctx.isOwner || ctx.isSubbotOwner || isPrivateChatApproved(ctx.sender)
   const instance = ctx.instanceId ? `Subbot #${ctx.instanceId}` : 'MainBot'
   const visual = await currentVisualIdentity(ctx)
+  const menuRows = effectiveCommands().filter((row) => visible(ctx, row.command))
   const grouped = new Map<SectionId, string[]>()
   for (const id of sectionOrder) grouped.set(id, [])
-  for (const row of effectiveCommands()) if (visible(ctx, row.command)) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx, row.command, row.tokens))
+  for (const row of menuRows) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx, row.command, row.tokens))
 
   const sections = sectionOrder.flatMap((id) => {
     const rows = grouped.get(id) ?? []
@@ -220,7 +220,10 @@ async function menu(ctx: CommandContext) {
     ? '╭━━━〔 👻 *GHOST NEXORA BOT* 〕━━━╮'
     : `╭━━━〔 ${visual.style.icon} *${visual.displayName.toUpperCase()}* 〕━━━╮`
 
-  const effectiveCount = effectiveCommands().filter((row) => visible(ctx, row.command)).length
+  // Cuenta rutas realmente utilizables (nombre principal + aliases únicos), no
+  // solo handlers canónicos. Así el total coincide con los comandos que el menú
+  // muestra y que el router acepta, sin volver a registrar implementaciones duplicadas.
+  const effectiveCount = new Set(menuRows.flatMap((row) => row.tokens)).size
   const website = publicBotWebsite()
   const body = [
     visualHeader,
