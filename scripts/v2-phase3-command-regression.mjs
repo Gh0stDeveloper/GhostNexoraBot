@@ -17,6 +17,15 @@ const PHASE3_COMMANDS = new Map([
   ['providerhealth', ['dlhealth']],
 ])
 
+// Approved post-Phase-3 additions. Keeping this list explicit preserves the
+// frozen V1 fingerprint while allowing intentional new public commands.
+const DOWNLOAD_COMMANDS = new Map([
+  ['likee', ['like', 'likeedl']],
+  ['terabox', ['tera', 'teraboxdl']],
+])
+
+const APPROVED_COMMANDS = new Map([...PHASE3_COMMANDS, ...DOWNLOAD_COMMANDS])
+
 const [report, baseline, providerCatalog] = await Promise.all([
   readFile(inputPath, 'utf8').then(JSON.parse),
   readFile(baselinePath, 'utf8').then(JSON.parse),
@@ -70,15 +79,15 @@ for (const profileName of ['minimal', 'full']) {
   const expected = baseline.profiles?.[profileName]
   if (!profile || !expected) throw new Error(`Missing profile ${profileName}`)
 
-  for (const [name, aliases] of PHASE3_COMMANDS) {
+  for (const [name, aliases] of APPROVED_COMMANDS) {
     const matches = (profile.commands ?? []).filter((command) => command.name === name)
     assertEqual(`${profileName}.${name}.count`, matches.length, 1)
     const actualAliases = [...(matches[0]?.aliases ?? [])].sort()
     assertEqual(`${profileName}.${name}.aliases`, JSON.stringify(actualAliases), JSON.stringify([...aliases].sort()))
   }
 
-  const withoutPhase3 = (profile.commands ?? []).filter((command) => !PHASE3_COMMANDS.has(command.name))
-  const frozen = fingerprint(withoutPhase3, profile)
+  const withoutApproved = (profile.commands ?? []).filter((command) => !APPROVED_COMMANDS.has(command.name))
+  const frozen = fingerprint(withoutApproved, profile)
   for (const [key, value] of Object.entries(expected)) {
     if (key === 'duplicateCanonicalNameCount') {
       assertEqual(`${profileName}.${key}`, frozen.duplicateCanonicalNameCount, value)
@@ -91,12 +100,12 @@ for (const profileName of ['minimal', 'full']) {
     assertEqual(`${profileName}.${key}`, frozen[key], value)
   }
 
-  assertEqual(`${profileName}.phase3 command delta`, (profile.commands ?? []).length - withoutPhase3.length, PHASE3_COMMANDS.size)
-  assertEqual(`${profileName}.current command count`, profile.commandCount, expected.commandCount + PHASE3_COMMANDS.size)
-  assertEqual(`${profileName}.current canonical count`, profile.canonicalCommandCount, expected.canonicalCommandCount + PHASE3_COMMANDS.size)
+  assertEqual(`${profileName}.approved command delta`, (profile.commands ?? []).length - withoutApproved.length, APPROVED_COMMANDS.size)
+  assertEqual(`${profileName}.current command count`, profile.commandCount, expected.commandCount + APPROVED_COMMANDS.size)
+  assertEqual(`${profileName}.current canonical count`, profile.canonicalCommandCount, expected.canonicalCommandCount + APPROVED_COMMANDS.size)
   assertEqual(`${profileName}.legacy duplicate canonical debt unchanged`, profile.duplicateCanonicalNames?.length ?? 0, expected.duplicateCanonicalNameCount)
   assertEqual(`${profileName}.legacy alias collision debt unchanged`, profile.aliasCollisions?.length ?? 0, expected.aliasCollisionCount)
-  console.log(`[V2 PHASE 3] ${profileName}: +${PHASE3_COMMANDS.size} approved commands; frozen V1 fingerprint intact.`)
+  console.log(`[V2 REGISTRY] ${profileName}: +${APPROVED_COMMANDS.size} approved commands; frozen V1 fingerprint intact.`)
 }
 
-console.log('[V2 PHASE 3] PASS — Phase 3 adds only the approved provider commands and preserves the complete V1 registry surface.')
+console.log('[V2 REGISTRY] PASS — approved command additions preserve the complete frozen V1 registry surface.')
