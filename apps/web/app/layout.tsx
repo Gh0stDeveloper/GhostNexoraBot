@@ -11,7 +11,11 @@ export async function generateMetadata(): Promise<Metadata> {
     title: webT(locale, 'meta.title'),
     description: webT(locale, 'meta.description'),
     applicationName: 'Ghost Nexora Bot',
-    keywords: ['Ghost Nexora Bot', 'WhatsApp bot', 'Telegram bot', 'Discord bot', 'Nexora', 'Ghost Developer', 'subbots', 'NXC'],
+    keywords: [
+      'Ghost Nexora Bot', 'Ghost Nexora Manager', 'WhatsApp bot', 'Telegram bot', 'Discord bot',
+      'Nexora', 'Ghost Developer', 'subbots', 'NXC', 'Android APK', 'Windows installer',
+      'Linux AppImage', 'Ubuntu', 'Debian', 'RPM', 'official download',
+    ],
     openGraph: {
       title: 'Ghost Nexora Bot',
       description: webT(locale, 'meta.ogDescription'),
