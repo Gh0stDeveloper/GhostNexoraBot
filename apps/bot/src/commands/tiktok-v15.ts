@@ -180,9 +180,17 @@ async function showProfile(ctx: CommandContext, target: string) {
     imageUrl: profile.avatar,
   })
 
-  const feed = (await searchLempiTikTokVideosV2(`@${profile.username}`, MAX_RESULTS * 2))
-    .filter((item) => !item.username || item.username.toLowerCase() === profile.username.toLowerCase())
-    .slice(0, MAX_RESULTS)
+  // El endpoint de perfil es suficiente para que `.tt profile` tenga éxito.
+  // La búsqueda de videos relacionados es complementaria y no debe convertir
+  // una respuesta de perfil válida en error si LemPi no ofrece resultados.
+  let feed: LempiTikTokVideo[] = []
+  try {
+    feed = (await searchLempiTikTokVideosV2(`@${profile.username}`, MAX_RESULTS * 2))
+      .filter((item) => !item.username || item.username.toLowerCase() === profile.username.toLowerCase())
+      .slice(0, MAX_RESULTS)
+  } catch {
+    return
+  }
   if (!feed.length) return
   await showVideos(
     ctx,
@@ -255,7 +263,7 @@ export const tiktokV15Commands: BotCommand[] = [
     name: 'tiktok',
     aliases: ['tt'],
     category: 'downloads',
-    description: 'Descarga TikTok y consulta perfiles usando la API de LemPi.',
+    description: 'Descarga enlaces, busca videos/perfiles y muestra el feed público exacto de un perfil TikTok.',
     usage: 'tiktok <url|búsqueda> | tiktok profile <usuario> | tiktok profiles <búsqueda>',
     handler: tiktok,
   },
@@ -270,7 +278,7 @@ export const tiktokV15Commands: BotCommand[] = [
     name: 'tiktokdl',
     aliases: ['ttdl'],
     category: 'downloads',
-    description: 'Descarga un resultado de TikTok mediante LemPi.',
+    description: 'Descarga un resultado de TikTok seleccionado.',
     usage: 'tiktokdl <resultado>',
     handler: downloadSelected,
   },
