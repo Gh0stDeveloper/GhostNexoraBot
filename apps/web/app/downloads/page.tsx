@@ -1,10 +1,38 @@
-import type { ReactNode } from 'react'
-import { ArrowLeft, Box, CheckCircle2, Download, FileCheck2, Fingerprint, Laptop, PackageCheck, ServerCog, ShieldCheck, Smartphone, TerminalSquare } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, FileCheck2, Fingerprint, ServerCog, ShieldCheck, TerminalSquare } from 'lucide-react'
 import { getWebLocale } from '../../lib/i18n-server'
 import { downloadT } from '../../lib/downloads-i18n'
 import { getOfficialReleaseCatalog, type OfficialReleaseArtifact, type ReleaseKind } from '../../lib/releases'
 
 export const dynamic = 'force-dynamic'
+
+const DEVICON_BASE = 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons'
+
+type PlatformBrand = {
+  src: string
+  alt: string
+}
+
+type PlatformCardData = {
+  title: string
+  text: string
+  artifact?: OfficialReleaseArtifact
+  brands: readonly PlatformBrand[]
+  packageLabel: string
+}
+
+const PLATFORM_BRANDS = {
+  windows: [{ src: `${DEVICON_BASE}/windows11/windows11-original.svg`, alt: 'Windows' }],
+  android: [{ src: `${DEVICON_BASE}/android/android-original.svg`, alt: 'Android' }],
+  debian: [
+    { src: `${DEVICON_BASE}/ubuntu/ubuntu-original.svg`, alt: 'Ubuntu' },
+    { src: `${DEVICON_BASE}/debian/debian-original.svg`, alt: 'Debian' },
+  ],
+  rpm: [
+    { src: `${DEVICON_BASE}/fedora/fedora-original.svg`, alt: 'Fedora' },
+    { src: `${DEVICON_BASE}/redhat/redhat-original.svg`, alt: 'Red Hat' },
+  ],
+  linux: [{ src: `${DEVICON_BASE}/linux/linux-original.svg`, alt: 'Linux' }],
+} as const
 
 function formatBytes(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB']
@@ -24,28 +52,67 @@ function artifactFor(artifacts: OfficialReleaseArtifact[], kind: ReleaseKind) {
   return artifacts.find((artifact) => artifact.kind === kind)
 }
 
-function PlatformCard({ icon, title, text, artifact, t }: {
-  icon: ReactNode
-  title: string
-  text: string
-  artifact?: OfficialReleaseArtifact
+function shortHash(hash: string) {
+  if (hash.length <= 32) return hash
+  return `${hash.slice(0, 18)}…${hash.slice(-12)}`
+}
+
+function PlatformLogos({ brands }: { brands: readonly PlatformBrand[] }) {
+  return <div className="flex items-center -space-x-2" aria-label={brands.map((brand) => brand.alt).join(' / ')}>
+    {brands.map((brand) => <span key={brand.alt} className="grid size-12 shrink-0 place-items-center rounded-xl border border-blue-500/20 bg-[#111827] shadow-[0_10px_28px_rgba(0,0,0,.3)] first:z-10">
+      <img src={brand.src} alt={brand.alt} className="size-7 object-contain" loading="lazy" decoding="async" />
+    </span>)}
+  </div>
+}
+
+function PlatformCard({ title, text, artifact, brands, packageLabel, t }: PlatformCardData & {
   t: (key: Parameters<typeof downloadT>[1]) => string
 }) {
   return <article className="group relative overflow-hidden rounded-2xl border border-white/[.08] bg-[#101012] p-5 shadow-[0_18px_55px_rgba(0,0,0,.22)] transition hover:-translate-y-0.5 hover:border-blue-500/25">
     <div className="pointer-events-none absolute -right-16 -top-16 size-40 rounded-full bg-blue-500/[.055] blur-3xl"/>
+
     <div className="relative flex items-start justify-between gap-4">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08] text-blue-400">{icon}</span>
+      <PlatformLogos brands={brands}/>
       {artifact ? <span className="ops-badge-good"><CheckCircle2 className="mr-1 size-3"/>{artifact.arch}</span> : <span className="ops-badge-warn">{t('artifact.unavailable')}</span>}
     </div>
-    <h3 className="relative mt-5 text-lg font-black tracking-tight text-white">{title}</h3>
+
+    <div className="relative mt-5 flex flex-wrap items-center gap-2">
+      <h3 className="text-lg font-black tracking-tight text-white">{title}</h3>
+      <span className="rounded-md border border-white/[.07] bg-white/[.025] px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-[.12em] text-zinc-600">{packageLabel}</span>
+    </div>
     <p className="relative mt-2 min-h-16 text-sm leading-6 text-zinc-500">{text}</p>
+
     {artifact ? <>
       <div className="relative mt-5 grid grid-cols-2 gap-2 text-[11px]">
-        <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block uppercase tracking-wider text-zinc-700">{t('artifact.size')}</span><strong className="mt-1 block text-zinc-300">{formatBytes(artifact.sizeBytes)}</strong></div>
-        <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block uppercase tracking-wider text-zinc-700">{t('artifact.signed')}</span><strong className="mt-1 block text-zinc-300">{signatureLabel(artifact, t)}</strong></div>
+        <div className="rounded-lg border border-white/[.06] bg-black/20 p-3">
+          <span className="block uppercase tracking-wider text-zinc-700">{t('artifact.size')}</span>
+          <strong className="mt-1 block text-zinc-300">{formatBytes(artifact.sizeBytes)}</strong>
+        </div>
+        <div className="rounded-lg border border-white/[.06] bg-black/20 p-3">
+          <span className="block uppercase tracking-wider text-zinc-700">{t('artifact.arch')}</span>
+          <strong className="mt-1 block font-mono text-zinc-300">{artifact.arch}</strong>
+        </div>
+        <div className="col-span-2 rounded-lg border border-white/[.06] bg-black/20 p-3">
+          <span className="block uppercase tracking-wider text-zinc-700">{t('artifact.signed')}</span>
+          <strong className="mt-1 flex items-center gap-2 text-zinc-300"><ShieldCheck className="size-3.5 text-emerald-500"/>{signatureLabel(artifact, t)}</strong>
+        </div>
       </div>
-      <div className="relative mt-3 rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-[10px] uppercase tracking-wider text-zinc-700">{t('artifact.hash')}</span><code className="mt-1 block truncate font-mono text-[11px] text-zinc-500" title={artifact.sha256}>{artifact.sha256}</code></div>
-      <a className="ops-button-primary relative mt-4 w-full" href={`/api/releases/download?id=${encodeURIComponent(artifact.id)}`}><Download className="size-4"/>{t('artifact.download')} · {artifact.filename}</a>
+
+      <div className="relative mt-3 rounded-lg border border-white/[.06] bg-black/20 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] uppercase tracking-wider text-zinc-700">{t('artifact.hash')}</span>
+          <FileCheck2 className="size-3.5 text-zinc-700"/>
+        </div>
+        <code className="mt-1 block break-all font-mono text-[11px] text-zinc-500" title={artifact.sha256}>{shortHash(artifact.sha256)}</code>
+      </div>
+
+      <a className="ops-button-primary relative mt-4 min-h-14 w-full justify-start px-4" href={`/api/releases/download?id=${encodeURIComponent(artifact.id)}`}>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/10"><Download className="size-4"/></span>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block text-sm font-bold">{t('artifact.download')} · {title}</span>
+          <span className="mt-0.5 block truncate font-mono text-[10px] font-normal opacity-70">{artifact.filename}</span>
+        </span>
+      </a>
     </> : <div className="relative mt-5 rounded-lg border border-white/[.06] bg-black/20 px-4 py-3 text-xs text-zinc-600">{t('release.noneText')}</div>}
   </article>
 }
@@ -61,13 +128,13 @@ export default async function DownloadsPage() {
   const rpm = artifactFor(release.artifacts, 'rpm')
   const appImage = artifactFor(release.artifacts, 'appimage')
 
-  const cards = [
-    [Laptop, t('platform.windows'), t('platform.windowsText'), windows],
-    [Smartphone, t('platform.android'), t('platform.androidText'), android],
-    [PackageCheck, t('platform.debian'), t('platform.debianText'), deb],
-    [Box, t('platform.rpm'), t('platform.rpmText'), rpm],
-    [TerminalSquare, t('platform.appimage'), t('platform.appimageText'), appImage],
-  ] as const
+  const cards: PlatformCardData[] = [
+    { title: t('platform.windows'), text: t('platform.windowsText'), artifact: windows, brands: PLATFORM_BRANDS.windows, packageLabel: 'NSIS · .EXE' },
+    { title: t('platform.android'), text: t('platform.androidText'), artifact: android, brands: PLATFORM_BRANDS.android, packageLabel: 'APK' },
+    { title: t('platform.debian'), text: t('platform.debianText'), artifact: deb, brands: PLATFORM_BRANDS.debian, packageLabel: '.DEB' },
+    { title: t('platform.rpm'), text: t('platform.rpmText'), artifact: rpm, brands: PLATFORM_BRANDS.rpm, packageLabel: '.RPM' },
+    { title: t('platform.appimage'), text: t('platform.appimageText'), artifact: appImage, brands: PLATFORM_BRANDS.linux, packageLabel: 'APPIMAGE' },
+  ]
 
   return <main className="ops-page min-h-screen">
     <header className="sticky top-0 z-30 border-b border-white/[.07] bg-[#080809]/90 backdrop-blur-xl">
@@ -96,7 +163,7 @@ export default async function DownloadsPage() {
     <section className="mx-auto w-full max-w-[1480px] px-5 py-10 md:px-8">
       <div className="mb-8 max-w-3xl"><p className="font-mono text-xs font-bold uppercase tracking-[.16em] text-blue-500">{t('section.eyebrow')}</p><h2 className="mt-2 text-3xl font-black tracking-tight text-white">{t('section.title')}</h2><p className="mt-3 text-sm leading-7 text-zinc-500">{t('section.text')}</p></div>
       {release.artifacts.length === 0 && <div className="ops-panel mb-6 flex gap-4 p-5"><ServerCog className="mt-0.5 size-5 shrink-0 text-amber-400"/><div><h3 className="font-bold text-zinc-200">{t('release.none')}</h3><p className="mt-1 text-sm leading-6 text-zinc-600">{t('release.noneText')}</p></div></div>}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{cards.map(([Icon, title, text, artifact]) => <PlatformCard key={title} icon={<Icon className="size-5"/>} title={title} text={text} artifact={artifact} t={t}/>)}</div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{cards.map((card) => <PlatformCard key={card.title} {...card} t={t}/>)}</div>
     </section>
 
     <section className="mx-auto grid w-full max-w-[1480px] gap-4 px-5 py-14 md:px-8 lg:grid-cols-[1.1fr_.9fr]">
