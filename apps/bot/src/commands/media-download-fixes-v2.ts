@@ -114,7 +114,7 @@ async function runPinterest(ctx: CommandContext) {
 }
 
 async function runInstagramDownload(ctx: CommandContext, source: string, imagesOnly: boolean) {
-  const sourceUrl = requireUrl(source, `Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'instagram'} <url de Instagram>`)
+  const sourceUrl = requireUrl(source, `Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'ig'} <url de Instagram>`)
   const reel = /\/(?:reel|reels)\//i.test(new URL(sourceUrl).pathname)
   const endpoint = !imagesOnly && reel ? '/dl/igreel' : '/dl/instagram'
   await ctx.reply(`📥 *INSTAGRAM*\n━━━━━━━━━━━━━━\nAPI: ${endpoint}\n⬇️ Descargando contenido...`)
@@ -130,7 +130,7 @@ async function runInstagramDownload(ctx: CommandContext, source: string, imagesO
 
 async function runInstagramProfile(ctx: CommandContext, input: string) {
   const target = input.trim()
-  if (!target) throw new Error(`Uso: ${ctx.prefix}instagram profile <usuario>`)
+  if (!target) throw new Error(`Uso: ${ctx.prefix}ig profile <usuario>`)
   const profile = await stalkLempiInstagram(target)
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: profile.name ? `${profile.name} · @${profile.username}`.slice(0, 80) : `@${profile.username}`,
@@ -155,18 +155,16 @@ async function instagram(ctx: CommandContext) {
     await runInstagramProfile(ctx, ctx.args.slice(1).join(' '))
     return
   }
-
-  const source = ctx.argText.trim()
-  await runInstagramDownload(ctx, source, false)
+  await runInstagramDownload(ctx, ctx.argText.trim(), false)
 }
 
 export const mediaDownloadFixCommands: BotCommand[] = [
   {
-    name: 'instagram',
-    aliases: ['ig', 'insta'],
+    name: 'ig',
+    aliases: [],
     category: 'downloads',
-    description: 'Descarga Reels/publicaciones de Instagram con LemPi o consulta un perfil.',
-    usage: 'instagram <url> | instagram profile <usuario>',
+    description: 'Descarga Reels/publicaciones o consulta un perfil de Instagram mediante LemPi.',
+    usage: 'ig <url> | ig profile <usuario>',
     handler: instagram,
   },
   {
@@ -177,16 +175,6 @@ export const mediaDownloadFixCommands: BotCommand[] = [
     usage: 'igimg <url>',
     async handler(ctx) {
       await runInstagramDownload(ctx, ctx.argText.trim(), true)
-    },
-  },
-  {
-    name: 'igprofile',
-    aliases: ['instagramprofile', 'igstalk', 'stalkig'],
-    category: 'downloads',
-    description: 'Consulta el perfil público de Instagram mediante LemPi.',
-    usage: 'igprofile <usuario>',
-    async handler(ctx) {
-      await runInstagramProfile(ctx, ctx.argText)
     },
   },
   {
