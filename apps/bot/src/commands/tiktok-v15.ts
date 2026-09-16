@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto'
 import type { BotCommand, CommandContext } from '../types.js'
-import { downloadSocialVideo } from '../services/downloader.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { createDownloadProgress } from '../services/progress.js'
-import { getTikTokProfile, searchTikTokProfiles, searchTikTokVideos, type TikTokVideoSearchResult } from '../services/tiktok-search.js'
-import { getTikTokProfileVideos } from '../services/tiktok-profile-feed.js'
+import { downloadLempiMedia } from '../services/lempi-api.js'
+import {
+  downloadLempiTikTokVideo,
+  getLempiTikTokProfileV2,
+  searchLempiTikTokProfilesV2,
+  searchLempiTikTokVideosV2,
+  type LempiTikTokVideo,
+} from '../services/lempi-media-endpoints.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const TOKEN_TTL_MS = 30 * 60_000
@@ -12,6 +17,7 @@ const MAX_RESULTS = 8
 
 type CachedVideo = {
   url: string
+  directUrl?: string
   title: string
   username?: string
   thumbnail?: string
@@ -52,10 +58,11 @@ function looksLikeUrl(value: string) {
   return /^https?:\/\//i.test(value.trim())
 }
 
-function remember(item: TikTokVideoSearchResult) {
-  const token = `tt_${createHash('sha256').update(item.url).digest('hex').slice(0, 16)}`
+function remember(item: LempiTikTokVideo) {
+  const token = `tt_${createHash('sha256').update(`${item.url}:${item.downloadUrl}`).digest('hex').slice(0, 16)}`
   videos.set(token, {
     url: item.url,
+    directUrl: item.downloadUrl,
     title: item.title || (item.username ? `Video de @${item.username}` : 'Video de TikTok'),
     username: item.username,
     thumbnail: item.thumbnail,
@@ -75,11 +82,13 @@ function getVideo(token: string) {
   return row
 }
 
-async function downloadTikTok(ctx: CommandContext, source: string, title?: string) {
-  if (!isTikTokUrl(source)) throw new Error('La URL no pertenece a TikTok.')
+async function downloadTikTok(ctx: CommandContext, source: string, title?: string, directUrl?: string) {
+  if (!directUrl && !isTikTokUrl(source)) throw new Error('La URL no pertenece a TikTok.')
   const progress = await createDownloadProgress(ctx, 'TikTok · video')
-  await progress.update('downloading', title ? `Descargando: ${title.slice(0, 90)}` : 'Obteniendo y validando el video…')
-  const result = await downloadSocialVideo(source, 'tiktok')
+  await progress.update('downloading', title ? `Descargando: ${title.slice(0, 90)}` : 'Consultando LemPi y descargando el video…')
+  const result = directUrl
+    ? await downloadLempiMedia(directUrl, { kind: 'video', baseName: 'tiktok-video' })
+    : await downloadLempiTikTokVideo(source, 'tiktok-video')
   try {
     await progress.update('sending', `${bytes(result.size)} · enviando a WhatsApp`)
     await ctx.socket.sendMessage(ctx.chatId, {
@@ -89,6 +98,7 @@ async function downloadTikTok(ctx: CommandContext, source: string, title?: strin
         '🎵 *TIKTOK*',
         title ? `🎬 ${title.slice(0, 180)}` : '',
         `📦 ${bytes(result.size)}`,
+        'Fuente: LemPi',
         '👻 Ghost Nexora Bot',
       ].filter(Boolean).join('\n'),
     }, { quoted: ctx.message })
@@ -99,7 +109,7 @@ async function downloadTikTok(ctx: CommandContext, source: string, title?: strin
   }
 }
 
-function videoBody(item: TikTokVideoSearchResult) {
+function videoBody(item: LempiTikTokVideo) {
   return [
     item.title?.slice(0, 90) || 'Video de TikTok',
     item.username ? `Usuario: @${item.username}` : '',
@@ -108,13 +118,13 @@ function videoBody(item: TikTokVideoSearchResult) {
   ].filter(Boolean).join('\n').slice(0, 135)
 }
 
-async function showVideos(ctx: CommandContext, title: string, body: string, rows: TikTokVideoSearchResult[]) {
+async function showVideos(ctx: CommandContext, title: string, body: string, rows: LempiTikTokVideo[]) {
   const unique = [...new Map(rows.map((item) => [item.url, item])).values()].slice(0, MAX_RESULTS)
-  if (!unique.length) throw new Error('TikTok no devolvió videos públicos para esa consulta.')
+  if (!unique.length) throw new Error('LemPi no devolvió videos de TikTok para esa consulta.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title,
     body,
-    footer: 'Ghost Nexora Bot · TikTok',
+    footer: 'Ghost Nexora Bot · TikTok · LemPi',
     cards: unique.map((item, index) => {
       const token = remember(item)
       return {
@@ -128,17 +138,17 @@ async function showVideos(ctx: CommandContext, title: string, body: string, rows
 }
 
 async function searchVideos(ctx: CommandContext, query: string) {
-  const rows = await searchTikTokVideos(query, MAX_RESULTS)
-  await showVideos(ctx, '🎵 TIKTOK · BÚSQUEDA', `Resultados para: ${query}\nDesliza y toca Seleccionar.`, rows)
+  const rows = await searchLempiTikTokVideosV2(query, MAX_RESULTS)
+  await showVideos(ctx, '🎵 TIKTOK · BÚSQUEDA', `Resultados para: ${query}\nFuente: LemPi`, rows)
 }
 
 async function searchProfiles(ctx: CommandContext, query: string) {
-  const profiles = await searchTikTokProfiles(query, MAX_RESULTS)
-  if (!profiles.length) throw new Error('TikTok no devolvió perfiles públicos para esa búsqueda.')
+  const profiles = await searchLempiTikTokProfilesV2(query, MAX_RESULTS)
+  if (!profiles.length) throw new Error('LemPi no devolvió perfiles de TikTok para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '👤 TIKTOK · PERFILES',
-    body: `Perfiles relacionados con: ${query}\nSelecciona una cuenta para ver su contenido.`,
-    footer: 'Ghost Nexora Bot · TikTok',
+    body: `Perfiles relacionados con: ${query}\nFuente: LemPi`,
+    footer: 'Ghost Nexora Bot · TikTok · LemPi',
     cards: profiles.slice(0, MAX_RESULTS).map((profile, index) => ({
       title: `#${index + 1} · @${profile.username}`.slice(0, 80),
       body: [
@@ -153,30 +163,39 @@ async function searchProfiles(ctx: CommandContext, query: string) {
 }
 
 async function showProfile(ctx: CommandContext, target: string) {
-  const profile = await getTikTokProfile(target)
+  const profile = await getLempiTikTokProfileV2(target)
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: profile.nickname ? `${profile.nickname} · @${profile.username}`.slice(0, 80) : `@${profile.username}`,
     body: [
       profile.bio?.slice(0, 180) ?? '',
       profile.followers !== undefined ? `Seguidores: ${compact(profile.followers)}` : '',
+      profile.following !== undefined ? `Siguiendo: ${compact(profile.following)}` : '',
       profile.likes !== undefined ? `Likes: ${compact(profile.likes)}` : '',
       profile.videos !== undefined ? `Videos: ${compact(profile.videos)}` : '',
+      profile.verified !== undefined ? `Verificado: ${profile.verified ? 'sí' : 'no'}` : '',
       '',
-      'Contenido público reciente del perfil:',
+      'Perfil obtenido mediante LemPi /s/tiktokprofile.',
     ].filter((value) => value !== '').join('\n'),
-    footer: 'Ghost Nexora Bot · TikTok',
+    footer: 'Ghost Nexora Bot · TikTok · LemPi',
     imageUrl: profile.avatar,
   })
 
-  const feed = await getTikTokProfileVideos(profile.username, MAX_RESULTS)
-  if (!feed.length) {
-    await ctx.reply(`👤 *@${profile.username}*\nTikTok no expuso videos públicos del perfil en este momento.`)
+  // El endpoint de perfil es suficiente para que `.tt profile` tenga éxito.
+  // La búsqueda de videos relacionados es complementaria y no debe convertir
+  // una respuesta de perfil válida en error si LemPi no ofrece resultados.
+  let feed: LempiTikTokVideo[] = []
+  try {
+    feed = (await searchLempiTikTokVideosV2(`@${profile.username}`, MAX_RESULTS * 2))
+      .filter((item) => !item.username || item.username.toLowerCase() === profile.username.toLowerCase())
+      .slice(0, MAX_RESULTS)
+  } catch {
     return
   }
+  if (!feed.length) return
   await showVideos(
     ctx,
     `🎬 @${profile.username} · VIDEOS`,
-    `Contenido público de @${profile.username}\nDesliza y toca Seleccionar.`,
+    `Resultados públicos relacionados con @${profile.username}\nFuente: LemPi`,
     feed,
   )
 }
@@ -191,8 +210,9 @@ async function selectVideo(ctx: CommandContext) {
       item.title.slice(0, 220),
       item.views !== undefined ? `Vistas: ${compact(item.views)}` : '',
       item.likes !== undefined ? `Likes: ${compact(item.likes)}` : '',
+      'Descarga: LemPi /s/tiktok',
     ].filter(Boolean).join('\n'),
-    footer: 'Ghost Nexora Bot · TikTok',
+    footer: 'Ghost Nexora Bot · TikTok · LemPi',
     imageUrl: item.thumbnail,
     buttons: [{ type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}tiktokdl ${token}` }],
   })
@@ -206,7 +226,7 @@ async function downloadSelected(ctx: CommandContext) {
     return
   }
   const item = getVideo(tokenOrUrl)
-  await downloadTikTok(ctx, item.url, item.title)
+  await downloadTikTok(ctx, item.url, item.title, item.directUrl)
 }
 
 async function tiktok(ctx: CommandContext) {
