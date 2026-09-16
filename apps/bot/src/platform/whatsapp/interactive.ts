@@ -14,8 +14,8 @@ import { preloadWhatsAppMedia } from './media.js'
 import {
   cardFallbackText,
   carouselFallbackText,
-  planCarousel,
   planInteractiveCard,
+  WHATSAPP_STABLE_UI_POLICY,
   type CarouselCard,
   type InteractiveButton,
 } from './ui-compat.js'
@@ -181,10 +181,9 @@ async function sendStandardCard(
 /**
  * Transporte estable para tarjetas de WhatsApp.
  *
- * Fase 2 evita emitir un Native Flow cuando la combinación de acciones no puede
- * representarse de forma conservadora. Un card sin acciones usa un mensaje
- * estándar; un card que mezcla `single_select` con otros botones cae a texto
- * accionable; el resto conserva Native Flow y su fallback textual completo.
+ * Los cards simples conservan Native Flow y los casos no representables mantienen
+ * un fallback textual accionable. Este comportamiento es independiente del
+ * transporte de carruseles nativos restaurado abajo.
  */
 export async function sendInteractiveCard(
   socket: WASocket,
@@ -268,14 +267,13 @@ export async function sendInteractiveCard(
 }
 
 /**
- * Compatibilidad de carruseles V2.
+ * Transporte nativo de carruseles WhatsApp.
  *
- * El sobre de carrusel nativo queda deliberadamente fuera del camino estable porque
- * el servidor puede aceptar el relay aunque el cliente termine mostrando el aviso
- * de actualización de WhatsApp. Los carruseles formados únicamente por acciones
- * de comando se convierten a una tarjeta `single_select`; si contienen URLs o
- * acciones anidadas se renderizan como texto accionable que conserva cada enlace
- * y comando. Así ningún caller heredado necesita reescribirse para recibir el fix.
+ * Recupera el comportamiento V1/V15 que utilizaban yts, erome, proveedores +18,
+ * shop, minershop y el resto de callers de sendCarousel(). Se mantienen los
+ * límites compatibles de ocho cards y dos acciones por card; botones adicionales
+ * se envían después como navegación independiente. Si el relay nativo falla de
+ * verdad, se conserva un fallback textual completo en lugar de perder resultados.
  */
 export async function sendCarousel(
   socket: WASocket,
@@ -284,6 +282,9 @@ export async function sendCarousel(
   input: { title: string; body?: string; footer?: string; cards: CarouselCard[] },
 ): Promise<string> {
   const locale = interactiveLocale(socket, chatId)
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
+
   const localizedInput = {
     title: localizeLegacyText(input.title, locale),
     body: input.body ? localizeLegacyText(input.body, locale) : undefined,
@@ -297,31 +298,95 @@ export async function sendCarousel(
     })),
   }
 
-  const plan = planCarousel(localizedInput.cards)
-  if (plan.mode === 'text-fallback') {
+  const sourceCards = localizedInput.cards.slice(0, WHATSAPP_STABLE_UI_POLICY.maxCards)
+  if (!sourceCards.length) {
     const messageId = await sendTextFallback(socket, chatId, quoted, carouselFallbackText({
       title: localizedInput.title,
       body: localizedInput.body,
       footer: localizedInput.footer,
-      cards: plan.cards,
+      cards: [],
     }))
-    if (!messageId) throw new Error('WhatsApp carousel compatibility fallback did not return a message ID.')
-    logger.info({ chatId, messageId, uiMode: plan.mode, reason: plan.reason, cards: plan.cards.length }, 'carousel replaced by compatible text UI')
+    if (!messageId) throw new Error('WhatsApp empty carousel fallback did not return a message ID.')
     return messageId
   }
 
-  const firstImage = plan.cards.find((card) => Boolean(card.imageUrl))?.imageUrl
-  const messageId = await sendInteractiveCard(socket, chatId, quoted, {
-    title: localizedInput.title,
-    body: localizedInput.body ?? `${plan.cards.length} resultados disponibles.`,
-    footer: localizedInput.footer ?? 'Ghost Nexora Bot',
-    imageUrl: firstImage,
-    buttons: [{
-      type: 'select',
-      text: localizeLegacyText('Seleccionar', locale),
-      sections: plan.sections,
-    }],
+  const imageCache = new Map<string, Promise<Awaited<ReturnType<typeof imageMessageFromUrl>>>>()
+  const preparedImages = await Promise.all(sourceCards.map((card) => {
+    if (!card.imageUrl) return undefined
+    let prepared = imageCache.get(card.imageUrl)
+    if (!prepared) {
+      prepared = imageMessageFromUrl(socket, card.imageUrl)
+      imageCache.set(card.imageUrl, prepared)
+    }
+    return prepared
+  }))
+
+  const overflowButtons = sourceCards
+    .flatMap((card) => card.buttons.slice(WHATSAPP_STABLE_UI_POLICY.maxButtonsPerCarouselCard))
+    .slice(0, WHATSAPP_STABLE_UI_POLICY.maxNativeButtons)
+
+  const cards = sourceCards.map((card, index) => {
+    const imageMessage = preparedImages[index]
+    return {
+      body: proto.Message.InteractiveMessage.Body.fromObject({ text: card.body.slice(0, 140) }),
+      footer: proto.Message.InteractiveMessage.Footer.fromObject({ text: (card.footer ?? 'Ghost Nexora Bot').slice(0, 60) }),
+      header: proto.Message.InteractiveMessage.Header.fromObject({
+        title: card.title.slice(0, 80),
+        hasMediaAttachment: Boolean(imageMessage),
+        ...(imageMessage ? { imageMessage } : {}),
+      }),
+      nativeFlowMessage: nativeFlow(card.buttons.slice(0, WHATSAPP_STABLE_UI_POLICY.maxButtonsPerCarouselCard)),
+    }
   })
-  logger.info({ chatId, messageId, uiMode: plan.mode, cards: plan.cards.length, sections: plan.sections.length }, 'carousel converted to select-first UI')
-  return messageId
+
+  const message = generateWAMessageFromContent(chatId, {
+    viewOnceMessage: {
+      message: {
+        messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+        interactiveMessage: proto.Message.InteractiveMessage.fromObject({
+          body: proto.Message.InteractiveMessage.Body.create({ text: (localizedInput.body ?? localizedInput.title).slice(0, 200) }),
+          footer: proto.Message.InteractiveMessage.Footer.create({ text: (localizedInput.footer ?? 'Ghost Nexora Bot').slice(0, 60) }),
+          header: proto.Message.InteractiveMessage.Header.create({ title: localizedInput.title.slice(0, 80), hasMediaAttachment: false }),
+          carouselMessage: proto.Message.InteractiveMessage.CarouselMessage.fromObject({ cards }),
+        }),
+      },
+    },
+  }, { ...(quoted ? { quoted } : {}), userJid })
+
+  const generatedId = message.key.id
+  if (!generatedId) throw new Error('WhatsApp carousel message ID was not generated.')
+  const additionalNodes = interactiveRelayNodes(chatId)
+
+  try {
+    await withTimeout(
+      socket.relayMessage(chatId, message.message!, { messageId: generatedId, additionalNodes }),
+      25_000,
+      'carousel relay',
+    )
+    logger.info({
+      chatId,
+      messageId: generatedId,
+      uiMode: 'native-carousel',
+      cards: cards.length,
+      relayNodes: additionalNodes.map((node) => node.tag),
+    }, 'native WhatsApp carousel relay completed')
+
+    if (overflowButtons.length) {
+      await sendInteractiveCard(socket, chatId, quoted, {
+        title: translate(locale, 'interactive.navigation.title'),
+        body: translate(locale, 'interactive.navigation.more'),
+        footer: localizedInput.footer ?? 'Ghost Nexora Bot',
+        buttons: overflowButtons,
+      })
+    }
+    return generatedId
+  } catch (error) {
+    logger.warn({ error, chatId, cards: cards.length }, 'native carousel relay failed; sending text fallback')
+    return (await sendTextFallback(socket, chatId, quoted, carouselFallbackText({
+      title: localizedInput.title,
+      body: localizedInput.body,
+      footer: localizedInput.footer,
+      cards: sourceCards,
+    }))) ?? generatedId
+  }
 }
