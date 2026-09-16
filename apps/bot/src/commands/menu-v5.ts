@@ -1,10 +1,11 @@
+import { readFileSync } from 'node:fs'
 import type { BotCommand, CommandContext } from '../types.js'
 import { config } from '../config.js'
 import { COIN_NAME, COIN_SYMBOL } from '../services/economy.js'
 import { professionsV2 } from '../services/professions-v2.js'
 import { isPrivateChatApproved } from '../services/private-chat-policy.js'
 import { effectiveCommands } from '../services/menu-registry.js'
-import { sendInteractiveCard } from '../services/interactive.js'
+import { sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
 import { localeName } from '../i18n/index.js'
@@ -29,6 +30,21 @@ const sets = {
   support: new Set(['ticket','tickets']),
   personalization: new Set(['setbotname','setbotcurrency','setpfp','sb','welbanner','byebanner','delbanner','delwelbanner','delbyebanner','styles','style','styleimg']),
 }
+
+const BOT_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version?: string }
+    return pkg.version?.trim() || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+})()
+
+const interactiveGameCatalog = [
+  { command: 'dino', icon: '🦖', label: 'Dino Runner', descriptionKey: 'games.catalog.dino' },
+  { command: 'mario', icon: '🍄', label: 'Mario', descriptionKey: 'games.catalog.mario' },
+  { command: 'snake', icon: '🐍', label: 'Snake', descriptionKey: 'games.catalog.snake' },
+] as const
 
 function sectionFor(command: BotCommand): SectionId {
   const name = command.name.toLowerCase()
@@ -61,18 +77,45 @@ function visible(ctx: CommandContext, command: BotCommand) {
   return true
 }
 
-function renderTokens(ctx: CommandContext, command: BotCommand, tokens: string[]) {
-  const usage = command.usage?.trim()
-  const primary = usage ? `${ctx.prefix}${usage}` : `${ctx.prefix}${command.name}`
-  const aliases = tokens.filter((token) => token !== command.name.toLowerCase()).slice(0, 8).map((token) => `${ctx.prefix}${token}`)
-  const suffix = aliases.length ? ` · ${aliases.join(' · ')}` : ''
-  const restriction = [
+function restrictionLabel(ctx: CommandContext, command: BotCommand) {
+  return [
     command.groupOnly ? ctx.t('menu.restriction.group') : '',
     command.adminOnly ? ctx.t('menu.restriction.admin') : '',
     command.staffOnly ? ctx.t('menu.restriction.staff') : '',
     command.ownerOnly ? ctx.t('menu.restriction.owner') : '',
   ].filter(Boolean).join('/')
-  return `│ ${primary}${suffix}${restriction ? ` 〔${restriction}〕` : ''}`
+}
+
+function renderTokens(ctx: CommandContext, command: BotCommand, tokens: string[]) {
+  const usage = command.usage?.trim()
+  const primary = usage ? `${ctx.prefix}${usage}` : `${ctx.prefix}${command.name}`
+  const aliases = tokens
+    .filter((token) => token !== command.name.toLowerCase())
+    .slice(0, 8)
+    .sort((a, b) => a.localeCompare(b, ctx.locale))
+  const restriction = restrictionLabel(ctx, command)
+  const suffix = restriction ? ` 〔${restriction}〕` : ''
+
+  return [
+    `│ ${primary}${suffix}`,
+    ...aliases.map((token) => `│ ${ctx.prefix}${token}${suffix}`),
+  ].join('\n')
+}
+
+function publicBotWebsite() {
+  const configured = config.publicWebUrl.trim().replace(/\/+$/, '')
+  try {
+    const url = new URL(configured)
+    if (!['127.0.0.1', 'localhost', '0.0.0.0'].includes(url.hostname)) return configured
+  } catch {
+    // Falls through to the public browser/proxy origin.
+  }
+
+  try {
+    return new URL(config.browserProxyPublicUrl).origin
+  } catch {
+    return 'https://ghostnexorabot.duckdns.org'
+  }
 }
 
 function formatUptime() {
@@ -117,6 +160,45 @@ async function currentVisualIdentity(ctx: CommandContext) {
   }
 }
 
+async function gamesCatalog(ctx: CommandContext) {
+  const lines = interactiveGameCatalog.map((game) => [
+    `${game.icon} *${ctx.prefix}${game.command}* · ${game.label}`,
+    `   ${ctx.t(game.descriptionKey)}`,
+  ].join('\n'))
+
+  const buttons: InteractiveButton[] = interactiveGameCatalog.length <= 3
+    ? interactiveGameCatalog.map((game) => ({
+        type: 'reply' as const,
+        text: `${game.icon} ${game.label}`,
+        id: `${ctx.prefix}${game.command}`,
+      }))
+    : [{
+        type: 'select',
+        text: ctx.t('games.catalog.select'),
+        sections: [{
+          title: ctx.t('games.catalog.section'),
+          rows: interactiveGameCatalog.map((game) => ({
+            id: `${ctx.prefix}${game.command}`,
+            title: `${game.icon} ${game.label}`,
+            description: ctx.t(game.descriptionKey),
+          })),
+        }],
+      }]
+
+  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+    title: ctx.t('games.catalog.title'),
+    body: [
+      ctx.t('games.catalog.intro'),
+      '',
+      ...lines,
+      '',
+      ctx.t('games.catalog.hint', { prefix: ctx.prefix }),
+    ].join('\n'),
+    footer: ctx.t('games.catalog.footer'),
+    buttons,
+  })
+}
+
 async function menu(ctx: CommandContext) {
   const profession = professionsV2.get(ctx.sender)
   const role = await roleLabel(ctx)
@@ -139,10 +221,13 @@ async function menu(ctx: CommandContext) {
     : `╭━━━〔 ${visual.style.icon} *${visual.displayName.toUpperCase()}* 〕━━━╮`
 
   const effectiveCount = effectiveCommands().filter((row) => visible(ctx, row.command)).length
+  const website = publicBotWebsite()
   const body = [
     visualHeader,
     visual.style.id !== 'default' ? ctx.t('menu.header.activeWaifu', { name: visual.displayName }) : '',
     ctx.t('menu.header.instance', { value: instance }),
+    ctx.t('menu.header.version', { value: BOT_VERSION }),
+    ctx.t('menu.header.website', { value: website }),
     ctx.t('menu.header.user', { value: ctx.pushName }),
     ctx.t('menu.header.prefix', { value: ctx.prefix }),
     ctx.t('menu.header.language', { value: `${localeName(ctx.locale, ctx.locale)} (${ctx.locale})` }),
@@ -155,6 +240,7 @@ async function menu(ctx: CommandContext) {
     ...sections,
     ctx.t('menu.totalCommands', { count: effectiveCount }),
     '',
+    ctx.t('menu.discovery.games', { prefix: ctx.prefix }),
     visual.style.id !== 'default' ? ctx.t('menu.appearance', { icon: visual.style.icon, name: visual.displayName }) : '',
     '*Ghost Nexora Bot*',
   ].filter(Boolean).join('\n')
@@ -180,5 +266,6 @@ export const menuV5Commands: BotCommand[] = [
   ...valleyCompatV21Commands,
   ...editCommands,
   ...valleyPocV22Commands,
+  { name: 'game', aliases: ['games'], category: 'games', description: 'Muestra el catálogo de juegos interactivos HTML/Rich disponibles.', handler: gamesCatalog },
   { name: 'menu', aliases: ['help','comandos'], category: 'general', description: 'Menú completo generado desde todos los comandos activos con avatar/waifu visual de la instancia.', handler: menu },
 ]
