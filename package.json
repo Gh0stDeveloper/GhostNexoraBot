@@ -14,7 +14,7 @@
     "pair": "npm run pair --workspace=@ghostnexora/bot",
     "session:repair": "node scripts/repair-main-session.mjs",
     "web": "npm run start --workspace=@ghostnexora/web",
-    "release:vps": "bash scripts/release/build-official-apps.sh",
+    "release:vps": "GHOST_NEXORA_RELEASE_BUILD_ACTIVE=1 bash scripts/release/build-official-apps.sh",
     "llm:train": "npm run llm:train --workspace=@ghostnexora/bot",
     "v2:contracts": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/core && npm run build --workspace=@ghostnexora/runtime && node scripts/platform-contracts-v2-smoke.mjs",
     "v2:inventory": "npm run build --workspace=@ghostnexora/bot && node scripts/v2-baseline-report.mjs",
