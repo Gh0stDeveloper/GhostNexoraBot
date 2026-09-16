@@ -151,8 +151,9 @@ try {
   assert.match(mediaShim, /platform\/whatsapp\/media\.js/)
   assert.match(localizedShim, /platform\/whatsapp\/localized-socket\.js/)
   assert.match(interactive, /NativeFlowMessage/)
-  assert.match(interactive, /planCarousel/)
-  assert.doesNotMatch(interactive, /carouselMessage|CarouselMessage/, 'stable transport must not restore native carousel payloads')
+  assert.match(interactive, /CarouselMessage\.fromObject/)
+  assert.match(interactive, /carouselMessage:/)
+  assert.match(interactive, /WHATSAPP_STABLE_UI_POLICY/)
   assert.match(interactive, /interactiveRelayNodes/)
   assert.match(interactive, /sendTextFallback/)
 
@@ -166,7 +167,7 @@ try {
   assert.match(main, /startTypingIndicator\(transport, chatId\)/)
   assert.doesNotMatch(main, /function startTypingIndicator\(socket:/)
 
-  console.log('[V2 PHASE 1] OK — WhatsApp adapter preserves V1 compatibility while exposing normalized transport APIs.')
+  console.log('[V2 PHASE 1] OK — WhatsApp adapter preserves V1 compatibility and native carousel transport while exposing normalized APIs.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
