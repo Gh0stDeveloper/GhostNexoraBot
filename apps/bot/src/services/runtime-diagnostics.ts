@@ -1,11 +1,13 @@
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
+import { setOpsAlert, pruneResolvedAlerts } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 const instanceKey = opsInstanceKey()
 let timer: NodeJS.Timeout | null = null
 let previousCpu = process.cpuUsage()
 let previousClock = process.hrtime.bigint()
+let highCpuSamples = 0
 
 opsDb.exec(`
   CREATE TABLE IF NOT EXISTS ops_runtime_diagnostics (
@@ -33,6 +35,29 @@ function sampleCpuPercent() {
   previousCpu = nowCpu
   if (!Number.isFinite(elapsedUs) || elapsedUs <= 0) return 0
   return Math.max(0, Math.min(999, cpuUs / elapsedUs * 100))
+}
+
+function updateResourceAlerts(memory: NodeJS.MemoryUsage, cpuPercent: number) {
+  const heapRatio = memory.heapTotal > 0 ? memory.heapUsed / memory.heapTotal : 0
+  const highMemory = memory.rss >= 1536 * 1024 * 1024 || (memory.heapTotal >= 128 * 1024 * 1024 && heapRatio >= 0.9)
+  setOpsAlert({
+    key: 'runtime:memory',
+    severity: memory.rss >= 2 * 1024 * 1024 * 1024 ? 'critical' : 'warning',
+    title: 'Runtime memory pressure',
+    detail: highMemory ? `RSS ${Math.round(memory.rss / 1024 / 1024)} MB · heap ${Math.round(heapRatio * 100)}%` : null,
+    active: highMemory,
+    instanceKey,
+  })
+
+  highCpuSamples = cpuPercent >= 90 ? highCpuSamples + 1 : 0
+  setOpsAlert({
+    key: 'runtime:cpu',
+    severity: cpuPercent >= 97 ? 'critical' : 'warning',
+    title: 'Sustained runtime CPU pressure',
+    detail: highCpuSamples >= 3 ? `${cpuPercent.toFixed(1)}% CPU over ${highCpuSamples} consecutive samples` : null,
+    active: highCpuSamples >= 3,
+    instanceKey,
+  })
 }
 
 function persistSample() {
@@ -69,6 +94,8 @@ function persistSample() {
         process.pid,
         Date.now(),
       )
+    updateResourceAlerts(memory, cpuPercent)
+    if (Math.random() < 0.01) pruneResolvedAlerts()
   } catch (error) {
     logger.debug({ error, instanceKey }, 'runtime diagnostics sample skipped')
   }
