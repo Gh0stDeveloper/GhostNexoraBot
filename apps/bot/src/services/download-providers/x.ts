@@ -1,6 +1,6 @@
 import { downloadSocialVideo } from '../downloader.js'
 import { downloadProviderFile } from './http.js'
-import { withProviderTelemetry } from './runtime.js'
+import { providerFailoverOrder, withProviderTelemetry } from './runtime.js'
 
 const X_INPUT_HOSTS = [/^(?:www\.)?x\.com$/i, /^(?:www\.)?twitter\.com$/i]
 const X_MEDIA_HOSTS = [/^(?:video|pbs)\.twimg\.com$/i, /\.twimg\.com$/i]
@@ -122,50 +122,57 @@ export async function resolveXOfficial(input: string): Promise<XResolvedMedia[]>
   })
 }
 
-export async function downloadXMedia(input: string): Promise<XDownloadBundle> {
-  const url = validateXUrl(input)
-  const officialErrors: string[] = []
-
-  if (xBearerToken()) {
-    try {
-      const resolved = await resolveXOfficial(url)
-      const downloads = [] as Array<Awaited<ReturnType<typeof downloadProviderFile>> & { kind: 'video' | 'image' }>
-      try {
-        for (const [index, item] of resolved.slice(0, 8).entries()) {
-          const extension = item.kind === 'image' ? (/\.png(?:$|[?#])/i.test(item.url) ? 'png' : 'jpg') : 'mp4'
-          const file = await withProviderTelemetry('x-official', 'download', () => downloadProviderFile(item.url, {
-            allowedHosts: X_MEDIA_HOSTS,
-            provider: 'x-official',
-            fileBase: `x-${xPostIdFromUrl(url) ?? 'post'}-${index + 1}`,
-            extension,
-            referer: url,
-          }))
-          downloads.push({ ...file, kind: item.kind })
-        }
-        return {
-          files: downloads.map((item) => ({ kind: item.kind, filePath: item.filePath, fileName: item.fileName, size: item.size })),
-          provider: 'x-official',
-          cleanup: async () => { await Promise.all(downloads.map((item) => item.cleanup())) },
-        }
-      } catch (error) {
-        await Promise.all(downloads.map((item) => item.cleanup())).catch(() => undefined)
-        throw error
-      }
-    } catch (error) {
-      officialErrors.push(error instanceof Error ? error.message : String(error))
-    }
-  }
-
+async function downloadXOfficial(url: string): Promise<XDownloadBundle> {
+  const resolved = await resolveXOfficial(url)
+  const downloads = [] as Array<Awaited<ReturnType<typeof downloadProviderFile>> & { kind: 'video' | 'image' }>
   try {
-    const result = await withProviderTelemetry('x-ytdlp', 'download', () => downloadSocialVideo(url, 'twitter'))
+    for (const [index, item] of resolved.slice(0, 8).entries()) {
+      const extension = item.kind === 'image' ? (/\.png(?:$|[?#])/i.test(item.url) ? 'png' : 'jpg') : 'mp4'
+      const file = await withProviderTelemetry('x-official', 'download', () => downloadProviderFile(item.url, {
+        allowedHosts: X_MEDIA_HOSTS,
+        provider: 'x-official',
+        fileBase: `x-${xPostIdFromUrl(url) ?? 'post'}-${index + 1}`,
+        extension,
+        referer: url,
+      }))
+      downloads.push({ ...file, kind: item.kind })
+    }
     return {
-      files: [{ kind: 'video', filePath: result.filePath, fileName: result.fileName, size: result.size }],
-      provider: 'x-ytdlp',
-      cleanup: result.cleanup,
+      files: downloads.map((item) => ({ kind: item.kind, filePath: item.filePath, fileName: item.fileName, size: item.size })),
+      provider: 'x-official',
+      cleanup: async () => { await Promise.all(downloads.map((item) => item.cleanup())) },
     }
   } catch (error) {
-    const fallback = error instanceof Error ? error.message : String(error)
-    const prefix = officialErrors.length ? `${officialErrors.join(' · ')} · ` : ''
-    throw new Error(`No pude descargar el Post público de X/Twitter. ${prefix}${fallback}`)
+    await Promise.all(downloads.map((item) => item.cleanup())).catch(() => undefined)
+    throw error
   }
+}
+
+async function downloadXYtDlp(url: string): Promise<XDownloadBundle> {
+  const result = await withProviderTelemetry('x-ytdlp', 'download', () => downloadSocialVideo(url, 'twitter'))
+  return {
+    files: [{ kind: 'video', filePath: result.filePath, fileName: result.fileName, size: result.size }],
+    provider: 'x-ytdlp',
+    cleanup: result.cleanup,
+  }
+}
+
+export async function downloadXMedia(input: string): Promise<XDownloadBundle> {
+  const url = validateXUrl(input)
+  const candidates = xBearerToken()
+    ? providerFailoverOrder(['x-official', 'x-ytdlp'] as const)
+    : providerFailoverOrder(['x-ytdlp'] as const)
+  const errors: string[] = []
+
+  for (const provider of candidates) {
+    try {
+      if (provider === 'x-official') return await downloadXOfficial(url)
+      return await downloadXYtDlp(url)
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      errors.push(`${provider}: ${detail}`)
+    }
+  }
+
+  throw new Error(`No pude descargar el Post público de X/Twitter. ${errors.join(' · ')}`)
 }
