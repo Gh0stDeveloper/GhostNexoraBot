@@ -37,6 +37,7 @@ export type OpsGroup = {
   adminCount: number
   announce: boolean
   restrictMode: boolean
+  mutedUntil: number
   updatedAt: number
 }
 
@@ -213,12 +214,24 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
     }
 
     if (tableExists(db, 'ops_groups')) {
-      snapshot.groups = db.prepare(`SELECT group_jid AS groupJid, name, participant_count AS participantCount,
-        admin_count AS adminCount, announce, restrict_mode AS restrictMode, updated_at AS updatedAt
-        FROM ops_groups WHERE instance_key = ? ORDER BY name COLLATE NOCASE ASC`)
+      const hasPreferences = tableExists(db, 'ops_group_chat_preferences')
+      const query = hasPreferences
+        ? `SELECT g.group_jid AS groupJid, g.name, g.participant_count AS participantCount,
+            g.admin_count AS adminCount, g.announce, g.restrict_mode AS restrictMode,
+            COALESCE(p.muted_until, 0) AS mutedUntil, g.updated_at AS updatedAt
+          FROM ops_groups g
+          LEFT JOIN ops_group_chat_preferences p
+            ON p.instance_key = g.instance_key AND p.group_jid = g.group_jid
+          WHERE g.instance_key = ? ORDER BY g.name COLLATE NOCASE ASC`
+        : `SELECT group_jid AS groupJid, name, participant_count AS participantCount,
+            admin_count AS adminCount, announce, restrict_mode AS restrictMode,
+            0 AS mutedUntil, updated_at AS updatedAt
+          FROM ops_groups WHERE instance_key = ? ORDER BY name COLLATE NOCASE ASC`
+      snapshot.groups = db.prepare(query)
         .all(instanceKey).map((row: any) => ({
           groupJid: String(row.groupJid), name: String(row.name), participantCount: Number(row.participantCount),
-          adminCount: Number(row.adminCount), announce: Boolean(row.announce), restrictMode: Boolean(row.restrictMode), updatedAt: Number(row.updatedAt),
+          adminCount: Number(row.adminCount), announce: Boolean(row.announce), restrictMode: Boolean(row.restrictMode),
+          mutedUntil: Number(row.mutedUntil ?? 0), updatedAt: Number(row.updatedAt),
         })) as OpsGroup[]
       snapshot.runtime.groupCount = snapshot.groups.length
     }
