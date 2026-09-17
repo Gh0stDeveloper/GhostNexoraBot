@@ -40,6 +40,15 @@ opsDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ops_group_requests_pending
     ON ops_group_control_requests(instance_key, status, requested_at);
+  CREATE TABLE IF NOT EXISTS ops_group_chat_preferences (
+    instance_key TEXT NOT NULL,
+    group_jid TEXT NOT NULL,
+    muted_until INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(instance_key, group_jid)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_group_chat_preferences_instance
+    ON ops_group_chat_preferences(instance_key, updated_at DESC);
   CREATE TABLE IF NOT EXISTS ops_instance_status (
     instance_key TEXT PRIMARY KEY,
     connected INTEGER NOT NULL DEFAULT 0,
@@ -143,6 +152,26 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
   return true
 }
 
+function persistMuteState(groupJid: string, mutedUntil: number) {
+  if (mutedUntil > Date.now()) {
+    opsDb.prepare(`INSERT INTO ops_group_chat_preferences(instance_key, group_jid, muted_until, updated_at)
+      VALUES(?, ?, ?, ?)
+      ON CONFLICT(instance_key, group_jid) DO UPDATE SET
+        muted_until = excluded.muted_until,
+        updated_at = excluded.updated_at`)
+      .run(instanceKey, groupJid, mutedUntil, Date.now())
+  } else {
+    opsDb.prepare('DELETE FROM ops_group_chat_preferences WHERE instance_key = ? AND group_jid = ?')
+      .run(instanceKey, groupJid)
+  }
+}
+
+function muteDuration(action: string) {
+  if (action === 'mute:8h') return 8 * 60 * 60_000
+  if (action === 'mute:7d') return 7 * 24 * 60 * 60_000
+  return null
+}
+
 async function syncOneGroup(groupJid: string, force = false) {
   const socket = currentSocket
   if (!socket || !connectionOpen || !socket.authState.creds.registered || !groupJid.endsWith('@g.us')) return
@@ -177,6 +206,9 @@ async function syncGroups(connectionProbe = false) {
       // Un fetch correcto con cero grupos significa que la instancia ya no pertenece
       // a ninguno; se limpian también los registros que quedaron de sincronizaciones anteriores.
       opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND updated_at < ?').run(instanceKey, stamp)
+      opsDb.prepare(`DELETE FROM ops_group_chat_preferences
+        WHERE instance_key = ? AND group_jid NOT IN (SELECT group_jid FROM ops_groups WHERE instance_key = ?)`)
+        .run(instanceKey, instanceKey)
       opsDb.exec('COMMIT')
     } catch (error) {
       opsDb.exec('ROLLBACK')
@@ -212,7 +244,20 @@ async function processOneRequest() {
       if (!groupJid.endsWith('@g.us')) throw new Error('JID de grupo inválido.')
       await currentSocket.groupLeave(groupJid)
       opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
+      opsDb.prepare('DELETE FROM ops_group_chat_preferences WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
       touchRuntime({ connected: true, groupCount: currentGroupCount() })
+    } else if (request.action === 'unmute') {
+      const groupJid = String(request.groupJid ?? '')
+      if (!groupJid.endsWith('@g.us')) throw new Error('JID de grupo inválido.')
+      await currentSocket.chatModify({ mute: null }, groupJid)
+      persistMuteState(groupJid, 0)
+    } else if (request.action.startsWith('mute:')) {
+      const groupJid = String(request.groupJid ?? '')
+      if (!groupJid.endsWith('@g.us')) throw new Error('JID de grupo inválido.')
+      const duration = muteDuration(request.action)
+      if (!duration) throw new Error('Duración de silencio no soportada.')
+      await currentSocket.chatModify({ mute: duration }, groupJid)
+      persistMuteState(groupJid, Date.now() + duration)
     } else {
       throw new Error('Acción de grupo no soportada.')
     }
@@ -247,6 +292,8 @@ function startLoop() {
     if (Math.random() < 0.02) {
       opsDb.prepare("DELETE FROM ops_group_control_requests WHERE status IN ('completed','failed') AND completed_at < ?")
         .run(Date.now() - 7 * 86_400_000)
+      opsDb.prepare('DELETE FROM ops_group_chat_preferences WHERE muted_until > 0 AND muted_until <= ?')
+        .run(Date.now())
     }
   }, 3000)
   timer.unref?.()
