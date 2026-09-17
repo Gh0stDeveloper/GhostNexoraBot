@@ -2,6 +2,9 @@ import type { BotCommand } from '../types.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 const now = () => Date.now()
+const MINUTE = 60_000
+const USAGE_RETENTION_MS = 31 * 86_400_000
+let lastUsagePruneAt = 0
 
 export const PIPELINE_STAGES = [
   { id: '01', name: 'Ingesta Baileys', bottleneckUs: 50_000 },
@@ -53,9 +56,42 @@ opsDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ops_command_metrics_instance_avg
     ON ops_command_metrics(instance_key, total_us DESC);
+
+  CREATE TABLE IF NOT EXISTS ops_user_metrics (
+    instance_key TEXT NOT NULL,
+    user_jid TEXT NOT NULL,
+    display_name TEXT,
+    requests INTEGER NOT NULL DEFAULT 0,
+    successes INTEGER NOT NULL DEFAULT 0,
+    failures INTEGER NOT NULL DEFAULT 0,
+    total_us INTEGER NOT NULL DEFAULT 0,
+    first_at INTEGER NOT NULL DEFAULT 0,
+    last_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(instance_key, user_jid)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_user_metrics_instance_requests
+    ON ops_user_metrics(instance_key, requests DESC);
+
+  CREATE TABLE IF NOT EXISTS ops_usage_minutes (
+    instance_key TEXT NOT NULL,
+    bucket_minute INTEGER NOT NULL,
+    user_jid TEXT NOT NULL,
+    display_name TEXT,
+    command_name TEXT NOT NULL,
+    requests INTEGER NOT NULL DEFAULT 0,
+    successes INTEGER NOT NULL DEFAULT 0,
+    failures INTEGER NOT NULL DEFAULT 0,
+    total_us INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(instance_key, bucket_minute, user_jid, command_name)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_usage_minutes_instance_bucket
+    ON ops_usage_minutes(instance_key, bucket_minute);
+  CREATE INDEX IF NOT EXISTS idx_ops_usage_minutes_instance_user_bucket
+    ON ops_usage_minutes(instance_key, user_jid, bucket_minute);
 `)
 
 type CommandAuditInput = Pick<BotCommand, 'name' | 'category' | 'description'>
+export type CommandAuditIdentity = { userJid: string; displayName?: string | null }
 
 function micros(durationMs: number) {
   if (!Number.isFinite(durationMs)) return 0
@@ -67,6 +103,56 @@ function commandStatus(avgUs: number, maxUs: number, successRate: number) {
   if (avgUs >= 750_000 || maxUs >= 2_000_000 || successRate < 97) return 'slow' as const
   if (avgUs >= 250_000 || maxUs >= 1_000_000 || successRate < 99) return 'warning' as const
   return 'optimal' as const
+}
+
+function cleanDisplayName(value?: string | null) {
+  const clean = String(value ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  return clean ? clean.slice(0, 80) : null
+}
+
+function recordUsage(input: {
+  instanceKey: string
+  commandName: string
+  durationUs: number
+  success: boolean
+  stamp: number
+  identity?: CommandAuditIdentity
+}) {
+  const userJid = String(input.identity?.userJid ?? '').trim()
+  if (!userJid) return
+  const displayName = cleanDisplayName(input.identity?.displayName)
+  const bucketMinute = Math.floor(input.stamp / MINUTE) * MINUTE
+  const successes = input.success ? 1 : 0
+  const failures = input.success ? 0 : 1
+
+  opsDb.prepare(`INSERT INTO ops_user_metrics(
+      instance_key, user_jid, display_name, requests, successes, failures, total_us, first_at, last_at
+    ) VALUES(?, ?, ?, 1, ?, ?, ?, ?, ?)
+    ON CONFLICT(instance_key, user_jid) DO UPDATE SET
+      display_name = COALESCE(NULLIF(excluded.display_name, ''), ops_user_metrics.display_name),
+      requests = ops_user_metrics.requests + 1,
+      successes = ops_user_metrics.successes + excluded.successes,
+      failures = ops_user_metrics.failures + excluded.failures,
+      total_us = ops_user_metrics.total_us + excluded.total_us,
+      first_at = CASE WHEN ops_user_metrics.first_at = 0 THEN excluded.first_at ELSE ops_user_metrics.first_at END,
+      last_at = excluded.last_at`)
+    .run(input.instanceKey, userJid, displayName, successes, failures, input.durationUs, input.stamp, input.stamp)
+
+  opsDb.prepare(`INSERT INTO ops_usage_minutes(
+      instance_key, bucket_minute, user_jid, display_name, command_name, requests, successes, failures, total_us
+    ) VALUES(?, ?, ?, ?, ?, 1, ?, ?, ?)
+    ON CONFLICT(instance_key, bucket_minute, user_jid, command_name) DO UPDATE SET
+      display_name = COALESCE(NULLIF(excluded.display_name, ''), ops_usage_minutes.display_name),
+      requests = ops_usage_minutes.requests + 1,
+      successes = ops_usage_minutes.successes + excluded.successes,
+      failures = ops_usage_minutes.failures + excluded.failures,
+      total_us = ops_usage_minutes.total_us + excluded.total_us`)
+    .run(input.instanceKey, bucketMinute, userJid, displayName, input.commandName, successes, failures, input.durationUs)
+
+  if (input.stamp - lastUsagePruneAt >= 3_600_000) {
+    lastUsagePruneAt = input.stamp
+    opsDb.prepare('DELETE FROM ops_usage_minutes WHERE bucket_minute < ?').run(input.stamp - USAGE_RETENTION_MS)
+  }
 }
 
 export const performanceAudit = {
@@ -110,7 +196,7 @@ export const performanceAudit = {
       .run(instanceKey, stage.id, stage.name, value, value, value, value, stamp, stamp)
   },
 
-  recordCommand(command: CommandAuditInput, durationMs: number, success: boolean, heapDeltaBytes = 0, instanceKey = opsInstanceKey()) {
+  recordCommand(command: CommandAuditInput, durationMs: number, success: boolean, heapDeltaBytes = 0, instanceKey = opsInstanceKey(), identity?: CommandAuditIdentity) {
     const name = command.name.toLowerCase()
     const value = micros(durationMs)
     const stamp = now()
@@ -136,6 +222,8 @@ export const performanceAudit = {
         last_at = excluded.last_at,
         last_error_at = MAX(ops_command_metrics.last_error_at, excluded.last_error_at)`)
       .run(instanceKey, name, success ? 1 : 0, success ? 0 : 1, value, value, value, value, heap, stamp, stamp, success ? 0 : stamp)
+
+    recordUsage({ instanceKey, commandName: name, durationUs: value, success, stamp, identity })
   },
 
   snapshot(instanceKey = opsInstanceKey()) {
@@ -226,5 +314,7 @@ export const performanceAudit = {
   reset(instanceKey = opsInstanceKey()) {
     opsDb.prepare('DELETE FROM ops_pipeline_metrics WHERE instance_key = ?').run(instanceKey)
     opsDb.prepare('DELETE FROM ops_command_metrics WHERE instance_key = ?').run(instanceKey)
+    opsDb.prepare('DELETE FROM ops_user_metrics WHERE instance_key = ?').run(instanceKey)
+    opsDb.prepare('DELETE FROM ops_usage_minutes WHERE instance_key = ?').run(instanceKey)
   },
 }

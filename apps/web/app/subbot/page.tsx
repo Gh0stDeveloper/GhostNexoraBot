@@ -2,6 +2,7 @@ import { Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Sett
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { OpsConsole } from '../../components/ops-console'
+import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { SUBBOT_SESSION_COOKIE, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
@@ -45,6 +46,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   }
   const cards = [[Smartphone,t('subbot.number'),subbot.phone??t('common.unlinked')],[Bot,t('subbot.runtime'),snapshot.runtime.connected?t('admin.connected'):labels[subbot.status]??subbot.status],[Clock3,t('subbot.subscription'),new Date(Number(subbot.expiresAt)).toLocaleString(intl)],[UsersRound,t('subbot.groups'),snapshot.groups.length.toLocaleString(intl)],[Download,t('subbot.downloads'),`${(Number(subbot.downloadBytes)/1024/1024).toFixed(1)} MB`]] as const
   const hrefFor = (target: SubbotSection) => `/subbot?section=${target}`
+  const instanceLabel = `Subbot #${subbot.id}`
 
   return <main className="ops-page">
     <div className="mx-auto w-full max-w-[1540px] px-4 py-7 md:px-7 lg:px-9">
@@ -62,11 +64,12 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
 
       {section === 'overview' && <>
         <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{cards.map(([Icon,label,value])=><article key={label} className="ops-stat"><Icon className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{label}</p><p className="mt-2 break-all font-bold text-zinc-100">{value}</p></article>)}</section>
-        <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('overview')} instanceLabel={`Subbot #${subbot.id}`} view="overview" locale={locale}/></div>
+        <div className="mt-6"><OpsUsageDashboard analytics={snapshot.analytics} instanceLabel={instanceLabel} locale={locale}/></div>
+        <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('overview')} instanceLabel={instanceLabel} view="overview" locale={locale}/></div>
       </>}
 
-      {section === 'groups' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('groups')} instanceLabel={`Subbot #${subbot.id}`} view="groups" locale={locale}/></div>}
-      {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('audit')} instanceLabel={`Subbot #${subbot.id}`} view="audit" locale={locale}/></div>}
+      {section === 'groups' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('groups')} instanceLabel={instanceLabel} view="groups" locale={locale}/></div>}
+      {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('audit')} instanceLabel={instanceLabel} view="audit" locale={locale}/></div>}
 
       {section === 'account' && <section className="mt-6 ops-panel p-5"><div className="flex items-center gap-2 font-bold"><RefreshCcw className="size-4 text-blue-400"/>{t('subbot.resetTitle')}</div><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">{t('subbot.resetText')}</p><form action="/api/control" method="post" className="mt-4"><input type="hidden" name="section" value="account"/><input type="hidden" name="action" value="reset_own_subbot"/><button className="ops-button-danger"><RefreshCcw className="size-4"/>{t('subbot.resetButton')}</button></form><p className="mt-5 text-xs text-zinc-700">{t('subbot.webSession', { date: new Date(Number(session.exp)).toLocaleString(intl) })}</p></section>}
     </div>

@@ -62,6 +62,14 @@ function ensure(userJid: string) {
   db.prepare('INSERT OR IGNORE INTO economy_professions_v2(user_jid, profession, updated_at) VALUES(?, ?, ?)').run(userJid, DEFAULT, now())
 }
 
+function instanceAudit() {
+  const subbot = process.env.NEXORA_INSTANCE_ROLE === 'subbot'
+  return {
+    role: subbot ? 'subbot' : 'main',
+    id: subbot ? Number(process.env.NEXORA_SUBBOT_ID || 0) || null : null,
+  }
+}
+
 export const professionsV2 = {
   get(userJid: string) {
     ensure(userJid)
@@ -85,13 +93,34 @@ export const professionsV2 = {
     if (remaining) return { ok: false as const, remaining }
     const profession = this.get(userJid)
     const reward = profession.min + Math.floor(Math.random() * (profession.max - profession.min + 1))
+    const stamp = now()
+    const audit = instanceAudit()
+
+    // La recompensa se escribe directamente en la base global adjunta dentro de
+    // la misma transacción que el cooldown. Evitamos depender del TEMP VIEW
+    // economy_users para dinero real: MainBot, subbots y .wallet leen el mismo
+    // global_economy_users inmediatamente después del COMMIT.
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare(`INSERT INTO economy_cooldowns_v2(user_jid, action, last_used) VALUES(?, 'work', ?)
-        ON CONFLICT(user_jid, action) DO UPDATE SET last_used = excluded.last_used`).run(userJid, now())
-      db.prepare('UPDATE economy_users SET wallet = wallet + ? WHERE user_jid = ?').run(reward, userJid)
+        ON CONFLICT(user_jid, action) DO UPDATE SET last_used = excluded.last_used`).run(userJid, stamp)
+      const credited = db.prepare(`UPDATE global_wallet.global_economy_users
+        SET wallet = wallet + ?, updated_at = ?
+        WHERE user_jid = ?`).run(reward, stamp, userJid)
+      if (Number(credited.changes) !== 1) throw new Error('No fue posible acreditar la recompensa en la billetera global.')
       db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
-        .run(userJid, 'work_v2', reward, `profession:${profession.id}`, now())
+        .run(userJid, 'work_v2', reward, `profession:${profession.id}`, stamp)
+      db.prepare(`INSERT INTO global_wallet.economy_global_ledger(
+        user_jid, kind, amount, note, instance_role, instance_id, created_at
+      ) VALUES(?, ?, ?, ?, ?, ?, ?)`).run(
+        userJid,
+        'work_v2',
+        reward,
+        `profession:${profession.id}`,
+        audit.role,
+        audit.id,
+        stamp,
+      )
       db.exec('COMMIT')
     } catch (error) {
       db.exec('ROLLBACK')

@@ -290,11 +290,11 @@ export class CommandRouter {
         await command.handler(context)
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
-        performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore)
+        performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
       } catch (error) {
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
-        performanceAudit.recordCommand(command, durationMs, false, process.memoryUsage().heapUsed - heapBefore)
+        performanceAudit.recordCommand(command, durationMs, false, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
         throw error
       }
 

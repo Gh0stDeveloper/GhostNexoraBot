@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { BackupPanel } from '../../components/backup-panel'
 import { OpsConsole } from '../../components/ops-console'
+import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { ADMIN_SESSION_COOKIE, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
@@ -74,6 +75,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           {[[Bot,t('admin.stat.subbots'),subbots.length],[MessageSquare,t('admin.stat.online'),subbots.filter((s)=>s.status==='online').length],[MessageSquare,t('admin.stat.messages'),totalMessages],[ShieldCheck,t('admin.stat.users'),users],[UsersRound,t('admin.stat.groups'),snapshot.groups.length]].map(([Icon,label,value])=>{const I=Icon as typeof Bot;return <article key={String(label)} className="ops-stat"><I className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{String(label)}</p><p className="mt-2 text-2xl font-black text-white">{Number(value).toLocaleString(intl)}</p></article>})}
         </section>
         <p className="mt-3 text-xs text-zinc-600"><Download className="mr-2 inline size-3.5"/>{t('admin.traffic', { size: (totalBytes/1024/1024/1024).toFixed(2), heartbeat: snapshot.runtime.updatedAt ? new Date(snapshot.runtime.updatedAt).toLocaleString(intl) : t('common.noData') })}</p>
+        <div className="mt-6"><OpsUsageDashboard analytics={snapshot.analytics} instanceLabel={instanceLabel} locale={locale}/></div>
         <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="overview" locale={locale}/></div>
       </>}
 

@@ -89,6 +89,42 @@ export type OpsRuntimeStatus = {
   fresh: boolean
 }
 
+export type OpsUsageRank = {
+  key: string
+  label: string
+  secondary: string
+  requests: number
+  successRate: number
+}
+
+export type OpsUsagePoint = {
+  at: number
+  requests: number
+  averageLatencyMs: number
+}
+
+export type OpsHeatmapDay = {
+  at: number
+  hours: number[]
+}
+
+export type OpsUsageAnalytics = {
+  uptimeMs: number
+  averageLatencyMs: number
+  totalRequests: number
+  lastMinute: number
+  lastHour: number
+  previousHour: number
+  growthPct: number
+  todayRequests: number
+  recentSeries: OpsUsagePoint[]
+  heatmap: OpsHeatmapDay[]
+  topUsersHistorical: OpsUsageRank[]
+  topUsersToday: OpsUsageRank[]
+  topCommandsHistorical: OpsUsageRank[]
+  topCommandsToday: OpsUsageRank[]
+}
+
 export type OpsSnapshot = {
   instanceKey: string
   runtime: OpsRuntimeStatus
@@ -99,6 +135,7 @@ export type OpsSnapshot = {
     auditedCommands: number
     bottlenecks: number
   }
+  analytics: OpsUsageAnalytics
   stages: OpsStage[]
   commands: OpsCommand[]
   groups: OpsGroup[]
@@ -117,6 +154,10 @@ const STAGES = [
   ['07', 'Despacho Socket Baileys', 250_000],
 ] as const
 
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+
 function commandStatus(avgUs: number, maxUs: number, successRate: number): OpsCommand['status'] {
   if (successRate < 90 || avgUs >= 2_000_000 || maxUs >= 5_000_000) return 'critical'
   if (avgUs >= 750_000 || maxUs >= 2_000_000 || successRate < 97) return 'slow'
@@ -131,10 +172,29 @@ function providerStatus(input: {
   updatedAt: number
 }): OpsProviderHealth['status'] {
   if (!input.requests) return 'unknown'
-  if (input.updatedAt > 0 && Date.now() - input.updatedAt > 30 * 60_000) return 'unknown'
+  if (input.updatedAt > 0 && Date.now() - input.updatedAt > 30 * MINUTE) return 'unknown'
   if (input.consecutiveFailures >= 3 || (!input.successes && input.consecutiveFailures > 0)) return 'offline'
   if (input.consecutiveFailures > 0) return 'degraded'
   return input.successes > 0 ? 'online' : 'unknown'
+}
+
+function emptyAnalytics(): OpsUsageAnalytics {
+  return {
+    uptimeMs: 0,
+    averageLatencyMs: 0,
+    totalRequests: 0,
+    lastMinute: 0,
+    lastHour: 0,
+    previousHour: 0,
+    growthPct: 0,
+    todayRequests: 0,
+    recentSeries: [],
+    heatmap: [],
+    topUsersHistorical: [],
+    topUsersToday: [],
+    topCommandsHistorical: [],
+    topCommandsToday: [],
+  }
 }
 
 function empty(instanceKey: string): OpsSnapshot {
@@ -142,6 +202,7 @@ function empty(instanceKey: string): OpsSnapshot {
     instanceKey,
     runtime: { connected: false, registered: false, groupCount: 0, connectedAt: 0, lastEventAt: 0, lastGroupSyncAt: 0, updatedAt: 0, fresh: false },
     summary: { throughputMps: 0, averageE2eUs: 0, processingNodes: 7, auditedCommands: 0, bottlenecks: 0 },
+    analytics: emptyAnalytics(),
     stages: STAGES.map(([id, name]) => ({ id, name, invocations: 0, minUs: 0, avgUs: 0, maxUs: 0, lastUs: 0, firstAt: 0, lastAt: 0, status: 'optimal' })),
     commands: [], groups: [], providers: [], adminAudit: [], requests: [],
   }
@@ -149,6 +210,152 @@ function empty(instanceKey: string): OpsSnapshot {
 
 function tableExists(db: NonNullable<ReturnType<typeof openBotDb>>, name: string) {
   return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name))
+}
+
+function startOfDay(stamp: number) {
+  const value = new Date(stamp)
+  value.setHours(0, 0, 0, 0)
+  return value.getTime()
+}
+
+function rankUser(row: any, index: number): OpsUsageRank {
+  const userJid = String(row.userJid ?? '')
+  const digits = userJid.split('@')[0]?.replace(/\D/g, '') ?? ''
+  const tail = digits.slice(-4)
+  const displayName = String(row.displayName ?? '').trim()
+  const requests = Number(row.requests ?? 0)
+  const successes = Number(row.successes ?? 0)
+  return {
+    key: `user:${index}:${tail || 'anon'}:${displayName}`,
+    label: displayName || (tail ? `Usuario •••• ${tail}` : 'Usuario de WhatsApp'),
+    secondary: tail ? `WhatsApp •••• ${tail}` : 'WhatsApp',
+    requests,
+    successRate: requests ? successes / requests * 100 : 100,
+  }
+}
+
+function rankCommand(row: any): OpsUsageRank {
+  const commandName = String(row.commandName ?? '')
+  const requests = Number(row.requests ?? row.invocations ?? 0)
+  const successes = Number(row.successes ?? 0)
+  const successRate = row.successRate !== undefined
+    ? Number(row.successRate)
+    : requests ? successes / requests * 100 : 100
+  return {
+    key: `command:${commandName}`,
+    label: `.${commandName}`,
+    secondary: String(row.category ?? 'command'),
+    requests,
+    successRate,
+  }
+}
+
+function readUsageAnalytics(db: NonNullable<ReturnType<typeof openBotDb>>, instanceKey: string, snapshot: OpsSnapshot): OpsUsageAnalytics {
+  const analytics = emptyAnalytics()
+  const stamp = Date.now()
+  const currentMinute = Math.floor(stamp / MINUTE) * MINUTE
+  const todayStart = startOfDay(stamp)
+  const firstPipelineAt = snapshot.stages.filter((stage) => stage.firstAt > 0).reduce((min, stage) => Math.min(min, stage.firstAt), Number.POSITIVE_INFINITY)
+  const uptimeBase = snapshot.runtime.connectedAt > 0 ? snapshot.runtime.connectedAt : (Number.isFinite(firstPipelineAt) ? firstPipelineAt : 0)
+  analytics.uptimeMs = uptimeBase ? Math.max(0, stamp - uptimeBase) : 0
+
+  if (tableExists(db, 'ops_command_metrics')) {
+    const totals = db.prepare(`SELECT COALESCE(SUM(invocations), 0) AS requests, COALESCE(SUM(total_us), 0) AS totalUs
+      FROM ops_command_metrics WHERE instance_key = ?`).get(instanceKey) as { requests?: number; totalUs?: number } | undefined
+    analytics.totalRequests = Number(totals?.requests ?? 0)
+    analytics.averageLatencyMs = analytics.totalRequests ? Number(totals?.totalUs ?? 0) / analytics.totalRequests / 1000 : 0
+  } else {
+    analytics.totalRequests = snapshot.commands.reduce((sum, command) => sum + command.invocations, 0)
+    const totalUs = snapshot.commands.reduce((sum, command) => sum + command.avgUs * command.invocations, 0)
+    analytics.averageLatencyMs = analytics.totalRequests ? totalUs / analytics.totalRequests / 1000 : 0
+  }
+
+  analytics.topCommandsHistorical = snapshot.commands
+    .filter((command) => command.invocations > 0)
+    .sort((left, right) => right.invocations - left.invocations || left.commandName.localeCompare(right.commandName))
+    .slice(0, 10)
+    .map((command) => rankCommand({ ...command, requests: command.invocations }))
+
+  if (tableExists(db, 'ops_user_metrics')) {
+    const users = db.prepare(`SELECT user_jid AS userJid, display_name AS displayName, requests, successes
+      FROM ops_user_metrics WHERE instance_key = ? AND requests > 0
+      ORDER BY requests DESC, last_at DESC LIMIT 5`).all(instanceKey) as Array<Record<string, string | number | null>>
+    analytics.topUsersHistorical = users.map(rankUser)
+  }
+
+  if (!tableExists(db, 'ops_usage_minutes')) return analytics
+
+  const windows = db.prepare(`SELECT
+      COALESCE(SUM(CASE WHEN bucket_minute = ? THEN requests ELSE 0 END), 0) AS lastMinute,
+      COALESCE(SUM(CASE WHEN bucket_minute >= ? THEN requests ELSE 0 END), 0) AS lastHour,
+      COALESCE(SUM(CASE WHEN bucket_minute >= ? AND bucket_minute < ? THEN requests ELSE 0 END), 0) AS previousHour,
+      COALESCE(SUM(CASE WHEN bucket_minute >= ? THEN requests ELSE 0 END), 0) AS today
+    FROM ops_usage_minutes WHERE instance_key = ? AND bucket_minute >= ?`)
+    .get(currentMinute, currentMinute - 59 * MINUTE, currentMinute - 119 * MINUTE, currentMinute - 59 * MINUTE, todayStart, instanceKey, Math.min(todayStart, currentMinute - 119 * MINUTE)) as Record<string, number> | undefined
+  analytics.lastMinute = Number(windows?.lastMinute ?? 0)
+  analytics.lastHour = Number(windows?.lastHour ?? 0)
+  analytics.previousHour = Number(windows?.previousHour ?? 0)
+  analytics.todayRequests = Number(windows?.today ?? 0)
+  analytics.growthPct = analytics.previousHour > 0
+    ? (analytics.lastHour - analytics.previousHour) / analytics.previousHour * 100
+    : analytics.lastHour > 0 ? 100 : 0
+
+  const recentStart = currentMinute - 59 * MINUTE
+  const recentRows = db.prepare(`SELECT bucket_minute AS bucket, SUM(requests) AS requests, SUM(total_us) AS totalUs
+    FROM ops_usage_minutes WHERE instance_key = ? AND bucket_minute >= ?
+    GROUP BY bucket_minute ORDER BY bucket_minute ASC`).all(instanceKey, recentStart) as Array<{ bucket: number; requests: number; totalUs: number }>
+  const recentByBucket = new Map(recentRows.map((row) => [Number(row.bucket), row]))
+  analytics.recentSeries = Array.from({ length: 60 }, (_, index) => {
+    const at = recentStart + index * MINUTE
+    const row = recentByBucket.get(at)
+    const requests = Number(row?.requests ?? 0)
+    return {
+      at,
+      requests,
+      averageLatencyMs: requests ? Number(row?.totalUs ?? 0) / requests / 1000 : 0,
+    }
+  })
+
+  const heatmapStartDate = new Date(todayStart)
+  heatmapStartDate.setDate(heatmapStartDate.getDate() - 6)
+  const heatmapStart = heatmapStartDate.getTime()
+  const heatRows = db.prepare(`SELECT bucket_minute AS bucket, SUM(requests) AS requests
+    FROM ops_usage_minutes WHERE instance_key = ? AND bucket_minute >= ?
+    GROUP BY bucket_minute ORDER BY bucket_minute ASC`).all(instanceKey, heatmapStart) as Array<{ bucket: number; requests: number }>
+  const dayMap = new Map<number, number[]>()
+  for (let day = 0; day < 7; day += 1) {
+    const date = new Date(heatmapStart)
+    date.setDate(date.getDate() + day)
+    date.setHours(0, 0, 0, 0)
+    dayMap.set(date.getTime(), Array.from({ length: 24 }, () => 0))
+  }
+  for (const row of heatRows) {
+    const date = new Date(Number(row.bucket))
+    const day = new Date(date)
+    day.setHours(0, 0, 0, 0)
+    const hours = dayMap.get(day.getTime())
+    if (hours) hours[date.getHours()] += Number(row.requests ?? 0)
+  }
+  analytics.heatmap = [...dayMap.entries()].map(([at, hours]) => ({ at, hours }))
+
+  const todayUsers = db.prepare(`SELECT user_jid AS userJid, MAX(display_name) AS displayName,
+      SUM(requests) AS requests, SUM(successes) AS successes
+    FROM ops_usage_minutes WHERE instance_key = ? AND bucket_minute >= ?
+    GROUP BY user_jid ORDER BY requests DESC, MAX(bucket_minute) DESC LIMIT 5`)
+    .all(instanceKey, todayStart) as Array<Record<string, string | number | null>>
+  analytics.topUsersToday = todayUsers.map(rankUser)
+
+  const todayCommands = db.prepare(`SELECT u.command_name AS commandName, COALESCE(c.category, 'command') AS category,
+      SUM(u.requests) AS requests, SUM(u.successes) AS successes
+    FROM ops_usage_minutes u
+    LEFT JOIN ops_command_catalog c ON c.instance_key = u.instance_key AND c.command_name = u.command_name
+    WHERE u.instance_key = ? AND u.bucket_minute >= ?
+    GROUP BY u.command_name, c.category
+    ORDER BY requests DESC, u.command_name ASC LIMIT 10`)
+    .all(instanceKey, todayStart) as Array<Record<string, string | number | null>>
+  analytics.topCommandsToday = todayCommands.map(rankCommand)
+
+  return analytics
 }
 
 export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
@@ -328,6 +535,7 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
       auditedCommands: snapshot.commands.length,
       bottlenecks: snapshot.commands.filter((command) => command.status === 'slow' || command.status === 'critical').length,
     }
+    snapshot.analytics = readUsageAnalytics(db, instanceKey, snapshot)
     return snapshot
   } catch {
     return empty(instanceKey)
