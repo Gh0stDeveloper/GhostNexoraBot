@@ -1,5 +1,6 @@
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
+import { recordProviderAttempt } from './provider-health.js'
 
 const MAX_REQUESTS_PER_KEY = 190
 const DEFAULT_TIMEOUT_MS = 45_000
@@ -82,6 +83,29 @@ function shouldRotate(status: number, payload: unknown) {
   return isQuotaMessage(payloadMessage(payload))
 }
 
+function logicalProviderId(endpoints: string[]) {
+  const value = endpoints.join(' ').toLowerCase()
+  if (value.includes('tiktok')) return 'tiktok'
+  if (value.includes('instagram') || /(^|\/)ig(?:\b|\/)/.test(value)) return 'instagram'
+  if (value.includes('happymod')) return 'happymod'
+  if (value.includes('likee')) return 'likee'
+  if (value.includes('terabox')) return 'terabox'
+  if (value.includes('pinterest')) return 'pinterest'
+  if (value.includes('deepseek')) return 'deepseek'
+  if (value.includes('youtube') || /(^|\/)yt(?:\b|\/)/.test(value)) return 'youtube'
+  return 'lempi'
+}
+
+function recordHealth(providerId: string, ok: boolean, started: number, errorCode?: string) {
+  const latencyMs = Math.max(0, performance.now() - started)
+  try {
+    recordProviderAttempt('lempi', { ok, latencyMs, errorCode })
+    if (providerId !== 'lempi') recordProviderAttempt(providerId, { ok, latencyMs, errorCode })
+  } catch (error) {
+    logger.debug({ error, providerId }, 'provider health telemetry skipped')
+  }
+}
+
 async function requestOnce<T>(pathname: string, params: Record<string, string | number | undefined>, keyIndex: number, options: RequestOptions = {}) {
   const state = states[keyIndex]
   if (!state) throw new LempiRequestError(true)
@@ -158,35 +182,49 @@ export async function requestLempiJson<T>(
   params: Record<string, string | number | undefined>,
   options: RequestOptions = {},
 ): Promise<T> {
-  ensureState()
   const endpointList = Array.isArray(endpoints) ? endpoints : [endpoints]
   const candidates = [...new Set(endpointList.map((item) => item.trim()).filter(Boolean))]
-  if (!candidates.length) throw new LempiUnavailableError()
+  const providerId = logicalProviderId(candidates)
+  const started = performance.now()
 
-  let lastError: LempiRequestError | null = null
-  for (let keyRound = 0; keyRound < states.length; keyRound += 1) {
-    const keyIndex = nextAvailableIndex()
-    if (keyIndex < 0) break
-    cursor = keyIndex
+  try {
+    ensureState()
+    if (!candidates.length) throw new LempiUnavailableError()
 
-    for (const endpoint of candidates) {
-      try {
-        return await requestOnce<T>(endpoint, params, keyIndex, options)
-      } catch (error) {
-        if (!(error instanceof LempiRequestError)) throw error
-        lastError = error
-        if (error.rotateKey) {
-          cursor = (keyIndex + 1) % states.length
-          break
+    let lastError: LempiRequestError | null = null
+    for (let keyRound = 0; keyRound < states.length; keyRound += 1) {
+      const keyIndex = nextAvailableIndex()
+      if (keyIndex < 0) break
+      cursor = keyIndex
+
+      for (const endpoint of candidates) {
+        try {
+          const payload = await requestOnce<T>(endpoint, params, keyIndex, options)
+          recordHealth(providerId, true, started)
+          return payload
+        } catch (error) {
+          if (!(error instanceof LempiRequestError)) throw error
+          lastError = error
+          if (error.rotateKey) {
+            cursor = (keyIndex + 1) % states.length
+            break
+          }
         }
       }
+
+      if (!states[keyIndex]?.exhausted) break
     }
 
-    if (!states[keyIndex]?.exhausted) break
+    recordHealth(providerId, false, started, lastError?.rotateKey ? 'quota_or_auth' : 'request_failed')
+    throw new LempiUnavailableError()
+  } catch (error) {
+    if (!(error instanceof LempiUnavailableError)) {
+      recordHealth(providerId, false, started, 'unexpected_failure')
+      throw error
+    }
+    if (!states.length || !candidates.length) recordHealth(providerId, false, started, !states.length ? 'not_configured' : 'invalid_endpoint')
+    throw error
   }
-
-  if (lastError?.rotateKey) throw new LempiUnavailableError()
-  throw new LempiUnavailableError()
 }
 
 export function resetLempiKeyStateForTests() {
