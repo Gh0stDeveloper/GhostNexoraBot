@@ -2,6 +2,7 @@ import { Activity, Gauge, GitBranch, RefreshCcw, RotateCcw, ServerCog, ShieldAle
 import type { OpsProviderHealth, OpsSnapshot } from '../lib/ops'
 import { webIntlLocale, webT, type WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
+import { AdminAuditTable } from './admin-audit-table'
 import { CommandAuditTable } from './command-audit-table'
 import { ConfirmSubmitButton, OpsAutoRefresh } from './ops-client-controls'
 
@@ -109,12 +110,13 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
   }
 
   if (view === 'audit') {
-    return <div className="space-y-4">
+    return <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs text-zinc-500">{t('ops.auditText', { instance: instanceLabel })}</p></div>
         <div className="flex gap-2"><OpsAutoRefresh seconds={10}/><form action="/api/control" method="post"><input type="hidden" name="action" value="reset_audit"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="audit"/><button className="ops-button-muted"><RotateCcw className="size-4"/>{t('ops.resetAudit')}</button></form></div>
       </div>
       <CommandAuditTable commands={snapshot.commands} locale={locale} />
+      <AdminAuditTable rows={snapshot.adminAudit} locale={locale}/>
     </div>
   }
 
