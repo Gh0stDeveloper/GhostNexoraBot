@@ -31,6 +31,17 @@ const es = {
   'backup.date': 'Fecha',
   'backup.size': 'Tamaño',
   'backup.action': 'Acción',
+  'audit.adminTitle': 'Historial administrativo',
+  'audit.adminText': 'Registro por instancia de acciones aceptadas o fallidas desde los paneles autenticados. No almacena tokens, cookies, claves ni cuerpos de anuncios.',
+  'audit.actor': 'Actor',
+  'audit.action': 'Acción',
+  'audit.target': 'Objetivo',
+  'audit.status': 'Estado',
+  'audit.date': 'Fecha',
+  'audit.accepted': 'ACEPTADA',
+  'audit.failed': 'FALLIDA',
+  'audit.none': 'Todavía no hay acciones administrativas registradas para esta instancia.',
+  'audit.noTarget': 'Sin objetivo',
 } as const
 
 const en: Record<keyof typeof es, string> = {
@@ -64,6 +75,17 @@ const en: Record<keyof typeof es, string> = {
   'backup.date': 'Date',
   'backup.size': 'Size',
   'backup.action': 'Action',
+  'audit.adminTitle': 'Administrative history',
+  'audit.adminText': 'Per-instance record of accepted or failed actions from authenticated panels. It does not store tokens, cookies, keys or broadcast bodies.',
+  'audit.actor': 'Actor',
+  'audit.action': 'Action',
+  'audit.target': 'Target',
+  'audit.status': 'Status',
+  'audit.date': 'Date',
+  'audit.accepted': 'ACCEPTED',
+  'audit.failed': 'FAILED',
+  'audit.none': 'No administrative actions have been recorded for this instance yet.',
+  'audit.noTarget': 'No target',
 }
 
 export type OpsExtraKey = keyof typeof es
