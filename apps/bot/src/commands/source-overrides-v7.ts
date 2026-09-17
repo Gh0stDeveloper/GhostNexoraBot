@@ -8,9 +8,9 @@ const apkStores = [
 ]
 
 const streams = [
-  { name: '🎌 AnimeX', url: 'https://animex.one/' , description: 'Streaming y catálogo de anime en AnimeX.' },
+  { name: '🎌 Anime', url: 'https://myanimelist.net/', command: 'anime', description: 'Busca anime, abre su ficha y navega por episodios.' },
   { name: '🧡 Crunchyroll', url: 'https://www.crunchyroll.com/', description: 'Plataforma oficial de streaming de anime.' },
-  { name: '🎵 Spotify', url: 'https://open.spotify.com/', description: 'Música y podcasts en Spotify.' },
+  { name: '🎵 Spotify', url: 'https://open.spotify.com/', command: 'spotify', description: 'Busca música, reconoce enlaces y descarga pistas como audio.' },
   { name: '🐉 Xuper Hydra', url: 'https://xuperhydra.com/', description: 'Página del servicio Xuper Hydra.' },
 ]
 
@@ -32,10 +32,16 @@ async function apkMenu(ctx: CommandContext) {
 
 async function streamingMenu(ctx: CommandContext) {
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
-    title: '▶️ STREAMING · SITIOS OFICIALES',
-    body: 'Accesos directos a las páginas oficiales. No se utiliza Google como intermediario.',
+    title: '▶️ STREAMING Y MULTIMEDIA',
+    body: 'Los servicios con integración propia abren su comando real; los demás conservan su acceso oficial.',
     footer: 'Ghost Nexora Bot',
-    cards: streams.map((item) => ({ title: item.name, body: item.description, buttons: [{ type: 'url' as const, text: '🌐 Abrir sitio oficial', url: item.url }] })),
+    cards: streams.map((item) => ({
+      title: item.name,
+      body: item.description,
+      buttons: item.command
+        ? [{ type: 'reply' as const, text: 'Usar comando', id: `${ctx.prefix}${item.command}` }, { type: 'url' as const, text: 'Abrir sitio', url: item.url }]
+        : [{ type: 'url' as const, text: 'Abrir sitio oficial', url: item.url }],
+    })),
   })
 }
 
@@ -46,9 +52,8 @@ function one(name: string, aliases: string[], title: string, description: string
 export const sourceOverrideV7Commands: BotCommand[] = [
   { name: 'apk', aliases: ['apks', 'androidapp', 'androidapk'], category: 'downloads', description: 'Selector de fuentes APK oficiales: Uptodown, LiteAPKs y HappyMod.', usage: 'apk <aplicación>', handler: apkMenu },
   { name: 'downloads', aliases: ['downloadsites', 'fuentesapk'], category: 'downloads', description: 'Muestra únicamente fuentes APK oficiales configuradas.', usage: 'downloads', handler: apkMenu },
-  { name: 'streaming', aliases: ['stream', 'veranime'], category: 'tools', description: 'Muestra accesos directos a servicios oficiales.', usage: 'streaming', handler: streamingMenu },
-  one('anime', ['animex'], 'AnimeX', 'Abre AnimeX en su sitio oficial.', 'https://animex.one/'),
+  { name: 'streaming', aliases: ['stream', 'veranime'], category: 'tools', description: 'Muestra servicios multimedia y abre las integraciones reales disponibles.', usage: 'streaming', handler: streamingMenu },
+  one('animex', ['animexhd'], 'AnimeX', 'Abre AnimeX en su sitio oficial.', 'https://animex.one/'),
   one('crunchyroll', ['crunchy'], 'Crunchyroll', 'Abre Crunchyroll.', 'https://www.crunchyroll.com/'),
-  one('spotify', ['sp'], 'Spotify', 'Abre Spotify.', 'https://open.spotify.com/'),
   one('xuperhydra', ['xhydra'], 'Xuper Hydra', 'Abre Xuper Hydra.', 'https://xuperhydra.com/'),
 ]
