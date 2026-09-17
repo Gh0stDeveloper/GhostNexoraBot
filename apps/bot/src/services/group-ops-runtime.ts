@@ -200,7 +200,7 @@ async function refreshGroupPictures(limit = 6) {
     ORDER BY picture_updated_at ASC LIMIT ?`).all(instanceKey, staleBefore, limit) as unknown as Array<{ groupJid: string }>
   for (const row of rows) {
     let pictureUrl: string | null = null
-    try { pictureUrl = await socket.profilePictureUrl(row.groupJid, 'image') } catch {}
+    try { pictureUrl = (await socket.profilePictureUrl(row.groupJid, 'image')) ?? null } catch {}
     opsDb.prepare(`UPDATE ops_groups SET picture_url = ?, picture_updated_at = ?
       WHERE instance_key = ? AND group_jid = ?`).run(pictureUrl, Date.now(), instanceKey, row.groupJid)
   }
