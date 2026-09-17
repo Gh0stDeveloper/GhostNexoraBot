@@ -2,6 +2,7 @@ import { Activity, Cpu, Gauge, MemoryStick, ServerCog, Timer } from 'lucide-reac
 import { type WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
 import { readRuntimeDiagnostics } from '../lib/runtime-diagnostics'
+import { GroupActivityPanel } from './group-activity-panel'
 import { OpsAlertCenter } from './ops-alert-center'
 import { RuntimeLogTable } from './runtime-log-table'
 
@@ -44,6 +45,7 @@ export function RuntimeDiagnosticsPanel({ instanceKey, locale }: { instanceKey: 
     </section>
 
     <OpsAlertCenter instanceKey={instanceKey} runtimeFresh={Boolean(data?.fresh)} locale={locale}/>
+    <GroupActivityPanel instanceKey={instanceKey} locale={locale}/>
     <RuntimeLogTable instanceKey={instanceKey} locale={locale}/>
   </div>
 }
