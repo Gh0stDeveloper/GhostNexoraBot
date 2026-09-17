@@ -16,6 +16,7 @@ import { economy } from './economy.js'
 import { telegramRuntimeStatus, startTelegramPlatform, stopTelegramPlatform } from '../platform/telegram/runtime.js'
 import { discordRuntimeStatus, startDiscordPlatform, stopDiscordPlatform } from '../platform/discord/runtime.js'
 import { logger } from '../utils/logger.js'
+import { recordOpsRuntimeLog } from './ops-runtime-log.js'
 
 const startedAt = new Date().toISOString()
 const logEntries: LogEntry[] = []
@@ -45,9 +46,12 @@ function pairedState(detail?: string | null): PairStatusResponse {
 }
 
 export function recordControlLog(level: LogEntry['level'], message: string) {
-  const entry: LogEntry = { cursor: `${Date.now()}-${logEntries.length}`, timestamp: now(), level, message: redact(message) }
+  const safeMessage = redact(message)
+  const entry: LogEntry = { cursor: `${Date.now()}-${logEntries.length}`, timestamp: now(), level, message: safeMessage }
   logEntries.push(entry)
   if (logEntries.length > MAX_CONTROL_LOGS) logEntries.splice(0, logEntries.length - MAX_CONTROL_LOGS)
+  const persistentLevel = level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'debug' ? 'debug' : 'info'
+  recordOpsRuntimeLog(persistentLevel, 'control-api', safeMessage)
 }
 
 export function setControlPairQr(qr: string | null) {
@@ -258,29 +262,24 @@ export async function handleControlApiV2(req: http.IncomingMessage, res: http.Se
       return true
     }
     if (req.method === 'GET' && url.pathname === '/v2/pair/status') {
-      if (deps.whatsappConnected()) pairState = pairedState(pairState.detail ?? null)
+      if (deps.whatsappConnected() && pairState.state !== 'paired') pairState = pairedState()
       json(res, 200, pairState)
       return true
     }
 
-    if (req.method === 'POST' && url.pathname === '/v2/runtime/update') {
+    if (req.method === 'POST' && url.pathname === '/v2/update') {
       await runtimeUpdate()
-      json(res, 202, { ok: true, action: 'update', accepted: true, detail: 'safe_update_request_queued' })
-      return true
-    }
-    if (req.method === 'POST' && ['/v2/runtime/start', '/v2/runtime/stop', '/v2/runtime/restart'].includes(url.pathname)) {
-      const action = url.pathname.split('/').at(-1) as 'start' | 'stop' | 'restart'
-      json(res, 409, { ok: true, action, accepted: false, managerRequired: true, detail: 'host_process_manager_required' })
+      json(res, 202, { ok: true, accepted: true })
       return true
     }
 
     json(res, 404, { ok: false, error: 'not_found' })
     return true
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'control_api_failed'
-    recordControlLog('error', message)
-    logger.warn({ error }, 'Control API V2 request failed')
-    json(res, 400, { ok: false, error: redact(message) })
+    const detail = error instanceof Error ? error.message : 'control_api_failed'
+    recordControlLog('error', detail)
+    logger.warn({ error, path: url.pathname }, 'Control API V2 request failed')
+    json(res, 400, { ok: false, error: redact(detail) })
     return true
   }
 }
