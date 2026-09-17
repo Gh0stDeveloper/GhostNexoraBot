@@ -94,19 +94,27 @@ function localOpsAction(action: string, instance: string, payload: Record<string
       return { ok: true, action, instance, queued: true }
     }
 
-    if (['leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group'].includes(action)) {
+    const groupActions = new Set([
+      'leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
+      'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
+    ])
+    if (groupActions.has(action)) {
       const groupJid = String(payload.groupJid ?? '')
       if (!groupJid.endsWith('@g.us')) return { ok: false, error: 'invalid_group' }
       const group = db.prepare('SELECT name FROM ops_groups WHERE instance_key = ? AND group_jid = ?').get(instance, groupJid) as { name?: string } | undefined
       if (!group) return { ok: false, error: 'group_not_registered_for_instance' }
 
-      const requestAction = action === 'leave_group'
-        ? 'leave'
-        : action === 'mute_group_8h'
-          ? 'mute:8h'
-          : action === 'mute_group_7d'
-            ? 'mute:7d'
-            : 'unmute'
+      const actionMap: Record<string, string> = {
+        leave_group: 'leave',
+        mute_group_8h: 'mute:8h',
+        mute_group_7d: 'mute:7d',
+        unmute_group: 'unmute',
+        group_announce_on: 'announce:on',
+        group_announce_off: 'announce:off',
+        group_lock_on: 'lock:on',
+        group_lock_off: 'lock:off',
+      }
+      const requestAction = actionMap[action]
       const duplicate = db.prepare("SELECT id FROM ops_group_control_requests WHERE instance_key = ? AND action = ? AND group_jid = ? AND status IN ('pending','processing') LIMIT 1")
         .get(instance, requestAction, groupJid)
       if (!duplicate) db.prepare(`INSERT INTO ops_group_control_requests(instance_key, action, group_jid, requested_by, status, requested_at)
@@ -183,8 +191,12 @@ async function handlePost(request: NextRequest) {
   }
 
   const actor = isSubbot ? `subbot-owner:${subbot.subbotId}` : 'web-admin'
+  const localActions = new Set([
+    'leave_group', 'sync_groups', 'reset_audit', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
+    'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
+  ])
 
-  if (['leave_group', 'sync_groups', 'reset_audit', 'mute_group_8h', 'mute_group_7d', 'unmute_group'].includes(action)) {
+  if (localActions.has(action)) {
     const requestedBy = isSubbot ? subbot.userJid : 'web-admin'
     const result = localOpsAction(action, instance, payload, requestedBy)
     auditResult({ instance, actor, action, payload, result })
