@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_SESSION_COOKIE, SUBBOT_SESSION_COOKIE, verifySession } from '../../../lib/auth'
+import { auditTarget, recordAdminAudit } from '../../../lib/admin-audit'
 import { readOpsSnapshot } from '../../../lib/ops'
 import { publicUrl } from '../../../lib/public-url'
 import { openBotDbWritable, runtime } from '../../../lib/runtime'
@@ -54,6 +55,23 @@ function responseFor(request: NextRequest, result: Record<string, unknown>, isAd
   if (section) redirect.searchParams.set('section', normalizeSection(section, isAdmin))
   redirect.searchParams.set(result.ok ? 'ok' : 'error', result.ok ? '1' : String(result.error ?? 'control_failed').slice(0, 100))
   return NextResponse.redirect(redirect, 303)
+}
+
+function auditResult(input: {
+  instance: string
+  actor: string
+  action: string
+  payload: Record<string, unknown>
+  result: Record<string, unknown>
+}) {
+  recordAdminAudit({
+    instanceKey: input.instance,
+    actor: input.actor,
+    action: input.action,
+    target: auditTarget(input.action, input.payload),
+    ok: Boolean(input.result.ok),
+    error: input.result.ok ? null : String(input.result.error ?? 'control_failed'),
+  })
 }
 
 function localOpsAction(action: string, instance: string, payload: Record<string, unknown>, requestedBy: string) {
@@ -164,9 +182,13 @@ async function handlePost(request: NextRequest) {
     if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, true, 'main', section)
   }
 
+  const actor = isSubbot ? `subbot-owner:${subbot.subbotId}` : 'web-admin'
+
   if (['leave_group', 'sync_groups', 'reset_audit', 'mute_group_8h', 'mute_group_7d', 'unmute_group'].includes(action)) {
     const requestedBy = isSubbot ? subbot.userJid : 'web-admin'
-    return responseFor(request, localOpsAction(action, instance, payload, requestedBy), Boolean(isAdmin), instance, section)
+    const result = localOpsAction(action, instance, payload, requestedBy)
+    auditResult({ instance, actor, action, payload, result })
+    return responseFor(request, result, Boolean(isAdmin), instance, section)
   }
 
   const outgoing: Record<string, unknown> = { ...payload }
@@ -178,6 +200,7 @@ async function handlePost(request: NextRequest) {
   }
 
   const result = await sendBotControl(outgoing, action)
+  auditResult({ instance, actor, action, payload: outgoing, result })
   return responseFor(request, result, Boolean(isAdmin), instance, section)
 }
 
