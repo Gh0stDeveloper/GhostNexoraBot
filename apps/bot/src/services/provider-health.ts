@@ -1,3 +1,4 @@
+import { setOpsAlert } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 export type ProviderHealthRecord = {
@@ -77,6 +78,23 @@ export function providerLabel(providerId: string) {
   return PROVIDER_LABELS[id] ?? id.replace(/(^|-)([a-z])/g, (_match, prefix: string, letter: string) => `${prefix ? ' ' : ''}${letter.toUpperCase()}`)
 }
 
+function updateProviderAlert(instanceKey: string, id: string, label: string) {
+  const row = opsDb.prepare(`SELECT consecutive_failures AS consecutiveFailures, last_error AS lastError
+    FROM ops_provider_health WHERE instance_key = ? AND provider_id = ?`).get(instanceKey, id) as {
+      consecutiveFailures?: number
+      lastError?: string | null
+    } | undefined
+  const failures = Number(row?.consecutiveFailures ?? 0)
+  setOpsAlert({
+    key: `provider:${id}`,
+    severity: failures >= 5 ? 'critical' : 'warning',
+    title: `${label} provider unavailable`,
+    detail: failures ? `${failures} consecutive failures · ${String(row?.lastError ?? 'provider_failure')}` : null,
+    active: failures >= CIRCUIT_FAILURE_THRESHOLD,
+    instanceKey,
+  })
+}
+
 export function recordProviderAttempt(providerId: string, input: {
   ok: boolean
   latencyMs: number
@@ -124,6 +142,7 @@ export function recordProviderAttempt(providerId: string, input: {
       errorCode,
       stamp,
     )
+  updateProviderAlert(instanceKey, id, label)
 }
 
 export function readProviderHealth(instanceKey = opsInstanceKey()): ProviderHealthRecord[] {
