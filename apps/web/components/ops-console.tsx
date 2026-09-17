@@ -1,6 +1,7 @@
 import { Activity, Gauge, GitBranch, RefreshCcw, RotateCcw, ServerCog, ShieldAlert, Signal, UsersRound } from 'lucide-react'
 import type { OpsProviderHealth, OpsSnapshot } from '../lib/ops'
 import { webIntlLocale, webT, type WebLocale } from '../lib/i18n'
+import { opsExtraT } from '../lib/ops-extra-i18n'
 import { CommandAuditTable } from './command-audit-table'
 import { ConfirmSubmitButton, OpsAutoRefresh } from './ops-client-controls'
 
@@ -37,15 +38,13 @@ function dateTime(timestamp: number, locale: WebLocale) {
 }
 
 function providerBadge(provider: OpsProviderHealth, locale: WebLocale) {
-  const labels = locale === 'es'
-    ? { online: 'ONLINE', degraded: 'DEGRADADO', offline: 'OFFLINE', unknown: 'SIN DATOS' }
-    : { online: 'ONLINE', degraded: 'DEGRADED', offline: 'OFFLINE', unknown: 'NO DATA' }
   const className = provider.status === 'online'
     ? 'ops-badge-good'
     : provider.status === 'degraded' || provider.status === 'unknown'
       ? 'ops-badge-warn'
       : 'ops-badge-bad'
-  return <span className={className}>{labels[provider.status]}</span>
+  const key = `provider.status.${provider.status}` as const
+  return <span className={className}>{opsExtraT(locale, key)}</span>
 }
 
 export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overview', locale }: {
@@ -57,40 +56,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
 }) {
   const intl = webIntlLocale(locale)
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
-  const providerCopy = locale === 'es' ? {
-    title: 'Salud de proveedores',
-    subtitle: 'Telemetría por instancia para APIs y servicios utilizados por las descargas.',
-    empty: 'Todavía no hay telemetría. Los proveedores aparecerán después de recibir tráfico real.',
-    avg: 'Latencia media',
-    last: 'Última latencia',
-    errors: 'Errores',
-    requests: 'Solicitudes',
-    lastFailure: 'Último fallo',
-    noFailure: 'Sin fallos recientes',
-  } : {
-    title: 'Provider health',
-    subtitle: 'Per-instance telemetry for APIs and services used by download flows.',
-    empty: 'No telemetry yet. Providers will appear after receiving real traffic.',
-    avg: 'Average latency',
-    last: 'Last latency',
-    errors: 'Errors',
-    requests: 'Requests',
-    lastFailure: 'Last failure',
-    noFailure: 'No recent failures',
-  }
-  const groupCopy = locale === 'es' ? {
-    muted: 'SILENCIADO',
-    mute8h: 'Silenciar 8 h',
-    mute7d: 'Silenciar 7 días',
-    unmute: 'Activar notificaciones',
-    until: 'Hasta',
-  } : {
-    muted: 'MUTED',
-    mute8h: 'Mute 8 h',
-    mute7d: 'Mute 7 days',
-    unmute: 'Enable notifications',
-    until: 'Until',
-  }
+  const x = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
 
   if (view === 'groups') {
     return <section className="ops-panel overflow-hidden">
@@ -111,7 +77,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
                 <td>
                   <div className="flex flex-col items-start gap-1.5">
                     <span className={group.announce ? 'ops-badge-warn' : 'ops-badge-good'}>{group.announce ? t('ops.onlyAdmins') : t('ops.openMode')}</span>
-                    {muted && <><span className="ops-badge-warn">{groupCopy.muted}</span><span className="text-[10px] text-zinc-600">{groupCopy.until} {dateTime(group.mutedUntil, locale)}</span></>}
+                    {muted && <><span className="ops-badge-warn">{x('group.muted')}</span><span className="text-[10px] text-zinc-600">{x('group.until')} {dateTime(group.mutedUntil, locale)}</span></>}
                   </div>
                 </td>
                 <td className="text-zinc-500">{relativeTime(group.updatedAt, locale)}</td>
@@ -119,15 +85,15 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
                   <div className="flex flex-wrap justify-end gap-2">
                     {muted ? <form action="/api/control" method="post">
                       <input type="hidden" name="action" value="unmute_group"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
-                      <button className="ops-button-muted text-xs">{groupCopy.unmute}</button>
+                      <button className="ops-button-muted text-xs">{x('group.unmute')}</button>
                     </form> : <>
                       <form action="/api/control" method="post">
                         <input type="hidden" name="action" value="mute_group_8h"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
-                        <button className="ops-button-muted text-xs">{groupCopy.mute8h}</button>
+                        <button className="ops-button-muted text-xs">{x('group.mute8h')}</button>
                       </form>
                       <form action="/api/control" method="post">
                         <input type="hidden" name="action" value="mute_group_7d"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
-                        <button className="ops-button-muted text-xs">{groupCopy.mute7d}</button>
+                        <button className="ops-button-muted text-xs">{x('group.mute7d')}</button>
                       </form>
                     </>}
                     <form action="/api/control" method="post"><input type="hidden" name="action" value="leave_group"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/><ConfirmSubmitButton className="ops-button-danger" confirmText={t('ops.leaveConfirm', { instance: instanceLabel, group: group.name })}>{t('ops.leave')}</ConfirmSubmitButton></form>
@@ -187,7 +153,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
 
     <section className="ops-panel overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-4"><Activity className="size-5 shrink-0 text-blue-400"/><div><h2 className="font-bold text-white">{providerCopy.title}</h2><p className="mt-1 text-xs text-zinc-500">{providerCopy.subtitle}</p></div></div>
+        <div className="flex min-w-0 items-center gap-4"><Activity className="size-5 shrink-0 text-blue-400"/><div><h2 className="font-bold text-white">{x('provider.title')}</h2><p className="mt-1 text-xs text-zinc-500">{x('provider.subtitle')}</p></div></div>
         <div className="flex items-center gap-2"><span className="font-mono text-xs text-zinc-600">{snapshot.providers.length.toLocaleString(intl)}</span><OpsAutoRefresh seconds={10}/></div>
       </div>
       {snapshot.providers.length ? <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
@@ -197,15 +163,15 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
             {providerBadge(provider, locale)}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.avg}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.averageLatencyMs, intl)}</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.last}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.lastLatencyMs, intl)}</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.errors}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.errorRate.toFixed(1)}%</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.requests}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.requests.toLocaleString(intl)}</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.avg')}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.averageLatencyMs, intl)}</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.last')}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.lastLatencyMs, intl)}</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.errors')}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.errorRate.toFixed(1)}%</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.requests')}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.requests.toLocaleString(intl)}</strong></div>
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-zinc-600"><span>{providerCopy.lastFailure}</span><span className="text-right">{provider.lastFailureAt ? relativeTime(provider.lastFailureAt, locale) : providerCopy.noFailure}</span></div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-zinc-600"><span>{x('provider.lastFailure')}</span><span className="text-right">{provider.lastFailureAt ? relativeTime(provider.lastFailureAt, locale) : x('provider.noFailure')}</span></div>
           {provider.lastError && <p className="mt-2 truncate rounded-md border border-red-500/10 bg-red-500/[.04] px-2 py-1.5 font-mono text-[10px] text-red-400/70" title={provider.lastError}>{provider.lastError}</p>}
         </article>)}
-      </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{providerCopy.empty}</div>}
+      </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{x('provider.empty')}</div>}
     </section>
   </div>
 }
