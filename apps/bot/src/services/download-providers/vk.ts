@@ -4,7 +4,7 @@ import path from 'node:path'
 import { execa } from 'execa'
 import { config } from '../../config.js'
 import { downloadProviderFile } from './http.js'
-import { withProviderTelemetry } from './runtime.js'
+import { providerFailoverOrder, withProviderTelemetry } from './runtime.js'
 
 const VK_INPUT_HOSTS = [
   /^(?:m\.|www\.)?vk\.com$/i,
@@ -142,32 +142,40 @@ async function downloadVkViaYtDlp(url: string): Promise<Omit<VkDownloadBundle, '
   }
 }
 
+async function downloadVkOfficial(url: string): Promise<VkDownloadBundle> {
+  const resolved = await resolveVkOfficial(url)
+  const file = await withProviderTelemetry('vk-official', 'download', () => downloadProviderFile(resolved.url, {
+    allowedHosts: VK_MEDIA_HOSTS,
+    provider: 'vk-official',
+    fileBase: `vk-${resolved.ownerId ?? 'video'}-${resolved.videoId ?? 'media'}`,
+    extension: 'mp4',
+    referer: url,
+  }))
+  return { filePath: file.filePath, fileName: file.fileName, size: file.size, provider: 'vk-official', quality: resolved.quality, cleanup: file.cleanup }
+}
+
+async function downloadVkFallback(url: string): Promise<VkDownloadBundle> {
+  const result = await withProviderTelemetry('vk-ytdlp', 'download', () => downloadVkViaYtDlp(url))
+  return { ...result, provider: 'vk-ytdlp' }
+}
+
 export async function downloadVkVideo(input: string): Promise<VkDownloadBundle> {
   const url = validateVkUrl(input)
-  const officialErrors: string[] = []
+  const officialReady = Boolean(vkAccessToken() && vkVideoRefFromUrl(url))
+  const candidates = officialReady
+    ? providerFailoverOrder(['vk-official', 'vk-ytdlp'] as const)
+    : providerFailoverOrder(['vk-ytdlp'] as const)
+  const errors: string[] = []
 
-  if (vkAccessToken() && vkVideoRefFromUrl(url)) {
+  for (const provider of candidates) {
     try {
-      const resolved = await resolveVkOfficial(url)
-      const file = await withProviderTelemetry('vk-official', 'download', () => downloadProviderFile(resolved.url, {
-        allowedHosts: VK_MEDIA_HOSTS,
-        provider: 'vk-official',
-        fileBase: `vk-${resolved.ownerId ?? 'video'}-${resolved.videoId ?? 'media'}`,
-        extension: 'mp4',
-        referer: url,
-      }))
-      return { filePath: file.filePath, fileName: file.fileName, size: file.size, provider: 'vk-official', quality: resolved.quality, cleanup: file.cleanup }
+      if (provider === 'vk-official') return await downloadVkOfficial(url)
+      return await downloadVkFallback(url)
     } catch (error) {
-      officialErrors.push(error instanceof Error ? error.message : String(error))
+      const detail = error instanceof Error ? error.message : String(error)
+      errors.push(`${provider}: ${detail}`)
     }
   }
 
-  try {
-    const result = await withProviderTelemetry('vk-ytdlp', 'download', () => downloadVkViaYtDlp(url))
-    return { ...result, provider: 'vk-ytdlp' }
-  } catch (error) {
-    const fallback = error instanceof Error ? error.message : String(error)
-    const official = officialErrors.length ? `${officialErrors.join(' · ')} · ` : ''
-    throw new Error(`No pude descargar el video público de VK. ${official}${fallback}`)
-  }
+  throw new Error(`No pude descargar el video público de VK. ${errors.join(' · ')}`)
 }
