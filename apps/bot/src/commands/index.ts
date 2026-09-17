@@ -100,6 +100,7 @@ import { stickerPremiumV18Commands } from './sticker-premium-v18.js'
 import { economyUiV18Commands } from './economy-ui-v18.js'
 import { automaticResponseCommands } from './automatic-responses.js'
 import { happyModV19Commands } from './happymod-v19.js'
+import { commandSearchCommands } from './command-search.js'
 
 // El stack local LLM depende de Ollama. Si OLLAMA_ENABLED=false, el router y el
 // menú no registran .llm/.minillm/.localai ni el control de conversación libre.
@@ -253,6 +254,7 @@ export const commands: BotCommand[] = [
   ...economyUiV18Commands,
   ...automaticResponseCommands,
   ...happyModV19Commands,
+  ...commandSearchCommands,
 ]
 
 setMenuCommandProvider(() => commands)
