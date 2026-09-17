@@ -15,6 +15,7 @@ import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
 import { mangaDownloadCommands } from './manga-download.js'
 import { animeDownloadCommands } from './anime-download.js'
+import { spotifyCommands } from './spotify.js'
 import { webSearchCommands } from './web-search.js'
 import { navegadorCommands } from './navegador.js'
 import { minecraftCommands } from './minecraft.js'
@@ -230,6 +231,7 @@ const legacyCommands: BotCommand[] = [
   ...lempiApiCommands,
   ...mediaDownloadFixCommands,
   ...animeDownloadCommands,
+  ...spotifyCommands,
   ...localLlmCommands,
   ...bankingV10Commands,
   ...minershopV10Commands,
