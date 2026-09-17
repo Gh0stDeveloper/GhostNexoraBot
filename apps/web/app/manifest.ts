@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Ghost Nexora Bot',
     short_name: 'Ghost Nexora',
-    description: 'Panel y distribución oficial de Ghost Nexora Bot.',
+    description: 'Official Ghost Nexora Bot web application and operations panel.',
     start_url: '/',
     scope: '/',
     display: 'standalone',
