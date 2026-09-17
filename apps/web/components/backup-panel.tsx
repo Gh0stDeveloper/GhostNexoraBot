@@ -1,7 +1,8 @@
-import { Archive, Database, Download, Plus, ShieldCheck } from 'lucide-react'
+import { Archive, Database, Download, Plus, RotateCcw, ShieldCheck } from 'lucide-react'
 import { listWebBackups } from '../lib/backups'
 import { webIntlLocale, type WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
+import { ConfirmSubmitButton } from './ops-client-controls'
 
 function formatBytes(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB']
@@ -35,14 +36,26 @@ export async function BackupPanel({ locale }: { locale: WebLocale }) {
       <div className="ops-node"><ShieldCheck className="size-4 text-emerald-400"/><p className="mt-3 text-xs text-zinc-500">{t('backup.protected')}</p></div>
     </div>
 
+    <div className="border-b border-white/[.08] px-5 py-3 text-xs leading-5 text-amber-300/70">{t('backup.restoreHint')}</div>
+
     {backups.length ? <div className="overflow-x-auto">
-      <table className="ops-table min-w-[720px]">
+      <table className="ops-table min-w-[820px]">
         <thead><tr><th>Backup</th><th>{t('backup.date')}</th><th>{t('backup.size')}</th><th className="text-right">{t('backup.action')}</th></tr></thead>
         <tbody>{backups.map((backup, index) => <tr key={backup.id}>
           <td><div className="flex items-center gap-2"><span className="font-mono text-xs text-zinc-300">{backup.fileName}</span>{index === 0 && <span className="ops-badge-good">{t('backup.latest')}</span>}</div></td>
           <td className="text-zinc-500">{new Date(backup.createdAt).toLocaleString(intl)}</td>
           <td className="font-mono text-zinc-400">{formatBytes(backup.size)}</td>
-          <td className="text-right"><a className="ops-button-muted" href={`/api/backups/download?id=${encodeURIComponent(backup.id)}`}><Download className="size-4"/>{t('backup.download')}</a></td>
+          <td>
+            <div className="flex justify-end gap-2">
+              <a className="ops-button-muted" href={`/api/backups/download?id=${encodeURIComponent(backup.id)}`}><Download className="size-4"/>{t('backup.download')}</a>
+              <form action="/api/control" method="post">
+                <input type="hidden" name="section" value="management"/>
+                <input type="hidden" name="action" value="restore_backup"/>
+                <input type="hidden" name="backupId" value={backup.id}/>
+                <ConfirmSubmitButton className="ops-button-danger" confirmText={t('backup.restoreConfirm')}><RotateCcw className="size-4"/>{t('backup.restore')}</ConfirmSubmitButton>
+              </form>
+            </div>
+          </td>
         </tr>)}</tbody>
       </table>
     </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{t('backup.empty')}</div>}
