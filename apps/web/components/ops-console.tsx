@@ -5,6 +5,7 @@ import { opsExtraT } from '../lib/ops-extra-i18n'
 import { AdminAuditTable } from './admin-audit-table'
 import { CommandAuditTable } from './command-audit-table'
 import { ConfirmSubmitButton, OpsAutoRefresh } from './ops-client-controls'
+import { RuntimeDiagnosticsPanel } from './runtime-diagnostics-panel'
 
 export type OpsConsoleView = 'overview' | 'groups' | 'audit'
 
@@ -137,6 +138,8 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
         <p className="mt-1 text-xs text-zinc-600">{note}</p>
       </article>)}
     </section>
+
+    <RuntimeDiagnosticsPanel instanceKey={snapshot.instanceKey} locale={locale}/>
 
     <section className="ops-panel overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
