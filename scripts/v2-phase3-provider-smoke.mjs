@@ -124,6 +124,15 @@ try {
   assert.equal(health.find((row) => row.provider === 'apkpure-html')?.successes, 1)
   assert.equal(health.find((row) => row.provider === 'apkmirror-html')?.failures, 1)
 
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await assert.rejects(runtime.withProviderTelemetry('x-official', 'download', async () => { throw new Error('synthetic circuit failure') }))
+  }
+  assert.deepEqual(runtime.providerFailoverOrder(['x-official', 'x-ytdlp']), ['x-ytdlp'], 'open primary circuit must route directly to fallback')
+  assert.equal(runtime.providerCircuitSnapshot('x-official'), 'open')
+  assert.equal(await runtime.withProviderTelemetry('x-official', 'download', async () => 'probe-ok'), 'probe-ok')
+  assert.equal(runtime.providerCircuitSnapshot('x-official'), 'closed')
+  assert.deepEqual(runtime.providerFailoverOrder(['x-official', 'x-ytdlp']), ['x-official', 'x-ytdlp'], 'successful probe must restore primary ordering')
+
   const catalog = JSON.parse(await source('docs/v2/baselines/providers-v2-phase3.json'))
   assert.equal(catalog.totalProviders, 21)
   for (const id of ['twitter', 'vk', 'apkmirror', 'apkpure']) assert.ok(catalog.providers.some((provider) => provider.id === id), `provider catalog missing ${id}`)
@@ -152,9 +161,11 @@ try {
   assert.match(xSource, /attachments\.media_keys/)
   assert.match(xSource, /media\.fields/)
   assert.match(xSource, /variants/)
+  assert.match(xSource, /providerFailoverOrder/)
   assert.match(vkSource, /https:\/\/api\.vk\.com\/method\/video\.get/)
   assert.match(vkSource, /'5\.199'/)
   assert.match(vkSource, /mp4_/)
+  assert.match(vkSource, /providerFailoverOrder/)
   assert.match(apkSource, /post_type.*app_release/s)
   assert.match(apkSource, /searchtype.*apk/s)
   assert.match(apkSource, /apkMirrorRequiredWaitMs/)
@@ -169,7 +180,7 @@ try {
   assert.match(envSource, /^VK_ACCESS_TOKEN=/m)
   assert.match(termuxSource, /downloadProgressV2Commands/, 'Termux Lite must inherit the same Phase 3 provider command array')
 
-  console.log('[V2 PHASE 3] OK — X/VK/APKMirror/APKPure contracts, countdown-aware signed URLs, session cookies, telemetry and shared command registration validated.')
+  console.log('[V2 PHASE 3] OK — X/VK/APKMirror/APKPure contracts, countdown-aware signed URLs, session cookies, persistent circuit failover, telemetry and shared command registration validated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
