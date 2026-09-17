@@ -6,6 +6,7 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
+import { recordProviderAttempt } from './provider-health.js'
 
 const BASE = (process.env.LEMPI_BASE_URL?.trim() || 'https://api.lempi.lat').replace(/\/$/, '')
 const key = () => process.env.LEMPI_API_KEY?.trim() ?? ''
@@ -86,6 +87,20 @@ function addParams(target: URL, sourceUrl: string, kind: Kind, quality?: number)
   // /dl/yta y /dl/ytv ya definen el formato en el propio endpoint.
   // No enviamos type/format para no depender de parámetros no documentados.
   if (kind === 'video' && quality) target.searchParams.set('quality', String(quality))
+}
+
+function healthProvider(kind: Kind) {
+  return kind === 'facebook' ? 'facebook' : 'youtube'
+}
+
+function recordHealth(kind: Kind, ok: boolean, started: number, errorCode?: string) {
+  const latencyMs = Math.max(0, performance.now() - started)
+  try {
+    recordProviderAttempt('lempi', { ok, latencyMs, errorCode })
+    recordProviderAttempt(healthProvider(kind), { ok, latencyMs, errorCode })
+  } catch (error) {
+    logger.debug({ error, kind }, 'legacy LemPi provider health telemetry skipped')
+  }
 }
 
 async function parseResponse(response: Response, endpoint: string, target: URL, kind: Kind): Promise<EndpointHit | null> {
@@ -169,16 +184,21 @@ async function callEndpoint(endpoint: string, sourceUrl: string, kind: Kind, qua
 }
 
 export async function resolveLempi(sourceUrl: string, kind: Kind, quality?: number) {
+  const started = performance.now()
   let lastError: unknown
   for (const endpoint of endpointCandidates(kind)) {
     try {
       const result = await callEndpoint(endpoint, sourceUrl, kind, quality)
-      if (result) return result
+      if (result) {
+        recordHealth(kind, true, started)
+        return result
+      }
     } catch (error) {
       lastError = error
       logger.warn({ error, endpoint, kind }, 'Lempi endpoint attempt failed')
     }
   }
+  recordHealth(kind, false, started, key() ? 'all_endpoints_failed' : 'not_configured')
   throw lastError instanceof Error ? lastError : new Error('No hay un endpoint Lempi disponible para esta descarga.')
 }
 
