@@ -10,11 +10,13 @@ import { config } from '../config.js'
 import { registerOpsSocket } from '../services/group-ops-runtime.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canSendToChatJid } from '../services/private-chat-policy.js'
+import { startRuntimeDiagnostics } from '../services/runtime-diagnostics.js'
 import { registerSecurityPocSocket } from '../services/security-poc-scope.js'
 import { silentWaLogger } from '../utils/logger.js'
 
 export async function createSocket(sessionDir = config.sessionDir): Promise<{ socket: WASocket; saveCreds: () => Promise<void> }> {
   await mkdir(sessionDir, { recursive: true })
+  startRuntimeDiagnostics()
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
   const { version } = await fetchLatestBaileysVersion()
   const socket = makeWASocket({
