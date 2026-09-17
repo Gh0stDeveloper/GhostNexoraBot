@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger.js'
-import { recordProviderAttempt } from '../provider-health.js'
+import { providerCircuitState, recordProviderAttempt } from '../provider-health.js'
 
 export type DownloadProviderId =
   | 'x-official'
@@ -80,6 +80,26 @@ export async function withProviderTelemetry<T>(
     logger.warn({ provider, operation, latencyMs: current.lastLatencyMs, error: current.lastError }, 'download provider failed')
     throw error
   }
+}
+
+export function providerFailoverOrder<T extends DownloadProviderId>(providers: readonly T[]): T[] {
+  const unique = [...new Set(providers)]
+  if (unique.length <= 1) return unique
+  const rows = unique.map((provider, index) => ({ provider, index, circuit: providerCircuitState(provider) }))
+  const usable = rows.filter((item) => item.circuit !== 'open')
+  // If every circuit is open, allow a probe instead of permanently deadlocking the route.
+  const selected = usable.length ? usable : rows
+  return selected
+    .sort((left, right) => {
+      const leftRank = left.circuit === 'closed' ? 0 : left.circuit === 'half-open' ? 1 : 2
+      const rightRank = right.circuit === 'closed' ? 0 : right.circuit === 'half-open' ? 1 : 2
+      return leftRank - rightRank || left.index - right.index
+    })
+    .map((item) => item.provider)
+}
+
+export function providerCircuitSnapshot(provider: DownloadProviderId) {
+  return providerCircuitState(provider)
 }
 
 export function providerHealthSnapshot(): ProviderHealth[] {
