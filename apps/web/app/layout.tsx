@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import PublicQuickStart from '../components/PublicQuickStart'
 import { LanguageSwitcher, WebI18nProvider } from '../components/i18n-provider'
+import { PwaRegister } from '../components/pwa-register'
 import { getWebLocale } from '../lib/i18n-server'
 import { webT } from '../lib/i18n'
 import './globals.css'
@@ -11,6 +12,12 @@ export async function generateMetadata(): Promise<Metadata> {
     title: webT(locale, 'meta.title'),
     description: webT(locale, 'meta.description'),
     applicationName: 'Ghost Nexora Bot',
+    manifest: '/manifest.webmanifest',
+    icons: {
+      icon: '/pwa-icon.svg',
+      shortcut: '/pwa-icon.svg',
+      apple: '/pwa-icon.svg',
+    },
     keywords: [
       'Ghost Nexora Bot', 'Ghost Nexora Manager', 'WhatsApp bot', 'Telegram bot', 'Discord bot',
       'Nexora', 'Ghost Developer', 'subbots', 'NXC', 'Android APK', 'Windows installer',
@@ -39,6 +46,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           {children}
           <PublicQuickStart />
           <LanguageSwitcher />
+          <PwaRegister />
         </WebI18nProvider>
       </body>
     </html>
