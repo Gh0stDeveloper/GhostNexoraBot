@@ -42,8 +42,9 @@ export function readGroupInsights(instanceKey: string, limit = 25): GroupInsight
          COALESCE(SUM(CASE WHEN s.day >= ? THEN s.messages ELSE 0 END), 0) AS messages7d,
          COALESCE(SUM(s.messages), 0) AS messages30d`
       : '0 AS messagesToday, 0 AS messages7d, 0 AS messages30d'
+    // SQL placeholders appear first in SELECT, then JOIN, then WHERE/LIMIT.
     const params: Array<string | number> = []
-    if (hasStats) params.push(today - 29, today, today - 6)
+    if (hasStats) params.push(today, today - 6, today - 29)
     params.push(instanceKey, Math.max(1, Math.min(100, limit)))
 
     const rows = db.prepare(`SELECT g.group_jid AS groupJid, g.name, ${description} AS description,
