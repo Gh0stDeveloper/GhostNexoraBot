@@ -3,18 +3,22 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { gzip } from 'node:zlib'
+import { gunzip, gzip } from 'node:zlib'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 import { economy } from './economy.js'
 import { opsInstanceKey } from './ops-database.js'
+import { pendingRestorePath, type RestorePlan, type RestorePlanFile } from './restore-bootstrap.js'
 
 const gzipAsync = promisify(gzip)
+const gunzipAsync = promisify(gunzip)
 const BACKUP_VERSION = 1
 const BACKUP_EXTENSION = '.gnb-backup.gz'
 const MAX_BACKUPS = 30
 const AUTO_BACKUP_INTERVAL_MS = 24 * 60 * 60_000
 const CHECK_INTERVAL_MS = 60 * 60_000
+const MAX_COMPRESSED_BACKUP_BYTES = 512 * 1024 * 1024
+const MAX_ARCHIVE_FILE_BYTES = 2 * 1024 * 1024 * 1024
 
 export type BackupReason = 'manual' | 'scheduled'
 
@@ -46,9 +50,14 @@ type BackupArchive = {
 
 let timer: NodeJS.Timeout | null = null
 let creating = false
+let restorePreparing = false
 
 function backupDir() {
   return path.join(config.dataDir, 'backups')
+}
+
+function restoreDir() {
+  return path.join(config.dataDir, 'restore')
 }
 
 function settingsFile() {
@@ -158,6 +167,99 @@ export async function createOperationalBackup(reason: BackupReason = 'manual'): 
   } finally {
     creating = false
     await rm(tempDir, { recursive: true, force: true })
+  }
+}
+
+function validatedArchiveFile(file: BackupFile) {
+  const allowed = new Set(['ghostnexora.sqlite', 'nexora-economy.sqlite', 'settings.json'])
+  if (!allowed.has(file.name)) throw new Error(`El backup contiene un archivo no permitido: ${file.name}`)
+  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > MAX_ARCHIVE_FILE_BYTES) throw new Error(`Tamaño inválido en ${file.name}.`)
+  if (!/^[a-f0-9]{64}$/i.test(file.sha256)) throw new Error(`Hash inválido en ${file.name}.`)
+  if (typeof file.data !== 'string' || !file.data.length) throw new Error(`Contenido ausente en ${file.name}.`)
+  const buffer = Buffer.from(file.data, 'base64')
+  if (buffer.length !== file.size) throw new Error(`El tamaño de ${file.name} no coincide con el manifiesto.`)
+  if (sha256(buffer) !== file.sha256.toLowerCase()) throw new Error(`La integridad de ${file.name} no es válida.`)
+  return buffer
+}
+
+async function readAndValidateArchive(fileName: string) {
+  const filePath = operationalBackupPath(fileName)
+  const info = await stat(filePath)
+  if (!info.isFile() || info.size <= 0 || info.size > MAX_COMPRESSED_BACKUP_BYTES) throw new Error('El archivo de backup supera el límite permitido.')
+  const decompressed = await gunzipAsync(await readFile(filePath))
+  const archive = JSON.parse(decompressed.toString('utf8')) as Partial<BackupArchive>
+  if (archive.schemaVersion !== BACKUP_VERSION || archive.product !== 'Ghost Nexora Bot') throw new Error('Formato o versión de backup no compatible.')
+  if (archive.source?.instance !== 'main' || archive.source?.sessionIncluded !== false) throw new Error('El backup no cumple la política de restauración segura.')
+  if (!Array.isArray(archive.files) || !archive.files.length) throw new Error('El backup no contiene archivos restaurables.')
+
+  const decoded = new Map<string, Buffer>()
+  for (const file of archive.files) {
+    if (!file || typeof file !== 'object') throw new Error('Entrada de backup inválida.')
+    if (decoded.has(file.name)) throw new Error(`Archivo duplicado en backup: ${file.name}`)
+    decoded.set(file.name, validatedArchiveFile(file))
+  }
+  if (!decoded.has('ghostnexora.sqlite')) throw new Error('El backup no contiene ghostnexora.sqlite.')
+  const sameDatabase = path.resolve(economy.file) === path.resolve(economy.walletFile)
+  if (!sameDatabase && !decoded.has('nexora-economy.sqlite')) throw new Error('El backup no contiene la base global de economía.')
+  return { archive: archive as BackupArchive, decoded }
+}
+
+export async function prepareOperationalRestore(fileName: string) {
+  if (opsInstanceKey() !== 'main') throw new Error('La restauración global solo puede ejecutarse desde MainBot.')
+  if (restorePreparing || existsSync(pendingRestorePath())) throw new Error('Ya hay una restauración pendiente.')
+  restorePreparing = true
+  const root = restoreDir()
+  await mkdir(root, { recursive: true, mode: 0o700 })
+  const stagingDir = await mkdtemp(path.join(root, 'staging-'))
+
+  try {
+    const { decoded } = await readAndValidateArchive(fileName)
+    const targets = new Map<string, string>([
+      ['ghostnexora.sqlite', economy.file],
+      ['nexora-economy.sqlite', economy.walletFile],
+      ['settings.json', settingsFile()],
+    ])
+    const files: RestorePlanFile[] = []
+    for (const [name, buffer] of decoded) {
+      const target = targets.get(name)
+      if (!target) continue
+      if (name === 'nexora-economy.sqlite' && path.resolve(economy.file) === path.resolve(economy.walletFile)) continue
+      const source = path.join(stagingDir, name)
+      await writeFile(source, buffer, { mode: 0o600 })
+      files.push({
+        name: name as RestorePlanFile['name'],
+        source,
+        target,
+        size: buffer.length,
+        sha256: sha256(buffer),
+      })
+    }
+
+    const plan: RestorePlan = {
+      schemaVersion: 1,
+      createdAt: Date.now(),
+      backupId: path.basename(fileName),
+      stagingDir,
+      files,
+    }
+    await writeFile(pendingRestorePath(), `${JSON.stringify(plan, null, 2)}\n`, { mode: 0o600 })
+
+    const restartScheduled = !['1', 'true', 'yes', 'on'].includes(String(process.env.NEXORA_DISABLE_RESTORE_EXIT ?? '').toLowerCase())
+    if (restartScheduled) {
+      const exitTimer = setTimeout(() => {
+        logger.warn({ backupId: plan.backupId }, 'stopping MainBot to apply prepared operational restore on next bootstrap')
+        process.exit(76)
+      }, 1_500)
+      exitTimer.unref?.()
+    }
+
+    logger.warn({ backupId: plan.backupId, files: files.map((file) => file.name), restartScheduled }, 'operational restore prepared')
+    return { backupId: plan.backupId, files: files.map((file) => file.name), restartScheduled, sessionRestored: false }
+  } catch (error) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  } finally {
+    restorePreparing = false
   }
 }
 
