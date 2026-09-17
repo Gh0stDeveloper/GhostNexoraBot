@@ -26,6 +26,9 @@ export function auditTarget(action: string, payload: Record<string, unknown>) {
     // persist message bodies, tokens, API keys or cookies in this audit table.
     return limited(payload.userJid, 160) || null
   }
+  if (action === 'restore_backup') {
+    return limited(payload.backupId, 160) || null
+  }
   return null
 }
 
