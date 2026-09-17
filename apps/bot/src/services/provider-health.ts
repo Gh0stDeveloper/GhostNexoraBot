@@ -15,6 +15,11 @@ export type ProviderHealthRecord = {
   updatedAt: number
 }
 
+export type ProviderCircuitState = 'closed' | 'open' | 'half-open'
+
+const CIRCUIT_FAILURE_THRESHOLD = 3
+const CIRCUIT_OPEN_MS = 5 * 60_000
+
 const PROVIDER_LABELS: Record<string, string> = {
   lempi: 'LemPi',
   youtube: 'YouTube',
@@ -26,6 +31,12 @@ const PROVIDER_LABELS: Record<string, string> = {
   terabox: 'TeraBox',
   pinterest: 'Pinterest',
   deepseek: 'DeepSeek',
+  'x-official': 'X Official API',
+  'x-ytdlp': 'X yt-dlp',
+  'vk-official': 'VK Official API',
+  'vk-ytdlp': 'VK yt-dlp',
+  'apkmirror-html': 'APKMirror',
+  'apkpure-html': 'APKPure',
 }
 
 opsDb.exec(`
@@ -150,4 +161,36 @@ export function readProviderHealth(instanceKey = opsInstanceKey()): ProviderHeal
       updatedAt: Number(row.updatedAt ?? 0),
     }
   })
+}
+
+export function providerCircuitState(providerId: string, input: {
+  instanceKey?: string
+  failureThreshold?: number
+  openMs?: number
+  now?: number
+} = {}): ProviderCircuitState {
+  const id = normalizedProviderId(providerId)
+  const instanceKey = input.instanceKey ?? opsInstanceKey()
+  const failureThreshold = Math.max(1, Math.trunc(input.failureThreshold ?? CIRCUIT_FAILURE_THRESHOLD))
+  const openMs = Math.max(1_000, Math.trunc(input.openMs ?? CIRCUIT_OPEN_MS))
+  const now = input.now ?? Date.now()
+  const row = opsDb.prepare(`SELECT consecutive_failures AS consecutiveFailures,
+      last_success_at AS lastSuccessAt, last_failure_at AS lastFailureAt
+    FROM ops_provider_health WHERE instance_key = ? AND provider_id = ?`).get(instanceKey, id) as {
+      consecutiveFailures?: number
+      lastSuccessAt?: number
+      lastFailureAt?: number
+    } | undefined
+
+  if (!row) return 'closed'
+  const consecutiveFailures = Number(row.consecutiveFailures ?? 0)
+  const lastSuccessAt = Number(row.lastSuccessAt ?? 0)
+  const lastFailureAt = Number(row.lastFailureAt ?? 0)
+  if (consecutiveFailures < failureThreshold || !lastFailureAt || lastSuccessAt > lastFailureAt) return 'closed'
+  if (now - lastFailureAt < openMs) return 'open'
+  return 'half-open'
+}
+
+export function providerCircuitAllows(providerId: string, input: Parameters<typeof providerCircuitState>[1] = {}) {
+  return providerCircuitState(providerId, input) !== 'open'
 }
