@@ -6,7 +6,7 @@
   --surface: #101012;
   --surface-strong: #141417;
   --line: rgba(255, 255, 255, 0.09);
-  --muted: #7d7d87;
+  --muted: #b8b8c2;
   --foreground: #f5f5f7;
   --accent: #3b82f6;
   --accent-strong: #60a5fa;
@@ -144,9 +144,9 @@ a { text-underline-offset: 4px; }
 .ops-button-primary:hover { background:#3b82f6; }
 .ops-button-danger { border:1px solid rgba(239,68,68,.22); background:rgba(127,29,29,.18); color:#f87171; }
 .ops-button-danger:hover { border-color:rgba(239,68,68,.4); background:rgba(127,29,29,.28); }
-.ops-tab { flex:0 0 auto; border:1px solid rgba(255,255,255,.08); background:#101012; color:#71717a; }
-.ops-tab:hover { border-color:rgba(59,130,246,.22); color:#d4d4d8; background:#141417; }
-.ops-tab-active { flex:0 0 auto; border:1px solid rgba(59,130,246,.32); background:rgba(37,99,235,.16); color:#93c5fd; box-shadow:inset 0 0 0 1px rgba(59,130,246,.05); }
+.ops-tab { flex:0 0 auto; border:1px solid rgba(255,255,255,.08); background:#101012; color:#b8b8c2; }
+.ops-tab:hover { border-color:rgba(59,130,246,.22); color:#f4f4f5; background:#141417; }
+.ops-tab-active { flex:0 0 auto; border:1px solid rgba(59,130,246,.32); background:rgba(37,99,235,.16); color:#bfdbfe; box-shadow:inset 0 0 0 1px rgba(59,130,246,.05); }
 .ops-badge-good,.ops-badge-warn,.ops-badge-bad {
   display:inline-flex;
   align-items:center;
@@ -157,24 +157,79 @@ a { text-underline-offset: 4px; }
   font-weight:800;
   letter-spacing:.02em;
 }
-.ops-badge-good { background:rgba(16,185,129,.13); color:#34d399; border:1px solid rgba(16,185,129,.10); }
-.ops-badge-warn { background:rgba(245,158,11,.12); color:#fbbf24; border:1px solid rgba(245,158,11,.10); }
-.ops-badge-bad { background:rgba(239,68,68,.13); color:#f87171; border:1px solid rgba(239,68,68,.10); }
+.ops-badge-good { background:rgba(16,185,129,.13); color:#6ee7b7; border:1px solid rgba(16,185,129,.16); }
+.ops-badge-warn { background:rgba(245,158,11,.12); color:#fcd34d; border:1px solid rgba(245,158,11,.16); }
+.ops-badge-bad { background:rgba(239,68,68,.13); color:#fca5a5; border:1px solid rgba(239,68,68,.16); }
 .ops-table { width:100%; border-collapse:collapse; font-size:.82rem; }
 .ops-table th {
   background:#151517;
   border-bottom:1px solid rgba(255,255,255,.075);
   padding:12px 16px;
   text-align:left;
-  color:#71717a;
+  color:#b8b8c2;
   font-size:.69rem;
   font-weight:800;
   text-transform:uppercase;
   letter-spacing:.04em;
 }
-.ops-table td { border-bottom:1px solid rgba(255,255,255,.055); padding:14px 16px; color:#d4d4d8; vertical-align:middle; }
+.ops-table td { border-bottom:1px solid rgba(255,255,255,.055); padding:14px 16px; color:#e4e4e7; vertical-align:middle; }
 .ops-table tbody tr:last-child td { border-bottom:0; }
 .ops-table tbody tr:hover { background:rgba(255,255,255,.018); }
+
+/*
+ * Global accessibility contrast layer.
+ * The application uses very dark surfaces, so Tailwind's darker zinc tokens are
+ * remapped to readable neutrals for user-facing text across every route.
+ * Semantic colors (blue, green, amber, red) keep their meaning.
+ */
+.text-zinc-700 { color:#b8b8c2 !important; }
+.text-zinc-600 { color:#c4c4cc !important; }
+.text-zinc-500 { color:#d4d4d8 !important; }
+.text-zinc-400 { color:#e4e4e7 !important; }
+
+input::placeholder,
+textarea::placeholder {
+  color:#a1a1aa !important;
+  opacity:1;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline:2px solid #60a5fa;
+  outline-offset:3px;
+}
+
+.legal-prose {
+  color:#d4d4d8;
+  font-size:.94rem;
+  line-height:1.8;
+}
+.legal-prose h2 {
+  margin-top:2.25rem;
+  color:#f5f5f7;
+  font-size:1.22rem;
+  line-height:1.35;
+  font-weight:850;
+  letter-spacing:-.015em;
+}
+.legal-prose h3 {
+  margin-top:1.5rem;
+  color:#e4e4e7;
+  font-size:1rem;
+  font-weight:800;
+}
+.legal-prose p,
+.legal-prose ul,
+.legal-prose ol { margin-top:.8rem; }
+.legal-prose ul,
+.legal-prose ol { padding-left:1.25rem; }
+.legal-prose li + li { margin-top:.45rem; }
+.legal-prose a { color:#93c5fd; text-decoration:underline; text-decoration-color:rgba(147,197,253,.35); }
+.legal-prose strong { color:#f4f4f5; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior:auto !important; transition-duration:.01ms !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; }
