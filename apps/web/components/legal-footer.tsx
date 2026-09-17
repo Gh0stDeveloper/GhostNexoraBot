@@ -1,4 +1,4 @@
-import { FileText, HelpCircle, LockKeyhole, Scale } from 'lucide-react'
+import { FileText, HelpCircle, LockKeyhole, Scale, ShieldCheck } from 'lucide-react'
 
 type Props = { locale: string }
 
@@ -25,6 +25,9 @@ export function LegalFooter({ locale }: Props) {
         {links.map(({ href, label, Icon }) => <a key={href} href={href} className="inline-flex items-center gap-2 font-semibold text-zinc-300 transition hover:text-blue-300">
           <Icon className="size-3.5 text-blue-400"/>{label}
         </a>)}
+        <a href="https://github.com/Gh0stDeveloper/GhostNexoraBot/blob/main/SECURITY.md" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 font-semibold text-zinc-300 transition hover:text-blue-300">
+          <ShieldCheck className="size-3.5 text-emerald-400"/>{es ? 'Seguridad' : 'Security'}
+        </a>
       </nav>
     </div>
   </footer>
