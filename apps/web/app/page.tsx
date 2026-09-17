@@ -1,10 +1,35 @@
-import { Activity, Bot, BrainCircuit, CheckCircle2, Coins, Download, FileCheck2, Gamepad2, GitBranch, Laptop, LayoutDashboard, LockKeyhole, LogIn, MessageSquareMore, PackageCheck, ServerCog, ShieldCheck, Smartphone, TerminalSquare, UsersRound } from 'lucide-react'
+import { Activity, Bot, BrainCircuit, CheckCircle2, Coins, Download, FileCheck2, Gamepad2, GitBranch, LayoutDashboard, LockKeyhole, LogIn, MessageSquareMore, ServerCog, ShieldCheck, UsersRound } from 'lucide-react'
 import { getWebLocale } from '../lib/i18n-server'
 import { webT } from '../lib/i18n'
 import { downloadT } from '../lib/downloads-i18n'
 import { getOfficialReleaseCatalog, type ReleaseKind } from '../lib/releases'
 
 export const dynamic = 'force-dynamic'
+
+const DEVICON_BASE = 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons'
+
+type PlatformBrand = {
+  src: string
+  alt: string
+}
+
+const PLATFORM_BRANDS = {
+  windows: [{ src: `${DEVICON_BASE}/windows11/windows11-original.svg`, alt: 'Windows' }],
+  android: [{ src: `${DEVICON_BASE}/android/android-original.svg`, alt: 'Android' }],
+  debian: [
+    { src: `${DEVICON_BASE}/ubuntu/ubuntu-original.svg`, alt: 'Ubuntu' },
+    { src: `${DEVICON_BASE}/debian/debian-original.svg`, alt: 'Debian' },
+  ],
+  linux: [{ src: `${DEVICON_BASE}/linux/linux-original.svg`, alt: 'Linux' }],
+} as const
+
+function PlatformLogos({ brands }: { brands: readonly PlatformBrand[] }) {
+  return <div className="flex items-center -space-x-2" aria-label={brands.map((brand) => brand.alt).join(' / ')}>
+    {brands.map((brand) => <span key={brand.alt} className="grid size-12 shrink-0 place-items-center rounded-xl border border-blue-500/20 bg-[#111827] shadow-[0_10px_28px_rgba(0,0,0,.3)] first:z-10">
+      <img src={brand.src} alt={brand.alt} className="size-7 object-contain" loading="lazy" decoding="async" />
+    </span>)}
+  </div>
+}
 
 export default async function Home() {
   const locale = await getWebLocale()
@@ -52,10 +77,10 @@ export default async function Home() {
     ['5', t('home.flow.5.title'), t('home.flow.5.text')],
   ]
   const downloads = [
-    [Laptop, dt('platform.windows'), 'NSIS · x64', has('nsis')],
-    [Smartphone, dt('platform.android'), 'APK', has('apk')],
-    [PackageCheck, dt('platform.debian'), 'DEB · amd64', has('deb')],
-    [TerminalSquare, dt('platform.appimage'), 'AppImage · x64', has('appimage')],
+    [PLATFORM_BRANDS.windows, dt('platform.windows'), 'NSIS · x64', has('nsis')],
+    [PLATFORM_BRANDS.android, dt('platform.android'), 'APK', has('apk')],
+    [PLATFORM_BRANDS.debian, dt('platform.debian'), 'DEB · amd64', has('deb')],
+    [PLATFORM_BRANDS.linux, dt('platform.appimage'), 'AppImage · x64', has('appimage')],
   ] as const
 
   return <main className="ops-page">
@@ -86,7 +111,7 @@ export default async function Home() {
     <section id="descargas" className="mx-auto w-full max-w-[1480px] scroll-mt-24 px-5 py-12 md:px-8">
       <div className="overflow-hidden rounded-2xl border border-blue-500/15 bg-[linear-gradient(135deg,rgba(37,99,235,.09),#101012_42%,#101012)] shadow-[0_22px_70px_rgba(0,0,0,.22)]">
         <div className="grid gap-8 border-b border-white/[.07] p-6 md:p-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="font-mono text-xs font-bold uppercase tracking-[.18em] text-blue-500">{dt('hero.badge')}</p><h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-4xl">{dt('hero.title')}</h2><p className="mt-3 max-w-3xl text-sm leading-7 text-zinc-500">{dt('hero.text')}</p></div><a href="/downloads" className="ops-button-primary"><Download className="size-4"/>{dt('hero.cta')}</a></div>
-        <div className="grid gap-px bg-white/[.06] sm:grid-cols-2 lg:grid-cols-4">{downloads.map(([Icon,title,format,available])=><div key={title} className="bg-[#0d0d0f] p-5"><div className="flex items-center justify-between"><span className="grid size-9 place-items-center rounded-lg border border-white/[.07] bg-white/[.025]"><Icon className="size-4 text-blue-400"/></span><span className={available ? 'ops-badge-good' : 'ops-badge-warn'}>{available ? `v${release.version}` : dt('artifact.unavailable')}</span></div><h3 className="mt-4 font-bold text-zinc-200">{title}</h3><p className="mt-1 font-mono text-[11px] text-zinc-700">{format}</p></div>)}</div>
+        <div className="grid gap-px bg-white/[.06] sm:grid-cols-2 lg:grid-cols-4">{downloads.map(([brands,title,format,available])=><div key={title} className="bg-[#0d0d0f] p-5"><div className="flex items-center justify-between gap-4"><PlatformLogos brands={brands}/><span className={available ? 'ops-badge-good' : 'ops-badge-warn'}>{available ? `v${release.version}` : dt('artifact.unavailable')}</span></div><h3 className="mt-4 font-bold text-zinc-200">{title}</h3><p className="mt-1 font-mono text-[11px] text-zinc-700">{format}</p></div>)}</div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-4 text-[11px] text-zinc-600 md:px-8"><span className="flex items-center gap-2"><FileCheck2 className="size-3.5 text-emerald-500"/>{dt('trust.hash')}</span><span className="flex items-center gap-2"><ShieldCheck className="size-3.5 text-blue-500"/>{dt('trust.keys')}</span><span className="flex items-center gap-2"><GitBranch className="size-3.5 text-violet-500"/>{dt('trust.source')}</span></div>
       </div>
     </section>
