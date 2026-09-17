@@ -40,6 +40,23 @@ export type OpsGroup = {
   updatedAt: number
 }
 
+export type OpsProviderHealth = {
+  providerId: string
+  label: string
+  status: 'online' | 'degraded' | 'offline' | 'unknown'
+  requests: number
+  successes: number
+  failures: number
+  consecutiveFailures: number
+  errorRate: number
+  averageLatencyMs: number
+  lastLatencyMs: number
+  lastSuccessAt: number
+  lastFailureAt: number
+  lastError: string | null
+  updatedAt: number
+}
+
 export type OpsRequest = {
   id: number
   action: string
@@ -74,6 +91,7 @@ export type OpsSnapshot = {
   stages: OpsStage[]
   commands: OpsCommand[]
   groups: OpsGroup[]
+  providers: OpsProviderHealth[]
   requests: OpsRequest[]
 }
 
@@ -94,13 +112,26 @@ function commandStatus(avgUs: number, maxUs: number, successRate: number): OpsCo
   return 'optimal'
 }
 
+function providerStatus(input: {
+  requests: number
+  successes: number
+  consecutiveFailures: number
+  updatedAt: number
+}): OpsProviderHealth['status'] {
+  if (!input.requests) return 'unknown'
+  if (input.updatedAt > 0 && Date.now() - input.updatedAt > 30 * 60_000) return 'unknown'
+  if (input.consecutiveFailures >= 3 || (!input.successes && input.consecutiveFailures > 0)) return 'offline'
+  if (input.consecutiveFailures > 0) return 'degraded'
+  return input.successes > 0 ? 'online' : 'unknown'
+}
+
 function empty(instanceKey: string): OpsSnapshot {
   return {
     instanceKey,
     runtime: { connected: false, registered: false, groupCount: 0, connectedAt: 0, lastEventAt: 0, lastGroupSyncAt: 0, updatedAt: 0, fresh: false },
     summary: { throughputMps: 0, averageE2eUs: 0, processingNodes: 7, auditedCommands: 0, bottlenecks: 0 },
     stages: STAGES.map(([id, name]) => ({ id, name, invocations: 0, minUs: 0, avgUs: 0, maxUs: 0, lastUs: 0, firstAt: 0, lastAt: 0, status: 'optimal' })),
-    commands: [], groups: [], requests: [],
+    commands: [], groups: [], providers: [], requests: [],
   }
 }
 
@@ -190,6 +221,48 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
           adminCount: Number(row.adminCount), announce: Boolean(row.announce), restrictMode: Boolean(row.restrictMode), updatedAt: Number(row.updatedAt),
         })) as OpsGroup[]
       snapshot.runtime.groupCount = snapshot.groups.length
+    }
+
+    if (tableExists(db, 'ops_provider_health')) {
+      snapshot.providers = db.prepare(`SELECT
+          provider_id AS providerId,
+          provider_label AS label,
+          requests,
+          successes,
+          failures,
+          consecutive_failures AS consecutiveFailures,
+          total_latency_ms AS totalLatencyMs,
+          last_latency_ms AS lastLatencyMs,
+          last_success_at AS lastSuccessAt,
+          last_failure_at AS lastFailureAt,
+          last_error AS lastError,
+          updated_at AS updatedAt
+        FROM ops_provider_health
+        WHERE instance_key = ?
+        ORDER BY provider_label COLLATE NOCASE ASC`)
+        .all(instanceKey).map((row: any) => {
+          const requests = Number(row.requests ?? 0)
+          const successes = Number(row.successes ?? 0)
+          const failures = Number(row.failures ?? 0)
+          const consecutiveFailures = Number(row.consecutiveFailures ?? 0)
+          const updatedAt = Number(row.updatedAt ?? 0)
+          return {
+            providerId: String(row.providerId),
+            label: String(row.label),
+            requests,
+            successes,
+            failures,
+            consecutiveFailures,
+            errorRate: requests ? failures / requests * 100 : 0,
+            averageLatencyMs: requests ? Number(row.totalLatencyMs ?? 0) / requests : 0,
+            lastLatencyMs: Number(row.lastLatencyMs ?? 0),
+            lastSuccessAt: Number(row.lastSuccessAt ?? 0),
+            lastFailureAt: Number(row.lastFailureAt ?? 0),
+            lastError: row.lastError ? String(row.lastError) : null,
+            updatedAt,
+            status: providerStatus({ requests, successes, consecutiveFailures, updatedAt }),
+          }
+        }) as OpsProviderHealth[]
     }
 
     if (tableExists(db, 'ops_group_control_requests')) {
