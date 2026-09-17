@@ -14,7 +14,10 @@ function limited(value: unknown, max: number) {
 }
 
 export function auditTarget(action: string, payload: Record<string, unknown>) {
-  if (['leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group'].includes(action)) {
+  if ([
+    'leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
+    'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
+  ].includes(action)) {
     return limited(payload.groupJid, 160) || null
   }
   if (['reset_subbot', 'reset_own_subbot'].includes(action)) {
