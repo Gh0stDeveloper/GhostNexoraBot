@@ -42,6 +42,18 @@ const es = {
   'audit.failed': 'FALLIDA',
   'audit.none': 'Todavía no hay acciones administrativas registradas para esta instancia.',
   'audit.noTarget': 'Sin objetivo',
+  'diagnostics.title': 'Diagnóstico en tiempo real',
+  'diagnostics.text': 'Métricas del proceso de esta instancia, actualizadas cada 10 segundos y almacenadas sin credenciales ni contenido de mensajes.',
+  'diagnostics.cpu': 'CPU del proceso',
+  'diagnostics.ram': 'RAM (RSS)',
+  'diagnostics.heap': 'Heap usado',
+  'diagnostics.uptime': 'Uptime',
+  'diagnostics.ollama': 'Ollama local',
+  'diagnostics.node': 'Runtime Node.js',
+  'diagnostics.online': 'ACTIVO',
+  'diagnostics.offline': 'INACTIVO',
+  'diagnostics.stale': 'TELEMETRÍA ANTIGUA',
+  'diagnostics.empty': 'Esta instancia todavía no ha publicado métricas de diagnóstico.',
 } as const
 
 const en: Record<keyof typeof es, string> = {
@@ -86,6 +98,18 @@ const en: Record<keyof typeof es, string> = {
   'audit.failed': 'FAILED',
   'audit.none': 'No administrative actions have been recorded for this instance yet.',
   'audit.noTarget': 'No target',
+  'diagnostics.title': 'Real-time diagnostics',
+  'diagnostics.text': 'Process metrics for this instance, refreshed every 10 seconds and stored without credentials or message content.',
+  'diagnostics.cpu': 'Process CPU',
+  'diagnostics.ram': 'RAM (RSS)',
+  'diagnostics.heap': 'Heap used',
+  'diagnostics.uptime': 'Uptime',
+  'diagnostics.ollama': 'Local Ollama',
+  'diagnostics.node': 'Node.js runtime',
+  'diagnostics.online': 'ACTIVE',
+  'diagnostics.offline': 'INACTIVE',
+  'diagnostics.stale': 'STALE TELEMETRY',
+  'diagnostics.empty': 'This instance has not published diagnostic metrics yet.',
 }
 
 export type OpsExtraKey = keyof typeof es
