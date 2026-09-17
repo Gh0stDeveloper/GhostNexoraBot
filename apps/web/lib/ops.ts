@@ -58,6 +58,16 @@ export type OpsProviderHealth = {
   updatedAt: number
 }
 
+export type OpsAdminAudit = {
+  id: number
+  actor: string
+  action: string
+  target: string | null
+  status: 'accepted' | 'failed'
+  error: string | null
+  createdAt: number
+}
+
 export type OpsRequest = {
   id: number
   action: string
@@ -93,6 +103,7 @@ export type OpsSnapshot = {
   commands: OpsCommand[]
   groups: OpsGroup[]
   providers: OpsProviderHealth[]
+  adminAudit: OpsAdminAudit[]
   requests: OpsRequest[]
 }
 
@@ -132,7 +143,7 @@ function empty(instanceKey: string): OpsSnapshot {
     runtime: { connected: false, registered: false, groupCount: 0, connectedAt: 0, lastEventAt: 0, lastGroupSyncAt: 0, updatedAt: 0, fresh: false },
     summary: { throughputMps: 0, averageE2eUs: 0, processingNodes: 7, auditedCommands: 0, bottlenecks: 0 },
     stages: STAGES.map(([id, name]) => ({ id, name, invocations: 0, minUs: 0, avgUs: 0, maxUs: 0, lastUs: 0, firstAt: 0, lastAt: 0, status: 'optimal' })),
-    commands: [], groups: [], providers: [], requests: [],
+    commands: [], groups: [], providers: [], adminAudit: [], requests: [],
   }
 }
 
@@ -276,6 +287,23 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
             status: providerStatus({ requests, successes, consecutiveFailures, updatedAt }),
           }
         }) as OpsProviderHealth[]
+    }
+
+    if (tableExists(db, 'ops_admin_audit')) {
+      snapshot.adminAudit = db.prepare(`SELECT id, actor, action, target, status, error, created_at AS createdAt
+        FROM ops_admin_audit
+        WHERE instance_key = ?
+        ORDER BY created_at DESC
+        LIMIT 50`)
+        .all(instanceKey).map((row: any) => ({
+          id: Number(row.id),
+          actor: String(row.actor),
+          action: String(row.action),
+          target: row.target ? String(row.target) : null,
+          status: row.status === 'failed' ? 'failed' : 'accepted',
+          error: row.error ? String(row.error) : null,
+          createdAt: Number(row.createdAt ?? 0),
+        })) as OpsAdminAudit[]
     }
 
     if (tableExists(db, 'ops_group_control_requests')) {
