@@ -107,3 +107,7 @@ try {
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }
+
+// Regresión específica: .work ejecutado desde un subbot debe acreditar la misma
+// wallet global que luego lee MainBot/.balance, sin saldo fantasma local.
+await import('./economy-work-global-smoke.mjs')
