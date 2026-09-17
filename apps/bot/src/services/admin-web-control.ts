@@ -1,9 +1,14 @@
 import type { WASocket } from 'baileys'
 import { subbotManager } from '../core/subbots.js'
+import { createOperationalBackup, startAutomaticBackups } from './backup-service.js'
 import { economy } from './economy.js'
 
 const PERMANENT_MS = 100 * 365 * 86_400_000
 const now = () => Date.now()
+
+// MainBot imports this control module during startup, so backup scheduling starts
+// with the same lifecycle as the control API. The service itself refuses subbot use.
+startAutomaticBackups()
 
 function normalizeUserJid(value: unknown) {
   const raw = String(value ?? '').trim()
@@ -95,6 +100,9 @@ export async function executeAdminWebControl(body: Record<string, unknown>, main
   const action = String(body.action ?? '')
   if (action === 'economy-sync') {
     return { ok: true, result: { top: economy.top(10) } }
+  }
+  if (action === 'create_backup') {
+    return { ok: true, result: await createOperationalBackup('manual') }
   }
   if (action === 'add_nxc') {
     const userJid = normalizeUserJid(body.userJid)
