@@ -4,6 +4,7 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
+import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
 import { resolveStoredIdentity } from '../services/identity.js'
@@ -91,8 +92,6 @@ export class CommandRouter {
     performanceAudit.recordStage('01', performance.now() - ingestStarted)
     if (!chatId) return false
 
-    // Defensa en profundidad: un privado no autorizado se consume en silencio.
-    // No se responde, no se reacciona y ningún comando alcanza su handler.
     if (!canProcessPrivateMessage(message, this.options.instanceOwnerJid)) return true
 
     const serializeStarted = performance.now()
@@ -119,8 +118,6 @@ export class CommandRouter {
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
     const pushName = message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser'))
 
-    // V2 adapter: encapsula toda salida común del router, pero el socket localizado
-    // sigue presente en CommandContext como puente para comandos WhatsApp-only V1.
     const adapter = createWhatsAppAdapter(socket, this.options.instanceId)
     const normalizedMessage = adapter.normalizeMessage(message, {
       senderId: sender,
@@ -132,9 +129,6 @@ export class CommandRouter {
 
     const reply = async (replyText: string) => {
       const sent = await adapter.sendText(chatId, replyText, { replyTo: message.key.id ?? undefined })
-      // V1 compatibility: varios comandos guardan `ctx.reply()` para editar después
-      // usando la key de Baileys. El envío ya pasa por el adapter, pero el retorno
-      // continúa siendo el WAMessage crudo hasta migrar esos comandos.
       return sent.raw
     }
     const react = async (emoji: string) => {
@@ -244,6 +238,20 @@ export class CommandRouter {
         if (command.botAdminOnly && !botIsAdmin) {
           finishFilters()
           await reply(t('router.botAdminOnly'))
+          await react('🚫')
+          return true
+        }
+      }
+
+      if (isGroup && !isOwner && !isBotStaff && !isSubbotOwner && !isGroupCommandCategoryAllowed(chatId, command.category)) {
+        if (!senderIsGroupAdmin) {
+          const metadata = await socket.groupMetadata(chatId).catch(() => null)
+          const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
+          senderIsGroupAdmin = Boolean(senderParticipant?.admin)
+        }
+        if (!senderIsGroupAdmin) {
+          finishFilters()
+          await reply(t('router.categoryDisabled', { category: command.category }))
           await react('🚫')
           return true
         }
