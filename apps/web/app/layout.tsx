@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import PublicQuickStart from '../components/PublicQuickStart'
 import { LanguageSwitcher, WebI18nProvider } from '../components/i18n-provider'
+import { LegalFooter } from '../components/legal-footer'
 import { PwaRegister } from '../components/pwa-register'
 import { getWebLocale } from '../lib/i18n-server'
 import { webT } from '../lib/i18n'
@@ -44,6 +45,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body>
         <WebI18nProvider locale={locale}>
           {children}
+          <LegalFooter locale={locale} />
           <PublicQuickStart />
           <LanguageSwitcher />
           <PwaRegister />
