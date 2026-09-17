@@ -1,0 +1,73 @@
+import type { WebLocale } from './i18n'
+
+const es = {
+  'provider.status.online': 'ONLINE',
+  'provider.status.degraded': 'DEGRADADO',
+  'provider.status.offline': 'OFFLINE',
+  'provider.status.unknown': 'SIN DATOS',
+  'provider.title': 'Salud de proveedores',
+  'provider.subtitle': 'Telemetría por instancia para APIs y servicios utilizados por las descargas.',
+  'provider.empty': 'Todavía no hay telemetría. Los proveedores aparecerán después de recibir tráfico real.',
+  'provider.avg': 'Latencia media',
+  'provider.last': 'Última latencia',
+  'provider.errors': 'Errores',
+  'provider.requests': 'Solicitudes',
+  'provider.lastFailure': 'Último fallo',
+  'provider.noFailure': 'Sin fallos recientes',
+  'group.muted': 'SILENCIADO',
+  'group.mute8h': 'Silenciar 8 h',
+  'group.mute7d': 'Silenciar 7 días',
+  'group.unmute': 'Activar notificaciones',
+  'group.until': 'Hasta',
+  'backup.title': 'Backups operativos',
+  'backup.text': 'Copias diarias y manuales de configuración, grupos, economía, usuarios y subbots. Las credenciales de sesión de WhatsApp quedan fuera del archivo.',
+  'backup.create': 'Crear backup ahora',
+  'backup.automatic': 'Backup automático cada 24 horas',
+  'backup.retention': 'Se conservan hasta 30 copias',
+  'backup.protected': 'SESSION_DIR excluido',
+  'backup.empty': 'Todavía no hay backups. Crea el primero desde este panel.',
+  'backup.download': 'Descargar',
+  'backup.latest': 'Más reciente',
+  'backup.date': 'Fecha',
+  'backup.size': 'Tamaño',
+  'backup.action': 'Acción',
+} as const
+
+const en: Record<keyof typeof es, string> = {
+  'provider.status.online': 'ONLINE',
+  'provider.status.degraded': 'DEGRADED',
+  'provider.status.offline': 'OFFLINE',
+  'provider.status.unknown': 'NO DATA',
+  'provider.title': 'Provider health',
+  'provider.subtitle': 'Per-instance telemetry for APIs and services used by download flows.',
+  'provider.empty': 'No telemetry yet. Providers will appear after receiving real traffic.',
+  'provider.avg': 'Average latency',
+  'provider.last': 'Last latency',
+  'provider.errors': 'Errors',
+  'provider.requests': 'Requests',
+  'provider.lastFailure': 'Last failure',
+  'provider.noFailure': 'No recent failures',
+  'group.muted': 'MUTED',
+  'group.mute8h': 'Mute 8 h',
+  'group.mute7d': 'Mute 7 days',
+  'group.unmute': 'Enable notifications',
+  'group.until': 'Until',
+  'backup.title': 'Operational backups',
+  'backup.text': 'Daily and manual snapshots of settings, groups, economy, users and subbots. WhatsApp session credentials stay outside the archive.',
+  'backup.create': 'Create backup now',
+  'backup.automatic': 'Automatic backup every 24 hours',
+  'backup.retention': 'Up to 30 snapshots are retained',
+  'backup.protected': 'SESSION_DIR excluded',
+  'backup.empty': 'No backups yet. Create the first one from this panel.',
+  'backup.download': 'Download',
+  'backup.latest': 'Latest',
+  'backup.date': 'Date',
+  'backup.size': 'Size',
+  'backup.action': 'Action',
+}
+
+export type OpsExtraKey = keyof typeof es
+
+export function opsExtraT(locale: WebLocale, key: OpsExtraKey) {
+  return (locale === 'en' ? en : es)[key]
+}
