@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "postinstall": "node ../../scripts/install-cli.mjs",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/bootstrap.ts",
     "build": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json",
     "build:termux": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.termux.json",
     "typecheck": "npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.json --noEmit",
-    "start": "node dist/index.js",
+    "start": "node dist/bootstrap.js",
     "pair": "node dist/pair.js",
     "termux:start": "NEXORA_RUNTIME_PROFILE=termux-lite node dist-termux/termux-lite.js",
     "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite node dist-termux/pair.js",
