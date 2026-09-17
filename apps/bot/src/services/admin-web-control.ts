@@ -1,6 +1,6 @@
 import type { WASocket } from 'baileys'
 import { subbotManager } from '../core/subbots.js'
-import { createOperationalBackup, startAutomaticBackups } from './backup-service.js'
+import { createOperationalBackup, prepareOperationalRestore, startAutomaticBackups } from './backup-service.js'
 import { economy } from './economy.js'
 
 const PERMANENT_MS = 100 * 365 * 86_400_000
@@ -103,6 +103,11 @@ export async function executeAdminWebControl(body: Record<string, unknown>, main
   }
   if (action === 'create_backup') {
     return { ok: true, result: await createOperationalBackup('manual') }
+  }
+  if (action === 'restore_backup') {
+    const backupId = String(body.backupId ?? '').trim()
+    if (!backupId) throw new Error('Debes seleccionar un backup para restaurar.')
+    return { ok: true, result: await prepareOperationalRestore(backupId) }
   }
   if (action === 'add_nxc') {
     const userJid = normalizeUserJid(body.userJid)
