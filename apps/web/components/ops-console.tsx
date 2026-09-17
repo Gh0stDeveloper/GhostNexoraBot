@@ -1,5 +1,5 @@
 import { Activity, Gauge, GitBranch, RefreshCcw, RotateCcw, ServerCog, ShieldAlert, Signal, UsersRound } from 'lucide-react'
-import type { OpsSnapshot } from '../lib/ops'
+import type { OpsProviderHealth, OpsSnapshot } from '../lib/ops'
 import { webIntlLocale, webT, type WebLocale } from '../lib/i18n'
 import { CommandAuditTable } from './command-audit-table'
 import { ConfirmSubmitButton, OpsAutoRefresh } from './ops-client-controls'
@@ -13,6 +13,12 @@ function latency(us: number, intl: string) {
   return `${Math.round(us).toLocaleString(intl)} µs`
 }
 
+function latencyMs(ms: number, intl: string) {
+  if (!ms) return '0 ms'
+  if (ms >= 1000) return `${(ms / 1000).toFixed(2)} s`
+  return `${Math.round(ms).toLocaleString(intl)} ms`
+}
+
 function relativeTime(timestamp: number, locale: WebLocale) {
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
   if (!timestamp) return t('ops.relative.none')
@@ -21,6 +27,18 @@ function relativeTime(timestamp: number, locale: WebLocale) {
   if (diff < 3_600_000) return t('ops.relative.minutes', { value: Math.round(diff / 60_000) })
   if (diff < 86_400_000) return t('ops.relative.hours', { value: Math.round(diff / 3_600_000) })
   return t('ops.relative.days', { value: Math.round(diff / 86_400_000) })
+}
+
+function providerBadge(provider: OpsProviderHealth, locale: WebLocale) {
+  const labels = locale === 'es'
+    ? { online: 'ONLINE', degraded: 'DEGRADADO', offline: 'OFFLINE', unknown: 'SIN DATOS' }
+    : { online: 'ONLINE', degraded: 'DEGRADED', offline: 'OFFLINE', unknown: 'NO DATA' }
+  const className = provider.status === 'online'
+    ? 'ops-badge-good'
+    : provider.status === 'degraded' || provider.status === 'unknown'
+      ? 'ops-badge-warn'
+      : 'ops-badge-bad'
+  return <span className={className}>{labels[provider.status]}</span>
 }
 
 export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overview', locale }: {
@@ -32,6 +50,27 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
 }) {
   const intl = webIntlLocale(locale)
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
+  const providerCopy = locale === 'es' ? {
+    title: 'Salud de proveedores',
+    subtitle: 'Telemetría por instancia para APIs y servicios utilizados por las descargas.',
+    empty: 'Todavía no hay telemetría. Los proveedores aparecerán después de recibir tráfico real.',
+    avg: 'Latencia media',
+    last: 'Última latencia',
+    errors: 'Errores',
+    requests: 'Solicitudes',
+    lastFailure: 'Último fallo',
+    noFailure: 'Sin fallos recientes',
+  } : {
+    title: 'Provider health',
+    subtitle: 'Per-instance telemetry for APIs and services used by download flows.',
+    empty: 'No telemetry yet. Providers will appear after receiving real traffic.',
+    avg: 'Average latency',
+    last: 'Last latency',
+    errors: 'Errors',
+    requests: 'Requests',
+    lastFailure: 'Last failure',
+    noFailure: 'No recent failures',
+  }
 
   if (view === 'groups') {
     return <section className="ops-panel overflow-hidden">
@@ -99,6 +138,29 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
           <div className="mt-4 flex items-center justify-between gap-3 text-xs text-zinc-600"><span>{t('ops.last', { value: stage.lastUs.toLocaleString(intl) })}</span><span>{t('ops.executions', { count: stage.invocations.toLocaleString(intl) })}</span></div>
         </article>)}
       </div>
+    </section>
+
+    <section className="ops-panel overflow-hidden">
+      <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-4"><Activity className="size-5 shrink-0 text-blue-400"/><div><h2 className="font-bold text-white">{providerCopy.title}</h2><p className="mt-1 text-xs text-zinc-500">{providerCopy.subtitle}</p></div></div>
+        <div className="flex items-center gap-2"><span className="font-mono text-xs text-zinc-600">{snapshot.providers.length.toLocaleString(intl)}</span><OpsAutoRefresh seconds={10}/></div>
+      </div>
+      {snapshot.providers.length ? <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
+        {snapshot.providers.map((provider) => <article key={provider.providerId} className="ops-node">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0"><p className="truncate font-bold text-zinc-100">{provider.label}</p><p className="mt-1 font-mono text-[10px] text-zinc-700">{provider.providerId}</p></div>
+            {providerBadge(provider, locale)}
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.avg}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.averageLatencyMs, intl)}</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.last}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.lastLatencyMs, intl)}</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.errors}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.errorRate.toFixed(1)}%</strong></div>
+            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{providerCopy.requests}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.requests.toLocaleString(intl)}</strong></div>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-zinc-600"><span>{providerCopy.lastFailure}</span><span className="text-right">{provider.lastFailureAt ? relativeTime(provider.lastFailureAt, locale) : providerCopy.noFailure}</span></div>
+          {provider.lastError && <p className="mt-2 truncate rounded-md border border-red-500/10 bg-red-500/[.04] px-2 py-1.5 font-mono text-[10px] text-red-400/70" title={provider.lastError}>{provider.lastError}</p>}
+        </article>)}
+      </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{providerCopy.empty}</div>}
     </section>
   </div>
 }
