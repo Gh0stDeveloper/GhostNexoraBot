@@ -76,14 +76,23 @@ function localOpsAction(action: string, instance: string, payload: Record<string
       return { ok: true, action, instance, queued: true }
     }
 
-    if (action === 'leave_group') {
+    if (['leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group'].includes(action)) {
       const groupJid = String(payload.groupJid ?? '')
       if (!groupJid.endsWith('@g.us')) return { ok: false, error: 'invalid_group' }
       const group = db.prepare('SELECT name FROM ops_groups WHERE instance_key = ? AND group_jid = ?').get(instance, groupJid) as { name?: string } | undefined
       if (!group) return { ok: false, error: 'group_not_registered_for_instance' }
-      const duplicate = db.prepare("SELECT id FROM ops_group_control_requests WHERE instance_key = ? AND action = 'leave' AND group_jid = ? AND status IN ('pending','processing') LIMIT 1").get(instance, groupJid)
+
+      const requestAction = action === 'leave_group'
+        ? 'leave'
+        : action === 'mute_group_8h'
+          ? 'mute:8h'
+          : action === 'mute_group_7d'
+            ? 'mute:7d'
+            : 'unmute'
+      const duplicate = db.prepare("SELECT id FROM ops_group_control_requests WHERE instance_key = ? AND action = ? AND group_jid = ? AND status IN ('pending','processing') LIMIT 1")
+        .get(instance, requestAction, groupJid)
       if (!duplicate) db.prepare(`INSERT INTO ops_group_control_requests(instance_key, action, group_jid, requested_by, status, requested_at)
-        VALUES(?, 'leave', ?, ?, 'pending', ?)`).run(instance, groupJid, requestedBy, Date.now())
+        VALUES(?, ?, ?, ?, 'pending', ?)`).run(instance, requestAction, groupJid, requestedBy, Date.now())
       return { ok: true, action, instance, groupJid, groupName: group.name, queued: true }
     }
 
@@ -155,7 +164,7 @@ async function handlePost(request: NextRequest) {
     if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, true, 'main', section)
   }
 
-  if (['leave_group', 'sync_groups', 'reset_audit'].includes(action)) {
+  if (['leave_group', 'sync_groups', 'reset_audit', 'mute_group_8h', 'mute_group_7d', 'unmute_group'].includes(action)) {
     const requestedBy = isSubbot ? subbot.userJid : 'web-admin'
     return responseFor(request, localOpsAction(action, instance, payload, requestedBy), Boolean(isAdmin), instance, section)
   }
