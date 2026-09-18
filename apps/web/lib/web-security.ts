@@ -755,3 +755,30 @@ export function roleLabel(role: WebRole) {
   if (role === 'support') return 'Support'
   return 'Subbot Owner'
 }
+
+
+export function webauthnContext(request: Request) {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  const referer = request.headers.get('referer')
+  const originHeader = request.headers.get('origin')
+
+  const candidates: string[] = []
+  if (originHeader) candidates.push(originHeader)
+  if (referer) {
+    try { candidates.push(new URL(referer).origin) } catch {}
+  }
+  if (forwardedHost) candidates.push(`${forwardedProto || 'https'}://${forwardedHost}`)
+  candidates.push(runtime.publicWebUrl)
+  try { candidates.push(new URL(request.url).origin) } catch {}
+
+  for (const value of candidates) {
+    try {
+      const url = new URL(value)
+      const secure = url.protocol === 'https:' || ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
+      if (!secure) continue
+      return { origin: url.origin, rpID: url.hostname }
+    } catch {}
+  }
+  throw new Error('webauthn_secure_context_required')
+}
