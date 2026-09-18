@@ -2,7 +2,7 @@
 
 > Documento de seguimiento oficial
 >
-> Estado general: PENDIENTE
+> Estado general: EN PROGRESO
 >
 > Última actualización: 2026-09-18
 >
@@ -38,7 +38,7 @@ Una fase solo se marca como TERMINADO cuando:
 
 | Fase | Área | Estado |
 |---|---|---|
-| Fase A | Login y seguridad Web | PENDIENTE |
+| Fase A | Login y seguridad Web | EN PROGRESO |
 | Fase B | Núcleo multiplataforma compartido | PENDIENTE |
 | Fase C | Paridad Discord y Telegram | PENDIENTE |
 | Fase D | Runtime y entrega WhatsApp | PENDIENTE |
@@ -71,7 +71,7 @@ Todavía existe una capa de compatibilidad V1 de WhatsApp. CommandContext conser
 
 # FASE A — Login y seguridad Web
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 ## Objetivo
 
@@ -172,22 +172,39 @@ Permitir desde el dashboard:
 - cerrar todas las demás sesiones;
 - caducar sesiones antiguas.
 
-## A6. 2FA administrativo
+## A6. 2FA administrativo, Passkeys y biometría del dispositivo
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
-Añadir segundo factor opcional u obligatorio para administradores.
+Añadir segundo factor y acceso fuerte para cuentas privilegiadas.
 
 Opciones:
 
-1. TOTP;
-2. posteriormente WebAuthn o Passkeys.
+1. Passkeys/WebAuthn como mecanismo principal moderno;
+2. autenticador de plataforma: huella digital, Face ID/rostro, PIN o bloqueo del dispositivo según Android, iOS, Windows o navegador;
+3. TOTP como método alternativo o de recuperación cuando se añada;
+4. soporte posterior para llaves FIDO2 externas.
+
+En móvil, la Web no recibe ni almacena la huella: Android/iOS valida localmente al usuario y WebAuthn entrega una prueba criptográfica. En producción pública debe usarse HTTPS; localhost/loopback puede usarse para desarrollo.
 
 Configuración sugerida: ADMIN_2FA_REQUIRED=true.
 
-Los portales de subbot pueden mantener su mecanismo de token independiente.
+Los portales de subbot mantienen aislamiento y pueden registrar su propia Passkey sin obtener privilegios sobre MainBot.
 
-## A7. Reautenticación para acciones críticas
+## A7. Roles Web y permisos limitados
+
+Estado: EN PROGRESO
+
+Roles acordados:
+
+- Owner: dueño del bot, control total, seguridad, sesiones, staff, backups y acciones críticas;
+- Admin: operación diaria con permisos limitados y sin control de seguridad/credenciales críticas;
+- Support: diagnóstico, lectura y acciones de soporte muy acotadas;
+- Subbot Owner: únicamente su propia instancia, sus grupos, configuración y sesión; nunca MainBot ni otros subbots.
+
+Los permisos deben aplicarse en backend, no solo ocultando botones.
+
+## A8. Reautenticación para acciones críticas
 
 Estado: PENDIENTE
 
@@ -1027,7 +1044,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | Fecha | Fase | Cambio | Estado | PR/Commit |
 |---|---|---|---|---|
 | 2026-09-18 | Plan general | Se crea este roadmap de próximas integraciones | TERMINADO | — |
-| — | Fase A | Login y seguridad Web | PENDIENTE | — |
+| 2026-09-18 | Fase A | Login, roles, sesiones, Passkeys y seguridad Web | EN PROGRESO | feat/phase-a-web-auth-security | — |
 | — | Fase B | Núcleo multiplataforma | PENDIENTE | — |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
