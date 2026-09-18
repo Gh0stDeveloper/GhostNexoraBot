@@ -42,6 +42,7 @@ type Snapshot = {
   staff: Staff[]
   sessions: Session[]
   passkeys: Passkey[]
+  twoFactorRequired: boolean
 }
 
 const copy = {
@@ -71,6 +72,10 @@ const copy = {
     revoke: 'Revocar',
     loading: 'Cargando seguridad…',
     failed: 'No se pudo completar la operación.',
+    twoFactor: '2FA para accesos privilegiados',
+    twoFactorText: 'Cuando está activo, Owner, Admin y Support deben confirmar una Passkey después de usar su token.',
+    enable2fa: 'Activar 2FA',
+    disable2fa: 'Desactivar 2FA',
   },
   en: {
     title: 'Account security',
@@ -98,6 +103,10 @@ const copy = {
     revoke: 'Revoke',
     loading: 'Loading security…',
     failed: 'The operation could not be completed.',
+    twoFactor: '2FA for privileged access',
+    twoFactorText: 'When enabled, Owner, Admin and Support must confirm a Passkey after using their token.',
+    enable2fa: 'Enable 2FA',
+    disable2fa: 'Disable 2FA',
   },
 } as const
 
@@ -255,6 +264,15 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
         </article>
       </div>
     </section>
+
+    {snapshot.role === 'owner' ? <section className="ops-panel p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-3xl"><div className="flex items-center gap-2 font-bold text-white"><ShieldCheck className="size-4 text-blue-400"/>{t.twoFactor}</div><p className="mt-2 text-xs leading-5 text-zinc-500">{t.twoFactorText}</p></div>
+        <button type="button" onClick={() => run({ action: 'set_2fa_required', enabled: !snapshot.twoFactorRequired }, '2fa')} className={snapshot.twoFactorRequired ? 'ops-button-danger' : 'ops-button-primary'}>
+          <Fingerprint className="size-4"/>{snapshot.twoFactorRequired ? t.disable2fa : t.enable2fa}
+        </button>
+      </div>
+    </section> : null}
 
     {snapshot.role === 'owner' ? <section className="ops-panel overflow-hidden">
       <div className="border-b border-white/[.08] px-5 py-5">
