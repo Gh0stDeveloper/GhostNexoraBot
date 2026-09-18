@@ -19,6 +19,7 @@ type SessionBase = {
   sid: string
   exp: number
   authAt: number
+  mfaPending: boolean
 }
 
 export type OwnerSession = SessionBase & {
@@ -136,16 +137,16 @@ export function verifySession(raw: string | undefined | null): WebSession | null
 
   if (role === 'owner') {
     if (accountId !== 'owner') return null
-    return { role: 'owner', sid: parsed.sid, accountId: 'owner', exp: stored.expiresAt, authAt: stored.authAt }
+    return { role: 'owner', sid: parsed.sid, accountId: 'owner', exp: stored.expiresAt, authAt: stored.authAt, mfaPending: stored.mfaPending }
   }
 
   if (role === 'admin' || role === 'support') {
     if (!accountId) return null
-    return { role, sid: parsed.sid, accountId, exp: stored.expiresAt, authAt: stored.authAt }
+    return { role, sid: parsed.sid, accountId, exp: stored.expiresAt, authAt: stored.authAt, mfaPending: stored.mfaPending }
   }
 
   if (subbotId === null || !userJid) return null
-  return { role: 'subbot', sid: parsed.sid, subbotId, userJid, exp: stored.expiresAt, authAt: stored.authAt }
+  return { role: 'subbot', sid: parsed.sid, subbotId, userJid, exp: stored.expiresAt, authAt: stored.authAt, mfaPending: false }
 }
 
 function digest(value: string) {
@@ -159,14 +160,15 @@ export function verifyAdminToken(input: string) {
   return left.length === right.length && timingSafeEqual(left, right)
 }
 
-export function createOwnerSession(request: Request, ttlMs?: number): OwnerSession {
-  const stored = createStoredSession({ role: 'owner' }, request, ttlMs)
+export function createOwnerSession(request: Request, ttlMs?: number, mfaPending = false): OwnerSession {
+  const stored = createStoredSession({ role: 'owner' }, request, ttlMs, mfaPending)
   return {
     role: 'owner',
     sid: stored.sid,
     accountId: 'owner',
     exp: stored.exp,
     authAt: stored.authAt,
+    mfaPending: stored.mfaPending,
   }
 }
 
@@ -175,14 +177,16 @@ export function createStaffSession(
   accountId: string,
   request: Request,
   ttlMs?: number,
+  mfaPending = false,
 ): StaffSession {
-  const stored = createStoredSession({ role, accountId }, request, ttlMs)
+  const stored = createStoredSession({ role, accountId }, request, ttlMs, mfaPending)
   return {
     role,
     sid: stored.sid,
     accountId,
     exp: stored.exp,
     authAt: stored.authAt,
+    mfaPending: stored.mfaPending,
   }
 }
 
@@ -250,6 +254,7 @@ export function createSubbotSession(access: SubbotPortalAccess, request: Request
     subbotId: access.subbotId,
     exp: Math.min(stored.exp, access.exp),
     authAt: stored.authAt,
+    mfaPending: false,
   }
 }
 
