@@ -15,7 +15,6 @@ import {
   verifyAdminToken,
 } from '../../../../lib/auth'
 import { publicUrl } from '../../../../lib/public-url'
-import { runtime } from '../../../../lib/runtime'
 import {
   clearLoginFailures,
   listPasskeys,
@@ -24,6 +23,7 @@ import {
   requireSameOrigin,
   resolveStaffToken,
   subjectForPrincipal,
+  privileged2faRequired,
 } from '../../../../lib/web-security'
 
 function loginUrl(request: Request, error: string) {
@@ -43,7 +43,7 @@ function privilegedLogin(
   const subject = subjectForPrincipal(principal)
   const hasSecondFactor = listPasskeys(subject).length > 0
 
-  if (runtime.admin2faRequired && hasSecondFactor) {
+  if (privileged2faRequired() && hasSecondFactor) {
     const preauth = createPreauth(principal.role, principal.accountId)
     const url = publicUrl(request, '/login')
     url.searchParams.set('mfa', '1')
@@ -59,7 +59,7 @@ function privilegedLogin(
     : createStaffSession(principal.role, principal.accountId, request)
 
   const target = publicUrl(request, '/admin')
-  if (runtime.admin2faRequired && !hasSecondFactor) {
+  if (privileged2faRequired() && !hasSecondFactor) {
     target.searchParams.set('section', 'security')
     target.searchParams.set('enroll', '1')
   }
