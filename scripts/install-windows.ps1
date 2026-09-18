@@ -264,7 +264,7 @@ function Write-InstallError([System.Management.Automation.ErrorRecord]$Record) {
     "Etapa: $CurrentStage",
     "Mensaje: $($Record.Exception.Message)",
     "Tipo: $($Record.Exception.GetType().FullName)",
-    "Comando: $($Record.InvocationInfo.Line)",
+    "Código: $($Record.InvocationInfo.Line)",
     "Posición: $($Record.InvocationInfo.PositionMessage)",
     "Stack: $($Record.ScriptStackTrace)",
     '============================================================',
