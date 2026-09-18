@@ -9,6 +9,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import {
   ADMIN_SESSION_COOKIE,
+  PREAUTH_COOKIE,
   SUBBOT_SESSION_COOKIE,
   cookieOptions,
   createOwnerSession,
@@ -17,6 +18,7 @@ import {
   resolveSubbotPasskeyAccess,
   sessionPrincipal,
   signSession,
+  verifyPreauth,
   verifySession,
 } from '../../../../../lib/auth'
 import {
@@ -39,7 +41,7 @@ async function currentSession() {
 }
 
 type PasskeyVerifyBody = {
-  mode?: 'register' | 'login'
+  mode?: 'register' | 'login' | 'mfa'
   challengeId?: string
   response?: RegistrationResponseJSON | AuthenticationResponseJSON
   label?: string
@@ -110,6 +112,20 @@ export async function POST(request: Request) {
   const passkey = findPasskey(credentialId)
   if (!passkey) return loginFailure(request)
 
+  let preauthPrincipal: { role: 'owner'; accountId: 'owner' } | { role: 'admin' | 'support'; accountId: string } | null = null
+  if (body.mode === 'mfa') {
+    const store = await cookies()
+    const preauth = verifyPreauth(store.get(PREAUTH_COOKIE)?.value)
+    if (!preauth) return loginFailure(request)
+    preauthPrincipal = preauth.role === 'owner'
+      ? { role: 'owner', accountId: 'owner' }
+      : { role: preauth.role, accountId: preauth.accountId }
+    const subject = subjectForPrincipal(preauthPrincipal.role === 'owner'
+      ? { role: 'owner' }
+      : { role: preauthPrincipal.role, accountId: preauthPrincipal.accountId })
+    if (pending.subject !== subject || passkey.subject !== subject) return loginFailure(request)
+  }
+
   try {
     const verification = await verifyAuthenticationResponse({
       response: body.response as AuthenticationResponseJSON,
@@ -126,17 +142,26 @@ export async function POST(request: Request) {
     })
     if (!verification.verified) return loginFailure(request)
 
-    const principal = principalForPasskey(passkey)
-    if (!principal) return loginFailure(request)
+    const credentialPrincipal = principalForPasskey(passkey)
+    if (!credentialPrincipal) return loginFailure(request)
 
     let session
-    if (principal.role === 'owner') {
+    if (body.mode === 'mfa') {
+      if (!preauthPrincipal || credentialPrincipal.role !== preauthPrincipal.role) return loginFailure(request)
+      if (preauthPrincipal.role === 'owner') {
+        session = createOwnerSession(request)
+      } else {
+        if (credentialPrincipal.role === 'subbot' || credentialPrincipal.role === 'owner') return loginFailure(request)
+        if (credentialPrincipal.accountId !== preauthPrincipal.accountId) return loginFailure(request)
+        session = createStaffSession(preauthPrincipal.role, preauthPrincipal.accountId, request)
+      }
+    } else if (credentialPrincipal.role === 'owner') {
       session = createOwnerSession(request)
-    } else if (principal.role === 'admin' || principal.role === 'support') {
-      if (!principal.accountId) return loginFailure(request)
-      session = createStaffSession(principal.role, principal.accountId, request)
+    } else if (credentialPrincipal.role === 'admin' || credentialPrincipal.role === 'support') {
+      if (!credentialPrincipal.accountId) return loginFailure(request)
+      session = createStaffSession(credentialPrincipal.role, credentialPrincipal.accountId, request)
     } else {
-      const access = resolveSubbotPasskeyAccess(principal.subbotId, principal.userJid)
+      const access = resolveSubbotPasskeyAccess(credentialPrincipal.subbotId, credentialPrincipal.userJid)
       if (!access) return loginFailure(request)
       session = createSubbotSession(access, request)
     }
@@ -156,6 +181,7 @@ export async function POST(request: Request) {
       response.cookies.set(ADMIN_SESSION_COOKIE, signSession(session), cookieOptions(session.exp))
       response.cookies.delete(SUBBOT_SESSION_COOKIE)
     }
+    response.cookies.delete(PREAUTH_COOKIE)
     return response
   } catch {
     return loginFailure(request)
