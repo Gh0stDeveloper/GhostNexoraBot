@@ -13,6 +13,7 @@ import {
 
 export const ADMIN_SESSION_COOKIE = 'ghost_admin_session'
 export const SUBBOT_SESSION_COOKIE = 'ghost_subbot_session'
+export const PREAUTH_COOKIE = 'ghost_web_preauth'
 
 type SessionBase = {
   sid: string
@@ -46,6 +47,51 @@ function sessionSecret() {
 
 function signature(encoded: string) {
   return createHmac('sha256', sessionSecret()).update(encoded).digest('base64url')
+}
+
+
+export type PreauthSession = {
+  role: PrivilegedWebRole
+  accountId: string
+  exp: number
+}
+
+export function signPreauth(input: PreauthSession) {
+  const encoded = Buffer.from(JSON.stringify(input), 'utf8').toString('base64url')
+  const mac = createHmac('sha256', sessionSecret()).update(`preauth:${encoded}`).digest('base64url')
+  return `${encoded}.${mac}`
+}
+
+export function verifyPreauth(raw: string | undefined | null): PreauthSession | null {
+  if (!raw) return null
+  const [encoded, supplied] = raw.split('.')
+  if (!encoded || !supplied) return null
+  const expected = createHmac('sha256', sessionSecret()).update(`preauth:${encoded}`).digest('base64url')
+  const a = Buffer.from(supplied)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null
+  try {
+    const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Partial<PreauthSession>
+    if (!isPrivilegedRole(parsed.role) || typeof parsed.accountId !== 'string' || typeof parsed.exp !== 'number' || parsed.exp <= Date.now()) return null
+    return { role: parsed.role, accountId: parsed.accountId, exp: parsed.exp }
+  } catch {
+    return null
+  }
+}
+
+export function createPreauth(role: PrivilegedWebRole, accountId: string, ttlMs = 5 * 60_000): PreauthSession {
+  return { role, accountId, exp: Date.now() + Math.max(60_000, Math.min(ttlMs, 10 * 60_000)) }
+}
+
+export function preauthCookieOptions(exp: number) {
+  const maxAge = Math.max(1, Math.floor((exp - Date.now()) / 1000))
+  return {
+    httpOnly: true,
+    secure: runtime.publicWebUrl.startsWith('https://'),
+    sameSite: 'strict' as const,
+    path: '/',
+    maxAge,
+  }
 }
 
 export function signSession(session: WebSession) {
