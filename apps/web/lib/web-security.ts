@@ -351,7 +351,9 @@ export function revokeStaffAccount(id: string) {
 }
 
 export type WebPrincipal =
-  | { role: PrivilegedWebRole; accountId?: string | null }
+  | { role: 'owner' }
+  | { role: 'admin'; accountId: string | null }
+  | { role: 'support'; accountId: string | null }
   | { role: 'subbot'; subbotId: number; userJid: string }
 
 export function createStoredSession(principal: WebPrincipal, request: Request, ttlMs?: number, mfaPending = false) {
