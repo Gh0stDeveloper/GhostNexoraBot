@@ -67,7 +67,12 @@ export function upsertPlatformGroup(
       authoritative, source, metadata_json, first_seen_at, updated_at
     ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_key, platform, external_id) DO UPDATE SET
-      name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE ops_platform_groups.name END,
+      name = CASE
+        WHEN excluded.name = excluded.external_id AND ops_platform_groups.name <> ops_platform_groups.external_id
+          THEN ops_platform_groups.name
+        WHEN excluded.name <> '' THEN excluded.name
+        ELSE ops_platform_groups.name
+      END,
       kind = excluded.kind,
       member_count = COALESCE(excluded.member_count, ops_platform_groups.member_count),
       admin_count = COALESCE(excluded.admin_count, ops_platform_groups.admin_count),
