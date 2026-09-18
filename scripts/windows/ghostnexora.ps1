@@ -278,7 +278,7 @@ function Configure-Bot {
       }
       '5' {
         Write-Info 'Proyecto de referencia: https://github.com/FxxMorgan/anime1v-api'
-        Write-Info 'Autoalójalo y escribe la URL base, por ejemplo http://127.0.0.1:3001 (sin /api/v1).'
+        Write-Info 'Si lo ejecutas en esta PC, usa un puerto distinto del health del bot (3001), por ejemplo http://127.0.0.1:3101 (sin /api/v1).'
         $url = (Read-Host 'ANIME1V_API_URL (Enter para omitir)').Trim().TrimEnd('/')
         if ($url) { Set-EnvValue 'ANIME1V_API_URL' $url; Write-Ok 'Anime1v configurado.' } else { Write-Info 'Anime seguirá usando Jikan y los proveedores disponibles.' }
       }
