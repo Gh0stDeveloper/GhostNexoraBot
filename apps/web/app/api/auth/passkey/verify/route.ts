@@ -2,7 +2,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
   type AuthenticationResponseJSON,
-  type AuthenticatorTransportFuture,
+  type AuthenticatorTransport,
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server'
 import { cookies } from 'next/headers'
@@ -138,7 +138,7 @@ export async function POST(request: Request) {
         id: passkey.credentialId,
         publicKey: passkey.publicKey,
         counter: passkey.counter,
-        transports: passkey.transports as AuthenticatorTransportFuture[],
+        transports: passkey.transports as AuthenticatorTransport[],
       },
       requireUserVerification: true,
     })
