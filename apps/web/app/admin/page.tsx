@@ -10,6 +10,7 @@ import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { readMainPlatformStatuses, subbotPlatformStatuses } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 import { hasPermission, roleLabel, type PrivilegedWebRole } from '../../lib/web-security'
 
@@ -81,6 +82,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const selectedSubbot = selectedInstance === 'main' ? null : subbots.find((item) => item.id === Number(selectedInstance.split(':')[1])) ?? null
   const instanceLabel = selectedSubbot ? `Subbot #${selectedSubbot.id}${selectedSubbot.phone ? ` · ${selectedSubbot.phone}` : ''}` : 'MainBot'
   const snapshot = readOpsSnapshot(selectedInstance)
+  const platformStatuses = selectedInstance === 'main'
+    ? await readMainPlatformStatuses(snapshot.runtime)
+    : subbotPlatformStatuses(snapshot.runtime)
   const hrefFor = (target: AdminSection) => `/admin?instance=${encodeURIComponent(selectedInstance)}&section=${target}`
   const refreshHref = hrefFor(section)
   const runtimeStatus = snapshot.runtime.connected ? t('admin.connected') : snapshot.runtime.registered ? t('admin.linkedNoHeartbeat') : t('admin.notLinked')
@@ -143,7 +147,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
-        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups}/>
+        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses}/>
         <OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/>
       </div>}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>}
