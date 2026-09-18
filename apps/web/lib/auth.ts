@@ -171,6 +171,25 @@ export function resolveSubbotPortalToken(input: string): SubbotPortalAccess | nu
   }
 }
 
+export function resolveSubbotPasskeyAccess(subbotId: number, userJid: string): SubbotPortalAccess | null {
+  const db = openBotDb()
+  if (!db) return null
+  try {
+    const now = Date.now()
+    const row = db.prepare(`SELECT id, COALESCE(owner_jid, ?) AS userJid, expires_at AS expiresAt
+      FROM subbots WHERE id = ? AND expires_at > ? LIMIT 1`)
+      .get(userJid, subbotId, now) as { id?: number; userJid?: string; expiresAt?: number } | undefined
+    if (!row?.id || !row.userJid || Number(row.expiresAt ?? 0) <= now) return null
+    return {
+      userJid: String(row.userJid),
+      subbotId: Number(row.id),
+      exp: Math.min(Number(row.expiresAt), now + 7 * 86400_000),
+    }
+  } finally {
+    db.close()
+  }
+}
+
 export function createSubbotSession(access: SubbotPortalAccess, request: Request): SubbotSession {
   const ttlMs = Math.max(60_000, access.exp - Date.now())
   const stored = createStoredSession({
