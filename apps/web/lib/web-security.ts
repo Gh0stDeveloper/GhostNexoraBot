@@ -32,10 +32,10 @@ const permissions: Record<WebRole, ReadonlySet<WebPermission>> = {
   ]),
   admin: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage',
-    'audit:view', 'audit:reset',
+    'audit:view', 'audit:reset', 'sessions:manage',
   ]),
   support: new Set<WebPermission>([
-    'dashboard:view', 'groups:view', 'groups:sync', 'audit:view',
+    'dashboard:view', 'groups:view', 'groups:sync', 'audit:view', 'sessions:manage',
   ]),
   subbot: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage', 'groups:leave',
