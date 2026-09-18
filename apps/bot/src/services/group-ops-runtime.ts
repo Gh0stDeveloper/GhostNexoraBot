@@ -14,6 +14,8 @@ let lastSyncAttemptAt = 0
 let syncing = false
 let processing = false
 let connectionOpen = false
+let emptyFullSyncStreak = 0
+const EMPTY_SYNC_CONFIRMATIONS = 3
 const groupRefreshAt = new Map<string, number>()
 const PICTURE_REFRESH_MS = 6 * 60 * 60_000
 
@@ -331,15 +333,47 @@ async function syncGroups(connectionProbe = false) {
   syncing = true
   lastSyncAttemptAt = Date.now()
   touchRuntime({ lastGroupSyncAttemptAt: lastSyncAttemptAt })
+
   try {
     const raw = await socket.groupFetchAllParticipating()
     if (!connectionOpen) connectionOpen = true
+
     const groups = Object.values(raw) as ParticipatingGroup[]
+    const participatingGroups = groups.filter((group) => String(group.id ?? '').endsWith('@g.us'))
+    const count = participatingGroups.length
     const stamp = Date.now()
+    const previousCount = currentGroupCount()
+
+    if (count === 0) emptyFullSyncStreak += 1
+    else emptyFullSyncStreak = 0
+
+    const preserveEmptySnapshot = count === 0 && emptyFullSyncStreak < EMPTY_SYNC_CONFIRMATIONS
+    if (preserveEmptySnapshot) {
+      const detail = `empty_group_snapshot_retry_${emptyFullSyncStreak}_of_${EMPTY_SYNC_CONFIRMATIONS}`
+      touchRuntime({
+        connected: true,
+        registered: true,
+        jid: socket.user?.id ?? null,
+        lastGroupSyncAttemptAt: stamp,
+        lastGroupSyncError: detail,
+        groupCount: previousCount,
+      })
+      recordOpsRuntimeLog(
+        'warn',
+        'groups',
+        `Empty WhatsApp group snapshot preserved; retry ${emptyFullSyncStreak}/${EMPTY_SYNC_CONFIRMATIONS}`,
+        instanceKey,
+      )
+      const retry = setTimeout(() => {
+        if (currentSocket === socket && socket.authState.creds.registered) void syncGroups(true)
+      }, emptyFullSyncStreak === 1 ? 5000 : 10_000)
+      retry.unref?.()
+      return
+    }
 
     opsDb.exec('BEGIN IMMEDIATE')
     try {
-      for (const group of groups) upsertGroup(group, stamp)
+      for (const group of participatingGroups) upsertGroup(group, stamp)
       opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND updated_at < ?').run(instanceKey, stamp)
       opsDb.prepare(`DELETE FROM ops_group_chat_preferences
         WHERE instance_key = ? AND group_jid NOT IN (SELECT group_jid FROM ops_groups WHERE instance_key = ?)`)
@@ -349,9 +383,7 @@ async function syncGroups(connectionProbe = false) {
       opsDb.exec('ROLLBACK')
       throw error
     }
-    lastSyncAt = stamp
-    const participatingGroups = groups.filter((group) => String(group.id ?? '').endsWith('@g.us'))
-    const count = participatingGroups.length
+
     replacePlatformGroups('whatsapp', participatingGroups.map((group) => {
       const participants = group.participants ?? []
       return {
@@ -368,6 +400,8 @@ async function syncGroups(connectionProbe = false) {
         },
       }
     }), instanceKey, stamp)
+
+    lastSyncAt = stamp
     touchRuntime({
       connected: true,
       registered: true,
@@ -386,8 +420,12 @@ async function syncGroups(connectionProbe = false) {
     logger.debug({ error, instanceKey, connectionProbe }, 'ops group registry sync skipped')
     if (!connectionProbe) {
       setOpsAlert({
-        key: 'whatsapp:group-sync', severity: 'warning', title: 'WhatsApp group sync failed',
-        detail: detail.slice(0, 240), active: true, instanceKey,
+        key: 'whatsapp:group-sync',
+        severity: 'warning',
+        title: 'WhatsApp group sync failed',
+        detail: detail.slice(0, 240),
+        active: true,
+        instanceKey,
       })
     }
   } finally {
@@ -492,6 +530,7 @@ export function registerOpsSocket(socket: WASocket) {
   connectionOpen = false
   lastSyncAt = 0
   lastSyncAttemptAt = 0
+  emptyFullSyncStreak = 0
   touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
   startLoop()
 
@@ -536,6 +575,7 @@ export function registerOpsSocket(socket: WASocket) {
       currentSocket = socket
       lastSyncAt = 0
       lastSyncAttemptAt = 0
+      emptyFullSyncStreak = 0
       touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, connectedAt: Date.now() })
       recordOpsRuntimeLog('info', 'whatsapp', 'WhatsApp transport connected', instanceKey)
       setOpsAlert({ key: 'whatsapp:connection', severity: 'critical', title: 'WhatsApp transport disconnected', active: false, instanceKey })
