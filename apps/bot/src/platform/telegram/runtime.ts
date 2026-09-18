@@ -1,12 +1,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { ingestTelegramChannelPost, initTelegramBridgeCache } from '../../services/telegram-bridge-v7.js'
+import { removePlatformGroup, upsertPlatformGroup } from '../../services/platform-group-registry.js'
 import { logger } from '../../utils/logger.js'
 import { TelegramAdapter } from './adapter.js'
 import { TelegramBotApiClient, TelegramApiError } from './client.js'
 import { telegramConfig } from './config.js'
 import { TelegramCommandRouter } from './router.js'
-import type { TelegramBotIdentity, TelegramCallbackQuery, TelegramMessage, TelegramUpdate } from './types.js'
+import type { TelegramBotIdentity, TelegramCallbackQuery, TelegramChat, TelegramMessage, TelegramUpdate } from './types.js'
 
 type TelegramRuntimeState = 'disabled' | 'starting' | 'running' | 'blocked-webhook' | 'stopped' | 'error'
 
@@ -63,6 +64,38 @@ export class TelegramRuntime {
     await writeFile(telegramConfig.stateFile, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 })
   }
 
+  private observeChat(chat: TelegramChat | undefined, source: string) {
+    if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) return
+    upsertPlatformGroup('telegram', {
+      externalId: String(chat.id),
+      name: chat.title || chat.username || String(chat.id),
+      kind: chat.type,
+      authoritative: false,
+      source,
+      metadata: {
+        username: chat.username ?? null,
+        observed: true,
+      },
+    })
+  }
+
+  private observeUpdate(update: TelegramUpdate) {
+    this.observeChat(update.message?.chat, 'telegram-message')
+    this.observeChat(update.edited_message?.chat, 'telegram-edited-message')
+    this.observeChat(update.callback_query?.message?.chat, 'telegram-callback')
+
+    const membership = update.my_chat_member
+    if (!membership) return
+    const chat = membership.chat
+    if (chat.type !== 'group' && chat.type !== 'supergroup') return
+    const status = membership.new_chat_member.status
+    if (status === 'left' || status === 'kicked') {
+      removePlatformGroup('telegram', String(chat.id))
+      return
+    }
+    this.observeChat(chat, 'telegram-my-chat-member')
+  }
+
   private async callback(query: TelegramCallbackQuery) {
     const command = this.adapter!.resolveCallbackData(query.data)
     await this.client!.answerCallbackQuery(query.id, command ? undefined : 'Esta acción expiró. Ejecuta de nuevo el comando.').catch(() => undefined)
@@ -77,6 +110,7 @@ export class TelegramRuntime {
   }
 
   private async processUpdate(update: TelegramUpdate) {
+    this.observeUpdate(update)
     if (update.channel_post) await ingestTelegramChannelPost(update.channel_post).catch((error) => logger.warn({ error }, 'Telegram channel cache ingest failed'))
     if (update.edited_channel_post) await ingestTelegramChannelPost(update.edited_channel_post).catch((error) => logger.warn({ error }, 'Telegram edited channel cache ingest failed'))
     if (update.callback_query) await this.callback(update.callback_query)
