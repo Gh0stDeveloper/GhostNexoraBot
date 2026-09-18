@@ -24,6 +24,7 @@ import {
   resolveStaffToken,
   subjectForPrincipal,
   privileged2faRequired,
+  principalHasVerifiedTotp,
 } from '../../../../lib/web-security'
 
 function loginUrl(request: Request, error: string) {
@@ -41,7 +42,7 @@ function privilegedLogin(
   principal: { role: 'owner'; accountId: 'owner' } | { role: 'admin' | 'support'; accountId: string },
 ) {
   const subject = subjectForPrincipal(principal)
-  const hasSecondFactor = listPasskeys(subject).length > 0
+  const hasSecondFactor = listPasskeys(subject).length > 0 || principalHasVerifiedTotp(principal)
 
   if (privileged2faRequired() && hasSecondFactor) {
     const preauth = createPreauth(principal.role, principal.accountId)
