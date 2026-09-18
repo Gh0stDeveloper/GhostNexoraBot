@@ -149,7 +149,7 @@ try {
   assert.ok(controlSource.includes("'mute_group_8h'"), 'web control must support 8 hour group mute')
   assert.ok(controlSource.includes("'mute_group_7d'"), 'web control must support 7 day group mute')
   assert.ok(controlSource.includes("'unmute_group'"), 'web control must support group unmute')
-  assert.ok(controlSource.includes('isSubbot ? `subbot:${subbot.subbotId}`'), 'subbot web session must force its own instance key')
+  assert.ok(controlSource.includes("if (session.role === 'subbot')") && controlSource.includes('instance = `subbot:${session.subbotId}`'), 'subbot web session must force its own instance key')
   assert.ok(backupDownloadSource.includes('ADMIN_SESSION_COOKIE'), 'backup downloads must require an admin session')
   assert.ok(backupDownloadSource.includes('safeBackupFileName'), 'backup download path must reject traversal or arbitrary files')
   assert.ok(backupPanelSource.includes("action\" value=\"create_backup"), 'admin backup panel must expose manual backup creation')
