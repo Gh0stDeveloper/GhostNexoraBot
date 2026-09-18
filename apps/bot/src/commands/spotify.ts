@@ -58,7 +58,7 @@ async function showTrack(ctx: CommandContext, track: SpotifyTrack) {
   })
 }
 
-async function spotifySearch(ctx: CommandContext) {
+export async function spotifySearch(ctx: CommandContext) {
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}spotify <canción|artista|enlace de Spotify>`)
 
@@ -123,14 +123,6 @@ async function spotifyDownload(ctx: CommandContext) {
 }
 
 export const spotifyCommands: BotCommand[] = [
-  {
-    name: 'spotify',
-    aliases: ['sp'],
-    category: 'downloads',
-    description: 'Busca canciones reales en Spotify, muestra metadatos y permite obtener el audio con el proveedor multimedia del bot.',
-    usage: 'spotify <canción|artista|url>',
-    handler: spotifySearch,
-  },
   {
     name: 'spotifydl',
     aliases: ['spdl'],
