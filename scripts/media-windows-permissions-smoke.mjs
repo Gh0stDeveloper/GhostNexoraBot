@@ -6,6 +6,7 @@ const read = (path) => readFileSync(path, 'utf8')
 const index = read('apps/bot/src/commands/index.ts')
 const spotify = read('apps/bot/src/commands/spotify.ts')
 const spotifyService = read('apps/bot/src/services/spotify.ts')
+const sourceOverrides = read('apps/bot/src/commands/source-overrides-v7.ts')
 const anime = read('apps/bot/src/services/anime.ts')
 const adultDownloads = read('apps/bot/src/commands/adult-download-v15.ts')
 const adultMode = read('apps/bot/src/commands/group-adult-mode.ts')
@@ -15,11 +16,8 @@ const manager = read('scripts/windows/ghostnexora.ps1')
 const cmdInstaller = read('scripts/install-windows.cmd')
 
 assert.ok(index.includes("import { spotifyCommands } from './spotify.js'"), 'Spotify functional commands must be registered')
-assert.ok(
-  index.indexOf('...spotifyCommands') > index.indexOf('...sourceOverrideV7Commands'),
-  'Functional Spotify commands must override the old link-only source command',
-)
-assert.match(spotify, /name: 'spotify'/, 'spotify command missing')
+assert.match(spotify, /export async function spotifySearch/, 'Spotify search handler must be reusable by the legacy command slot')
+assert.match(sourceOverrides, /handler: spotifySearch/, 'The canonical Spotify command must use the functional search handler')
 assert.match(spotify, /name: 'spotifydl'/, 'spotifydl command missing')
 assert.match(spotifyService, /https:\/\/accounts\.spotify\.com\/api\/token/, 'Spotify Client Credentials token flow missing')
 assert.match(spotifyService, /\/v1\/search\?type=track/, 'Spotify track search endpoint missing')
