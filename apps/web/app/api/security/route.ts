@@ -44,6 +44,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     role: session.role,
+    currentSessionId: session.sid,
     csrfToken: sessionCsrfToken(session),
     staff: session.role === 'owner' ? listStaffAccounts() : [],
     sessions,
