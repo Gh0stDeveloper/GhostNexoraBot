@@ -30,10 +30,18 @@ const DOWNLOAD_COMMANDS = new Map([
   ['terabox', ['tera', 'teraboxdl']],
 ])
 
+const POST_BASELINE_COMMANDS = new Map([
+  ['autorespuestas', ['autorespuesta', 'respuestasauto', 'automaticresponses']],
+  ['buscarcomando', ['buscarcmd', 'findcmd', 'comandobuscar']],
+  ['happymodmore', ['hmmore']],
+  ['spotifydl', ['spdl']],
+])
+
 const APPROVED_COMMANDS = new Map([
   ...PHASE3_COMMANDS,
   ...PREEXISTING_MAIN_COMMANDS,
   ...DOWNLOAD_COMMANDS,
+  ...POST_BASELINE_COMMANDS,
 ])
 
 const [report, baseline, providerCatalog] = await Promise.all([
