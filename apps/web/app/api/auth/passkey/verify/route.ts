@@ -129,6 +129,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const credentialPublicKey = new Uint8Array(passkey.publicKey.byteLength)
+    credentialPublicKey.set(passkey.publicKey)
+
     const verification = await verifyAuthenticationResponse({
       response: body.response as AuthenticationResponseJSON,
       expectedChallenge: pending.challenge,
@@ -136,7 +139,7 @@ export async function POST(request: Request) {
       expectedRPID: rpID,
       credential: {
         id: passkey.credentialId,
-        publicKey: passkey.publicKey,
+        publicKey: credentialPublicKey,
         counter: passkey.counter,
         transports: passkey.transports as AuthenticatorTransport[],
       },
@@ -149,11 +152,13 @@ export async function POST(request: Request) {
 
     let session
     if (body.mode === 'mfa') {
-      if (!preauthPrincipal || credentialPrincipal.role !== preauthPrincipal.role) return loginFailure(request)
+      if (!preauthPrincipal) return loginFailure(request)
       if (preauthPrincipal.role === 'owner') {
+        if (credentialPrincipal.role !== 'owner') return loginFailure(request)
         session = createOwnerSession(request)
       } else {
-        if (credentialPrincipal.role === 'subbot' || credentialPrincipal.role === 'owner') return loginFailure(request)
+        if (credentialPrincipal.role !== preauthPrincipal.role) return loginFailure(request)
+        if (credentialPrincipal.role !== 'admin' && credentialPrincipal.role !== 'support') return loginFailure(request)
         if (credentialPrincipal.accountId !== preauthPrincipal.accountId) return loginFailure(request)
         session = createStaffSession(preauthPrincipal.role, preauthPrincipal.accountId, request)
       }
