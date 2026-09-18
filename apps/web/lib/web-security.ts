@@ -470,6 +470,44 @@ export function listSessionsForPrincipal(principal: WebPrincipal): StoredWebSess
   }
 }
 
+
+export function listPrivilegedSessionsForOwner(): StoredWebSession[] {
+  const db = securityDb()
+  try {
+    const rows = db.prepare(`SELECT id, role, account_id AS accountId, subbot_id AS subbotId, user_jid AS userJid,
+      created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt
+      FROM web_sessions WHERE role IN ('owner','admin','support') ORDER BY last_seen DESC LIMIT 200`)
+      .all() as Array<Record<string, unknown>>
+    return rows.map((row) => ({
+      id: String(row.id),
+      role: normalizeRole(row.role) ?? 'support',
+      accountId: row.accountId === null || row.accountId === undefined ? null : String(row.accountId),
+      subbotId: null,
+      userJid: null,
+      createdAt: Number(row.createdAt),
+      lastSeen: Number(row.lastSeen),
+      authAt: Number(row.authAt),
+      expiresAt: Number(row.expiresAt),
+      revokedAt: row.revokedAt === null || row.revokedAt === undefined ? null : Number(row.revokedAt),
+    }))
+  } finally {
+    db.close()
+  }
+}
+
+export function sessionBelongsToPrincipal(sessionId: string, principal: WebPrincipal) {
+  if (principal.role === 'owner') {
+    const db = securityDb()
+    try {
+      const row = db.prepare("SELECT role FROM web_sessions WHERE id = ? LIMIT 1").get(sessionId) as { role?: string } | undefined
+      return row?.role === 'owner' || row?.role === 'admin' || row?.role === 'support'
+    } finally {
+      db.close()
+    }
+  }
+  return listSessionsForPrincipal(principal).some((session) => session.id === sessionId)
+}
+
 export function revokeSession(sessionId: string) {
   const db = securityDb()
   try {
