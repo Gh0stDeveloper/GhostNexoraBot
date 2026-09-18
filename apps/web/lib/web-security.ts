@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -173,6 +173,15 @@ function securityDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS web_totp (
+      subject TEXT PRIMARY KEY,
+      encrypted_secret TEXT NOT NULL,
+      verified INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      verified_at INTEGER,
+      last_used_step INTEGER NOT NULL DEFAULT -1
     );
   `)
   return db
@@ -851,4 +860,186 @@ export function setPrivileged2faRequired(enabled: boolean) {
     db.close()
   }
   return enabled
+}
+
+
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+function base32Encode(bytes: Uint8Array) {
+  let bits = 0
+  let value = 0
+  let output = ''
+  for (const byte of bytes) {
+    value = (value << 8) | byte
+    bits += 8
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31]
+      bits -= 5
+    }
+  }
+  if (bits > 0) output += BASE32_ALPHABET[(value << (5 - bits)) & 31]
+  return output
+}
+
+function base32Decode(input: string) {
+  const clean = input.toUpperCase().replace(/=+$/g, '').replace(/\s+/g, '')
+  let bits = 0
+  let value = 0
+  const bytes: number[] = []
+  for (const char of clean) {
+    const index = BASE32_ALPHABET.indexOf(char)
+    if (index < 0) throw new Error('invalid_base32')
+    value = (value << 5) | index
+    bits += 5
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 255)
+      bits -= 8
+    }
+  }
+  return Buffer.from(bytes)
+}
+
+function totpEncryptionKey() {
+  return createHash('sha256').update(`ghost-nexora-totp:${secret()}`).digest()
+}
+
+function encryptTotpSecret(value: string) {
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', totpEncryptionKey(), iv)
+  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return [iv, tag, encrypted].map((part) => part.toString('base64url')).join('.')
+}
+
+function decryptTotpSecret(value: string) {
+  const [ivRaw, tagRaw, encryptedRaw] = value.split('.')
+  if (!ivRaw || !tagRaw || !encryptedRaw) throw new Error('invalid_totp_secret')
+  const decipher = createDecipheriv('aes-256-gcm', totpEncryptionKey(), Buffer.from(ivRaw, 'base64url'))
+  decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'))
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedRaw, 'base64url')),
+    decipher.final(),
+  ]).toString('utf8')
+}
+
+function hotp(secretValue: string, counter: number) {
+  const counterBytes = Buffer.alloc(8)
+  counterBytes.writeBigUInt64BE(BigInt(counter))
+  const digest = createHmac('sha1', base32Decode(secretValue)).update(counterBytes).digest()
+  const offset = digest[digest.length - 1]! & 0x0f
+  const binary =
+    ((digest[offset]! & 0x7f) << 24) |
+    ((digest[offset + 1]! & 0xff) << 16) |
+    ((digest[offset + 2]! & 0xff) << 8) |
+    (digest[offset + 3]! & 0xff)
+  return String(binary % 1_000_000).padStart(6, '0')
+}
+
+function totpStep(stamp = Date.now()) {
+  return Math.floor(stamp / 30_000)
+}
+
+function safeCodeEqual(left: string, right: string) {
+  const a = Buffer.from(left)
+  const b = Buffer.from(right)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+export function beginTotpEnrollment(principal: WebPrincipal) {
+  const subject = subjectForPrincipal(principal)
+  const secretValue = base32Encode(randomBytes(20))
+  const now = Date.now()
+  const db = securityDb()
+  try {
+    db.prepare(`INSERT INTO web_totp(subject, encrypted_secret, verified, created_at, verified_at, last_used_step)
+      VALUES(?, ?, 0, ?, NULL, -1)
+      ON CONFLICT(subject) DO UPDATE SET encrypted_secret = excluded.encrypted_secret,
+        verified = 0, created_at = excluded.created_at, verified_at = NULL, last_used_step = -1`)
+      .run(subject, encryptTotpSecret(secretValue), now)
+  } finally {
+    db.close()
+  }
+  const label = encodeURIComponent(`Ghost Nexora Bot:${subject}`)
+  const issuer = encodeURIComponent('Ghost Nexora Bot')
+  return {
+    subject,
+    secret: secretValue,
+    otpauthUrl: `otpauth://totp/${label}?secret=${secretValue}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`,
+  }
+}
+
+export function totpStatus(principal: WebPrincipal) {
+  const subject = subjectForPrincipal(principal)
+  const db = securityDb()
+  try {
+    const row = db.prepare('SELECT verified, created_at AS createdAt, verified_at AS verifiedAt FROM web_totp WHERE subject = ? LIMIT 1')
+      .get(subject) as { verified?: number; createdAt?: number; verifiedAt?: number | null } | undefined
+    return {
+      configured: Boolean(row),
+      verified: Boolean(row?.verified),
+      createdAt: Number(row?.createdAt ?? 0),
+      verifiedAt: row?.verifiedAt === null || row?.verifiedAt === undefined ? 0 : Number(row.verifiedAt),
+    }
+  } finally {
+    db.close()
+  }
+}
+
+function verifyTotpInternal(subject: string, code: string, consume: boolean) {
+  const clean = code.replace(/\s+/g, '')
+  if (!/^\d{6}$/.test(clean)) return false
+  const db = securityDb()
+  try {
+    const row = db.prepare(`SELECT encrypted_secret AS encryptedSecret, verified, last_used_step AS lastUsedStep
+      FROM web_totp WHERE subject = ? LIMIT 1`).get(subject) as {
+        encryptedSecret?: string
+        verified?: number
+        lastUsedStep?: number
+      } | undefined
+    if (!row?.encryptedSecret) return false
+    const secretValue = decryptTotpSecret(String(row.encryptedSecret))
+    const current = totpStep()
+    for (const step of [current - 1, current, current + 1]) {
+      if (consume && step <= Number(row.lastUsedStep ?? -1)) continue
+      if (!safeCodeEqual(hotp(secretValue, step), clean)) continue
+      if (consume) db.prepare('UPDATE web_totp SET last_used_step = ? WHERE subject = ?').run(step, subject)
+      return true
+    }
+    return false
+  } finally {
+    db.close()
+  }
+}
+
+export function confirmTotpEnrollment(principal: WebPrincipal, code: string) {
+  const subject = subjectForPrincipal(principal)
+  if (!verifyTotpInternal(subject, code, false)) return false
+  const db = securityDb()
+  try {
+    db.prepare('UPDATE web_totp SET verified = 1, verified_at = ? WHERE subject = ?').run(Date.now(), subject)
+  } finally {
+    db.close()
+  }
+  return true
+}
+
+export function verifyTotpForPrincipal(principal: WebPrincipal, code: string) {
+  const subject = subjectForPrincipal(principal)
+  const status = totpStatus(principal)
+  if (!status.verified) return false
+  return verifyTotpInternal(subject, code, true)
+}
+
+export function deleteTotp(principal: WebPrincipal) {
+  const subject = subjectForPrincipal(principal)
+  const db = securityDb()
+  try {
+    return Number(db.prepare('DELETE FROM web_totp WHERE subject = ?').run(subject).changes) > 0
+  } finally {
+    db.close()
+  }
+}
+
+export function principalHasVerifiedTotp(principal: WebPrincipal) {
+  return totpStatus(principal).verified
 }
