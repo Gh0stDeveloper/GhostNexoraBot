@@ -13,6 +13,7 @@ import {
   hasPermission,
   listPasskeys,
   listPrivilegedSessionsForOwner,
+  privileged2faRequired,
   listSessionsForPrincipal,
   listStaffAccounts,
   requireMutationSecurity,
@@ -20,6 +21,7 @@ import {
   revokeSession,
   revokeStaffAccount,
   sessionBelongsToPrincipal,
+  setPrivileged2faRequired,
   subjectForPrincipal,
 } from '../../../lib/web-security'
 
@@ -49,6 +51,7 @@ export async function GET() {
     staff: session.role === 'owner' ? listStaffAccounts() : [],
     sessions,
     passkeys: listPasskeys(subject),
+    twoFactorRequired: privileged2faRequired(),
   }, { headers: { 'cache-control': 'no-store' } })
 }
 
@@ -66,6 +69,18 @@ export async function POST(request: Request) {
 
   const principal = sessionPrincipal(session)
   const action = String(body.action ?? '')
+
+  if (action === 'set_2fa_required') {
+    if (!hasPermission(session.role, 'security:manage') || session.role !== 'owner') {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
+    const enabled = Boolean(body.enabled)
+    if (enabled && listPasskeys('owner').length === 0) {
+      return NextResponse.json({ ok: false, error: 'owner_passkey_required' }, { status: 400 })
+    }
+    setPrivileged2faRequired(enabled)
+    return NextResponse.json({ ok: true, enabled })
+  }
 
   if (action === 'create_staff') {
     if (!hasPermission(session.role, 'security:manage') || session.role !== 'owner') {
