@@ -49,12 +49,17 @@ function providerBadge(provider: OpsProviderHealth, locale: WebLocale) {
   return <span className={className}>{opsExtraT(locale, key)}</span>
 }
 
-export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overview', locale }: {
+export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overview', locale, csrfToken, canSyncGroups = false, canManageGroups = false, canLeaveGroups = false, canResetAudit = false }: {
   snapshot: OpsSnapshot
   refreshHref: string
   instanceLabel: string
   view?: OpsConsoleView
   locale: WebLocale
+  csrfToken: string
+  canSyncGroups?: boolean
+  canManageGroups?: boolean
+  canLeaveGroups?: boolean
+  canResetAudit?: boolean
 }) {
   const intl = webIntlLocale(locale)
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
@@ -64,7 +69,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
     return <section className="ops-panel overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3"><UsersRound className="size-5 text-blue-400"/><div><h2 className="font-bold text-white">{t('ops.groupsTitle')}</h2><p className="mt-1 text-xs text-zinc-500">{t('ops.groupsText', { count: snapshot.groups.length, instance: instanceLabel })}</p></div></div>
-        <div className="flex flex-wrap gap-2"><OpsAutoRefresh seconds={10}/><form action="/api/control" method="post"><input type="hidden" name="action" value="sync_groups"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><button className="ops-button-muted"><RefreshCcw className="size-4"/>{t('ops.syncGroups')}</button></form></div>
+        <div className="flex flex-wrap gap-2"><OpsAutoRefresh seconds={10}/>{canSyncGroups ? <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="sync_groups"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><button className="ops-button-muted"><RefreshCcw className="size-4"/>{t('ops.syncGroups')}</button></form> : null}</div>
       </div>
       <div className="overflow-x-auto">
         <table className="ops-table min-w-[1020px]">
@@ -85,20 +90,20 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
                 <td className="text-zinc-500">{relativeTime(group.updatedAt, locale)}</td>
                 <td>
                   <div className="flex flex-wrap justify-end gap-2">
-                    {muted ? <form action="/api/control" method="post">
-                      <input type="hidden" name="action" value="unmute_group"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
+                    {canManageGroups ? (muted ? <form action="/api/control" method="post">
+                      <input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="unmute_group"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
                       <button className="ops-button-muted text-xs">{x('group.unmute')}</button>
                     </form> : <>
                       <form action="/api/control" method="post">
-                        <input type="hidden" name="action" value="mute_group_8h"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
+                        <input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="mute_group_8h"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
                         <button className="ops-button-muted text-xs">{x('group.mute8h')}</button>
                       </form>
                       <form action="/api/control" method="post">
-                        <input type="hidden" name="action" value="mute_group_7d"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
+                        <input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="mute_group_7d"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/>
                         <button className="ops-button-muted text-xs">{x('group.mute7d')}</button>
                       </form>
-                    </>}
-                    <form action="/api/control" method="post"><input type="hidden" name="action" value="leave_group"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/><ConfirmSubmitButton className="ops-button-danger" confirmText={t('ops.leaveConfirm', { instance: instanceLabel, group: group.name })}>{t('ops.leave')}</ConfirmSubmitButton></form>
+                    </>) : null}
+                    {canLeaveGroups ? <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="leave_group"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="groupJid" value={group.groupJid}/><ConfirmSubmitButton className="ops-button-danger" confirmText={t('ops.leaveConfirm', { instance: instanceLabel, group: group.name })}>{t('ops.leave')}</ConfirmSubmitButton></form> : null}
                   </div>
                 </td>
               </tr>
@@ -114,7 +119,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
     return <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs text-zinc-500">{t('ops.auditText', { instance: instanceLabel })}</p></div>
-        <div className="flex gap-2"><OpsAutoRefresh seconds={10}/><form action="/api/control" method="post"><input type="hidden" name="action" value="reset_audit"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="audit"/><button className="ops-button-muted"><RotateCcw className="size-4"/>{t('ops.resetAudit')}</button></form></div>
+        <div className="flex gap-2"><OpsAutoRefresh seconds={10}/>{canResetAudit ? <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="reset_audit"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="audit"/><button className="ops-button-muted"><RotateCcw className="size-4"/>{t('ops.resetAudit')}</button></form> : null}</div>
       </div>
       <CommandAuditTable commands={snapshot.commands} locale={locale} />
       <AdminAuditTable rows={snapshot.adminAudit} locale={locale}/>
@@ -139,7 +144,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
       </article>)}
     </section>
 
-    <RuntimeDiagnosticsPanel instanceKey={snapshot.instanceKey} locale={locale}/>
+    <RuntimeDiagnosticsPanel instanceKey={snapshot.instanceKey} locale={locale} csrfToken={csrfToken} canManageGroups={canManageGroups}/>
 
     <section className="ops-panel overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
