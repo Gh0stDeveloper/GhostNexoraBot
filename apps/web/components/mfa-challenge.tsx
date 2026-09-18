@@ -2,6 +2,7 @@
 
 import { KeyRound, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { webT, type WebLocale } from '../lib/i18n'
 import { PasskeyLoginButton } from './passkey-login-button'
 
 type MfaStatus = {
@@ -11,7 +12,7 @@ type MfaStatus = {
 }
 
 export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError }: {
-  locale: 'es' | 'en'
+  locale: WebLocale
   passkeyLabel: string
   workingLabel: string
   passkeyError: string
@@ -21,21 +22,7 @@ export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError 
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
 
-  const copy = locale === 'es'
-    ? {
-      totp: 'Código del autenticador',
-      placeholder: '000000',
-      confirm: 'Confirmar código',
-      invalid: 'No se pudo validar el segundo factor.',
-      loading: 'Cargando métodos de seguridad…',
-    }
-    : {
-      totp: 'Authenticator code',
-      placeholder: '000000',
-      confirm: 'Confirm code',
-      invalid: 'The second factor could not be verified.',
-      loading: 'Loading security methods…',
-    }
+  const t = (key: Parameters<typeof webT>[1]) => webT(locale, key)
 
   useEffect(() => {
     fetch('/api/auth/mfa/status', { cache: 'no-store' })
@@ -44,8 +31,8 @@ export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError 
         if (!response.ok || !data.ok) throw new Error('mfa')
         setStatus(data)
       })
-      .catch(() => setError(copy.invalid))
-  }, [copy.invalid])
+      .catch(() => setError(t('mfa.invalid')))
+  }, [t('mfa.invalid')])
 
   async function verifyTotp() {
     setWorking(true)
@@ -60,7 +47,7 @@ export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError 
       if (!response.ok || !result.ok || !result.redirect) throw new Error('totp')
       window.location.assign(result.redirect)
     } catch {
-      setError(copy.invalid)
+      setError(t('mfa.invalid'))
     } finally {
       setWorking(false)
     }
@@ -68,7 +55,7 @@ export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError 
 
   if (!status) {
     return <div className="mt-7 text-center text-sm text-zinc-500">
-      <LoaderCircle className="mr-2 inline size-4 animate-spin"/>{error || copy.loading}
+      <LoaderCircle className="mr-2 inline size-4 animate-spin"/>{error || t('mfa.loading')}
     </div>
   }
 
@@ -81,11 +68,11 @@ export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError 
     /> : null}
 
     {status.passkey && status.totp ? <div className="flex items-center gap-3 text-[10px] uppercase tracking-[.16em] text-zinc-700">
-      <span className="h-px flex-1 bg-white/[.07]"/><span>o</span><span className="h-px flex-1 bg-white/[.07]"/>
+      <span className="h-px flex-1 bg-white/[.07]"/><span>{t('mfa.or')}</span><span className="h-px flex-1 bg-white/[.07]"/>
     </div> : null}
 
     {status.totp ? <div>
-      <label htmlFor="totp" className="text-xs font-bold uppercase tracking-wide text-zinc-300">{copy.totp}</label>
+      <label htmlFor="totp" className="text-xs font-bold uppercase tracking-wide text-zinc-300">{t('mfa.totp')}</label>
       <input
         id="totp"
         inputMode="numeric"
@@ -94,11 +81,11 @@ export function MfaChallenge({ locale, passkeyLabel, workingLabel, passkeyError 
         maxLength={6}
         value={code}
         onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-        placeholder={copy.placeholder}
+        placeholder={'000000'}
         className="ops-input mt-2 py-3.5 text-center font-mono text-xl tracking-[.3em]"
       />
       <button type="button" disabled={working || code.length !== 6} onClick={verifyTotp} className="ops-button-primary mt-3 w-full justify-center py-3.5">
-        {working ? <LoaderCircle className="size-4 animate-spin"/> : <KeyRound className="size-4"/>}{copy.confirm}
+        {working ? <LoaderCircle className="size-4 animate-spin"/> : <KeyRound className="size-4"/>}{t('mfa.confirm')}
       </button>
     </div> : null}
 
