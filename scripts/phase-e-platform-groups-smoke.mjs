@@ -36,6 +36,9 @@ assert.match(whatsapp, /observeGroupJid/, 'WhatsApp traffic must recover groups 
 assert.match(whatsapp, /replacePlatformGroups\('whatsapp'/, 'WhatsApp full sync must feed the cross-platform registry')
 assert.match(whatsapp, /last_group_sync_attempt_at/, 'WhatsApp sync attempt timestamp must be persisted')
 assert.match(whatsapp, /last_group_sync_error/, 'WhatsApp sync errors must be persisted')
+assert.match(whatsapp, /EMPTY_SYNC_CONFIRMATIONS = 3/, 'Transient empty WhatsApp snapshots must require confirmation')
+assert.match(whatsapp, /preserveEmptySnapshot/, 'Existing WhatsApp inventory must survive transient empty snapshots')
+assert.match(whatsapp, /empty_group_snapshot_retry_/, 'Transient empty sync retries must be diagnosable')
 assert.match(whatsapp, /setTimeout\(\(\) => \{[\s\S]*lastSyncAt === 0/, 'WhatsApp initial group sync must retry after connection')
 
 assert.match(discordGateway, /GUILD_CREATE/, 'Discord Gateway must observe guild joins/availability')
