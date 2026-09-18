@@ -58,6 +58,7 @@ export type StaffAccount = {
   active: boolean
   createdAt: number
   revokedAt: number | null
+  mfaPending: boolean
 }
 
 export type StoredWebSession = {
@@ -108,7 +109,8 @@ function securityDb() {
       token_hash TEXT NOT NULL UNIQUE,
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
-      revoked_at INTEGER
+      revoked_at INTEGER,
+      mfa_pending INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS web_sessions (
@@ -184,6 +186,10 @@ function securityDb() {
       last_used_step INTEGER NOT NULL DEFAULT -1
     );
   `)
+  const sessionColumns = db.prepare('PRAGMA table_info(web_sessions)').all() as Array<{ name?: string }>
+  if (!sessionColumns.some((column) => column.name === 'mfa_pending')) {
+    db.exec('ALTER TABLE web_sessions ADD COLUMN mfa_pending INTEGER NOT NULL DEFAULT 0')
+  }
   return db
 }
 
@@ -288,6 +294,7 @@ export function listStaffAccounts(): StaffAccount[] {
       active: Boolean(row.active),
       createdAt: Number(row.createdAt),
       revokedAt: row.revokedAt === null || row.revokedAt === undefined ? null : Number(row.revokedAt),
+      mfaPending: Boolean(row.mfaPending),
     }))
   } finally {
     db.close()
@@ -348,7 +355,7 @@ export type WebPrincipal =
   | { role: PrivilegedWebRole; accountId?: string | null }
   | { role: 'subbot'; subbotId: number; userJid: string }
 
-export function createStoredSession(principal: WebPrincipal, request: Request, ttlMs?: number) {
+export function createStoredSession(principal: WebPrincipal, request: Request, ttlMs?: number, mfaPending = false) {
   const now = Date.now()
   const ttl = Math.max(60_000, Math.min(ttlMs ?? SESSION_MAX_IDLE_MS, principal.role === 'subbot' ? 7 * 86_400_000 : SESSION_MAX_IDLE_MS))
   const id = randomBytes(24).toString('base64url')
@@ -365,8 +372,8 @@ export function createStoredSession(principal: WebPrincipal, request: Request, t
   try {
     db.prepare(`INSERT INTO web_sessions(
       id, role, account_id, subbot_id, user_jid, created_at, last_seen, auth_at,
-      expires_at, ip_hash, user_agent_hash
-    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      expires_at, ip_hash, user_agent_hash, mfa_pending
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       id,
       principal.role,
       accountId,
@@ -378,6 +385,7 @@ export function createStoredSession(principal: WebPrincipal, request: Request, t
       expiresAt,
       requestIdentityHash(request),
       userAgentHash(request),
+      mfaPending ? 1 : 0,
     )
   } finally {
     db.close()
@@ -391,6 +399,7 @@ export function createStoredSession(principal: WebPrincipal, request: Request, t
     userJid,
     exp: expiresAt,
     authAt: now,
+    mfaPending,
   }
 }
 
@@ -407,7 +416,7 @@ export function validateStoredSession(input: {
   try {
     const row = db.prepare(`SELECT id, role, account_id AS accountId, subbot_id AS subbotId,
       user_jid AS userJid, created_at AS createdAt, last_seen AS lastSeen,
-      auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt
+      auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt, mfa_pending AS mfaPending
       FROM web_sessions WHERE id = ? LIMIT 1`).get(input.sid) as Record<string, unknown> | undefined
 
     const role = normalizeRole(row?.role)
@@ -444,6 +453,7 @@ export function validateStoredSession(input: {
       authAt: Number(row.authAt),
       expiresAt,
       revokedAt: null,
+      mfaPending: Boolean(row.mfaPending),
     }
   } finally {
     db.close()
@@ -456,15 +466,15 @@ export function listSessionsForPrincipal(principal: WebPrincipal): StoredWebSess
     let rows: Array<Record<string, unknown>>
     if (principal.role === 'owner') {
       rows = db.prepare(`SELECT id, role, account_id AS accountId, subbot_id AS subbotId, user_jid AS userJid,
-        created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt
+        created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt, mfa_pending AS mfaPending
         FROM web_sessions WHERE role = 'owner' ORDER BY last_seen DESC`).all() as Array<Record<string, unknown>>
     } else if (principal.role === 'admin' || principal.role === 'support') {
       rows = db.prepare(`SELECT id, role, account_id AS accountId, subbot_id AS subbotId, user_jid AS userJid,
-        created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt
+        created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt, mfa_pending AS mfaPending
         FROM web_sessions WHERE account_id = ? ORDER BY last_seen DESC`).all(principal.accountId ?? '') as Array<Record<string, unknown>>
     } else {
       rows = db.prepare(`SELECT id, role, account_id AS accountId, subbot_id AS subbotId, user_jid AS userJid,
-        created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt
+        created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt, mfa_pending AS mfaPending
         FROM web_sessions WHERE role = 'subbot' AND subbot_id = ? AND user_jid = ? ORDER BY last_seen DESC`)
         .all(principal.subbotId, principal.userJid) as Array<Record<string, unknown>>
     }
@@ -479,6 +489,7 @@ export function listSessionsForPrincipal(principal: WebPrincipal): StoredWebSess
       authAt: Number(row.authAt),
       expiresAt: Number(row.expiresAt),
       revokedAt: row.revokedAt === null || row.revokedAt === undefined ? null : Number(row.revokedAt),
+      mfaPending: Boolean(row.mfaPending),
     }))
   } finally {
     db.close()
@@ -490,7 +501,7 @@ export function listPrivilegedSessionsForOwner(): StoredWebSession[] {
   const db = securityDb()
   try {
     const rows = db.prepare(`SELECT id, role, account_id AS accountId, subbot_id AS subbotId, user_jid AS userJid,
-      created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt
+      created_at AS createdAt, last_seen AS lastSeen, auth_at AS authAt, expires_at AS expiresAt, revoked_at AS revokedAt, mfa_pending AS mfaPending
       FROM web_sessions WHERE role IN ('owner','admin','support') ORDER BY last_seen DESC LIMIT 200`)
       .all() as Array<Record<string, unknown>>
     return rows.map((row) => ({
@@ -504,6 +515,7 @@ export function listPrivilegedSessionsForOwner(): StoredWebSession[] {
       authAt: Number(row.authAt),
       expiresAt: Number(row.expiresAt),
       revokedAt: row.revokedAt === null || row.revokedAt === undefined ? null : Number(row.revokedAt),
+      mfaPending: Boolean(row.mfaPending),
     }))
   } finally {
     db.close()
@@ -521,6 +533,16 @@ export function sessionBelongsToPrincipal(sessionId: string, principal: WebPrinc
     }
   }
   return listSessionsForPrincipal(principal).some((session) => session.id === sessionId)
+}
+
+export function markSessionMfaComplete(sessionId: string) {
+  const db = securityDb()
+  try {
+    db.prepare('UPDATE web_sessions SET mfa_pending = 0, auth_at = ?, last_seen = ? WHERE id = ? AND revoked_at IS NULL')
+      .run(Date.now(), Date.now(), sessionId)
+  } finally {
+    db.close()
+  }
 }
 
 export function revokeSession(sessionId: string) {
