@@ -117,7 +117,7 @@ export class TelegramBotApiClient {
     return this.call<TelegramUpdate[]>('getUpdates', {
       offset,
       timeout: timeoutSeconds,
-      allowed_updates: ['message', 'edited_message', 'channel_post', 'edited_channel_post', 'callback_query'],
+      allowed_updates: ['message', 'edited_message', 'channel_post', 'edited_channel_post', 'callback_query', 'my_chat_member'],
     }, signalTimeoutMs, false)
   }
 
