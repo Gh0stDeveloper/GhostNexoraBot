@@ -58,6 +58,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
   const sections = availableSections(role, (key) => t(key))
   const params = await searchParams
+  if (session.mfaPending && params.section !== 'security') redirect('/admin?section=security&enroll=1')
   const section = normalizeSection(params.section, role)
 
   const db = openBotDb()
