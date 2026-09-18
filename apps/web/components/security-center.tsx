@@ -42,6 +42,12 @@ type Snapshot = {
   staff: Staff[]
   sessions: Session[]
   passkeys: Passkey[]
+  totp: {
+    configured: boolean
+    verified: boolean
+    createdAt: number
+    verifiedAt: number
+  }
   twoFactorRequired: boolean
 }
 
@@ -56,6 +62,15 @@ const copy = {
     deviceName: 'Nombre para este dispositivo',
     defaultDevice: 'Mi dispositivo',
     noPasskeys: 'No hay Passkeys registradas.',
+    totp: 'Aplicación Authenticator (TOTP)',
+    totpText: 'Método alternativo con códigos de 6 dígitos que cambian cada 30 segundos.',
+    totpStart: 'Configurar Authenticator',
+    totpOpen: 'Abrir en Authenticator',
+    totpSecret: 'Clave manual',
+    totpCode: 'Código de 6 dígitos',
+    totpConfirm: 'Confirmar y activar',
+    totpActive: 'TOTP activo',
+    totpRemove: 'Eliminar TOTP',
     remove: 'Eliminar',
     sessions: 'Sesiones activas',
     sessionText: 'Puedes cerrar sesiones que ya no reconozcas.',
@@ -87,6 +102,15 @@ const copy = {
     deviceName: 'Name for this device',
     defaultDevice: 'My device',
     noPasskeys: 'No Passkeys registered.',
+    totp: 'Authenticator app (TOTP)',
+    totpText: 'Alternative method using 6-digit codes that change every 30 seconds.',
+    totpStart: 'Set up Authenticator',
+    totpOpen: 'Open in Authenticator',
+    totpSecret: 'Manual key',
+    totpCode: '6-digit code',
+    totpConfirm: 'Confirm and enable',
+    totpActive: 'TOTP active',
+    totpRemove: 'Remove TOTP',
     remove: 'Remove',
     sessions: 'Active sessions',
     sessionText: 'Close sessions you no longer recognize.',
@@ -118,6 +142,8 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
   const [createdToken, setCreatedToken] = useState('')
   const [label, setLabel] = useState('')
   const [role, setRole] = useState<'admin' | 'support'>('support')
+  const [totpSetup, setTotpSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null)
+  const [totpCode, setTotpCode] = useState('')
   const intl = useMemo(() => locale === 'es' ? 'es-MX' : 'en-US', [locale])
 
   const refresh = useCallback(async () => {
@@ -203,6 +229,39 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
     }
   }
 
+  async function beginTotp() {
+    setWorking('totp-begin')
+    setError('')
+    try {
+      const result = await action({ action: 'totp_begin' })
+      setTotpSetup({
+        secret: String(result.secret ?? ''),
+        otpauthUrl: String(result.otpauthUrl ?? ''),
+      })
+      setTotpCode('')
+      await refresh()
+    } catch {
+      setError(t.failed)
+    } finally {
+      setWorking('')
+    }
+  }
+
+  async function confirmTotp() {
+    setWorking('totp-confirm')
+    setError('')
+    try {
+      await action({ action: 'totp_confirm', code: totpCode })
+      setTotpSetup(null)
+      setTotpCode('')
+      await refresh()
+    } catch {
+      setError(t.failed)
+    } finally {
+      setWorking('')
+    }
+  }
+
   async function run(payload: Record<string, unknown>, key: string) {
     setWorking(key)
     setError('')
@@ -261,6 +320,25 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
               <button type="button" onClick={() => run({ action: 'revoke_session', id: item.id }, `session:${item.id}`)} className="ops-button-muted text-xs"><LogOut className="size-3.5"/>{t.remove}</button>
             </div>)}
           </div>
+        </article>
+
+        <article className="ops-node">
+          <div className="flex items-center gap-2 font-bold text-white"><KeyRound className="size-4 text-violet-400"/>{t.totp}</div>
+          <p className="mt-2 text-xs leading-5 text-zinc-500">{t.totpText}</p>
+          {snapshot.totp.verified ? <div className="mt-4">
+            <span className="ops-badge-good">{t.totpActive}</span>
+            <button type="button" onClick={() => run({ action: 'totp_delete' }, 'totp-delete')} className="ops-button-danger mt-4"><Trash2 className="size-4"/>{t.totpRemove}</button>
+          </div> : <>
+            <button type="button" onClick={beginTotp} disabled={working === 'totp-begin'} className="ops-button-muted mt-4">
+              {working === 'totp-begin' ? <LoaderCircle className="size-4 animate-spin"/> : <KeyRound className="size-4"/>}{t.totpStart}
+            </button>
+            {totpSetup ? <div className="mt-4 space-y-3 rounded-xl border border-violet-500/15 bg-violet-500/[.05] p-4">
+              <div><p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t.totpSecret}</p><div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-black/30 px-3 py-2 text-xs text-zinc-200">{totpSetup.secret}</code><button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="ops-button-muted">{t.copy}</button></div></div>
+              <a href={totpSetup.otpauthUrl} className="ops-button-muted w-full justify-center"><KeyRound className="size-4"/>{t.totpOpen}</a>
+              <div><label htmlFor="totp-enroll" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t.totpCode}</label><input id="totp-enroll" value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="ops-input mt-2 text-center font-mono text-lg tracking-[.28em]" placeholder="000000"/></div>
+              <button type="button" onClick={confirmTotp} disabled={working === 'totp-confirm' || totpCode.length !== 6} className="ops-button-primary w-full justify-center">{working === 'totp-confirm' ? <LoaderCircle className="size-4 animate-spin"/> : <ShieldCheck className="size-4"/>}{t.totpConfirm}</button>
+            </div> : null}
+          </>}
         </article>
       </div>
     </section>
