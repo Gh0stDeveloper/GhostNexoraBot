@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
+const read = (path) => readFileSync(path, 'utf8')
+
+const roadmap = read('README_NEXT_INTEGRATIONS.md')
+const loginPage = read('apps/web/app/login/page.tsx')
+const loginRoute = read('apps/web/app/api/auth/login/route.ts')
+const logoutRoute = read('apps/web/app/api/auth/logout/route.ts')
+const auth = read('apps/web/lib/auth.ts')
+const security = read('apps/web/lib/web-security.ts')
+const control = read('apps/web/app/api/control/route.ts')
+const passkeyOptions = read('apps/web/app/api/auth/passkey/options/route.ts')
+const passkeyVerify = read('apps/web/app/api/auth/passkey/verify/route.ts')
+const securityApi = read('apps/web/app/api/security/route.ts')
+const securityCenter = read('apps/web/components/security-center.tsx')
+const adminPage = read('apps/web/app/admin/page.tsx')
+const subbotPage = read('apps/web/app/subbot/page.tsx')
+const backupDownload = read('apps/web/app/api/backups/download/route.ts')
+const envExample = read('.env.example')
+
+assert.match(roadmap, /FASE A — Login y seguridad Web[\s\S]*Estado: EN PROGRESO/, 'Phase A roadmap must remain tracked while the PR is active')
+assert.match(roadmap, /Passkeys\/WebAuthn/, 'Phase A roadmap must cover Passkeys/WebAuthn')
+assert.match(roadmap, /Owner:[\s\S]*Admin:[\s\S]*Support:[\s\S]*Subbot Owner:/, 'Phase A roadmap must document all web roles')
+
+assert.doesNotMatch(loginPage, /login\.security/, 'Public login must not expose session internals')
+assert.doesNotMatch(loginPage, /login\.intro/, 'Public login must not explain authorization internals')
+assert.match(loginPage, /PasskeyLoginButton/, 'Public login must offer Passkey authentication')
+assert.match(loginPage, /mfa \? pt\('loginMfaTitle'\)/, 'Public login must support dedicated MFA confirmation UI')
+
+assert.match(loginRoute, /loginRateLimited\(request\)/, 'Login must enforce rate limiting')
+assert.match(loginRoute, /requireSameOrigin\(request\)/, 'Login must enforce same-origin requests')
+assert.match(loginRoute, /resolveStaffToken\(token\)/, 'Login must support limited Admin/Support accounts')
+assert.match(loginRoute, /resolveSubbotPortalToken\(token\)/, 'Login must preserve isolated subbot access')
+assert.match(loginRoute, /privileged2faRequired\(\)/, 'Privileged login must enforce the persisted 2FA policy')
+assert.match(loginRoute, /createPreauth/, 'Privileged token login must use a pre-authentication stage before MFA')
+
+assert.match(auth, /role: 'owner'/, 'Owner role missing from web sessions')
+assert.match(auth, /role: 'admin' \| 'support'/, 'Admin/Support session role missing')
+assert.match(auth, /role: 'subbot'/, 'Subbot role missing from web sessions')
+assert.match(auth, /validateStoredSession/, 'Signed cookies must be backed by revocable stored sessions')
+assert.match(auth, /PREAUTH_COOKIE/, 'MFA pre-authentication cookie missing')
+
+for (const role of ['owner', 'admin', 'support', 'subbot']) {
+  assert.match(security, new RegExp(`${role}: new Set<WebPermission>`), `${role} permission matrix missing`)
+}
+assert.match(security, /CREATE TABLE IF NOT EXISTS web_sessions/, 'Revocable session store missing')
+assert.match(security, /CREATE TABLE IF NOT EXISTS web_passkeys/, 'Passkey store missing')
+assert.match(security, /CREATE TABLE IF NOT EXISTS web_staff_accounts/, 'Staff account store missing')
+assert.match(security, /CREATE TABLE IF NOT EXISTS web_login_attempts/, 'Login rate-limit store missing')
+assert.match(security, /5 \|\| Number\(hourRow\?\.attempts \?\? 0\) >= 20/, 'Expected 5/minute and 20/hour login limits missing')
+assert.match(security, /requireMutationSecurity/, 'CSRF/origin mutation protection missing')
+assert.match(security, /CRITICAL_REAUTH_MAX_AGE_MS = 10 \* 60_000/, 'Critical action re-authentication window missing')
+assert.match(security, /setPrivileged2faRequired/, 'Owner-controlled 2FA policy missing')
+
+assert.match(passkeyOptions, /generateRegistrationOptions/, 'Passkey registration options missing')
+assert.match(passkeyOptions, /generateAuthenticationOptions/, 'Passkey authentication options missing')
+assert.match(passkeyOptions, /authenticatorAttachment: 'platform'/, 'Passkeys must prefer the phone/device authenticator')
+assert.match(passkeyOptions, /userVerification: 'required'/, 'Passkeys must require local user verification')
+assert.match(passkeyVerify, /verifyRegistrationResponse/, 'Passkey registration verification missing')
+assert.match(passkeyVerify, /verifyAuthenticationResponse/, 'Passkey authentication verification missing')
+assert.match(passkeyVerify, /requireUserVerification: true/, 'Passkey verification must require user verification')
+
+assert.match(control, /requireMutationSecurity\(request, session/, 'Control mutations must require CSRF/origin validation')
+assert.match(control, /permissionForAction/, 'Control actions must be mapped to backend permissions')
+assert.match(control, /session\.role !== 'owner' && instance !== 'main'/, 'Admin/Support must not control subbot instances')
+assert.match(control, /instance = `subbot:\$\{session\.subbotId\}`/, 'Subbot Owner must be hard-bound to its own instance')
+assert.match(control, /sessionIsFreshForCriticalAction/, 'Critical actions must require fresh authentication')
+assert.match(control, /management:economy/, 'Owner-only economy mutation permission mapping missing')
+assert.match(control, /management:broadcast/, 'Owner-only broadcast permission mapping missing')
+
+assert.match(securityApi, /create_staff/, 'Owner staff creation API missing')
+assert.match(securityApi, /revoke_staff/, 'Owner staff revocation API missing')
+assert.match(securityApi, /set_2fa_required/, 'Owner 2FA policy API missing')
+assert.match(securityApi, /revoke_other_sessions/, 'Session revocation API missing')
+assert.match(securityCenter, /startRegistration/, 'Passkey enrollment UI missing')
+assert.match(securityCenter, /create_staff/, 'Owner staff management UI missing')
+assert.match(securityCenter, /set_2fa_required/, 'Owner 2FA control UI missing')
+
+assert.match(adminPage, /role === 'owner'/, 'Owner-specific admin UI guard missing')
+assert.match(adminPage, /SecurityCenter/, 'Privileged security center missing')
+assert.match(subbotPage, /SecurityCenter/, 'Subbot security center missing')
+assert.match(subbotPage, /reset_own_subbot/, 'Subbot self-service isolation flow missing')
+assert.match(subbotPage, /name="_csrf"/, 'Subbot mutation forms must contain CSRF tokens')
+
+assert.match(logoutRoute, /revokeSession\(session\.sid\)/, 'Logout must revoke the stored session')
+assert.match(logoutRoute, /method_not_allowed/, 'GET logout must be disabled')
+assert.match(backupDownload, /hasPermission\(session\.role, 'backups:read'\)/, 'Backup downloads must use role permissions')
+assert.match(envExample, /ADMIN_2FA_REQUIRED=false/, '2FA environment bootstrap flag missing')
+
+console.log('Phase A web authentication and security smoke passed')
