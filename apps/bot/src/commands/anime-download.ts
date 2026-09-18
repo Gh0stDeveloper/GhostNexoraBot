@@ -3,6 +3,7 @@ import {
   downloadAnimeEpisode,
   getAnimeEpisodes,
   getAnimeEpisodesBySeason,
+  getAnimeInfo,
   getAnimeSeasons,
   getAnimeSources,
   searchAnime,
@@ -185,12 +186,26 @@ export const animeDownloadCommands: BotCommand[] = [
     async handler(ctx) {
       const animeId = ctx.argText.trim()
       if (!animeId) throw new Error(`Uso: ${ctx.prefix}animeinfo <id>`)
-      const seasons = await getAnimeSeasons(animeId)
-      const episodes = await getAnimeEpisodes(animeId)
-      await ctx.reply(
-        `📺 *ANIME*\n━━━━━━━━━━━━━━\nID: \`${animeId}\`\nTemporadas: *${seasons.length}*\nEpisodios: *${episodes.length}*\n\n` +
-        `Usa *Temporadas* o *Episodios* para continuar.`,
-      )
+      const [info, seasons, episodes] = await Promise.all([
+        getAnimeInfo(animeId),
+        getAnimeSeasons(animeId),
+        getAnimeEpisodes(animeId),
+      ])
+      await ctx.reply([
+        '📺 *ANIME · FICHA*',
+        '━━━━━━━━━━━━━━',
+        info?.title ? `Título: *${info.title}*` : '',
+        info?.titleJapanese ? `Japonés: ${info.titleJapanese}` : '',
+        info?.status ? `Estado: *${info.status}*` : '',
+        info?.score ? `Puntuación MAL: *${info.score}/10*` : '',
+        `Temporadas disponibles: *${seasons.length}*`,
+        `Episodios disponibles para descarga: *${episodes.length}*`,
+        info?.episodes ? `Episodios de la ficha: *${info.episodes}*` : '',
+        info?.synopsis ? `\n${info.synopsis.slice(0, 900)}` : '',
+        info?.url ? `\nMyAnimeList: ${info.url}` : '',
+        '',
+        `Usa *${ctx.prefix}animeeps ${animeId}* para continuar.`,
+      ].filter(Boolean).join('\n'))
     },
   },
   {
