@@ -58,7 +58,6 @@ export type StaffAccount = {
   active: boolean
   createdAt: number
   revokedAt: number | null
-  mfaPending: boolean
 }
 
 export type StoredWebSession = {
@@ -72,6 +71,7 @@ export type StoredWebSession = {
   authAt: number
   expiresAt: number
   revokedAt: number | null
+  mfaPending: boolean
 }
 
 export type PasskeyRecord = {
@@ -109,8 +109,7 @@ function securityDb() {
       token_hash TEXT NOT NULL UNIQUE,
       active INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
-      revoked_at INTEGER,
-      mfa_pending INTEGER NOT NULL DEFAULT 0
+      revoked_at INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS web_sessions (
@@ -125,7 +124,8 @@ function securityDb() {
       expires_at INTEGER NOT NULL,
       ip_hash TEXT,
       user_agent_hash TEXT,
-      revoked_at INTEGER
+      revoked_at INTEGER,
+      mfa_pending INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_web_sessions_role_exp
       ON web_sessions(role, expires_at DESC);
@@ -294,7 +294,6 @@ export function listStaffAccounts(): StaffAccount[] {
       active: Boolean(row.active),
       createdAt: Number(row.createdAt),
       revokedAt: row.revokedAt === null || row.revokedAt === undefined ? null : Number(row.revokedAt),
-      mfaPending: Boolean(row.mfaPending),
     }))
   } finally {
     db.close()
