@@ -2,6 +2,7 @@ import type {
   DiscordApplicationCommandDefinition,
   DiscordCreateMessageBody,
   DiscordGatewayBot,
+  DiscordGuildSummary,
   DiscordMessage,
   DiscordRestErrorBody,
 } from './types.js'
@@ -112,6 +113,10 @@ export class DiscordRestClient {
 
   getGatewayBot() {
     return this.request<DiscordGatewayBot>('GET', '/gateway/bot')
+  }
+
+  getGuild(guildId: string) {
+    return this.request<DiscordGuildSummary>('GET', `/guilds/${encodeURIComponent(guildId)}?with_counts=true`)
   }
 
   createMessage(channelId: string, body: DiscordCreateMessageBody) {
