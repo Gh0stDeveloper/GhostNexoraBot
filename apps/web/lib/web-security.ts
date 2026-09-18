@@ -168,6 +168,12 @@ function securityDb() {
       attempts INTEGER NOT NULL,
       reset_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS web_security_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `)
   return db
 }
@@ -819,4 +825,30 @@ export function webauthnContext(request: Request) {
     } catch {}
   }
   throw new Error('webauthn_secure_context_required')
+}
+
+
+export function privileged2faRequired() {
+  const db = securityDb()
+  try {
+    const row = db.prepare("SELECT value FROM web_security_settings WHERE key = 'privileged_2fa_required' LIMIT 1")
+      .get() as { value?: string } | undefined
+    if (!row?.value) return runtime.admin2faRequired
+    return /^(1|true|yes|on)$/i.test(String(row.value))
+  } finally {
+    db.close()
+  }
+}
+
+export function setPrivileged2faRequired(enabled: boolean) {
+  const db = securityDb()
+  try {
+    db.prepare(`INSERT INTO web_security_settings(key, value, updated_at)
+      VALUES('privileged_2fa_required', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(enabled ? 'true' : 'false', Date.now())
+  } finally {
+    db.close()
+  }
+  return enabled
 }
