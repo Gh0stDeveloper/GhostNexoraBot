@@ -51,6 +51,15 @@ export interface DiscordMessage {
   components?: DiscordMessageComponent[]
 }
 
+export interface DiscordGuildSummary {
+  id: DiscordSnowflake
+  name?: string
+  owner_id?: DiscordSnowflake
+  member_count?: number
+  approximate_member_count?: number
+  unavailable?: boolean
+}
+
 export interface DiscordReady {
   v: number
   user: DiscordUser
