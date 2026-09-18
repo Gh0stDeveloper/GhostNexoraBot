@@ -84,9 +84,7 @@ export async function POST(request: Request) {
         credentialId: credential.id,
         principal,
         publicKey: credential.publicKey,
-        webauthnUserId: verification.registrationInfo.userVerified
-          ? subject
-          : subject,
+        webauthnUserId: Buffer.from(subject, 'utf8').toString('base64url'),
         counter: credential.counter,
         deviceType: credentialDeviceType,
         backedUp: credentialBackedUp,
