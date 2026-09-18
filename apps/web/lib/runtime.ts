@@ -45,6 +45,7 @@ const defaultReleaseDir = path.resolve(dataDir, '..', 'releases')
 
 export const runtime = {
   adminToken: process.env.ADMIN_WEB_TOKEN ?? fileEnv.ADMIN_WEB_TOKEN ?? '',
+  admin2faRequired: /^(1|true|yes|on)$/i.test(process.env.ADMIN_2FA_REQUIRED ?? fileEnv.ADMIN_2FA_REQUIRED ?? 'false'),
   dataDir,
   releaseDir: process.env.OFFICIAL_RELEASE_DIR ?? fileEnv.OFFICIAL_RELEASE_DIR ?? defaultReleaseDir,
   publicWebUrl: publicWebUrl(configuredPublicWebUrl, browserProxyPublicUrl),
