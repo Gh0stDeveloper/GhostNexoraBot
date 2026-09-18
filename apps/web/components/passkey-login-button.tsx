@@ -4,10 +4,11 @@ import { Fingerprint, LoaderCircle } from 'lucide-react'
 import { startAuthentication } from '@simplewebauthn/browser'
 import { useState } from 'react'
 
-export function PasskeyLoginButton({ label, workingLabel, errorLabel }: {
+export function PasskeyLoginButton({ label, workingLabel, errorLabel, mode = 'login' }: {
   label: string
   workingLabel: string
   errorLabel: string
+  mode?: 'login' | 'mfa'
 }) {
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
@@ -19,7 +20,7 @@ export function PasskeyLoginButton({ label, workingLabel, errorLabel }: {
       const optionsResponse = await fetch('/api/auth/passkey/options', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mode: 'login' }),
+        body: JSON.stringify({ mode }),
       })
       const optionsPayload = await optionsResponse.json() as {
         ok?: boolean
@@ -35,7 +36,7 @@ export function PasskeyLoginButton({ label, workingLabel, errorLabel }: {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          mode: 'login',
+          mode,
           challengeId: optionsPayload.challengeId,
           response: credential,
         }),
