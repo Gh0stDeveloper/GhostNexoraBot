@@ -100,10 +100,10 @@ El comando `.spotify` usa la Web API oficial para búsqueda y metadatos. Crea un
 Jikan se utiliza para metadatos y **no requiere API key**. `ANIME1V_API_URL` es opcional: apunta a una instancia autoalojada del proyecto Anime1v, por ejemplo:
 
 ```env
-ANIME1V_API_URL=http://127.0.0.1:3001
+ANIME1V_API_URL=http://127.0.0.1:3101
 ```
 
-No añadas `/api/v1` al final.
+No añadas `/api/v1` al final. Si Anime1v corre en la misma PC, usa un puerto distinto de `BOT_HEALTH_PORT=3001` para evitar conflictos.
 
 Consumet público ya no se presupone. Si mantienes una instancia propia puedes usar:
 
