@@ -3,8 +3,10 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import {
   ADMIN_SESSION_COOKIE,
+  PREAUTH_COOKIE,
   SUBBOT_SESSION_COOKIE,
   sessionPrincipal,
+  verifyPreauth,
   verifySession,
 } from '../../../../../lib/auth'
 import {
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
   try {
     requireSameOrigin(request)
     const body = await request.json().catch(() => ({})) as { mode?: string }
-    const mode = body.mode === 'register' ? 'register' : 'login'
+    const mode = body.mode === 'register' ? 'register' : body.mode === 'mfa' ? 'mfa' : 'login'
     const { rpID } = webauthnContext(request)
 
     if (mode === 'register') {
@@ -59,6 +61,28 @@ export async function POST(request: Request) {
 
     if (loginRateLimited(request)) {
       return NextResponse.json({ ok: false, error: 'invalid_credentials' }, { status: 429 })
+    }
+
+    if (mode === 'mfa') {
+      const store = await cookies()
+      const preauth = verifyPreauth(store.get(PREAUTH_COOKIE)?.value)
+      if (!preauth) return NextResponse.json({ ok: false, error: 'invalid_credentials' }, { status: 401 })
+      const principal = preauth.role === 'owner'
+        ? { role: 'owner' as const }
+        : { role: preauth.role, accountId: preauth.accountId }
+      const subject = subjectForPrincipal(principal)
+      const passkeys = listPasskeys(subject)
+      if (!passkeys.length) return NextResponse.json({ ok: false, error: 'invalid_credentials' }, { status: 401 })
+      const options = await generateAuthenticationOptions({
+        rpID,
+        userVerification: 'required',
+        allowCredentials: passkeys.map((item) => ({
+          id: item.credentialId,
+          transports: item.transports as AuthenticatorTransportFuture[],
+        })),
+      })
+      const challengeId = storeChallenge('authenticate', options.challenge, subject)
+      return NextResponse.json({ ok: true, challengeId, options }, { headers: { 'cache-control': 'no-store' } })
     }
 
     const options = await generateAuthenticationOptions({
