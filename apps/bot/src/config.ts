@@ -40,6 +40,8 @@ const schema = z.object({
   OFFICIAL_CHANNEL_URL: z.string().url().default('https://whatsapp.com/channel/0029VbCWbix9RZAfkkKOqP2i'),
   SPOTIFY_CLIENT_ID: z.string().default(''),
   SPOTIFY_CLIENT_SECRET: z.string().default(''),
+  ANIME1V_API_URL: z.string().default(''),
+  CONSUMET_API_URL: z.string().default(''),
 
   // Lempi: LEMPI_API_KEY remains supported for backwards compatibility.
   // Prefer LEMPI_API_KEYS with comma- or newline-separated keys.
@@ -133,6 +135,8 @@ export const config = {
   officialChannelUrl: raw.OFFICIAL_CHANNEL_URL,
   spotifyClientId: raw.SPOTIFY_CLIENT_ID,
   spotifyClientSecret: raw.SPOTIFY_CLIENT_SECRET,
+  anime1vApiUrl: raw.ANIME1V_API_URL.trim().replace(/\/+$/, ''),
+  consumetApiUrl: raw.CONSUMET_API_URL.trim().replace(/\/+$/, ''),
   lempiApiKey: raw.LEMPI_API_KEY,
   lempiApiKeys: splitList(raw.LEMPI_API_KEYS),
   lempiBaseUrl: raw.LEMPI_BASE_URL,
