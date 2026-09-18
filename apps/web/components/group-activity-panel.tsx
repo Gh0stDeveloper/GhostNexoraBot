@@ -3,7 +3,7 @@ import { readGroupInsights } from '../lib/group-insights'
 import type { WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
 
-export function GroupActivityPanel({ instanceKey, locale }: { instanceKey: string; locale: WebLocale }) {
+export function GroupActivityPanel({ instanceKey, locale, csrfToken, canManageGroups = false }: { instanceKey: string; locale: WebLocale; csrfToken: string; canManageGroups?: boolean }) {
   const rows = readGroupInsights(instanceKey, 25)
   const intl = locale === 'es' ? 'es-MX' : 'en-US'
   const t = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
@@ -30,10 +30,10 @@ export function GroupActivityPanel({ instanceKey, locale }: { instanceKey: strin
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-[10px] text-zinc-600"><CalendarDays className="size-3.5"/><span>{group.createdAt ? `${t('group.created')}: ${new Date(group.createdAt).toLocaleDateString(intl)}` : t('group.createdUnknown')}</span></div>
-          <div className="flex flex-wrap gap-2">
-            <form action="/api/control" method="post"><input type="hidden" name="section" value="groups"/><input type="hidden" name="instance" value={instanceKey}/><input type="hidden" name="groupJid" value={group.groupJid}/><input type="hidden" name="action" value={group.announce ? 'group_announce_off' : 'group_announce_on'}/><button className="ops-button-muted text-xs">{group.announce ? <Volume2 className="size-3.5"/> : <VolumeX className="size-3.5"/>}{group.announce ? t('group.enableEveryone') : t('group.enableAdminsOnly')}</button></form>
-            <form action="/api/control" method="post"><input type="hidden" name="section" value="groups"/><input type="hidden" name="instance" value={instanceKey}/><input type="hidden" name="groupJid" value={group.groupJid}/><input type="hidden" name="action" value={group.restrictMode ? 'group_lock_off' : 'group_lock_on'}/><button className="ops-button-muted text-xs">{group.restrictMode ? <Unlock className="size-3.5"/> : <Lock className="size-3.5"/>}{group.restrictMode ? t('group.unlockInfo') : t('group.lockInfo')}</button></form>
-          </div>
+          {canManageGroups ? <div className="flex flex-wrap gap-2">
+            <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="instance" value={instanceKey}/><input type="hidden" name="groupJid" value={group.groupJid}/><input type="hidden" name="action" value={group.announce ? 'group_announce_off' : 'group_announce_on'}/><button className="ops-button-muted text-xs">{group.announce ? <Volume2 className="size-3.5"/> : <VolumeX className="size-3.5"/>}{group.announce ? t('group.enableEveryone') : t('group.enableAdminsOnly')}</button></form>
+            <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="section" value="groups"/><input type="hidden" name="instance" value={instanceKey}/><input type="hidden" name="groupJid" value={group.groupJid}/><input type="hidden" name="action" value={group.restrictMode ? 'group_lock_off' : 'group_lock_on'}/><button className="ops-button-muted text-xs">{group.restrictMode ? <Unlock className="size-3.5"/> : <Lock className="size-3.5"/>}{group.restrictMode ? t('group.unlockInfo') : t('group.lockInfo')}</button></form>
+          </div> : null}
         </div>
       </article>)}
     </div> : <div className="px-5 py-8 text-center text-sm text-zinc-600">{t('group.emptyInsights')}</div>}
