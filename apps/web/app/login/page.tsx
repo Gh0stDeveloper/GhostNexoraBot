@@ -1,4 +1,5 @@
 import { ArrowLeft, Bot, LockKeyhole } from 'lucide-react'
+import { MfaChallenge } from '../../components/mfa-challenge'
 import { PasskeyLoginButton } from '../../components/passkey-login-button'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webT } from '../../lib/i18n'
@@ -56,12 +57,16 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </div>
         </> : <div className="mt-7"/>}
 
-        <PasskeyLoginButton
-          label={mfa ? pt('loginMfaButton') : pt('loginPasskey')}
+        {mfa ? <MfaChallenge
+          locale={locale}
+          passkeyLabel={pt('loginMfaButton')}
+          workingLabel={pt('loginPasskeyWorking')}
+          passkeyError={pt('loginPasskeyError')}
+        /> : <PasskeyLoginButton
+          label={pt('loginPasskey')}
           workingLabel={pt('loginPasskeyWorking')}
           errorLabel={pt('loginPasskeyError')}
-          mode={mfa ? 'mfa' : 'login'}
-        />
+        />}
       </div>
     </section>
   </main>
