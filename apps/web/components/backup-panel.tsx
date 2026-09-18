@@ -12,7 +12,7 @@ function formatBytes(bytes: number) {
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
 }
 
-export async function BackupPanel({ locale }: { locale: WebLocale }) {
+export async function BackupPanel({ locale, csrfToken }: { locale: WebLocale; csrfToken: string }) {
   const intl = webIntlLocale(locale)
   const backups = await listWebBackups().catch(() => [])
   const t = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
@@ -24,6 +24,7 @@ export async function BackupPanel({ locale }: { locale: WebLocale }) {
         <div><h2 className="font-bold text-white">{t('backup.title')}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-500">{t('backup.text')}</p></div>
       </div>
       <form action="/api/control" method="post">
+        <input type="hidden" name="_csrf" value={csrfToken}/>
         <input type="hidden" name="section" value="management"/>
         <input type="hidden" name="action" value="create_backup"/>
         <button className="ops-button-primary"><Plus className="size-4"/>{t('backup.create')}</button>
@@ -49,6 +50,7 @@ export async function BackupPanel({ locale }: { locale: WebLocale }) {
             <div className="flex justify-end gap-2">
               <a className="ops-button-muted" href={`/api/backups/download?id=${encodeURIComponent(backup.id)}`}><Download className="size-4"/>{t('backup.download')}</a>
               <form action="/api/control" method="post">
+                <input type="hidden" name="_csrf" value={csrfToken}/>
                 <input type="hidden" name="section" value="management"/>
                 <input type="hidden" name="action" value="restore_backup"/>
                 <input type="hidden" name="backupId" value={backup.id}/>
