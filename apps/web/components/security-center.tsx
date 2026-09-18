@@ -37,6 +37,7 @@ type Passkey = {
 type Snapshot = {
   ok: boolean
   role: 'owner' | 'admin' | 'support' | 'subbot'
+  mfaPending: boolean
   currentSessionId: string
   csrfToken: string
   staff: Staff[]
@@ -87,6 +88,7 @@ const copy = {
     revoke: 'Revocar',
     loading: 'Cargando seguridad…',
     failed: 'No se pudo completar la operación.',
+    enrollmentRequired: 'Debes registrar y confirmar una Passkey o TOTP antes de usar el resto del panel.',
     twoFactor: '2FA para accesos privilegiados',
     twoFactorText: 'Cuando está activo, Owner, Admin y Support deben confirmar una Passkey después de usar su token.',
     enable2fa: 'Activar 2FA',
@@ -127,6 +129,7 @@ const copy = {
     revoke: 'Revoke',
     loading: 'Loading security…',
     failed: 'The operation could not be completed.',
+    enrollmentRequired: 'Register and confirm a Passkey or TOTP before using the rest of the panel.',
     twoFactor: '2FA for privileged access',
     twoFactorText: 'When enabled, Owner, Admin and Support must confirm a Passkey after using their token.',
     enable2fa: 'Enable 2FA',
@@ -286,6 +289,7 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
   }
 
   return <div className="space-y-6">
+    {snapshot.mfaPending ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/[.07] px-4 py-3 text-sm text-amber-200">{t.enrollmentRequired}</div> : null}
     <section className="ops-panel overflow-hidden">
       <div className="border-b border-white/[.08] px-5 py-5">
         <div className="flex items-center gap-3"><ShieldCheck className="size-5 text-blue-400"/><div><h2 className="font-bold text-white">{t.title}</h2><p className="mt-1 text-xs text-zinc-500">{t.subtitle}</p></div></div>
