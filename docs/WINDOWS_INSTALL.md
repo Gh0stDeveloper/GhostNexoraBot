@@ -1,6 +1,6 @@
-# Ghost Nexora Bot · Instalación nativa en Windows
+# Ghost Nexora Bot · Instalador nativo para Windows
 
-Ghost Nexora Bot dispone de instalación nativa para **Windows 10/11**, sin WSL. El flujo nuevo mantiene la misma terminal durante toda la instalación, no inicia el bot automáticamente y, al terminar, ofrece un menú explícito para completar owner, APIs, pairing y arranque.
+Ghost Nexora Bot dispone de un instalador interactivo para **Windows 10/11**, sin WSL. El instalador mantiene la misma consola abierta, muestra cada etapa con colores, permite elegir componentes opcionales y deja un registro detallado si algo falla.
 
 > [README](../README.md) · [Linux/VPS](FIRST_INSTALL.md) · [Termux Lite](TERMUX_LITE.md)
 
@@ -14,134 +14,255 @@ Abre **CMD** y ejecuta:
 curl.exe -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.cmd -o "%TEMP%\ghostnexora-install.cmd" && call "%TEMP%\ghostnexora-install.cmd"
 ```
 
-El wrapper `install-windows.cmd`:
+El wrapper CMD:
 
-- ejecuta PowerShell dentro de la misma ventana de CMD;
-- no usa `start` ni crea una terminal desechable;
-- conserva la ventana abierta tanto si termina bien como si ocurre un error;
-- muestra el error antes de salir;
-- deja el MainBot apagado al finalizar salvo que el usuario lo inicie manualmente desde el menú.
-
-## Instalación directa desde PowerShell
-
-```powershell
-$installer = "$env:TEMP\ghostnexora-install.ps1"
-Invoke-WebRequest https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 -OutFile $installer
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
-```
-
-También se mantiene el atajo:
-
-```powershell
-irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 | iex
-```
+- descarga siempre el instalador PowerShell actual desde `main`;
+- ejecuta todo dentro de la misma ventana;
+- no usa `start` ni crea una consola desechable;
+- conserva visible toda la salida de Git, WinGet, npm, build y configuración;
+- cambia visualmente a rojo cuando el proceso termina con error;
+- muestra el código de salida;
+- hace `pause` tanto en éxito como en error;
+- no inicia MainBot automáticamente.
 
 ---
 
-## Qué instala
+## Aspecto y flujo del asistente
 
-El instalador comprueba y prepara:
+El instalador presenta una terminal organizada por secciones y pasos:
+
+```text
+======================================================================
+   GHOST NEXORA BOT · WINDOWS INSTALLER
+   ASISTENTE DE PRIMERA INSTALACIÓN
+======================================================================
+
+  RESUMEN INICIAL
+  Repositorio : ...
+  Rama        : main
+  Código      : ...
+  Datos       : ...
+
+┌─ PASO 1/10 Herramientas del sistema
+┌─ PASO 2/10 Código fuente
+┌─ PASO 3/10 Persistencia y configuración base
+┌─ PASO 4/10 Dashboard Web
+┌─ PASO 5/10 Ollama + Qwen
+┌─ PASO 6/10 Dependencias Node.js
+┌─ PASO 7/10 Build de producción
+┌─ PASO 8/10 Gestor de Windows
+┌─ PASO 9/10 Configuración del bot
+┌─ PASO 10/10 Resumen final
+```
+
+Los estados se distinguen por color:
+
+- verde: operación correcta;
+- cian: etapa o información;
+- amarillo: advertencia o decisión pendiente;
+- rojo: error que detuvo la instalación;
+- gris: información secundaria.
+
+---
+
+## Herramientas que instala o verifica
 
 | Componente | WinGet ID | Uso |
 |---|---|---|
 | Git | `Git.Git` | Código y actualizaciones |
 | Node.js LTS | `OpenJS.NodeJS.LTS` | Runtime Node 24+ |
 | FFmpeg | `Gyan.FFmpeg` | Audio, vídeo y conversiones |
-| yt-dlp | `yt-dlp.yt-dlp` | Proveedor multimedia |
+| yt-dlp | `yt-dlp.yt-dlp` | Descargas multimedia |
 | Ollama | `Ollama.Ollama` | Opcional; LLM local |
 
-Después de cada instalación por WinGet, el script refresca el PATH de la **misma sesión** y también revisa `%LOCALAPPDATA%\Microsoft\WinGet\Links` y los paquetes de WinGet. Ya no pide cerrar PowerShell/CMD y volver a abrirlo.
-
-La primera instalación:
-
-1. instala/verifica herramientas;
-2. clona `main`;
-3. prepara datos persistentes y `.env`;
-4. pregunta si deseas Web y Ollama;
-5. instala dependencias;
-6. compila;
-7. instala el comando global `ghostnexora`;
-8. abre el menú de configuración;
-9. **no** hace pairing por sí solo;
-10. **no** inicia MainBot ni Web por sí solo.
+Después de una instalación con WinGet, el script repara/refresca el `PATH` en la misma sesión. No requiere cerrar CMD o PowerShell y volver a abrirlo.
 
 ---
 
-## Menú de configuración
+## Configuración del Dashboard Web
 
-Después de una primera instalación se abre:
+En una primera instalación el asistente pregunta:
+
+```text
+¿Deseas instalar/configurar la Web? [s/N]
+```
+
+### Web desactivada
+
+Si respondes **No**:
+
+```env
+WEB_ENABLED=false
+WEB_EXPOSURE=disabled
+```
+
+El bot sigue funcionando con WhatsApp, economía, juegos, descargas y subbots. Next.js no se instala ni compila para producción.
+
+### Web local
+
+Si respondes **Sí**, puedes elegir:
+
+```text
+[1] LOCAL    · Solo esta PC
+[2] PÚBLICA  · Dominio HTTPS
+```
+
+En modo local el instalador pregunta el puerto. Por defecto:
+
+```text
+Puerto interno del Dashboard [3000]
+```
+
+y configura, por ejemplo:
+
+```env
+WEB_ENABLED=true
+WEB_EXPOSURE=local
+WEB_PORT=3000
+PUBLIC_WEB_URL=http://127.0.0.1:3000
+```
+
+Al finalizar muestra exactamente la URL local que debe abrirse.
+
+El puerto `3001` no puede usarse para la Web porque está reservado para el health del bot.
+
+### Web pública
+
+Si eliges **Pública**, el instalador solicita un dominio o URL HTTPS:
+
+```text
+Dominio o URL HTTPS: panel.midominio.com
+```
+
+El instalador normaliza el valor como:
+
+```env
+WEB_ENABLED=true
+WEB_EXPOSURE=public
+WEB_PORT=3000
+PUBLIC_WEB_URL=https://panel.midominio.com
+```
+
+La URL pública debe usar **HTTPS** y no puede ser `localhost`.
+
+El instalador deja claro que configurar `PUBLIC_WEB_URL` no crea mágicamente la exposición pública. Para que el dominio sea accesible desde Internet, el usuario debe tener:
+
+1. DNS apuntando al equipo o al servicio de túnel/proxy;
+2. HTTPS válido;
+3. reverse proxy o túnel que envíe el tráfico al `WEB_PORT` interno.
+
+Esto evita mostrar un dominio como operativo cuando la capa de red todavía no está configurada.
+
+---
+
+## Ollama + Qwen
+
+El instalador también pregunta:
+
+```text
+¿Deseas instalar Ollama + Qwen? [s/N]
+```
+
+Si respondes **Sí**:
+
+- instala Ollama si no está presente;
+- inicia su API local si hace falta;
+- verifica `http://127.0.0.1:11434`;
+- descarga/verifica el modelo configurado, por defecto `qwen2.5:1.5b`;
+- activa `OLLAMA_ENABLED=true`.
+
+Si respondes **No**:
+
+```env
+OLLAMA_ENABLED=false
+```
+
+Los comandos LLM locales permanecen ocultos y el resto del bot funciona normalmente.
+
+---
+
+## Persistencia
+
+El código y los datos están separados:
+
+```text
+%USERPROFILE%\GhostNexoraBot\
+└── código fuente + builds
+
+%LOCALAPPDATA%\GhostNexoraBot\
+├── session\
+├── data\
+│   └── subbots\
+├── logs\
+│   └── install-error.log
+└── run\
+```
+
+Esto permite actualizar el código sin borrar sesión, economía, configuración o subbots.
+
+---
+
+## Manejo de errores
+
+Si cualquier etapa falla, el instalador muestra un bloque rojo similar a:
+
+```text
+======================================================================
+   INSTALACIÓN DETENIDA POR UN ERROR
+======================================================================
+   Paso   : 6/10
+   Etapa  : Dependencias Node.js
+   Error  : npm install falló. Código: 1.
+   Código : ...
+   Log    : ...\GhostNexoraBot\logs\install-error.log
+======================================================================
+```
+
+El archivo `install-error.log` conserva:
+
+- fecha y hora;
+- número de paso;
+- etapa;
+- mensaje de excepción;
+- tipo de excepción;
+- línea/comando que estaba ejecutándose;
+- posición del error;
+- stack de PowerShell.
+
+La salida original del comando también permanece visible en la terminal. Por ejemplo, si falla `npm install`, Git, WinGet o el build, se muestran sus mensajes normales y después el resumen rojo del instalador.
+
+La consola CMD no se cierra automáticamente después del fallo.
+
+---
+
+## Configuración posterior
+
+Después de compilar, una primera instalación abre:
 
 ```text
 ghostnexora configure
 ```
 
-Puedes volver a abrirlo en cualquier momento. Incluye:
+Desde ahí se puede configurar:
 
-| Opción | Variable / acción | Dónde se obtiene |
-|---|---|---|
-| Owner | `OWNER_NUMBERS` | Tu número internacional de WhatsApp |
-| Spotify | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | https://developer.spotify.com/dashboard |
-| LemPi | `LEMPI_API_KEYS` | Proveedor LemPi usado por el proyecto / https://api.lempi.lat |
-| OpenRouter | `OPENROUTER_API_KEY` | https://openrouter.ai/keys |
-| Anime1v | `ANIME1V_API_URL` | Autoalojar https://github.com/FxxMorgan/anime1v-api |
-| Telegram | `TELEGRAM_BOT_TOKEN` | https://t.me/BotFather |
-| Discord | `DISCORD_BOT_TOKEN` | https://discord.com/developers/applications |
-| WhatsApp | pairing code | `ghostnexora pair <numero>` |
-| Arranque | MainBot/Web | solo cuando el usuario lo elige |
+| Opción | Variable / acción |
+|---|---|
+| Owner | `OWNER_NUMBERS` |
+| Spotify | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` |
+| LemPi | `LEMPI_API_KEYS` |
+| OpenRouter | `OPENROUTER_API_KEY` |
+| Anime1v | `ANIME1V_API_URL` |
+| Telegram | `TELEGRAM_BOT_TOKEN` |
+| Discord | `DISCORD_BOT_TOKEN` |
+| WhatsApp | pairing code |
+| MainBot | arranque manual |
+| Dashboard | arranque manual |
 
-Las claves sensibles se solicitan con entrada oculta en PowerShell.
-
-### Spotify
-
-El comando `.spotify` usa la Web API oficial para búsqueda y metadatos. Crea una app en Spotify Developer Dashboard y copia el **Client ID** y **Client Secret**.
-
-### Anime
-
-Jikan se utiliza para metadatos y **no requiere API key**. `ANIME1V_API_URL` es opcional: apunta a una instancia autoalojada del proyecto Anime1v, por ejemplo:
-
-```env
-ANIME1V_API_URL=http://127.0.0.1:3101
-```
-
-No añadas `/api/v1` al final. Si Anime1v corre en la misma PC, usa un puerto distinto de `BOT_HEALTH_PORT=3001` para evitar conflictos.
-
-Consumet público ya no se presupone. Si mantienes una instancia propia puedes usar:
-
-```env
-CONSUMET_API_URL=https://tu-consumet.example.com
-```
+El bot **no se inicia automáticamente**. El pairing tampoco se ejecuta sin que el usuario lo elija.
 
 ---
 
-## Componentes opcionales
-
-En la primera instalación se puede elegir Web y Ollama:
-
-```text
-¿Instalar dashboard web + portal de subbots? [s/N]
-¿Instalar Ollama + Qwen? [s/N]
-```
-
-Ejemplos no interactivos:
-
-```powershell
-# Solo bot
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No -SkipPair
-
-# Bot + Web
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -Ollama No -SkipPair
-
-# Bot + Ollama
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama Yes -OllamaModel "qwen2.5:1.5b" -SkipPair
-```
-
-`-SkipPair` se conserva por compatibilidad y en instalaciones automatizadas omite el menú interactivo posterior. El instalador ya no hace pairing automático.
-
-`-NoStart` también se conserva para compatibilidad, aunque el comportamiento actual ya es **no iniciar automáticamente**.
-
----
-
-## Gestor `ghostnexora`
+## Comandos del gestor
 
 ```text
 ghostnexora configure
@@ -157,35 +278,47 @@ ghostnexora web-start
 ghostnexora web-stop
 ```
 
-`configure` es la vía recomendada para completar o cambiar APIs sin editar `.env` manualmente.
-
 ---
 
-## Directorios
+## Instalación no interactiva
 
-```text
-%USERPROFILE%\GhostNexoraBot\
-└── código fuente + builds
+Los parámetros anteriores siguen disponibles y se amplían para la Web.
 
-%LOCALAPPDATA%\GhostNexoraBot\
-├── session\
-├── data\
-│   └── subbots\
-├── logs\
-└── run\
+### Solo bot
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No -SkipPair
 ```
 
-Código y datos quedan separados para que `ghostnexora update` no elimine sesión, economía, subbots ni configuración.
+### Web local
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -WebMode Local -WebPort 3000 -Ollama No -SkipPair
+```
+
+### Web pública
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -WebMode Public -WebPort 3000 -PublicWebUrl "https://panel.midominio.com" -Ollama No -SkipPair
+```
+
+### Bot + Ollama
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama Yes -OllamaModel "qwen2.5:1.5b" -SkipPair
+```
 
 ---
 
 ## Actualización
 
+Después de instalar una vez:
+
 ```powershell
 ghostnexora update
 ```
 
-El actualizador conserva `.env`, sesión y datos. Si MainBot/Web estaban encendidos antes de actualizar, restaura únicamente esos procesos.
+El actualizador conserva `.env`, sesión y datos. Si MainBot o Web estaban activos antes de la actualización, restaura únicamente esos procesos.
 
 ---
 
@@ -196,31 +329,20 @@ ghostnexora doctor
 ghostnexora status
 ```
 
-Comprueba Node.js, npm, Git, FFmpeg, yt-dlp, Ollama y health local.
-
----
-
-## Seguridad
-
-No publiques:
-
-```text
-.env
-creds.json
-%LOCALAPPDATA%\GhostNexoraBot\data\
-%LOCALAPPDATA%\GhostNexoraBot\session\
-```
-
-Las API keys y secretos deben permanecer únicamente en el `.env` local.
+`doctor` revisa Node.js, npm, Git, FFmpeg, yt-dlp, Ollama y health local.
 
 ---
 
 ## CI
 
-GitHub Actions valida la sintaxis de:
+GitHub Actions valida:
 
-- `scripts/install-windows.ps1`;
-- `scripts/windows/ghostnexora.ps1`;
-- el gestor `ghostnexora help` sobre `windows-latest`.
-
-También se valida que el instalador no vuelva a depender de cerrar/reabrir la terminal ni arranque el bot automáticamente.
+- sintaxis de `scripts/install-windows.ps1`;
+- sintaxis de `scripts/windows/ghostnexora.ps1`;
+- ejecución de `ghostnexora help` en `windows-latest`;
+- que el instalador no cierre/reabra la terminal;
+- que no inicie automáticamente MainBot;
+- que mantenga el asistente decorativo;
+- que existan los modos Web local/público/desactivado;
+- que la Web pública exija HTTPS;
+- que los errores registren paso y etapa.
