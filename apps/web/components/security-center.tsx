@@ -37,6 +37,7 @@ type Passkey = {
 type Snapshot = {
   ok: boolean
   role: 'owner' | 'admin' | 'support' | 'subbot'
+  currentSessionId: string
   csrfToken: string
   staff: Staff[]
   sessions: Session[]
@@ -247,7 +248,7 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
           <button type="button" onClick={() => run({ action: 'revoke_other_sessions' }, 'others')} className="ops-button-muted mt-4"><LogOut className="size-4"/>{t.closeOthers}</button>
           <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
             {snapshot.sessions.filter((item) => !item.revokedAt && item.expiresAt > Date.now()).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[.07] bg-black/20 p-3">
-              <div className="min-w-0"><p className="text-xs font-bold uppercase text-zinc-300">{item.role}{item.id === document.cookie ? ` · ${t.current}` : ''}</p><p className="mt-1 text-[10px] text-zinc-600">{new Date(item.lastSeen).toLocaleString(intl)}</p></div>
+              <div className="min-w-0"><p className="text-xs font-bold uppercase text-zinc-300">{item.role}{item.id === snapshot.currentSessionId ? ` · ${t.current}` : ''}</p><p className="mt-1 text-[10px] text-zinc-600">{new Date(item.lastSeen).toLocaleString(intl)}</p></div>
               <button type="button" onClick={() => run({ action: 'revoke_session', id: item.id }, `session:${item.id}`)} className="ops-button-muted text-xs"><LogOut className="size-3.5"/>{t.remove}</button>
             </div>)}
           </div>
