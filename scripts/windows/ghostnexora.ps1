@@ -73,7 +73,7 @@ function Set-EnvValue([string]$Key, [string]$Value) {
 
 function Read-SecretValue([string]$Prompt) {
   $secure = Read-Host $Prompt -AsSecureString
-  return (New-Object System.Net.NetworkCredential('', $secure)).Password
+  return [System.Net.NetworkCredential]::new('', $secure).Password
 }
 
 function Configured([string]$Key) {
