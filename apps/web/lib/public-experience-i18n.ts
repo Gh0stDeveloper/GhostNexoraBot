@@ -20,6 +20,9 @@ const copy = {
     loginPasskeyWorking: 'Verificando dispositivo…',
     loginPasskeyError: 'No se pudo validar la Passkey.',
     loginReauth: 'Vuelve a autenticarte para continuar con esta acción.',
+    loginMfaTitle: 'Confirma tu identidad',
+    loginMfaText: 'Usa la huella, rostro o bloqueo seguro de tu dispositivo.',
+    loginMfaButton: 'Confirmar con huella / Passkey',
   },
   en: {
     rankingNav: 'Ranking',
@@ -40,6 +43,9 @@ const copy = {
     loginPasskeyWorking: 'Verifying device…',
     loginPasskeyError: 'The Passkey could not be verified.',
     loginReauth: 'Sign in again to continue with this action.',
+    loginMfaTitle: 'Confirm your identity',
+    loginMfaText: 'Use fingerprint, face or your device secure lock.',
+    loginMfaButton: 'Confirm with fingerprint / Passkey',
   },
 } as const
 
