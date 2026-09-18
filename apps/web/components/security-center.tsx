@@ -185,7 +185,7 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
     setError('')
     try {
       const result = await action(payload)
-      if (result('security.revoke')dCurrent) {
+      if (result.revokedCurrent) {
         window.location.assign('/login')
         return
       }
@@ -220,7 +220,7 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
             {working === 'passkey' ? t('security.addingPasskey') : t('security.addPasskey')}
           </button>
           <div className="mt-4 space-y-2">
-            {snapshot('security.passkeys').length ? snapshot('security.passkeys').map((item) => <div key={item.credentialId} className="rounded-xl border border-white/[.07] bg-black/20 p-3">
+            {snapshot.passkeys.length ? snapshot.passkeys.map((item) => <div key={item.credentialId} className="rounded-xl border border-white/[.07] bg-black/20 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div><p className="text-sm font-bold text-zinc-200">{item.label}</p><p className="mt-1 text-[10px] text-zinc-600">{new Date(item.lastUsedAt || item.createdAt).toLocaleString(intl)} · {item.deviceType}</p></div>
                 <button type="button" onClick={() => run({ action: 'delete_passkey', credentialId: item.credentialId }, `pk:${item.credentialId}`)} className="ops-button-muted text-xs"><Trash2 className="size-3.5"/>{t('security.remove')}</button>
@@ -234,8 +234,8 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
           <p className="mt-2 text-xs leading-5 text-zinc-500">{t('security.sessionText')}</p>
           <button type="button" onClick={() => run({ action: 'revoke_other_sessions' }, 'others')} className="ops-button-muted mt-4"><LogOut className="size-4"/>{t('security.closeOthers')}</button>
           <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
-            {snapshot('security.sessions').filter((item) => !item.revokedAt && item.expiresAt > Date.now()).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[.07] bg-black/20 p-3">
-              <div className="min-w-0"><p className="text-xs font-bold uppercase text-zinc-300">{item.role}{item.id === snapshot('security.current')SessionId ? ` · ${t('security.current')}` : ''}</p><p className="mt-1 text-[10px] text-zinc-600">{new Date(item.lastSeen).toLocaleString(intl)}</p></div>
+            {snapshot.sessions.filter((item) => !item.revokedAt && item.expiresAt > Date.now()).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[.07] bg-black/20 p-3">
+              <div className="min-w-0"><p className="text-xs font-bold uppercase text-zinc-300">{item.role}{item.id === snapshot.currentSessionId ? ` · ${t('security.current')}` : ''}</p><p className="mt-1 text-[10px] text-zinc-600">{new Date(item.lastSeen).toLocaleString(intl)}</p></div>
               <button type="button" onClick={() => run({ action: 'revoke_session', id: item.id }, `session:${item.id}`)} className="ops-button-muted text-xs"><LogOut className="size-3.5"/>{t('security.remove')}</button>
             </div>)}
           </div>
@@ -243,19 +243,19 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
 
         <article className="ops-node">
           <div className="flex items-center gap-2 font-bold text-white"><KeyRound className="size-4 text-violet-400"/>{t('security.totp')}</div>
-          <p className="mt-2 text-xs leading-5 text-zinc-500">{t('security.totp')Text}</p>
-          {snapshot('security.totp').verified ? <div className="mt-4">
-            <span className="ops-badge-good">{t('security.totp')Active}</span>
-            <button type="button" onClick={() => run({ action: 'totp_delete' }, 'totp-delete')} className="ops-button-danger mt-4"><Trash2 className="size-4"/>{t('security.totp')Remove}</button>
+          <p className="mt-2 text-xs leading-5 text-zinc-500">{t('security.totpText')}</p>
+          {snapshot.totp.verified ? <div className="mt-4">
+            <span className="ops-badge-good">{t('security.totpActive')}</span>
+            <button type="button" onClick={() => run({ action: 'totp_delete' }, 'totp-delete')} className="ops-button-danger mt-4"><Trash2 className="size-4"/>{t('security.totpRemove')}</button>
           </div> : <>
             <button type="button" onClick={beginTotp} disabled={working === 'totp-begin'} className="ops-button-muted mt-4">
-              {working === 'totp-begin' ? <LoaderCircle className="size-4 animate-spin"/> : <KeyRound className="size-4"/>}{t('security.totp')Start}
+              {working === 'totp-begin' ? <LoaderCircle className="size-4 animate-spin"/> : <KeyRound className="size-4"/>}{t('security.totpStart')}
             </button>
             {totpSetup ? <div className="mt-4 space-y-3 rounded-xl border border-violet-500/15 bg-violet-500/[.05] p-4">
-              <div><p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t('security.totp')Secret}</p><div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-black/30 px-3 py-2 text-xs text-zinc-200">{totpSetup.secret}</code><button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="ops-button-muted">{t('security.copy')}</button></div></div>
-              <a href={totpSetup.otpauthUrl} className="ops-button-muted w-full justify-center"><KeyRound className="size-4"/>{t('security.totp')Open}</a>
-              <div><label htmlFor="totp-enroll" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t('security.totp')Code}</label><input id="totp-enroll" value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="ops-input mt-2 text-center font-mono text-lg tracking-[.28em]" placeholder="000000"/></div>
-              <button type="button" onClick={confirmTotp} disabled={working === 'totp-confirm' || totpCode.length !== 6} className="ops-button-primary w-full justify-center">{working === 'totp-confirm' ? <LoaderCircle className="size-4 animate-spin"/> : <ShieldCheck className="size-4"/>}{t('security.totp')Confirm}</button>
+              <div><p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t('security.totpSecret')}</p><div className="mt-2 flex gap-2"><code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-black/30 px-3 py-2 text-xs text-zinc-200">{totpSetup.secret}</code><button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="ops-button-muted">{t('security.copy')}</button></div></div>
+              <a href={totpSetup.otpauthUrl} className="ops-button-muted w-full justify-center"><KeyRound className="size-4"/>{t('security.totpOpen')}</a>
+              <div><label htmlFor="totp-enroll" className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t('security.totpCode')}</label><input id="totp-enroll" value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="ops-input mt-2 text-center font-mono text-lg tracking-[.28em]" placeholder="000000"/></div>
+              <button type="button" onClick={confirmTotp} disabled={working === 'totp-confirm' || totpCode.length !== 6} className="ops-button-primary w-full justify-center">{working === 'totp-confirm' ? <LoaderCircle className="size-4 animate-spin"/> : <ShieldCheck className="size-4"/>}{t('security.totpConfirm')}</button>
             </div> : null}
           </>}
         </article>
@@ -264,16 +264,16 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
 
     {snapshot.role === 'owner' ? <section className="ops-panel p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="max-w-3xl"><div className="flex items-center gap-2 font-bold text-white"><ShieldCheck className="size-4 text-blue-400"/>{t('security.twoFactor')}</div><p className="mt-2 text-xs leading-5 text-zinc-500">{t('security.twoFactor')Text}</p></div>
-        <button type="button" onClick={() => run({ action: 'set_2fa_required', enabled: !snapshot('security.twoFactor')Required }, '2fa')} className={snapshot('security.twoFactor')Required ? 'ops-button-danger' : 'ops-button-primary'}>
-          <Fingerprint className="size-4"/>{snapshot('security.twoFactor')Required ? t('security.disable2fa') : t('security.enable2fa')}
+        <div className="max-w-3xl"><div className="flex items-center gap-2 font-bold text-white"><ShieldCheck className="size-4 text-blue-400"/>{t('security.twoFactor')}</div><p className="mt-2 text-xs leading-5 text-zinc-500">{t('security.twoFactorText')}</p></div>
+        <button type="button" onClick={() => run({ action: 'set_2fa_required', enabled: !snapshot.twoFactorRequired }, '2fa')} className={snapshot.twoFactorRequired ? 'ops-button-danger' : 'ops-button-primary'}>
+          <Fingerprint className="size-4"/>{snapshot.twoFactorRequired ? t('security.disable2fa') : t('security.enable2fa')}
         </button>
       </div>
     </section> : null}
 
     {snapshot.role === 'owner' ? <section className="ops-panel overflow-hidden">
       <div className="border-b border-white/[.08] px-5 py-5">
-        <div className="flex items-center gap-3"><UserPlus className="size-5 text-blue-400"/><div><h2 className="font-bold text-white">{t('security.staff')}</h2><p className="mt-1 text-xs text-zinc-500">{t('security.staff')Text}</p></div></div>
+        <div className="flex items-center gap-3"><UserPlus className="size-5 text-blue-400"/><div><h2 className="font-bold text-white">{t('security.staff')}</h2><p className="mt-1 text-xs text-zinc-500">{t('security.staffText')}</p></div></div>
       </div>
       <div className="p-5">
         <div className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
@@ -285,11 +285,11 @@ export function SecurityCenter({ locale }: { locale: WebLocale }) {
           <button type="button" onClick={createStaff} disabled={working === 'staff' || label.trim().length < 2} className="ops-button-primary"><UserPlus className="size-4"/>{t('security.create')}</button>
         </div>
         {createdToken ? <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[.06] p-4">
-          <p className="text-xs text-amber-200">{t('security.create')dToken}</p>
+          <p className="text-xs text-amber-200">{t('security.createdToken')}</p>
           <div className="mt-3 flex gap-2"><code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-black/30 px-3 py-2 text-xs text-zinc-200">{createdToken}</code><button type="button" onClick={() => navigator.clipboard.writeText(createdToken)} className="ops-button-muted">{t('security.copy')}</button></div>
         </div> : null}
         <div className="mt-5 space-y-2">
-          {snapshot('security.staff').map((item) => <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-white/[.07] bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+          {snapshot.staff.map((item) => <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-white/[.07] bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div><p className="font-bold text-zinc-100">{item.label}</p><p className="mt-1 text-xs uppercase text-zinc-600">{item.role} · {item.active ? t('security.statusActive') : t('security.statusRevoked')}</p></div>
             {item.active ? <button type="button" onClick={() => run({ action: 'revoke_staff', id: item.id }, `staff:${item.id}`)} className="ops-button-danger"><Trash2 className="size-4"/>{t('security.revoke')}</button> : null}
           </div>)}
