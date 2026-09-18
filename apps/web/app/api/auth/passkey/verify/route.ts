@@ -25,6 +25,7 @@ import {
   clearLoginFailures,
   consumeChallenge,
   findPasskey,
+  markSessionMfaComplete,
   principalForPasskey,
   recordLoginFailure,
   requireMutationSecurity,
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
         transports: credential.transports,
         label: body.label,
       })
+      if (session.mfaPending) markSessionMfaComplete(session.sid)
       return NextResponse.json({ ok: true }, { headers: { 'cache-control': 'no-store' } })
     } catch {
       return NextResponse.json({ ok: false, error: 'registration_failed' }, { status: 400 })
