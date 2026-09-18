@@ -7,6 +7,7 @@ import {
   type WebSession,
 } from '../../../lib/auth'
 import { auditTarget, recordAdminAudit } from '../../../lib/admin-audit'
+import { readOpsSnapshot } from '../../../lib/ops'
 import { publicUrl } from '../../../lib/public-url'
 import { openBotDbWritable, runtime } from '../../../lib/runtime'
 import {
@@ -204,7 +205,27 @@ export async function GET() {
   if (!session || !hasPermission(session.role, 'dashboard:view')) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401, headers: { 'cache-control': 'no-store' } })
   }
-  return NextResponse.json({ ok: true, service: 'ghost-nexora-web-control' }, { headers: { 'cache-control': 'no-store' } })
+
+  const response = await fetch(runtime.botHealthUrl, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(4_000),
+  }).catch(() => null)
+  const health = response
+    ? await response.json().catch(() => null) as { connected?: boolean } | null
+    : null
+
+  const instance = session.role === 'subbot' ? `subbot:${session.subbotId}` : 'main'
+  const persisted = readOpsSnapshot(instance).runtime
+
+  return NextResponse.json({
+    ok: true,
+    service: 'ghost-nexora-web-control',
+    botControlReachable: Boolean(response),
+    whatsappConnected: Boolean(health?.connected) || persisted.connected,
+    persistedHeartbeatFresh: persisted.fresh,
+    registered: persisted.registered,
+    groupCount: persisted.groupCount,
+  }, { status: 200, headers: { 'cache-control': 'no-store' } })
 }
 
 async function handlePost(request: NextRequest) {
