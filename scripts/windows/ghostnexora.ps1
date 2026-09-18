@@ -78,7 +78,9 @@ function Read-SecretValue([string]$Prompt) {
 
 function Configured([string]$Key) {
   $value = (Get-EnvValue $Key).Trim()
-  return [bool]($value -and $value -notmatch '^(change-this|5210000000000)
+  return [bool]($value -and $value -notmatch '^(change-this|5210000000000)$')
+}
+
 function Test-WebEnabled {
   $value = (Get-EnvValue 'WEB_ENABLED').Trim().ToLowerInvariant()
   if ($value) { return $value -match '^(1|true|yes|on|si|sí)$' }
