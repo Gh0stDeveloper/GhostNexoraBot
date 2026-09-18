@@ -39,13 +39,13 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase | Área | Estado |
 |---|---|---|
 | Fase A | Login y seguridad Web | TERMINADO |
-| Fase B | Núcleo multiplataforma compartido | PENDIENTE |
-| Fase C | Paridad Discord y Telegram | PENDIENTE |
-| Fase D | Runtime y entrega WhatsApp | PENDIENTE |
-| Fase E | Dashboard Web V2 | PENDIENTE |
+| Fase E | Dashboard Web V2 | EN PROGRESO |
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
+| Fase B | Núcleo multiplataforma compartido | POSPUESTO |
+| Fase C | Paridad Discord y Telegram | POSPUESTO |
+| Fase D | Runtime y entrega WhatsApp | POSPUESTO |
 
-El orden debe respetarse salvo que aparezca una corrección crítica de producción.
+Orden actualizado por decisión de proyecto: después de Fase A se prioriza Fase E. Las fases B, C y D quedan pospuestas hasta terminar las fases de Dashboard/operación prioritarias.
 
 ---
 
@@ -535,7 +535,7 @@ Crear una capa compartida para:
 
 # FASE E — Dashboard Web V2
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 ## Objetivo
 
@@ -1048,14 +1048,26 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | — | Fase B | Núcleo multiplataforma | PENDIENTE | — |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
-| — | Fase E | Dashboard Web V2 | PENDIENTE | — |
+| 2026-09-18 | Fase E | Dashboard Web V2 · inventario de grupos por plataforma | EN PROGRESO | feat/phase-e-platform-groups-dashboard |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial es **FASE B — Núcleo multiplataforma compartido**.
+La siguiente tarea oficial es **FASE E — Dashboard Web V2**, comenzando por inventario y sincronización de grupos por plataforma.
+
+Prioridad inmediata:
+
+1. corregir la sincronización de grupos de WhatsApp;
+2. mostrar diagnóstico de sincronización y última actualización;
+3. separar grupos/servidores por plataforma: WhatsApp, Discord y Telegram;
+4. mantener acciones administrativas de WhatsApp sobre grupos reales de la instancia;
+5. registrar de forma persistente guilds de Discord;
+6. registrar grupos/supergrupos observados por Telegram, indicando la limitación de Bot API para enumerar chats históricos;
+7. continuar después con el resto de Dashboard Web V2.
+
+Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
