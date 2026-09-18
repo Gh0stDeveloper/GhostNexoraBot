@@ -55,9 +55,10 @@ function privilegedLogin(
     return response
   }
 
+  const mfaPending = privileged2faRequired() && !hasSecondFactor
   const session = principal.role === 'owner'
-    ? createOwnerSession(request)
-    : createStaffSession(principal.role, principal.accountId, request)
+    ? createOwnerSession(request, undefined, mfaPending)
+    : createStaffSession(principal.role, principal.accountId, request, undefined, mfaPending)
 
   const target = publicUrl(request, '/admin')
   if (privileged2faRequired() && !hasSecondFactor) {
