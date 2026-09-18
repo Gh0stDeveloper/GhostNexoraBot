@@ -34,8 +34,29 @@ function Refresh-Path {
   $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
   $user = [Environment]::GetEnvironmentVariable('Path', 'User')
   $env:Path = (($machine, $user) -join ';')
-  $ollamaDir = Join-Path $env:LOCALAPPDATA 'Programs\Ollama'
-  if ((Test-Path $ollamaDir) -and ($env:Path -notlike "*$ollamaDir*")) { $env:Path += ';' + $ollamaDir }
+  $extraDirs = @(
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Ollama'),
+    (Join-Path $env:ProgramFiles 'Git\cmd'),
+    (Join-Path $env:ProgramFiles 'nodejs')
+  )
+  foreach ($dir in $extraDirs) {
+    if ((Test-Path $dir) -and ($env:Path -notlike "*$dir*")) { $env:Path += ';' + $dir }
+  }
+}
+
+function Repair-CommandPath([string]$Command) {
+  Refresh-Path
+  if (Get-Command $Command -ErrorAction SilentlyContinue) { return $true }
+  $packages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+  if (Test-Path $packages) {
+    $candidate = Get-ChildItem -Path $packages -Filter $Command -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($candidate) {
+      $dir = $candidate.DirectoryName
+      if ($env:Path -notlike "*$dir*") { $env:Path += ';' + $dir }
+    }
+  }
+  return [bool](Get-Command $Command -ErrorAction SilentlyContinue)
 }
 
 function Require-WinGet {
@@ -49,11 +70,15 @@ function Install-Package([string]$Id, [string]$Command, [string]$Label) {
   Write-Info "Instalando $Label ($Id)…"
   & winget.exe install --id $Id -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
   if ($LASTEXITCODE -ne 0) { throw "WinGet no pudo instalar $Label (exit $LASTEXITCODE)." }
-  Refresh-Path
-  if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
-    throw "$Label terminó de instalarse, pero $Command aún no está en PATH. Cierra PowerShell, abre una nueva terminal y repite el instalador."
+  $available = $false
+  for ($i = 0; $i -lt 8; $i++) {
+    if (Repair-CommandPath $Command) { $available = $true; break }
+    Start-Sleep -Seconds 1
   }
-  Write-Ok "$Label instalado."
+  if (-not $available) {
+    throw "$Label terminó de instalarse, pero el instalador no pudo localizar $Command en la misma sesión."
+  }
+  Write-Ok "$Label instalado y disponible sin reiniciar la terminal."
 }
 
 function Set-EnvValue([string]$Key, [string]$Value) {
@@ -282,39 +307,17 @@ try {
   Write-Step '8/10' 'Gestor de Windows'
   $managerPath = Install-Manager
 
-  Write-Step '9/10' 'Vinculación de WhatsApp'
-  $credsPath = Join-Path $StateDir 'session\creds.json'
-  $registered = $false
-  if (Test-Path $credsPath) {
-    try { $registered = [bool]((Get-Content $credsPath -Raw | ConvertFrom-Json).registered) } catch { $registered = $false }
-  }
-  if ($registered) {
-    Write-Ok 'Sesión WhatsApp existente detectada; no se volvió a vincular.'
-  } elseif (-not $SkipPair) {
-    $phone = Read-Host 'Número internacional de WhatsApp (Enter para omitir)'
-    $phone = ($phone -replace '\D', '')
-    if ($phone) {
-      if (-not (Get-EnvValue 'OWNER_NUMBERS')) { Set-EnvValue 'OWNER_NUMBERS' $phone }
-      $oldEnvFile = $env:ENV_FILE
-      $oldPairing = $env:PAIRING_NUMBER
-      try {
-        $env:ENV_FILE = $envPath
-        $env:PAIRING_NUMBER = $phone
-        & node.exe (Join-Path $InstallDir 'apps\bot\dist\pair.js')
-        if ($LASTEXITCODE -ne 0) { Write-Warn 'El pairing no terminó correctamente; puedes repetirlo con ghostnexora pair <numero>.' }
-      } finally { $env:ENV_FILE = $oldEnvFile; $env:PAIRING_NUMBER = $oldPairing }
-    } else {
-      Write-Warn 'Pairing omitido. Puedes hacerlo después con ghostnexora pair <numero>.'
-    }
+  Write-Step '9/10' 'Configuración posterior'
+  if ($FirstInstall -and -not $SkipPair) {
+    Write-Info 'La instalación terminó. Se abrirá el menú de configuración; el bot seguirá apagado salvo que elijas iniciarlo.'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $managerPath configure
+    if ($LASTEXITCODE -ne 0) { Write-Warn 'El menú de configuración terminó con errores; puedes repetirlo con ghostnexora configure.' }
+  } else {
+    Write-Info 'Menú interactivo omitido. Puedes abrirlo después con ghostnexora configure.'
   }
 
-  Write-Step '10/10' 'Arranque y resumen'
-  if (-not $NoStart) {
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $managerPath start
-    if ($webEnabled) {
-      try { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $managerPath web-start } catch { Write-Warn 'El dashboard no pudo iniciarse automáticamente.' }
-    }
-  }
+  Write-Step '10/10' 'Resumen'
+  Write-Info 'No se realiza pairing ni arranque automático. Usa el menú de configuración cuando estés listo.'
 
   $elapsed = [math]::Round(((Get-Date) - $StartedAt).TotalSeconds, 1)
   Write-Header 'INSTALACIÓN COMPLETADA'
@@ -325,6 +328,7 @@ try {
   Write-Host (' Ollama    : ' + (Get-EnvValue 'OLLAMA_ENABLED'))
   Write-Host ''
   Write-Host 'Comandos:' -ForegroundColor Cyan
+  Write-Host '  ghostnexora configure'
   Write-Host '  ghostnexora status'
   Write-Host '  ghostnexora logs'
   Write-Host '  ghostnexora pair 521XXXXXXXXXX'
