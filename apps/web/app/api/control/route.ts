@@ -1,10 +1,20 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import { ADMIN_SESSION_COOKIE, SUBBOT_SESSION_COOKIE, verifySession } from '../../../lib/auth'
+import {
+  ADMIN_SESSION_COOKIE,
+  SUBBOT_SESSION_COOKIE,
+  verifySession,
+  type WebSession,
+} from '../../../lib/auth'
 import { auditTarget, recordAdminAudit } from '../../../lib/admin-audit'
-import { readOpsSnapshot } from '../../../lib/ops'
 import { publicUrl } from '../../../lib/public-url'
 import { openBotDbWritable, runtime } from '../../../lib/runtime'
+import {
+  hasPermission,
+  requireMutationSecurity,
+  sessionIsFreshForCriticalAction,
+  type WebPermission,
+} from '../../../lib/web-security'
 
 function controlUrl() {
   const base = new URL(runtime.botHealthUrl)
@@ -38,23 +48,43 @@ function normalizeInstance(value: unknown) {
   return `subbot:${Number(match[1])}`
 }
 
-function normalizeSection(value: unknown, isAdmin: boolean) {
-  const allowed = isAdmin
-    ? new Set(['overview', 'groups', 'audit', 'management', 'subbots'])
-    : new Set(['overview', 'groups', 'audit', 'account'])
+function normalizeSection(value: unknown, session: WebSession) {
+  const owner = session.role === 'owner'
+  const privileged = session.role === 'owner' || session.role === 'admin' || session.role === 'support'
+  const allowed = session.role === 'subbot'
+    ? new Set(['overview', 'groups', 'audit', 'account'])
+    : owner
+      ? new Set(['overview', 'groups', 'audit', 'management', 'subbots', 'security'])
+      : privileged
+        ? new Set(['overview', 'groups', 'audit', 'security'])
+        : new Set(['overview'])
   const raw = String(value ?? 'overview').trim().toLowerCase()
   return allowed.has(raw) ? raw : 'overview'
 }
 
-function responseFor(request: NextRequest, result: Record<string, unknown>, isAdmin: boolean, instance?: string, section?: string) {
+function responseFor(
+  request: NextRequest,
+  result: Record<string, unknown>,
+  session: WebSession,
+  instance?: string,
+  section?: string,
+) {
   const wantsJson = (request.headers.get('content-type') ?? '').includes('application/json')
-  if (wantsJson) return NextResponse.json(result, { status: result.ok ? 200 : 400 })
-  const target = isAdmin ? '/admin' : '/subbot'
-  const redirect = publicUrl(request, target)
-  if (isAdmin && instance) redirect.searchParams.set('instance', instance)
-  if (section) redirect.searchParams.set('section', normalizeSection(section, isAdmin))
-  redirect.searchParams.set(result.ok ? 'ok' : 'error', result.ok ? '1' : String(result.error ?? 'control_failed').slice(0, 100))
-  return NextResponse.redirect(redirect, 303)
+  const status = result.ok ? 200 : result.error === 'forbidden' ? 403 : result.error === 'reauth_required' ? 401 : 400
+  if (wantsJson) return NextResponse.json(result, { status })
+
+  if (result.error === 'reauth_required') {
+    const target = publicUrl(request, '/login')
+    target.searchParams.set('error', 'reauth')
+    return NextResponse.redirect(target, 303)
+  }
+
+  const privileged = session.role !== 'subbot'
+  const target = publicUrl(request, privileged ? '/admin' : '/subbot')
+  if (privileged && instance) target.searchParams.set('instance', instance)
+  if (section) target.searchParams.set('section', normalizeSection(section, session))
+  target.searchParams.set(result.ok ? 'ok' : 'error', result.ok ? '1' : String(result.error ?? 'control_failed').slice(0, 100))
+  return NextResponse.redirect(target, 303)
 }
 
 function auditResult(input: {
@@ -144,84 +174,123 @@ async function sendBotControl(outgoing: Record<string, unknown>, action: string)
   return parsed as Record<string, unknown>
 }
 
-/** Safe browser diagnostic. It intentionally exposes no admin token or JIDs. */
+function permissionForAction(action: string): WebPermission | null {
+  if (action === 'sync_groups') return 'groups:sync'
+  if (['mute_group_8h', 'mute_group_7d', 'unmute_group', 'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off'].includes(action)) return 'groups:manage'
+  if (action === 'leave_group') return 'groups:leave'
+  if (action === 'reset_audit') return 'audit:reset'
+  if (action === 'add_nxc') return 'management:economy'
+  if (['grant_subbot', 'reset_subbot'].includes(action)) return 'management:subbots'
+  if (action === 'broadcast') return 'management:broadcast'
+  if (['create_backup', 'restore_backup'].includes(action)) return 'backups:write'
+  return null
+}
+
+function requiresFreshAuth(action: string) {
+  return new Set([
+    'leave_group', 'reset_subbot', 'reset_own_subbot', 'broadcast',
+    'create_backup', 'restore_backup', 'add_nxc', 'grant_subbot',
+  ]).has(action)
+}
+
+async function getSession() {
+  const cookieStore = await cookies()
+  return verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
+    ?? verifySession(cookieStore.get(SUBBOT_SESSION_COOKIE)?.value)
+}
+
 export async function GET() {
-  const response = await fetch(runtime.botHealthUrl, {
-    cache: 'no-store',
-    signal: AbortSignal.timeout(4_000),
-  }).catch(() => null)
-  const health = response ? await response.json().catch(() => null) as { connected?: boolean } | null : null
-  const persisted = readOpsSnapshot('main').runtime
-  return NextResponse.json({
-    ok: true,
-    service: 'ghost-nexora-web-control',
-    botControlReachable: Boolean(response),
-    whatsappConnected: Boolean(health?.connected) || persisted.connected,
-    persistedHeartbeatFresh: persisted.fresh,
-    registered: persisted.registered,
-    groupCount: persisted.groupCount,
-  }, { status: 200, headers: { 'cache-control': 'no-store' } })
+  const session = await getSession()
+  if (!session || !hasPermission(session.role, 'dashboard:view')) {
+    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401, headers: { 'cache-control': 'no-store' } })
+  }
+  return NextResponse.json({ ok: true, service: 'ghost-nexora-web-control' }, { headers: { 'cache-control': 'no-store' } })
 }
 
 async function handlePost(request: NextRequest) {
-  const cookieStore = await cookies()
-  const admin = verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
-  const subbot = verifySession(cookieStore.get(SUBBOT_SESSION_COOKIE)?.value)
+  const session = await getSession()
+  if (!session) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+
   const payload = await payloadFrom(request)
+  try {
+    requireMutationSecurity(request, session, String(payload._csrf ?? ''))
+  } catch {
+    return NextResponse.json({ ok: false, error: 'invalid_request' }, { status: 400 })
+  }
+
   const action = String(payload.action ?? '')
-  const isAdmin = admin?.role === 'admin'
-  const isSubbot = subbot?.role === 'subbot'
-  if (!isAdmin && !isSubbot) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
-  const section = normalizeSection(payload.section, Boolean(isAdmin))
+  const section = normalizeSection(payload.section, session)
 
   let instance = 'main'
   try {
-    instance = isSubbot ? `subbot:${subbot.subbotId}` : normalizeInstance(payload.instance)
+    if (session.role === 'subbot') {
+      instance = `subbot:${session.subbotId}`
+    } else {
+      instance = normalizeInstance(payload.instance)
+      if (session.role !== 'owner' && instance !== 'main') {
+        return responseFor(request, { ok: false, error: 'forbidden' }, session, 'main', section)
+      }
+    }
   } catch {
-    return responseFor(request, { ok: false, error: 'invalid_instance' }, Boolean(isAdmin), undefined, section)
+    return responseFor(request, { ok: false, error: 'invalid_instance' }, session, undefined, section)
   }
 
-  if (isAdmin && instance.startsWith('subbot:')) {
+  if (session.role === 'owner' && instance.startsWith('subbot:')) {
     const db = openBotDbWritable()
-    if (!db) return responseFor(request, { ok: false, error: 'bot_database_unavailable' }, true, instance, section)
+    if (!db) return responseFor(request, { ok: false, error: 'bot_database_unavailable' }, session, instance, section)
     const id = Number(instance.split(':')[1])
     let exists = false
     try { exists = Boolean(db.prepare('SELECT 1 FROM subbots WHERE id = ?').get(id)) } finally { db.close() }
-    if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, true, 'main', section)
+    if (!exists) return responseFor(request, { ok: false, error: 'subbot_not_found' }, session, 'main', section)
   }
 
-  const actor = isSubbot ? `subbot-owner:${subbot.subbotId}` : 'web-admin'
+  if (action === 'reset_own_subbot') {
+    if (session.role !== 'subbot') return responseFor(request, { ok: false, error: 'forbidden' }, session, instance, section)
+  } else {
+    const required = permissionForAction(action)
+    if (!required || !hasPermission(session.role, required)) {
+      return responseFor(request, { ok: false, error: 'forbidden' }, session, instance, section)
+    }
+  }
+
+  if (requiresFreshAuth(action) && !sessionIsFreshForCriticalAction(session.authAt)) {
+    return responseFor(request, { ok: false, error: 'reauth_required' }, session, instance, section)
+  }
+
+  const actor = session.role === 'subbot'
+    ? `subbot-owner:${session.subbotId}`
+    : session.role === 'owner'
+      ? 'web-owner'
+      : `web-${session.role}:${session.accountId}`
+
   const localActions = new Set([
     'leave_group', 'sync_groups', 'reset_audit', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
     'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
   ])
 
   if (localActions.has(action)) {
-    const requestedBy = isSubbot ? subbot.userJid : 'web-admin'
+    const requestedBy = session.role === 'subbot' ? session.userJid : actor
     const result = localOpsAction(action, instance, payload, requestedBy)
     auditResult({ instance, actor, action, payload, result })
-    return responseFor(request, result, Boolean(isAdmin), instance, section)
+    return responseFor(request, result, session, instance, section)
   }
 
-  const outgoing: Record<string, unknown> = { ...payload }
+  const { _csrf: _ignoredCsrf, ...outgoing } = payload
   if (action === 'grant_subbot') Object.assign(outgoing, durationPayload(payload.duration))
-  if (isSubbot) {
-    if (action !== 'reset_own_subbot') return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
-    outgoing.id = subbot.subbotId
-    outgoing.userJid = subbot.userJid
+  if (session.role === 'subbot') {
+    outgoing.id = session.subbotId
+    outgoing.userJid = session.userJid
   }
 
   const result = await sendBotControl(outgoing, action)
   auditResult({ instance, actor, action, payload: outgoing, result })
-  return responseFor(request, result, Boolean(isAdmin), instance, section)
+  return responseFor(request, result, session, instance, section)
 }
 
 export async function POST(request: NextRequest) {
   try {
     return await handlePost(request)
   } catch {
-    const wantsJson = (request.headers.get('content-type') ?? '').includes('application/json')
-    if (wantsJson) return NextResponse.json({ ok: false, error: 'control_internal_error' }, { status: 500 })
-    return responseFor(request, { ok: false, error: 'control_internal_error' }, true, 'main', 'overview')
+    return NextResponse.json({ ok: false, error: 'control_internal_error' }, { status: 500 })
   }
 }
