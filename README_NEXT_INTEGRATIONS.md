@@ -38,7 +38,7 @@ Una fase solo se marca como TERMINADO cuando:
 
 | Fase | Área | Estado |
 |---|---|---|
-| Fase A | Login y seguridad Web | EN PROGRESO |
+| Fase A | Login y seguridad Web | TERMINADO |
 | Fase B | Núcleo multiplataforma compartido | PENDIENTE |
 | Fase C | Paridad Discord y Telegram | PENDIENTE |
 | Fase D | Runtime y entrega WhatsApp | PENDIENTE |
@@ -71,7 +71,7 @@ Todavía existe una capa de compatibilidad V1 de WhatsApp. CommandContext conser
 
 # FASE A — Login y seguridad Web
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -79,7 +79,7 @@ Simplificar la página pública de acceso y endurecer el sistema de autenticaci�
 
 ## A1. Login público minimalista
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 La pantalla /login debe mostrar únicamente:
 
@@ -102,7 +102,7 @@ El backend puede seguir detectando automáticamente el tipo de token y redirigie
 
 ## A2. Mensajes de error genéricos
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Nunca revelar si:
 
@@ -117,7 +117,7 @@ Los detalles reales deben quedarse únicamente en logs administrativos sanitizad
 
 ## A3. Rate limiting del login
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Añadir límites de intentos por origen.
 
@@ -131,7 +131,7 @@ Base recomendada:
 
 ## A4. CSRF y validación de Origin
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Añadir protección explícita a mutaciones Web.
 
@@ -150,7 +150,7 @@ Usar:
 
 ## A5. Sesiones administrativas revocables
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 La sesión actual está firmada mediante HMAC y expiración. Añadir un registro de sesiones para revocación individual.
 
@@ -174,7 +174,7 @@ Permitir desde el dashboard:
 
 ## A6. 2FA administrativo, Passkeys y biometría del dispositivo
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Añadir segundo factor y acceso fuerte para cuentas privilegiadas.
 
@@ -193,7 +193,7 @@ Los portales de subbot mantienen aislamiento y pueden registrar su propia Passke
 
 ## A7. Roles Web y permisos limitados
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Roles acordados:
 
@@ -206,7 +206,7 @@ Los permisos deben aplicarse en backend, no solo ocultando botones.
 
 ## A8. Reautenticación para acciones críticas
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Solicitar confirmación adicional para acciones como:
 
@@ -1044,7 +1044,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | Fecha | Fase | Cambio | Estado | PR/Commit |
 |---|---|---|---|---|
 | 2026-09-18 | Plan general | Se crea este roadmap de próximas integraciones | TERMINADO | — |
-| 2026-09-18 | Fase A | Login, roles, sesiones, Passkeys y seguridad Web | EN PROGRESO | feat/phase-a-web-auth-security | — |
+| 2026-09-18 | Fase A | Login, roles, sesiones, Passkeys, TOTP y seguridad Web | TERMINADO | PR #75 · c01c0ee61726fd4325a6fc60bd62108a880684e4 |
 | — | Fase B | Núcleo multiplataforma | PENDIENTE | — |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
@@ -1055,17 +1055,24 @@ Estas tareas están incluidas dentro de las fases anteriores:
 
 # Próximo paso
 
-La siguiente tarea oficial es FASE A — Login y seguridad Web.
+La siguiente tarea oficial es **FASE B — Núcleo multiplataforma compartido**.
 
-Comenzar por:
+La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
-1. simplificar /login;
-2. retirar información interna;
-3. mantener detección automática admin/subbot en backend;
-4. añadir rate limiting;
-5. añadir protección Origin y CSRF;
-6. preparar sesiones revocables;
-7. preparar 2FA administrativo;
-8. añadir pruebas y CI correspondientes.
+Resultados principales de Fase A:
 
-No iniciar la Fase B hasta dejar la Fase A validada y registrada aquí como TERMINADO.
+- login público minimalista;
+- Owner, Admin, Support y Subbot Owner;
+- permisos aplicados en backend;
+- aislamiento estricto de subbots;
+- sesiones revocables;
+- rate limiting de autenticación;
+- validación Origin + CSRF;
+- Passkeys/WebAuthn con huella, rostro, PIN o Windows Hello según el dispositivo;
+- TOTP cifrado con AES-256-GCM;
+- 2FA configurable por Owner;
+- reautenticación para acciones críticas;
+- panel privado de seguridad;
+- CI, typecheck, build y smoke de Fase A en verde.
+
+No iniciar la Fase C hasta dejar la Fase B validada y registrada aquí como TERMINADO.
