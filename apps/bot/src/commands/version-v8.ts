@@ -17,7 +17,7 @@ export const versionV8Commands: BotCommand[] = [{
   name: 'version',
   aliases: ['ver', 'botversion'],
   category: 'general',
-  description: 'Muestra la versión actual y la información principal del bot.',
+  description: 'Muestra la versión beta actual.',
   usage: 'version',
   handler: async (ctx) => ctx.reply([
     '👻 *GHOST NEXORA BOT*',
