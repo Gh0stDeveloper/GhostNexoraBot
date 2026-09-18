@@ -9,6 +9,7 @@ import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../li
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { subbotPlatformStatuses } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
 
   const instanceKey = `subbot:${subbot.id}`
   const snapshot = readOpsSnapshot(instanceKey)
+  const platformStatuses = subbotPlatformStatuses(snapshot.runtime)
   const labels: Record<string,string> = {
     pending: t('subbot.pending'), pairing: t('subbot.pairing'), online: t('common.online'), offline: t('subbot.offline'), logged_out: t('subbot.loggedOut'), revoked: t('subbot.revoked'),
   }
@@ -72,7 +74,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
       </>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
-        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp/>
+        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses}/>
         <OpsConsole snapshot={snapshot} refreshHref={hrefFor('groups')} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups canResetAudit/>
       </div>}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('audit')} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>}
