@@ -13,6 +13,7 @@ const telegramRuntime = read('apps/bot/src/platform/telegram/runtime.ts')
 const telegramClient = read('apps/bot/src/platform/telegram/client.ts')
 const webOps = read('apps/web/lib/ops.ts')
 const platformPanel = read('apps/web/components/platform-groups-panel.tsx')
+const platformStatus = read('apps/web/lib/platform-status.ts')
 const adminPage = read('apps/web/app/admin/page.tsx')
 const subbotPage = read('apps/web/app/subbot/page.tsx')
 
@@ -54,14 +55,23 @@ assert.match(webOps, /ops_platform_groups/, 'Web must read the platform group re
 assert.match(webOps, /lastGroupSyncAttemptAt/, 'Web must expose group sync attempt timestamp')
 assert.match(webOps, /lastGroupSyncError/, 'Web must expose WhatsApp sync errors')
 assert.match(webOps, /legacy-ops-groups/, 'Web must preserve legacy WhatsApp group inventory as migration fallback')
+assert.match(platformStatus, /\/v2\/platforms/, 'Web must read native platform status from the authenticated control API')
+assert.match(platformStatus, /authorization: `Bearer \${runtime\.adminToken}`/, 'Platform status lookup must stay server-side and authenticated')
+assert.match(platformStatus, /AbortSignal\.timeout\(3500\)/, 'Platform status lookup must be bounded')
+assert.match(platformStatus, /known: false/, 'Unavailable platform status must remain unknown instead of being reported offline')
 
 for (const platform of ['whatsapp', 'discord', 'telegram']) {
   assert.match(platformPanel, new RegExp(`platform="${platform}"`), `${platform} platform section missing from dashboard`)
 }
 assert.match(platformPanel, /Sincronizar WhatsApp/, 'WhatsApp manual sync control missing')
 assert.match(platformPanel, /lastGroupSyncError/, 'WhatsApp sync error must be visible in dashboard')
+assert.match(platformPanel, /statusBadge/, 'Each platform section must expose native connection state')
+assert.match(platformPanel, /ACTIVO/, 'Spanish active platform state missing')
+assert.match(platformPanel, /SIN DATOS/, 'Unknown platform state must be explicit')
 assert.match(platformPanel, /Telegram Bot API no ofrece una lista histórica completa/, 'Telegram inventory limitation must be explicit')
+assert.match(adminPage, /readMainPlatformStatuses/, 'Admin MainBot groups must load native platform status')
 assert.match(adminPage, /<PlatformGroupsPanel/, 'Admin groups view must render platform inventory')
+assert.match(subbotPage, /subbotPlatformStatuses/, 'Subbot platform status must remain isolated')
 assert.match(subbotPage, /<PlatformGroupsPanel/, 'Subbot groups view must render platform inventory')
 
 console.log('Phase E platform groups dashboard smoke passed')
