@@ -19,6 +19,7 @@ import {
   privileged2faRequired,
   listSessionsForPrincipal,
   listStaffAccounts,
+  markSessionMfaComplete,
   requireMutationSecurity,
   revokeOtherSessions,
   revokeSession,
@@ -50,6 +51,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     role: session.role,
+    mfaPending: session.mfaPending,
     currentSessionId: session.sid,
     csrfToken: sessionCsrfToken(session),
     staff: session.role === 'owner' ? listStaffAccounts() : [],
@@ -88,6 +90,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     }
     const ok = confirmTotpEnrollment(principal, String(body.code ?? ''))
+    if (ok && session.mfaPending) markSessionMfaComplete(session.sid)
     return NextResponse.json({ ok }, { status: ok ? 200 : 400 })
   }
 
