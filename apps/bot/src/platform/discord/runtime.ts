@@ -1,12 +1,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { logger } from '../../utils/logger.js'
+import { removePlatformGroup, replacePlatformGroups, upsertPlatformGroup } from '../../services/platform-group-registry.js'
 import { DiscordAdapter } from './adapter.js'
 import { discordConfig } from './config.js'
 import { DiscordGateway, type DiscordGatewayState } from './gateway.js'
 import { DiscordRestClient } from './rest.js'
 import { DiscordCommandRouter, discordApplicationCommands } from './router.js'
-import type { DiscordGatewaySession, DiscordInteraction, DiscordMessage, DiscordReady } from './types.js'
+import type { DiscordGatewaySession, DiscordGuildSummary, DiscordInteraction, DiscordMessage, DiscordReady } from './types.js'
 
 type DiscordRuntimeState = 'disabled' | 'starting' | 'running' | 'reconnecting' | 'stopped' | 'error'
 
@@ -137,6 +138,69 @@ export class DiscordRuntime {
     else if (state === 'connecting' || state === 'identifying' || state === 'resuming') this.state = 'starting'
   }
 
+  private async hydrateGuild(guildId: string) {
+    if (!this.rest) return
+    try {
+      const guild = await this.rest.getGuild(guildId)
+      upsertPlatformGroup('discord', {
+        externalId: guild.id,
+        name: guild.name || guild.id,
+        kind: 'guild',
+        memberCount: guild.approximate_member_count ?? guild.member_count ?? null,
+        source: 'discord-rest',
+        metadata: {
+          ownerId: guild.owner_id ?? null,
+          unavailable: Boolean(guild.unavailable),
+        },
+      })
+    } catch (error) {
+      logger.debug({ error, guildId }, 'Discord guild metadata hydration skipped')
+    }
+  }
+
+  private async syncGuildRegistry(guilds: DiscordGuildSummary[]) {
+    replacePlatformGroups('discord', guilds.map((guild) => ({
+      externalId: guild.id,
+      name: guild.name || guild.id,
+      kind: 'guild',
+      memberCount: guild.approximate_member_count ?? guild.member_count ?? null,
+      source: 'discord-gateway-ready',
+      metadata: {
+        ownerId: guild.owner_id ?? null,
+        unavailable: Boolean(guild.unavailable),
+      },
+    })))
+
+    const queue = guilds.map((guild) => guild.id)
+    const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+      while (queue.length) {
+        const guildId = queue.shift()
+        if (!guildId) return
+        await this.hydrateGuild(guildId)
+      }
+    })
+    await Promise.all(workers)
+  }
+
+  private async onGuildCreate(guild: DiscordGuildSummary) {
+    if (!guild.id) return
+    upsertPlatformGroup('discord', {
+      externalId: guild.id,
+      name: guild.name || guild.id,
+      kind: 'guild',
+      memberCount: guild.approximate_member_count ?? guild.member_count ?? null,
+      source: 'discord-gateway-create',
+      metadata: { ownerId: guild.owner_id ?? null, unavailable: Boolean(guild.unavailable) },
+    })
+    this.guildCount = Math.max(this.guildCount, 1)
+    void this.hydrateGuild(guild.id)
+  }
+
+  private async onGuildDelete(guild: DiscordGuildSummary) {
+    if (!guild.id || guild.unavailable) return
+    removePlatformGroup('discord', guild.id)
+  }
+
   private async registerCommands(applicationId: string) {
     if (!discordConfig.registerCommands || !this.rest) return
     await this.rest.overwriteApplicationCommands(applicationId, discordApplicationCommands, discordConfig.guildId || undefined)
@@ -155,6 +219,8 @@ export class DiscordRuntime {
     this.lastEventAt = this.readyAt
     this.lastError = undefined
     this.router?.setBotUserId(ready.user.id)
+    void this.syncGuildRegistry(ready.guilds).catch((error) =>
+      logger.warn({ error }, 'Discord guild registry sync failed'))
     await this.persistSession(this.session).catch((error) =>
       logger.warn({ error }, 'Discord READY identity state could not be persisted'))
     try {
@@ -185,6 +251,14 @@ export class DiscordRuntime {
   private async onMessage(message: DiscordMessage) {
     this.lastEventAt = new Date().toISOString()
     this.eventsProcessed += 1
+    if (message.guild_id) {
+      upsertPlatformGroup('discord', {
+        externalId: message.guild_id,
+        name: message.guild_id,
+        kind: 'guild',
+        source: 'discord-message-observed',
+      })
+    }
     await this.router?.handleMessage(message)
   }
 
@@ -235,6 +309,10 @@ export class DiscordRuntime {
       onResumed: () => this.onResumed(),
       onMessage: (message) => this.onMessage(message).catch((error) =>
         logger.warn({ error, channelId: message.channel_id }, 'Discord message failed')),
+      onGuildCreate: (guild) => this.onGuildCreate(guild).catch((error) =>
+        logger.warn({ error, guildId: guild.id }, 'Discord guild create inventory update failed')),
+      onGuildDelete: (guild) => this.onGuildDelete(guild).catch((error) =>
+        logger.warn({ error, guildId: guild.id }, 'Discord guild delete inventory update failed')),
       onInteraction: (interaction) => this.onInteraction(interaction).catch((error) =>
         logger.warn({ error, interactionId: interaction.id }, 'Discord interaction failed')),
     }, {
