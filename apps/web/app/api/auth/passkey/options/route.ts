@@ -1,4 +1,4 @@
-import { generateAuthenticationOptions, generateRegistrationOptions, type AuthenticatorTransportFuture } from '@simplewebauthn/server'
+import { generateAuthenticationOptions, generateRegistrationOptions, type AuthenticatorTransport } from '@simplewebauthn/server'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import {
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         },
         excludeCredentials: existing.map((item) => ({
           id: item.credentialId,
-          transports: item.transports as AuthenticatorTransportFuture[],
+          transports: item.transports as AuthenticatorTransport[],
         })),
       })
       const challengeId = storeChallenge('register', options.challenge, subject)
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
         userVerification: 'required',
         allowCredentials: passkeys.map((item) => ({
           id: item.credentialId,
-          transports: item.transports as AuthenticatorTransportFuture[],
+          transports: item.transports as AuthenticatorTransport[],
         })),
       })
       const challengeId = storeChallenge('authenticate', options.challenge, subject)
