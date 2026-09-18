@@ -19,6 +19,7 @@ Este archivo conserva el plan acordado para continuar mejorando Ghost Nexora Bot
 | PENDIENTE | Todavía no se ha iniciado |
 | EN PROGRESO | Hay trabajo activo en una rama/PR |
 | BLOQUEADO | Depende de otra tarea, decisión o integración |
+| POSPUESTO | Se conserva pendiente pero se ejecutará después de las fases actualmente priorizadas |
 | TERMINADO | Implementado, probado y fusionado a main |
 
 ### Regla de cierre
@@ -541,6 +542,22 @@ Estado: EN PROGRESO
 
 Convertir Operations Center en un dashboard de producto más ordenado y menos dependiente de vistas técnicas.
 
+## E0. Inventario de comunidades por plataforma
+
+Estado: EN PROGRESO
+
+Objetivo inmediato:
+
+- recuperar y mostrar correctamente los grupos en los que está MainBot y cada subbot de WhatsApp;
+- no depender únicamente de una sincronización completa: usar también eventos y tráfico real como recuperación;
+- mostrar último intento, última sincronización correcta y último error de WhatsApp;
+- separar el inventario visualmente por WhatsApp, Discord y Telegram;
+- persistir guilds de Discord y enriquecerlos con metadata REST;
+- persistir grupos y supergrupos observados en Telegram mediante mensajes y cambios `my_chat_member`;
+- indicar de forma explícita que Telegram Bot API no ofrece una enumeración histórica completa;
+- mostrar estado ACTIVO/OFFLINE/DESACTIVADO/SIN DATOS por plataforma;
+- mantener aislamiento de instancias: un Subbot Owner solo ve la información de su subbot.
+
 ## E1. Navegación lateral
 
 Estado: PENDIENTE
@@ -590,7 +607,7 @@ a una sección Developer o Diagnostics.
 
 ## E3. Pantalla Plataformas
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Mostrar por plataforma.
 
