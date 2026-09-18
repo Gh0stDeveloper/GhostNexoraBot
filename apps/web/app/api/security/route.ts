@@ -8,8 +8,11 @@ import {
   verifySession,
 } from '../../../lib/auth'
 import {
+  beginTotpEnrollment,
+  confirmTotpEnrollment,
   createStaffAccount,
   deletePasskey,
+  deleteTotp,
   hasPermission,
   listPasskeys,
   listPrivilegedSessionsForOwner,
@@ -23,6 +26,7 @@ import {
   sessionBelongsToPrincipal,
   setPrivileged2faRequired,
   subjectForPrincipal,
+  totpStatus,
 } from '../../../lib/web-security'
 
 async function currentSession() {
@@ -51,6 +55,7 @@ export async function GET() {
     staff: session.role === 'owner' ? listStaffAccounts() : [],
     sessions,
     passkeys: listPasskeys(subject),
+    totp: totpStatus(principal),
     twoFactorRequired: privileged2faRequired(),
   }, { headers: { 'cache-control': 'no-store' } })
 }
@@ -70,12 +75,35 @@ export async function POST(request: Request) {
   const principal = sessionPrincipal(session)
   const action = String(body.action ?? '')
 
+  if (action === 'totp_begin') {
+    if (!hasPermission(session.role, 'sessions:manage')) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
+    const enrollment = beginTotpEnrollment(principal)
+    return NextResponse.json({ ok: true, secret: enrollment.secret, otpauthUrl: enrollment.otpauthUrl })
+  }
+
+  if (action === 'totp_confirm') {
+    if (!hasPermission(session.role, 'sessions:manage')) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
+    const ok = confirmTotpEnrollment(principal, String(body.code ?? ''))
+    return NextResponse.json({ ok }, { status: ok ? 200 : 400 })
+  }
+
+  if (action === 'totp_delete') {
+    if (!hasPermission(session.role, 'sessions:manage')) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
+    }
+    return NextResponse.json({ ok: deleteTotp(principal) })
+  }
+
   if (action === 'set_2fa_required') {
     if (!hasPermission(session.role, 'security:manage') || session.role !== 'owner') {
       return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     }
     const enabled = Boolean(body.enabled)
-    if (enabled && listPasskeys('owner').length === 0) {
+    if (enabled && listPasskeys('owner').length === 0 && !totpStatus({ role: 'owner' }).verified) {
       return NextResponse.json({ ok: false, error: 'owner_passkey_required' }, { status: 400 })
     }
     setPrivileged2faRequired(enabled)
