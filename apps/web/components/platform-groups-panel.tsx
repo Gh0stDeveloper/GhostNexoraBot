@@ -1,6 +1,7 @@
 import { MessageCircleMore, RefreshCcw, Send, Server, ShieldCheck, UsersRound } from 'lucide-react'
 import type { OpsPlatformGroup, OpsSnapshot } from '../lib/ops'
 import type { WebLocale } from '../lib/i18n'
+import type { WebPlatformStatus } from '../lib/platform-status'
 import { OpsAutoRefresh } from './ops-client-controls'
 
 type Platform = OpsPlatformGroup['platform']
@@ -29,6 +30,10 @@ const copy = {
     waNever: 'Sin sincronización completa todavía',
     waError: 'Último error de sincronización',
     count: '{count} comunidad(es)',
+    online: 'ACTIVO',
+    offline: 'OFFLINE',
+    disabled: 'DESACTIVADO',
+    unknownStatus: 'SIN DATOS',
   },
   en: {
     title: 'Groups by platform',
@@ -53,6 +58,10 @@ const copy = {
     waNever: 'No complete synchronization yet',
     waError: 'Last synchronization error',
     count: '{count} community(ies)',
+    online: 'ACTIVE',
+    offline: 'OFFLINE',
+    disabled: 'DISABLED',
+    unknownStatus: 'NO DATA',
   },
 } as const
 
@@ -71,6 +80,14 @@ function platformMeta(platform: Platform, locale: WebLocale) {
   return { label: t.telegram, Icon: Send }
 }
 
+function statusBadge(status: WebPlatformStatus | undefined, locale: WebLocale) {
+  const t = copy[locale]
+  if (!status?.known) return <span className="ops-badge-warn">{t.unknownStatus}</span>
+  if (status.enabled === false) return <span className="ops-badge">{t.disabled}</span>
+  if (status.connected) return <span className="ops-badge-good">{t.online}</span>
+  return <span className="ops-badge-bad">{t.offline}</span>
+}
+
 function emptyText(platform: Platform, locale: WebLocale) {
   const t = copy[locale]
   if (platform === 'whatsapp') return t.waEmpty
@@ -78,10 +95,11 @@ function emptyText(platform: Platform, locale: WebLocale) {
   return t.telegramEmpty
 }
 
-function PlatformSection({ platform, rows, locale }: {
+function PlatformSection({ platform, rows, locale, status }: {
   platform: Platform
   rows: OpsPlatformGroup[]
   locale: WebLocale
+  status?: WebPlatformStatus
 }) {
   const t = copy[locale]
   const { label, Icon } = platformMeta(platform, locale)
@@ -95,10 +113,18 @@ function PlatformSection({ platform, rows, locale }: {
         <h3 className="font-bold text-white">{label}</h3>
         <p className="mt-0.5 text-xs text-zinc-600">{t.count.replace('{count}', String(rows.length))}</p>
       </div>
-      <span className={rows.some((row) => row.authoritative) ? 'ops-badge-good' : 'ops-badge-warn'}>
-        {rows.some((row) => row.authoritative) ? t.authoritative : t.observed}
-      </span>
+      <div className="flex flex-wrap justify-end gap-1.5">
+        {statusBadge(status, locale)}
+        <span className={rows.some((row) => row.authoritative) ? 'ops-badge-good' : 'ops-badge-warn'}>
+          {rows.some((row) => row.authoritative) ? t.authoritative : t.observed}
+        </span>
+      </div>
     </div>
+
+    {status?.accountLabel || status?.detail ? <div className="border-b border-white/[.06] px-5 py-3 text-xs text-zinc-600">
+      {status.accountLabel ? <span className="mr-3 font-semibold text-zinc-400">{status.accountLabel}</span> : null}
+      {status.detail ? <span>{status.detail}</span> : null}
+    </div> : null}
 
     {rows.length ? <div className="divide-y divide-white/[.06]">
       {rows.map((row) => <article key={platform + ':' + row.externalId} className="px-5 py-4">
@@ -124,12 +150,13 @@ function PlatformSection({ platform, rows, locale }: {
   </section>
 }
 
-export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken, canSyncWhatsApp }: {
+export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken, canSyncWhatsApp, platformStatuses }: {
   snapshot: OpsSnapshot
   instanceLabel: string
   locale: WebLocale
   csrfToken: string
   canSyncWhatsApp: boolean
+  platformStatuses: WebPlatformStatus[]
 }) {
   const t = copy[locale]
   const byPlatform = {
@@ -137,6 +164,7 @@ export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken
     discord: snapshot.platformGroups.filter((row) => row.platform === 'discord'),
     telegram: snapshot.platformGroups.filter((row) => row.platform === 'telegram'),
   }
+  const statusByPlatform = new Map(platformStatuses.map((item) => [item.id, item]))
 
   return <div className="space-y-5">
     <section className="ops-panel overflow-hidden">
@@ -176,9 +204,9 @@ export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken
     </section>
 
     <div className="grid gap-5 xl:grid-cols-3">
-      <PlatformSection platform="whatsapp" rows={byPlatform.whatsapp} locale={locale}/>
-      <PlatformSection platform="discord" rows={byPlatform.discord} locale={locale}/>
-      <PlatformSection platform="telegram" rows={byPlatform.telegram} locale={locale}/>
+      <PlatformSection platform="whatsapp" rows={byPlatform.whatsapp} locale={locale} status={statusByPlatform.get('whatsapp')}/>
+      <PlatformSection platform="discord" rows={byPlatform.discord} locale={locale} status={statusByPlatform.get('discord')}/>
+      <PlatformSection platform="telegram" rows={byPlatform.telegram} locale={locale} status={statusByPlatform.get('telegram')}/>
     </div>
 
     <p className="px-1 text-xs leading-5 text-zinc-600">{t.telegramNote}</p>
