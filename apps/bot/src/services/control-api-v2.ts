@@ -267,6 +267,25 @@ export async function handleControlApiV2(req: http.IncomingMessage, res: http.Se
       return true
     }
 
+    const runtimeMatch = /^\/v2\/runtime\/(start|stop|restart|update)$/.exec(url.pathname)
+    if (req.method === 'POST' && runtimeMatch) {
+      const action = runtimeMatch[1]
+      if (action === 'update') {
+        await runtimeUpdate()
+        json(res, 202, { ok: true, accepted: true })
+        return true
+      }
+      json(res, 409, {
+        ok: false,
+        error: 'runtime_lifecycle_managed_by_supervisor',
+        code: 'manager_required',
+        managerRequired: true,
+        action,
+      })
+      return true
+    }
+
+    // Backward-compatible alias kept for pre-Phase-7 clients.
     if (req.method === 'POST' && url.pathname === '/v2/update') {
       await runtimeUpdate()
       json(res, 202, { ok: true, accepted: true })
