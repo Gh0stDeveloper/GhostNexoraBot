@@ -220,6 +220,9 @@ async function handlePost(request: NextRequest) {
 
   const action = String(payload.action ?? '')
   const section = normalizeSection(payload.section, session)
+  if (session.mfaPending) {
+    return responseFor(request, { ok: false, error: 'mfa_enrollment_required' }, session, 'main', 'security')
+  }
 
   let instance = 'main'
   try {
