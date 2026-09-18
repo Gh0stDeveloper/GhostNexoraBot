@@ -24,7 +24,7 @@ function duration(totalSeconds: number) {
   return `${minutes}m`
 }
 
-export function RuntimeDiagnosticsPanel({ instanceKey, locale }: { instanceKey: string; locale: WebLocale }) {
+export function RuntimeDiagnosticsPanel({ instanceKey, locale, csrfToken, canManageGroups = false }: { instanceKey: string; locale: WebLocale; csrfToken: string; canManageGroups?: boolean }) {
   const data = readRuntimeDiagnostics(instanceKey)
   const t = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
 
@@ -45,7 +45,7 @@ export function RuntimeDiagnosticsPanel({ instanceKey, locale }: { instanceKey: 
     </section>
 
     <OpsAlertCenter instanceKey={instanceKey} runtimeFresh={Boolean(data?.fresh)} locale={locale}/>
-    <GroupActivityPanel instanceKey={instanceKey} locale={locale}/>
+    <GroupActivityPanel instanceKey={instanceKey} locale={locale} csrfToken={csrfToken} canManageGroups={canManageGroups}/>
     <RuntimeLogTable instanceKey={instanceKey} locale={locale}/>
   </div>
 }
