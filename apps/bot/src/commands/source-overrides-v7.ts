@@ -1,5 +1,6 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
+import { spotifySearch } from './spotify.js'
 
 const apkStores = [
   { id: 'uptodown', name: '📱 Uptodown', url: 'https://en.uptodown.com/android', command: 'uptodown', description: 'Busca y descarga desde el catálogo oficial de Uptodown.' },
@@ -49,6 +50,6 @@ export const sourceOverrideV7Commands: BotCommand[] = [
   { name: 'streaming', aliases: ['stream', 'veranime'], category: 'tools', description: 'Muestra accesos directos a servicios oficiales.', usage: 'streaming', handler: streamingMenu },
   one('anime', ['animex'], 'AnimeX', 'Abre AnimeX en su sitio oficial.', 'https://animex.one/'),
   one('crunchyroll', ['crunchy'], 'Crunchyroll', 'Abre Crunchyroll.', 'https://www.crunchyroll.com/'),
-  one('spotify', ['sp'], 'Spotify', 'Abre Spotify.', 'https://open.spotify.com/'),
+  { name: 'spotify', aliases: ['sp'], category: 'tools', description: 'Abre Spotify.', usage: 'spotify', handler: spotifySearch },
   one('xuperhydra', ['xhydra'], 'Xuper Hydra', 'Abre Xuper Hydra.', 'https://xuperhydra.com/'),
 ]

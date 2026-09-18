@@ -129,7 +129,7 @@ export const happyModV19Commands: BotCommand[] = [
     name: 'happymod',
     aliases: ['hm', 'hmod'],
     category: 'downloads',
-    description: 'Busca aplicaciones en HappyMod y permite recorrer todos los resultados.',
+    description: 'Busca aplicaciones exclusivamente en HappyMod.',
     usage: 'happymod <aplicación>',
     handler: (ctx) => showPage(ctx, requireQuery(ctx), 0),
   },

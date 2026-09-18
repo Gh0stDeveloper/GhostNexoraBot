@@ -54,6 +54,33 @@ function Get-EnvValue([string]$Key) {
   return ($line -split '=', 2)[1]
 }
 
+function Set-EnvValue([string]$Key, [string]$Value) {
+  Require-Install
+  $lines = @(Get-Content $EnvFile -ErrorAction SilentlyContinue)
+  $escapedKey = [regex]::Escape($Key)
+  $found = $false
+  $updated = foreach ($line in $lines) {
+    if ($line -match ('^' + $escapedKey + '=')) {
+      $found = $true
+      "$Key=$Value"
+    } else {
+      $line
+    }
+  }
+  if (-not $found) { $updated += "$Key=$Value" }
+  Set-Content -Path $EnvFile -Value $updated -Encoding utf8
+}
+
+function Read-SecretValue([string]$Prompt) {
+  $secure = Read-Host $Prompt -AsSecureString
+  return [System.Net.NetworkCredential]::new('', $secure).Password
+}
+
+function Configured([string]$Key) {
+  $value = (Get-EnvValue $Key).Trim()
+  return [bool]($value -and $value -notmatch '^(change-this|5210000000000)$')
+}
+
 function Test-WebEnabled {
   $value = (Get-EnvValue 'WEB_ENABLED').Trim().ToLowerInvariant()
   if ($value) { return $value -match '^(1|true|yes|on|si|sí)$' }
@@ -186,6 +213,94 @@ function Pair-Bot([string]$Phone) {
   }
 }
 
+
+function Show-ConfigurationState {
+  Write-Host ''
+  Write-Host 'Estado de configuración:' -ForegroundColor Cyan
+  Write-Host ('  Owner WhatsApp : ' + $(if (Configured 'OWNER_NUMBERS') { 'OK' } else { 'PENDIENTE' }))
+  Write-Host ('  Spotify API    : ' + $(if ((Configured 'SPOTIFY_CLIENT_ID') -and (Configured 'SPOTIFY_CLIENT_SECRET')) { 'OK' } else { 'OPCIONAL / PENDIENTE' }))
+  Write-Host ('  LemPi API      : ' + $(if ((Configured 'LEMPI_API_KEYS') -or (Configured 'LEMPI_API_KEY')) { 'OK' } else { 'OPCIONAL / PENDIENTE' }))
+  Write-Host ('  OpenRouter     : ' + $(if (Configured 'OPENROUTER_API_KEY') { 'OK' } else { 'OPCIONAL / PENDIENTE' }))
+  Write-Host ('  Anime1v        : ' + $(if (Configured 'ANIME1V_API_URL') { 'OK' } else { 'OPCIONAL' }))
+  Write-Host ('  Telegram       : ' + $(if (Configured 'TELEGRAM_BOT_TOKEN') { 'OK' } else { 'OPCIONAL' }))
+  Write-Host ('  Discord        : ' + $(if (Configured 'DISCORD_BOT_TOKEN') { 'OK' } else { 'OPCIONAL' }))
+}
+
+function Configure-Bot {
+  Require-Install
+  while ($true) {
+    Write-Header 'CONFIGURACIÓN'
+    Write-Host 'El bot NO se inicia automáticamente desde este menú.' -ForegroundColor Yellow
+    Write-Host 'Configura únicamente lo que necesites; puedes volver después con ghostnexora configure.' -ForegroundColor DarkGray
+    Show-ConfigurationState
+    Write-Host ''
+    Write-Host '  1) Owner / número principal de WhatsApp'
+    Write-Host '  2) Spotify Web API (Client ID + Client Secret)'
+    Write-Host '  3) LemPi API key(s)'
+    Write-Host '  4) OpenRouter API key'
+    Write-Host '  5) Anime1v API autoalojada'
+    Write-Host '  6) Telegram Bot Token'
+    Write-Host '  7) Discord Bot Token'
+    Write-Host '  8) Vincular WhatsApp por pairing code'
+    Write-Host '  9) Iniciar MainBot ahora'
+    Write-Host ' 10) Iniciar dashboard ahora'
+    Write-Host '  0) Guardar y salir (bot permanece apagado)'
+    Write-Host ''
+    $choice = (Read-Host 'Selecciona una opción').Trim()
+
+    switch ($choice) {
+      '1' {
+        $phone = ((Read-Host 'Número internacional del owner (solo dígitos, ej. 521XXXXXXXXXX)') -replace '\D', '')
+        if ($phone.Length -lt 8) { Write-Warn 'Número inválido.' } else { Set-EnvValue 'OWNER_NUMBERS' $phone; Write-Ok 'Owner guardado.' }
+      }
+      '2' {
+        Write-Info 'Crea una app Web API en: https://developer.spotify.com/dashboard'
+        Write-Info 'Copia Client ID y Client Secret desde Settings de la app.'
+        $clientId = (Read-Host 'Spotify Client ID').Trim()
+        $clientSecret = Read-SecretValue 'Spotify Client Secret'
+        if (-not $clientId -or -not $clientSecret) { Write-Warn 'No se guardaron credenciales vacías.' }
+        else {
+          Set-EnvValue 'SPOTIFY_CLIENT_ID' $clientId
+          Set-EnvValue 'SPOTIFY_CLIENT_SECRET' $clientSecret
+          Write-Ok 'Spotify Web API configurada.'
+        }
+      }
+      '3' {
+        Write-Info 'Proveedor configurado por el proyecto: https://api.lempi.lat'
+        Write-Info 'Puedes colocar varias keys separadas por comas; el bot rota automáticamente entre ellas.'
+        $keys = Read-SecretValue 'LEMPI_API_KEYS'
+        if ($keys) { Set-EnvValue 'LEMPI_API_KEYS' $keys; Write-Ok 'LemPi configurado.' } else { Write-Warn 'Sin cambios.' }
+      }
+      '4' {
+        Write-Info 'Obtén tu key en: https://openrouter.ai/keys'
+        $key = Read-SecretValue 'OPENROUTER_API_KEY'
+        if ($key) { Set-EnvValue 'OPENROUTER_API_KEY' $key; Write-Ok 'OpenRouter configurado.' } else { Write-Warn 'Sin cambios.' }
+      }
+      '5' {
+        Write-Info 'Proyecto de referencia: https://github.com/FxxMorgan/anime1v-api'
+        Write-Info 'Si lo ejecutas en esta PC, usa un puerto distinto del health del bot (3001), por ejemplo http://127.0.0.1:3101 (sin /api/v1).'
+        $url = (Read-Host 'ANIME1V_API_URL (Enter para omitir)').Trim().TrimEnd('/')
+        if ($url) { Set-EnvValue 'ANIME1V_API_URL' $url; Write-Ok 'Anime1v configurado.' } else { Write-Info 'Anime seguirá usando Jikan y los proveedores disponibles.' }
+      }
+      '6' {
+        Write-Info 'Crea el bot con @BotFather: https://t.me/BotFather'
+        $token = Read-SecretValue 'TELEGRAM_BOT_TOKEN'
+        if ($token) { Set-EnvValue 'TELEGRAM_BOT_TOKEN' $token; Write-Ok 'Telegram configurado.' } else { Write-Warn 'Sin cambios.' }
+      }
+      '7' {
+        Write-Info 'Crea la aplicación en: https://discord.com/developers/applications'
+        $token = Read-SecretValue 'DISCORD_BOT_TOKEN'
+        if ($token) { Set-EnvValue 'DISCORD_BOT_TOKEN' $token; Write-Ok 'Discord configurado.' } else { Write-Warn 'Sin cambios.' }
+      }
+      '8' { Pair-Bot '' }
+      '9' { Start-Bot }
+      '10' { Start-Web }
+      '0' { Write-Ok 'Configuración guardada. No se iniciará ningún proceso adicional.'; return }
+      default { Write-Warn 'Opción no válida.' }
+    }
+  }
+}
+
 function Update-Bot {
   Require-Install
   Write-Header 'ACTUALIZACIÓN'
@@ -280,6 +395,7 @@ function Show-Help {
   Write-Host '  web-stop          Detiene el dashboard'
   Write-Host '  update            Actualiza main respetando componentes opcionales'
   Write-Host '  doctor            Diagnóstico de dependencias y runtime'
+  Write-Host '  configure         Menú para owner, APIs, pairing y arranque manual'
   Write-Host '  help              Muestra esta ayuda'
 }
 
@@ -296,6 +412,7 @@ try {
     'web-stop' { Stop-Web }
     'update' { Update-Bot }
     'doctor' { Doctor }
+    'configure' { Configure-Bot }
     'help' { Show-Help }
     default { Show-Help; exit 2 }
   }

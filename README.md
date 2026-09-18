@@ -408,71 +408,36 @@ sudo journalctl -u ghost-nexora-bot -f
 
 </div>
 
-Ghost Nexora Bot funciona de forma **nativa, sin WSL**.
+Ghost Nexora Bot funciona de forma **nativa, sin WSL**. El instalador no cierra la terminal, no hace pairing automático y deja el bot apagado hasta que el usuario decida iniciarlo.
 
-## Instalación interactiva recomendada
+## CMD recomendado
 
-```powershell
-irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 | iex
+```bat
+curl.exe -fsSL https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.cmd -o "%TEMP%\ghostnexora-install.cmd" && call "%TEMP%\ghostnexora-install.cmd"
 ```
 
-La primera instalación pregunta por separado:
+El wrapper conserva CMD abierto al finalizar o al producirse un error.
 
-```text
-¿Instalar dashboard web + portal de subbots? [s/N]
-¿Instalar Ollama + Qwen? [s/N]
-```
-
-## Instalación parametrizada
-
-Descarga el instalador:
+## PowerShell
 
 ```powershell
 $installer = "$env:TEMP\ghostnexora-install.ps1"
 irm https://raw.githubusercontent.com/Gh0stDeveloper/GhostNexoraBot/main/scripts/install-windows.ps1 -OutFile $installer
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer
 ```
 
-### Solo Bot
+Al terminar se abre el menú de configuración:
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No
+```text
+ghostnexora configure
 ```
 
-### Bot + Web
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -Ollama No
-```
-
-### Bot + Ollama/Qwen
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama Yes -OllamaModel "qwen2.5:1.5b"
-```
-
-### Full
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web Yes -Ollama Yes -OllamaModel "qwen2.5:1.5b"
-```
-
-### Sin pairing inicial
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No -SkipPair
-```
-
-### Instalar sin arrancar automáticamente
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -Web No -Ollama No -NoStart
-```
-
-`-SkipWeb` se conserva como alias de compatibilidad para una primera instalación sin dashboard.
+Desde ahí se configuran owner, Spotify, LemPi, OpenRouter, Anime1v, Telegram y Discord; también puedes ejecutar pairing o iniciar MainBot/Web manualmente.
 
 ## Gestor Windows
 
 ```powershell
+ghostnexora configure
 ghostnexora start
 ghostnexora stop
 ghostnexora restart
@@ -490,25 +455,7 @@ ghostnexora web-start
 ghostnexora web-stop
 ```
 
-Si `WEB_ENABLED=false`, `ghostnexora web-start` no provoca un fallo del bot: informa que el dashboard está deshabilitado y termina limpiamente.
-
-### Datos Windows
-
-```text
-%USERPROFILE%\GhostNexoraBot\
-└── código y builds
-
-%LOCALAPPDATA%\GhostNexoraBot\
-├── session\
-├── data\
-│   └── subbots\
-├── logs\
-└── run\
-```
-
-Guía: [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md).
-
----
+Guía completa: [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md).
 
 # 📱 Instalación Termux Lite
 

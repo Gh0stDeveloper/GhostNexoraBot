@@ -1,5 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { economy } from '../services/economy.js'
+import { getGroupCommandPolicy, setGroupCategoryOverride } from '../services/group-command-policy.js'
 
 function toggle(value?: string) {
   const normalized = (value ?? '').toLowerCase()
@@ -21,21 +22,25 @@ export const groupAdultModeCommands: BotCommand[] = [
       const action = (ctx.args[0] ?? 'status').toLowerCase()
       if (action === 'status') {
         const policy = economy.getGroupPolicy(ctx.chatId)
+        const categoryAllowed = getGroupCommandPolicy(ctx.chatId).effective.adult
         await ctx.reply([
           '🔞 *MODO ADULTO · ESTE GRUPO*',
           '━━━━━━━━━━━━━━',
-          `Estado: *${policy.adultAllowed ? 'ON' : 'OFF'}*`,
+          `Estado: *${policy.adultAllowed && categoryAllowed ? 'ON' : 'OFF'}*`,
+          `Acceso para usuarios: *${categoryAllowed ? 'PERMITIDO' : 'BLOQUEADO'}*`,
           'Este ajuste no modifica ningún otro grupo.',
         ].join('\n'))
         return
       }
       const enabled = toggle(action)
       economy.setGroupPolicy(ctx.chatId, 'adultAllowed', enabled)
+      setGroupCategoryOverride(ctx.chatId, 'adult', enabled ? 'allow' : 'deny')
       await ctx.reply([
         '🔞 *MODO ADULTO · ESTE GRUPO*',
         '━━━━━━━━━━━━━━',
         `Estado: *${enabled ? 'ON' : 'OFF'}*`,
-        '✅ El cambio se guardó solo para este grupo.',
+        '✅ El cambio se guardó solo para este grupo y se sincronizó con la política de comandos.',
+        enabled ? 'Los miembros que hayan usado adult18 accept ya pueden utilizar las descargas 18+.' : 'Los comandos 18+ quedan bloqueados para los miembros.',
         `Los demás grupos conservan su propia configuración con ${ctx.prefix}adultmode status.`,
       ].join('\n'))
     },

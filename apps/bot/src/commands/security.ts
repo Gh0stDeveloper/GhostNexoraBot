@@ -1,5 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { economy } from '../services/economy.js'
+import { getGroupCommandPolicy, setGroupCategoryOverride } from '../services/group-command-policy.js'
 import { community } from '../services/community.js'
 
 const policyMap = {
@@ -94,12 +95,14 @@ export const securityCommands: BotCommand[] = [
       const action = (ctx.args[0] ?? 'status').toLowerCase()
       if (action === 'status') {
         const state = economy.getGroupPolicy(ctx.chatId)
-        await ctx.reply(`🔞 *NSFW · ESTE GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${state.adultAllowed ? 'ON' : 'OFF'}*\nEste ajuste no afecta a otros grupos.`)
+        const categoryAllowed = getGroupCommandPolicy(ctx.chatId).effective.adult
+        await ctx.reply(`🔞 *NSFW · ESTE GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${state.adultAllowed && categoryAllowed ? 'ON' : 'OFF'}*\nAcceso usuarios: *${categoryAllowed ? 'PERMITIDO' : 'BLOQUEADO'}*\nEste ajuste no afecta a otros grupos.`)
         return
       }
       const enabled = toggle(action)
       economy.setGroupPolicy(ctx.chatId, 'adultAllowed', enabled)
-      await ctx.reply(`🔞 *NSFW · ESTE GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${enabled ? 'ON' : 'OFF'}*\n✅ El cambio se guardó únicamente para este grupo.`)
+      setGroupCategoryOverride(ctx.chatId, 'adult', enabled ? 'allow' : 'deny')
+      await ctx.reply(`🔞 *NSFW · ESTE GRUPO*\n━━━━━━━━━━━━━━\nEstado: *${enabled ? 'ON' : 'OFF'}*\n✅ El cambio se guardó únicamente para este grupo y se sincronizó con la política de comandos.\n${enabled ? 'Los miembros con adult18 accept ya pueden usar las descargas 18+.' : 'Los comandos 18+ quedan bloqueados para los miembros.'}`)
     },
   },
 ]
