@@ -1,12 +1,43 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { runtime, openBotDb, tokenHash } from './runtime'
+import {
+  createStoredSession,
+  csrfTokenForSession,
+  isPrivilegedRole,
+  principalFromStoredSession,
+  type PrivilegedWebRole,
+  type WebPrincipal,
+  type WebRole,
+  validateStoredSession,
+} from './web-security'
 
 export const ADMIN_SESSION_COOKIE = 'ghost_admin_session'
 export const SUBBOT_SESSION_COOKIE = 'ghost_subbot_session'
 
-export type AdminSession = { role: 'admin'; exp: number }
-export type SubbotSession = { role: 'subbot'; userJid: string; subbotId: number; exp: number }
-export type WebSession = AdminSession | SubbotSession
+type SessionBase = {
+  sid: string
+  exp: number
+  authAt: number
+}
+
+export type OwnerSession = SessionBase & {
+  role: 'owner'
+  accountId: 'owner'
+}
+
+export type StaffSession = SessionBase & {
+  role: 'admin' | 'support'
+  accountId: string
+}
+
+export type SubbotSession = SessionBase & {
+  role: 'subbot'
+  userJid: string
+  subbotId: number
+}
+
+export type PrivilegedSession = OwnerSession | StaffSession
+export type WebSession = PrivilegedSession | SubbotSession
 
 function sessionSecret() {
   if (!runtime.adminToken) throw new Error('ADMIN_WEB_TOKEN no está configurado.')
@@ -22,7 +53,7 @@ export function signSession(session: WebSession) {
   return `${encoded}.${signature(encoded)}`
 }
 
-export function verifySession(raw: string | undefined | null): WebSession | null {
+function parseSignedSession(raw: string | undefined | null): Partial<WebSession> | null {
   if (!raw) return null
   const [encoded, supplied] = raw.split('.')
   if (!encoded || !supplied) return null
@@ -31,39 +62,97 @@ export function verifySession(raw: string | undefined | null): WebSession | null
   const b = Buffer.from(expected)
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null
   try {
-    const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Partial<WebSession>
-    if (typeof parsed.exp !== 'number' || parsed.exp <= Date.now()) return null
-    if (parsed.role === 'admin') return { role: 'admin', exp: parsed.exp }
-    if (parsed.role === 'subbot' && typeof parsed.userJid === 'string' && typeof parsed.subbotId === 'number') {
-      return { role: 'subbot', userJid: parsed.userJid, subbotId: parsed.subbotId, exp: parsed.exp }
-    }
-    return null
+    return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Partial<WebSession>
   } catch {
     return null
   }
 }
 
-function digest(value: string) { return createHash('sha256').update(value).digest() }
+export function verifySession(raw: string | undefined | null): WebSession | null {
+  const parsed = parseSignedSession(raw)
+  if (!parsed?.sid || typeof parsed.exp !== 'number' || typeof parsed.authAt !== 'number') return null
+  const role = parsed.role as WebRole | undefined
+  if (!role || !['owner', 'admin', 'support', 'subbot'].includes(role)) return null
+
+  const accountId = 'accountId' in parsed && typeof parsed.accountId === 'string' ? parsed.accountId : null
+  const subbotId = 'subbotId' in parsed && typeof parsed.subbotId === 'number' ? parsed.subbotId : null
+  const userJid = 'userJid' in parsed && typeof parsed.userJid === 'string' ? parsed.userJid : null
+
+  const stored = validateStoredSession({
+    sid: parsed.sid,
+    role,
+    exp: parsed.exp,
+    accountId,
+    subbotId,
+    userJid,
+  })
+  if (!stored) return null
+
+  if (role === 'owner') {
+    if (accountId !== 'owner') return null
+    return { role: 'owner', sid: parsed.sid, accountId: 'owner', exp: stored.expiresAt, authAt: stored.authAt }
+  }
+
+  if (role === 'admin' || role === 'support') {
+    if (!accountId) return null
+    return { role, sid: parsed.sid, accountId, exp: stored.expiresAt, authAt: stored.authAt }
+  }
+
+  if (subbotId === null || !userJid) return null
+  return { role: 'subbot', sid: parsed.sid, subbotId, userJid, exp: stored.expiresAt, authAt: stored.authAt }
+}
+
+function digest(value: string) {
+  return createHash('sha256').update(value).digest()
+}
 
 export function verifyAdminToken(input: string) {
   if (!runtime.adminToken || !input) return false
-  return timingSafeEqual(digest(input), digest(runtime.adminToken))
+  const left = digest(input)
+  const right = digest(runtime.adminToken)
+  return left.length === right.length && timingSafeEqual(left, right)
 }
 
-export function createAdminSession(ttlMs = 12 * 60 * 60_000): AdminSession {
-  return { role: 'admin', exp: Date.now() + ttlMs }
+export function createOwnerSession(request: Request, ttlMs?: number): OwnerSession {
+  const stored = createStoredSession({ role: 'owner' }, request, ttlMs)
+  return {
+    role: 'owner',
+    sid: stored.sid,
+    accountId: 'owner',
+    exp: stored.exp,
+    authAt: stored.authAt,
+  }
 }
 
-export function resolveSubbotPortalToken(input: string): SubbotSession | null {
+export function createStaffSession(
+  role: 'admin' | 'support',
+  accountId: string,
+  request: Request,
+  ttlMs?: number,
+): StaffSession {
+  const stored = createStoredSession({ role, accountId }, request, ttlMs)
+  return {
+    role,
+    sid: stored.sid,
+    accountId,
+    exp: stored.exp,
+    authAt: stored.authAt,
+  }
+}
+
+export type SubbotPortalAccess = {
+  userJid: string
+  subbotId: number
+  exp: number
+}
+
+export function resolveSubbotPortalToken(input: string): SubbotPortalAccess | null {
   const token = input.trim()
   if (!token) return null
   const db = openBotDb()
   if (!db) return null
   try {
     const now = Date.now()
-    // A portal token is already bound to a concrete subbot_id. Do not require
-    // p.user_jid === s.owner_jid here because WhatsApp identity reconciliation
-    // can migrate the owner between PN and LID after the token was issued.
     const row = db.prepare(`SELECT COALESCE(s.owner_jid, p.user_jid) AS userJid,
       p.subbot_id AS subbotId, p.expires_at AS tokenExpiresAt,
       s.expires_at AS subbotExpiresAt
@@ -73,7 +162,6 @@ export function resolveSubbotPortalToken(input: string): SubbotSession | null {
       .get(tokenHash(token), now, now) as { userJid: string; subbotId: number; tokenExpiresAt: number; subbotExpiresAt: number } | undefined
     if (!row?.subbotId) return null
     return {
-      role: 'subbot',
       userJid: row.userJid,
       subbotId: Number(row.subbotId),
       exp: Math.min(Number(row.tokenExpiresAt), Number(row.subbotExpiresAt), now + 7 * 86400_000),
@@ -81,6 +169,40 @@ export function resolveSubbotPortalToken(input: string): SubbotSession | null {
   } finally {
     db.close()
   }
+}
+
+export function createSubbotSession(access: SubbotPortalAccess, request: Request): SubbotSession {
+  const ttlMs = Math.max(60_000, access.exp - Date.now())
+  const stored = createStoredSession({
+    role: 'subbot',
+    subbotId: access.subbotId,
+    userJid: access.userJid,
+  }, request, ttlMs)
+  return {
+    role: 'subbot',
+    sid: stored.sid,
+    userJid: access.userJid,
+    subbotId: access.subbotId,
+    exp: Math.min(stored.exp, access.exp),
+    authAt: stored.authAt,
+  }
+}
+
+export function sessionPrincipal(session: WebSession): WebPrincipal {
+  return principalFromStoredSession({
+    role: session.role,
+    accountId: 'accountId' in session ? session.accountId : null,
+    subbotId: 'subbotId' in session ? session.subbotId : null,
+    userJid: 'userJid' in session ? session.userJid : null,
+  })
+}
+
+export function isPrivilegedSession(session: WebSession | null): session is PrivilegedSession {
+  return Boolean(session && isPrivilegedRole(session.role))
+}
+
+export function sessionCsrfToken(session: WebSession) {
+  return csrfTokenForSession(session.sid, session.role)
 }
 
 export function cookieOptions(exp: number) {
@@ -92,4 +214,12 @@ export function cookieOptions(exp: number) {
     path: '/',
     maxAge,
   }
+}
+
+export function sessionCookieForRole(role: WebRole) {
+  return role === 'subbot' ? SUBBOT_SESSION_COOKIE : ADMIN_SESSION_COOKIE
+}
+
+export function roleIsPrivileged(role: WebRole): role is PrivilegedWebRole {
+  return isPrivilegedRole(role)
 }
