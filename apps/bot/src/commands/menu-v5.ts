@@ -8,6 +8,7 @@ import { effectiveCommands } from '../services/menu-registry.js'
 import { sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
+import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
 import { localeName } from '../i18n/index.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 import { valleyCompatV21Commands } from './valley-compat-v21.js'
@@ -204,7 +205,13 @@ async function menu(ctx: CommandContext) {
   const privateAccess = ctx.isOwner || ctx.isSubbotOwner || isPrivateChatApproved(ctx.sender)
   const instance = ctx.instanceId ? `Subbot #${ctx.instanceId}` : 'MainBot'
   const visual = await currentVisualIdentity(ctx)
-  const menuRows = effectiveCommands().filter((row) => visible(ctx, row.command))
+  const groupAdmin = ctx.isGroup ? await isGroupAdministrator(ctx).catch(() => false) : false
+  const groupPolicyBypass = ctx.isOwner || ctx.isBotStaff || ctx.isSubbotOwner || groupAdmin
+  const menuRows = effectiveCommands().filter((row) => {
+    if (!visible(ctx, row.command)) return false
+    if (!ctx.isGroup || groupPolicyBypass) return true
+    return isGroupCommandCategoryAllowed(ctx.chatId, row.command.category)
+  })
   const grouped = new Map<SectionId, string[]>()
   for (const id of sectionOrder) grouped.set(id, [])
   for (const row of menuRows) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx, row.command, row.tokens))
