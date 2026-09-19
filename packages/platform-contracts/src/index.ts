@@ -3,6 +3,29 @@ export const PLATFORM_IDS = ['whatsapp', 'telegram', 'discord'] as const
 export type PlatformId = typeof PLATFORM_IDS[number]
 export type CapabilityName = Exclude<keyof PlatformCapabilities, 'maxUploadBytes'>
 
+export type CapabilityFallbackKind = 'text' | 'noop' | 'operation'
+
+export interface CapabilityFallback {
+  name: CapabilityName
+  kind: CapabilityFallbackKind
+}
+
+export interface CapabilityResolution {
+  supported: CapabilityName[]
+  fallback: CapabilityFallback[]
+  missing: CapabilityName[]
+}
+
+export const CAPABILITY_FALLBACKS = Object.freeze({
+  editMessage: 'text',
+  reactions: 'noop',
+  typing: 'noop',
+  buttons: 'text',
+  carousel: 'text',
+  embeds: 'text',
+  files: 'operation',
+} satisfies Partial<Record<CapabilityName, CapabilityFallbackKind>>)
+
 export type NormalizedMediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker'
 
 export interface NormalizedMedia {
@@ -137,6 +160,34 @@ export function supportsCapabilities(
   required: readonly CapabilityName[] = [],
 ): boolean {
   return required.every((name) => capabilities[name] === true)
+}
+
+export function resolveCapabilityRequirements(
+  capabilities: Readonly<PlatformCapabilities>,
+  required: readonly CapabilityName[] = [],
+): CapabilityResolution {
+  const supported: CapabilityName[] = []
+  const fallback: CapabilityFallback[] = []
+  const missing: CapabilityName[] = []
+
+  for (const name of [...new Set(required)]) {
+    if (capabilities[name] === true) {
+      supported.push(name)
+      continue
+    }
+    const kind = CAPABILITY_FALLBACKS[name]
+    if (kind) fallback.push({ name, kind })
+    else missing.push(name)
+  }
+
+  return { supported, fallback, missing }
+}
+
+export function canExecuteWithCapabilityFallbacks(
+  capabilities: Readonly<PlatformCapabilities>,
+  required: readonly CapabilityName[] = [],
+): boolean {
+  return resolveCapabilityRequirements(capabilities, required).missing.length === 0
 }
 
 function actionText(action: UiAction): string {

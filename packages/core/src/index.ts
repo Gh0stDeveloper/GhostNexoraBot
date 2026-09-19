@@ -1,5 +1,6 @@
 import {
-  supportsCapabilities,
+  canExecuteWithCapabilityFallbacks,
+  resolveCapabilityRequirements,
   type CapabilityName,
   type PlatformCapabilities,
   type PlatformId,
@@ -86,6 +87,13 @@ export function findCommandCollisions(commands: readonly CommandDescriptorLike[]
   return [...collisions].sort()
 }
 
+export function commandCapabilityResolution(
+  command: Pick<CoreCommandDescriptor, 'requiresCapabilities'>,
+  capabilities: Readonly<PlatformCapabilities>,
+) {
+  return resolveCapabilityRequirements(capabilities, command.requiresCapabilities ?? [])
+}
+
 export function isCommandAvailable(
   command: CoreCommandDescriptor,
   platform: PlatformId,
@@ -93,5 +101,5 @@ export function isCommandAvailable(
 ): boolean {
   if (command.scope === 'runtime-only') return false
   if (command.platforms?.length && !command.platforms.includes(platform)) return false
-  return supportsCapabilities(capabilities, command.requiresCapabilities ?? [])
+  return canExecuteWithCapabilityFallbacks(capabilities, command.requiresCapabilities ?? [])
 }

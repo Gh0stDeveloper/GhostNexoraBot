@@ -43,6 +43,7 @@ async function sendMenu(ctx: CommandContext, artwork: string | undefined, menu: 
 export const generalCommands: NeutralBotCommand[] = [
   {
     name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo con imagen y accesos rápidos en un solo mensaje.',
+    requiresCapabilities: ['buttons'],
     async handler(ctx) {
       const p = ctx.prefix
       const artwork = await menuArtwork(ctx)
@@ -208,6 +209,7 @@ ${staffSection}
   },
   {
     name: 'ping', category: 'general', description: 'Comprueba latencia y disponibilidad.',
+    requiresCapabilities: ['typing'],
     async handler(ctx) {
       const start = performance.now()
       await ctx.setTyping(true).catch(() => undefined)
@@ -219,6 +221,7 @@ ${staffSection}
   },
   {
     name: 'info', aliases: ['about', 'botinfo'], category: 'general', description: 'Información del bot.',
+    requiresCapabilities: ['files'],
     async handler(ctx) {
       const artwork = await menuArtwork(ctx)
       const brand = identity(ctx)

@@ -37,6 +37,7 @@ export const messages: TranslationCatalog = {
   'router.groupRequired': '👥 Este comando solo se puede usar dentro de un grupo.',
   'router.adminOnly': '🛡️ *PERMISO DE ADMIN*\n━━━━━━━━━━━━━━\nNecesitas ser administrador del grupo, staff global o dueño de esta instancia.',
   'router.botAdminOnly': '🤖 *PERMISO FALTANTE*\n━━━━━━━━━━━━━━\nNecesito ser administrador del grupo para realizar esta acción.',
+  'router.capabilityUnavailable': '⚠️ *CAPACIDAD NO DISPONIBLE*\n━━━━━━━━━━━━━━\nLa plataforma *{platform}* no ofrece una alternativa segura para: *{capabilities}*.',
   'router.categoryDisabled': '🚫 *CATEGORÍA DESHABILITADA*\n━━━━━━━━━━━━━━\nLos comandos de *{category}* están deshabilitados por la política de este grupo. Si necesitas usarlos, solicita a un administrador del grupo que habilite esa categoría.',
   'router.commandDisabled': '🚫 Este comando está deshabilitado por la configuración de esta instancia.',
   'router.commandCategoryDisabled': '🚫 La categoría *{category}* está deshabilitada por la configuración de esta instancia.',

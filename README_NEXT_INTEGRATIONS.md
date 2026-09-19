@@ -388,7 +388,7 @@ Cierre B3:
 
 ## B4. Capability-aware command execution
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Los comandos deben declarar capacidades requeridas cuando aplique:
 
@@ -402,6 +402,18 @@ Los comandos deben declarar capacidades requeridas cuando aplique:
 - reacciones.
 
 Si una plataforma no soporta algo, utilizar fallback y no duplicar el comando.
+
+Implementación B4:
+
+- `platform-contracts` mantiene el chequeo estricto `supportsCapabilities()` y añade `resolveCapabilityRequirements()` para distinguir soporte nativo, fallback y ausencia real;
+- fallbacks declarados: UI rica → texto normalizado, edición → nuevo mensaje, reactions/typing → no-op seguro y archivos remotos → URL textual;
+- `polls` y `groupModeration` permanecen hard requirements porque no existe un fallback genérico seguro;
+- `SharedCommandEngine` valida `requiresCapabilities` antes del handler y devuelve `fallbackCapabilities` para diagnóstico;
+- `createNeutralCommandContext` aplica los fallbacks operativos sin introducir condiciones por plataforma en los comandos;
+- Discord y Telegram aplican el mismo preflight a los comandos nativos que todavía permanecen fuera del engine compartido;
+- `menu`, `ping` e `info` declaran capacidades reales para cubrir UI, typing y archivos;
+- documentación técnica: `docs/v2/PHASE_B4.md`;
+- gate dedicado: `scripts/phase-b4-capability-execution-smoke.mjs`.
 
 ## B5. RequestContext inmutable
 
