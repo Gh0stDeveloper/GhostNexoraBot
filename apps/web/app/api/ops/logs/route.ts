@@ -43,6 +43,12 @@ export async function GET(request: NextRequest) {
       headers: { 'cache-control': 'no-store' },
     })
   }
+  if (current.mfaPending) {
+    return NextResponse.json({ ok: false, error: 'mfa_required' }, {
+      status: 403,
+      headers: { 'cache-control': 'no-store' },
+    })
+  }
 
   const requested = String(request.nextUrl.searchParams.get('instance') ?? 'main').trim().toLowerCase()
   let instanceKey = 'main'
