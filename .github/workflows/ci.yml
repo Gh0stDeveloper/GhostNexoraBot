@@ -60,6 +60,9 @@ jobs:
       - name: Phase E7 group detail smoke
         run: node scripts/phase-e7-group-detail-smoke.mjs
 
+      - name: Phase E8 user dashboard smoke
+        run: node scripts/phase-e8-user-dashboard-smoke.mjs
+
       - name: Spotify, anime, adult permissions and Windows installer smoke
         run: node scripts/media-windows-permissions-smoke.mjs
 
