@@ -18,9 +18,8 @@ export type CommandEngineExecuteOptions<C extends CommandContext> = {
 }
 
 export type CommandEngineResult<C extends CommandContext> =
-  | { matched: false }
-  | { matched: true; command: CommandEngineCommand<C>; allowed: false }
-  | { matched: true; command: CommandEngineCommand<C>; allowed: true }
+  | { command: CommandEngineCommand<C>; allowed: false }
+  | { command: CommandEngineCommand<C>; allowed: true }
 
 function runtimePolicyMessage(ctx: CommandContext, reason: string, category: string, remainingMs?: number) {
   if (reason === 'disabled') return ctx.t('router.commandDisabled')
@@ -62,34 +61,34 @@ export class CommandEngine<C extends CommandContext> {
   ): Promise<CommandEngineResult<C>> {
     if (command.ownerOnly && !ctx.isOwner) {
       await deny(ctx, ctx.t('router.ownerOnly'))
-      return { matched: true, command, allowed: false }
+      return { command, allowed: false }
     }
 
     if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner)) {
       await deny(ctx, ctx.t('router.staffOnly'))
-      return { matched: true, command, allowed: false }
+      return { command, allowed: false }
     }
 
     if (command.groupOnly && !ctx.isGroup) {
       await deny(ctx, ctx.t('router.groupOnly'))
-      return { matched: true, command, allowed: false }
+      return { command, allowed: false }
     }
 
     if (command.adminOnly || command.botAdminOnly) {
       if (!ctx.isGroup) {
         await deny(ctx, ctx.t('router.groupRequired'))
-        return { matched: true, command, allowed: false }
+        return { command, allowed: false }
       }
 
       const senderIsAdmin = Boolean(ctx.isOwner || ctx.isBotStaff || ctx.isSubbotOwner || ctx.isGroupAdmin)
       if (command.adminOnly && !senderIsAdmin) {
         await deny(ctx, ctx.t('router.adminOnly'))
-        return { matched: true, command, allowed: false }
+        return { command, allowed: false }
       }
 
       if (command.botAdminOnly && !ctx.isBotGroupAdmin) {
         await deny(ctx, ctx.t('router.botAdminOnly'))
-        return { matched: true, command, allowed: false }
+        return { command, allowed: false }
       }
     }
 
@@ -112,13 +111,13 @@ export class CommandEngine<C extends CommandContext> {
         command.category,
         runtimeDecision.remainingMs,
       ))
-      return { matched: true, command, allowed: false }
+      return { command, allowed: false }
     }
 
     const authorizationError = await options.authorize?.(command, ctx)
     if (authorizationError) {
       await deny(ctx, authorizationError)
-      return { matched: true, command, allowed: false }
+      return { command, allowed: false }
     }
 
     if (!ctx.isOwner && !ctx.isBotStaff && !ctx.isSubbotOwner && runtimeDecision.config.cooldownMs > 0) {
@@ -140,7 +139,7 @@ export class CommandEngine<C extends CommandContext> {
         options.auditIdentity,
         ctx.platform,
       )
-      return { matched: true, command, allowed: true }
+      return { command, allowed: true }
     } catch (error) {
       const durationMs = performance.now() - started
       performanceAudit.recordStage('06', durationMs, options.instanceKey)
