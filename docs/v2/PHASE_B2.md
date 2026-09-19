@@ -1,6 +1,6 @@
 # Fase B2 — Shared Command Engine
 
-Estado de validación: EN PROGRESO
+Estado de validación: TERMINADO
 
 ## Objetivo
 
@@ -46,3 +46,12 @@ Este documento existe también para disparar las suites históricas de plataform
 5. Superficie de comandos WhatsApp compatible con la baseline V2.
 
 B2 sólo se marca como TERMINADO en el roadmap después de esos gates.
+
+## Cierre validado
+
+- `SharedCommandEngine` es el punto común de resolución/ejecución para el catálogo neutral de B2.
+- WhatsApp mantiene el bridge V1 únicamente para comandos legacy; Discord y Telegram ejecutan el lote neutral compartido.
+- Los handlers nativos duplicados de `ping` e `info` fueron retirados de Discord y Telegram.
+- El baseline histórico reconoce `syncgroups` como delta pre-B2 aprobado, sin modificar la superficie real de comandos.
+- El smoke de runtime Discord espera el flujo observable ACK → respuesta → limpieza del placeholder, evitando falsos fallos por temporización del runner.
+- Evidencia previa al cierre documental sobre `2dd60e6a9f35319c336f0cd4458bdcd7e7820e3c`: CI #3032, V2 Phase 0 #569, Phase 1 #138, Phase 2 #135, Phase 3 #150, Phase 4 #129, Phase 5 #123 y Phase 6 #117 en `success`.
