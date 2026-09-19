@@ -83,6 +83,7 @@ function credit(userJid: string, amount: number) {
   db.prepare('UPDATE economy_users SET wallet = wallet + ? WHERE user_jid = ?').run(amount, userJid)
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
     .run(userJid, 'miner_yield', amount, 'NXC passive miner', now())
+  economy.recordGlobalLedger(userJid, 'miner_yield', amount, undefined, 'NXC passive miner')
 }
 
 function debitTotal(userJid: string, amount: number, note = 'NXC miner subscription') {
@@ -93,6 +94,7 @@ function debitTotal(userJid: string, amount: number, note = 'NXC miner subscript
   db.prepare('UPDATE economy_users SET wallet = wallet - ?, bank = bank - ? WHERE user_jid = ?').run(walletUse, bankUse, userJid)
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
     .run(userJid, 'miner_subscription', -amount, note, now())
+  economy.recordGlobalLedger(userJid, 'miner_subscription', -amount, undefined, note)
 }
 
 export const mining = {
