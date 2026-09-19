@@ -53,17 +53,20 @@ assert.match(adminPage, /const navigationItems: UnifiedNavItem\[] = sections\.ma
 assert.match(adminPage, /badge=\{roleLabel\(role\)\}/, 'Admin/Support role must be visible in the shared sidebar')
 assert.match(adminPage, /role === 'owner'/, 'Owner-only section filtering must remain')
 assert.match(adminPage, /\['management', t\('nav\.management'\)/, 'Owner management section must remain available')
+assert.match(adminPage, /\['providers', t\('nav\.providers'\)/, 'Providers section must remain available in Admin navigation')
 assert.match(adminPage, /\['subbots', t\('nav\.subbots'\)/, 'Owner subbots section must remain available')
 assert.doesNotMatch(adminPage, /<nav className="mt-5 flex gap-2 overflow-x-auto/, 'Legacy Admin tabs must be removed')
 
 assert.match(subbotPage, /const navigationItems: UnifiedNavItem\[] = sections\.map/, 'Subbot navigation must derive from isolated sections')
 assert.match(subbotPage, /brandTitle=\{`SUBBOT #\$\{subbot\.id\}`\}/, 'Subbot identity must remain visible in shared sidebar')
-assert.match(subbotPage, /sectionIds: SubbotSection\[] = \['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'account'\]/, 'Subbot must retain only its isolated sections')
+assert.match(subbotPage, /sectionIds: SubbotSection\[] = \['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'account'\]/, 'Subbot must retain only its isolated sections')
+assert.match(subbotPage, /\['providers', t\('nav\.providers'\)/, 'Subbot must expose only its own provider telemetry')
 assert.doesNotMatch(subbotPage, /management|nav\.subbots|nav\.security/, 'Subbot sidebar must not expose MainBot owner navigation')
 assert.doesNotMatch(subbotPage, /<nav className="mt-5 flex gap-2 overflow-x-auto/, 'Legacy Subbot tabs must be removed')
 
 assert.match(i18n, /'home\.navAria': 'Navegación principal'/, 'Spanish public navigation accessibility label missing')
 assert.match(i18n, /'home\.navAria': 'Primary navigation'/, 'English public navigation accessibility label missing')
+assert.match(i18n, /'nav\.providers': 'Providers'/, 'Providers navigation label missing')
 assert.match(i18n, /'nav\.close': 'Cerrar navegación'/, 'Spanish drawer close label missing')
 assert.match(i18n, /'nav\.close': 'Close navigation'/, 'English drawer close label missing')
 
