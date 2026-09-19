@@ -54,7 +54,13 @@ on_update_error() {
   trap - ERR
   local detail="Etapa ${CURRENT_UPDATE_STAGE} falló en línea ${BASH_LINENO[0]:-${LINENO}} (exit ${status}). Comando: ${BASH_COMMAND:-desconocido}"
   if [[ -n "${LAST_ERROR_LOG}" && -f "${LAST_ERROR_LOG}" ]]; then
-    detail="${detail}"
+    detail="${detail}"$'\n\n'"$(tail -n 40 "${LAST_ERROR_LOG}" 2>/dev/null || true)"
+  fi
+  update_progress "${CURRENT_UPDATE_STAGE}" failed "${CURRENT_UPDATE_PROGRESS}" 'La actualización falló.' "${detail}"
+  fail "La actualización falló en ${CURRENT_UPDATE_STAGE} (exit ${status})."
+  exit "${status}"
+}
+trap on_update_error ERR
 
 if [[ "${EUID}" -ne 0 ]]; then fail 'Ejecuta este script con sudo/root.'; exit 1; fi
 if [[ ! -d "${INSTALL_DIR}/.git" ]]; then fail "No existe un repositorio Git válido en ${INSTALL_DIR}. Usa install.sh primero."; exit 1; fi
