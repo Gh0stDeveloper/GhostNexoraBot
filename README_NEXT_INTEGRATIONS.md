@@ -302,7 +302,7 @@ Cierre B1:
 
 ## B2. Un solo Command Engine
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 El comando debe implementarse una sola vez y responder mediante una API neutral con operaciones equivalentes a:
 
@@ -315,6 +315,18 @@ El comando debe implementarse una sola vez y responder mediante una API neutral 
 - react.
 
 Cada plataforma traduce la intención a su formato nativo.
+
+Implementación B2 en validación:
+
+- nuevo `SharedCommandEngine` como punto común de resolución y ejecución;
+- fábrica `createNeutralCommandContext` para ligar `reply`, `sendText`, `sendMedia`, `sendUi`, `setTyping`, `editMessage` y `react` al `PlatformAdapter` actual;
+- WhatsApp resuelve y ejecuta el catálogo mediante el motor compartido, manteniendo `LegacyCompatibleCommandContext` solo como frontera temporal V1;
+- Discord y Telegram ejecutan el mismo handler para el lote neutral compartido;
+- alias neutrales quedan disponibles en los tres routers sin duplicar el handler;
+- los comandos todavía específicos de Discord/Telegram —por ejemplo estado del runtime, providers o configuración de idioma nativa— permanecen como fallback temporal;
+- `menu/help` permanece nativo hasta B3 para no anunciar comandos que todavía no tengan metadata central de disponibilidad;
+- Operations Center reconoce los comandos del motor compartido como disponibles en Discord y Telegram;
+- smoke B2 dedicado valida que las tres plataformas sigan entrando por el mismo motor.
 
 ## B3. Metadata central de comandos
 
