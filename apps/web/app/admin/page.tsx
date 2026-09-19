@@ -7,6 +7,7 @@ import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
 import { EconomyLedgerDashboard } from '../../components/economy-ledger-dashboard'
 import { JobsDashboard } from '../../components/jobs-dashboard'
 import { OperationsOverview } from '../../components/operations-overview'
+import { OpsToast } from '../../components/ops-client-controls'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
@@ -204,14 +205,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       closeLabel={t('nav.close')}
     />
     <div className="ops-shell-content">
-    <div className="mx-auto w-full max-w-[1540px] px-4 py-7 md:px-7 lg:px-9">
-      <header className="flex flex-col gap-5 border-b border-white/[.07] pb-6 lg:flex-row lg:items-center lg:justify-between">
+    <div className="ops-page-frame">
+      <header className="ops-page-header">
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><ShieldCheck className="size-5 text-blue-400"/></span>
           <div>
             <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-500">Operations Center</p><span className="ops-badge-good">{roleLabel(role)}</span></div>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-white">{t('admin.title')}</h1>
-            <p className="mt-1 text-xs text-zinc-600">{t('admin.currentView', { instance: instanceLabel, status: runtimeStatus })}</p>
+            <h1 className="ops-page-title mt-1">{t('admin.title')}</h1>
+            <p className="ops-page-subtitle">{t('admin.currentView', { instance: instanceLabel, status: runtimeStatus })}</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -230,8 +231,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </div>
       </header>
 
-      {params.ok && <div className="mt-5 rounded-xl border border-emerald-500/15 bg-emerald-500/[.07] px-4 py-3 text-sm text-emerald-300">{t('admin.ok')}</div>}
-      {params.error && <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/[.07] px-4 py-3 text-sm text-red-300">{t('admin.error', { error: params.error })}</div>}
+      {params.ok ? <OpsToast tone="success">{t('admin.ok')}</OpsToast> : null}
+      {params.error ? <OpsToast tone="error">{t('admin.error', { error: params.error })}</OpsToast> : null}
 
       {section === 'overview' && <>
         <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
