@@ -6,6 +6,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { load } from 'cheerio'
 import { config } from '../config.js'
+import { trackedProviderCall } from './provider-health.js'
 
 export type TempDownload = { filePath: string; fileName: string; size: number; contentType: string; cleanup: () => Promise<void> }
 
@@ -151,10 +152,12 @@ export async function downloadFdroidApk(input: string) {
 }
 
 export async function searchAnime(input: string) {
-  const response = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(input.trim())}&limit=6&sfw=true`)
-  if (!response.ok) throw new Error('Jikan no respondió correctamente.')
-  const json = await response.json() as { data?: Array<{ title?: string; title_english?: string; episodes?: number; score?: number; synopsis?: string; url?: string; images?: { jpg?: { large_image_url?: string } } }> }
-  return json.data ?? []
+  return trackedProviderCall('jikan', async () => {
+    const response = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(input.trim())}&limit=6&sfw=true`)
+    if (!response.ok) throw new Error(`jikan_http_${response.status}`)
+    const json = await response.json() as { data?: Array<{ title?: string; title_english?: string; episodes?: number; score?: number; synopsis?: string; url?: string; images?: { jpg?: { large_image_url?: string } } }> }
+    return json.data ?? []
+  }, { label: 'Jikan' })
 }
 
 export async function searchManga(input: string) {
