@@ -188,6 +188,132 @@ export class EconomyStore {
         created_at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_global_ledger_user ON economy_global_ledger(user_jid, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS economy_transactions (
+        transaction_id TEXT PRIMARY KEY,
+        user_jid TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        wallet_delta INTEGER NOT NULL,
+        bank_delta INTEGER NOT NULL,
+        wallet_before INTEGER,
+        bank_before INTEGER,
+        balance_before INTEGER,
+        wallet_after INTEGER NOT NULL,
+        bank_after INTEGER NOT NULL,
+        balance_after INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        counterparty_jid TEXT,
+        note TEXT,
+        instance_role TEXT,
+        instance_id INTEGER,
+        legacy_ledger_id INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_economy_transactions_user
+        ON economy_transactions(user_jid, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_economy_transactions_kind
+        ON economy_transactions(kind, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_economy_transactions_source
+        ON economy_transactions(source, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_economy_transactions_instance
+        ON economy_transactions(instance_role, instance_id, created_at DESC);
+
+      DROP TRIGGER IF EXISTS gn_e9_account_opening;
+      CREATE TRIGGER gn_e9_account_opening
+      AFTER INSERT ON global_economy_users
+      BEGIN
+        INSERT INTO economy_transactions(
+          transaction_id, user_jid, kind, amount, wallet_delta, bank_delta,
+          wallet_before, bank_before, balance_before,
+          wallet_after, bank_after, balance_after, source, created_at
+        ) VALUES(
+          'nxc_' || lower(hex(randomblob(16))),
+          NEW.user_jid,
+          'account_opening_or_import',
+          NEW.wallet + NEW.bank,
+          NEW.wallet,
+          NEW.bank,
+          0,
+          0,
+          0,
+          NEW.wallet,
+          NEW.bank,
+          NEW.wallet + NEW.bank,
+          'automatic_guard',
+          NEW.updated_at
+        );
+      END;
+
+      DROP TRIGGER IF EXISTS gn_e9_balance_change;
+      CREATE TRIGGER gn_e9_balance_change
+      AFTER UPDATE OF wallet, bank ON global_economy_users
+      WHEN OLD.wallet <> NEW.wallet OR OLD.bank <> NEW.bank
+      BEGIN
+        INSERT INTO economy_transactions(
+          transaction_id, user_jid, kind, amount, wallet_delta, bank_delta,
+          wallet_before, bank_before, balance_before,
+          wallet_after, bank_after, balance_after, source, created_at
+        ) VALUES(
+          'nxc_' || lower(hex(randomblob(16))),
+          NEW.user_jid,
+          CASE
+            WHEN (NEW.wallet + NEW.bank) > (OLD.wallet + OLD.bank) THEN 'credit_unattributed'
+            WHEN (NEW.wallet + NEW.bank) < (OLD.wallet + OLD.bank) THEN 'debit_unattributed'
+            ELSE 'bucket_transfer'
+          END,
+          (NEW.wallet + NEW.bank) - (OLD.wallet + OLD.bank),
+          NEW.wallet - OLD.wallet,
+          NEW.bank - OLD.bank,
+          OLD.wallet,
+          OLD.bank,
+          OLD.wallet + OLD.bank,
+          NEW.wallet,
+          NEW.bank,
+          NEW.wallet + NEW.bank,
+          'automatic_guard',
+          NEW.updated_at
+        );
+      END;
+
+      DROP TRIGGER IF EXISTS gn_e9_enrich_from_global_ledger;
+      CREATE TRIGGER gn_e9_enrich_from_global_ledger
+      AFTER INSERT ON economy_global_ledger
+      BEGIN
+        UPDATE economy_transactions
+        SET
+          kind = NEW.kind,
+          source = CASE
+            WHEN NEW.kind LIKE 'work%' THEN 'work'
+            WHEN NEW.kind LIKE 'game%' OR NEW.kind LIKE '%_game%' THEN 'games'
+            WHEN NEW.kind LIKE 'miner%' THEN 'mining'
+            WHEN NEW.kind LIKE 'transfer%' THEN 'transfer'
+            WHEN NEW.kind LIKE 'admin%' THEN 'admin'
+            WHEN NEW.kind LIKE 'purchase%' OR NEW.kind LIKE '%shop%' THEN 'shop'
+            WHEN NEW.kind LIKE 'bank%' OR NEW.kind LIKE 'loan%' OR NEW.kind LIKE 'interest%' THEN 'banking'
+            WHEN NEW.kind LIKE 'rob%' OR NEW.kind LIKE 'crime%' OR NEW.kind LIKE 'fine%' THEN 'justice'
+            WHEN NEW.kind LIKE 'profession%' THEN 'career'
+            ELSE NEW.kind
+          END,
+          counterparty_jid = NEW.counterparty_jid,
+          note = NEW.note,
+          instance_role = NEW.instance_role,
+          instance_id = NEW.instance_id,
+          legacy_ledger_id = NEW.id
+        WHERE transaction_id = (
+          SELECT transaction_id
+          FROM economy_transactions
+          WHERE user_jid = NEW.user_jid
+            AND legacy_ledger_id IS NULL
+            AND source = 'automatic_guard'
+            AND created_at BETWEEN NEW.created_at - 2500 AND NEW.created_at + 2500
+          ORDER BY
+            CASE WHEN amount = NEW.amount THEN 0 ELSE 1 END,
+            ABS(created_at - NEW.created_at),
+            created_at DESC
+          LIMIT 1
+        );
+      END;
     `)
 
     const role = process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main'
@@ -327,13 +453,26 @@ export class EconomyStore {
     this.db.prepare('INSERT OR IGNORE INTO economy_users(user_jid, created_at) VALUES(?, ?)').run(userJid, now())
   }
 
+  recordGlobalLedger(userJid: string, kind: string, amount: number, counterparty?: string, note?: string) {
+    try {
+      this.walletDb.prepare('INSERT INTO economy_global_ledger(user_jid, kind, amount, counterparty_jid, note, instance_role, instance_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(
+          userJid,
+          kind,
+          Math.trunc(amount),
+          counterparty ?? null,
+          note ?? null,
+          process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main',
+          Number(process.env.NEXORA_SUBBOT_ID || 0) || null,
+          now(),
+        )
+    } catch {}
+  }
+
   private ledger(userJid: string, kind: string, amount: number, counterparty?: string, note?: string) {
     this.db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, counterparty_jid, note, created_at) VALUES(?, ?, ?, ?, ?, ?)')
       .run(userJid, kind, amount, counterparty ?? null, note ?? null, now())
-    try {
-      this.walletDb.prepare('INSERT INTO economy_global_ledger(user_jid, kind, amount, counterparty_jid, note, instance_role, instance_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(userJid, kind, amount, counterparty ?? null, note ?? null, process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main', Number(process.env.NEXORA_SUBBOT_ID || 0) || null, now())
-    } catch {}
+    this.recordGlobalLedger(userJid, kind, amount, counterparty, note)
   }
 
   balance(userJid: string) {
