@@ -50,6 +50,7 @@ function safeGit(args: string[]) {
       encoding: 'utf8',
       timeout: 8_000,
       windowsHide: true,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim()
   } catch {
