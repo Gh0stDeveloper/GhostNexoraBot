@@ -1,5 +1,6 @@
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
+import { trackedProviderCall } from './provider-health.js'
 
 export type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 type OpenRouterResponse = { model?: string; choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>; error?: { message?: string; code?: string | number } }
@@ -21,9 +22,12 @@ export async function getAIStatus() {
   if (!configured) return { ...base, auth: 'missing' as const }
   if (!isOpenRouter()) return { ...base, auth: 'not-checked' as const }
   if (!openRouterKeyShape()) return { ...base, auth: 'invalid-format' as const }
-  const response = await fetch('https://openrouter.ai/api/v1/key', { headers: { authorization: `Bearer ${apiKey()}`, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) })
+  const response = await trackedProviderCall('openrouter', async () => fetch('https://openrouter.ai/api/v1/key', { headers: { authorization: `Bearer ${apiKey()}`, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) }), { label: 'OpenRouter' })
   const type = response.headers.get('content-type') ?? ''; const payload = type.includes('json') ? await response.json() as OpenRouterKeyResponse : undefined
-  if (!response.ok) return { ...base, auth: 'rejected' as const, httpStatus: response.status, detail: payload?.error?.message || `HTTP ${response.status}` }
+  if (!response.ok) {
+    try { throw new Error(`openrouter_key_http_${response.status}`) } catch {}
+    return { ...base, auth: 'rejected' as const, httpStatus: response.status, detail: payload?.error?.message || `HTTP ${response.status}` }
+  }
   return { ...base, auth: 'valid' as const, freeTier: payload?.data?.is_free_tier, managementKey: payload?.data?.is_management_key, limit: payload?.data?.limit, limitRemaining: payload?.data?.limit_remaining, limitReset: payload?.data?.limit_reset, expiresAt: payload?.data?.expires_at }
 }
 export async function askAI(messages: AiMessage[], maxTokens = 1600) {
@@ -32,9 +36,18 @@ export async function askAI(messages: AiMessage[], maxTokens = 1600) {
   const targetEndpoint = endpoint(); const selectedModel = model()
   const headers: Record<string, string> = { authorization: `Bearer ${key}`, 'content-type': 'application/json', accept: 'application/json', 'x-title': 'Ghost Nexora Bot' }
   if (/^https?:\/\//i.test(config.publicWebUrl)) headers['http-referer'] = config.publicWebUrl
-  const response = await fetch(targetEndpoint, { method: 'POST', headers, body: JSON.stringify({ model: selectedModel, messages: [{ role: 'system', content: INTERNAL_PRIVACY_PROMPT }, ...messages], temperature: 0.45, max_tokens: Math.max(256, Math.min(3000, maxTokens)), stream: false }), signal: AbortSignal.timeout(AI_TIMEOUT_MS) })
-  const type = response.headers.get('content-type') ?? ''; const payload = type.includes('json') ? await response.json() as OpenRouterResponse : { error: { message: (await response.text()).slice(0, 400) } }
-  if (!response.ok) { const detail = payload.error?.message || `HTTP ${response.status}`; logger.warn({ httpStatus: response.status, detail: detail.slice(0, 240), model: selectedModel }, 'ai provider request failed'); throw new Error('El servicio de inteligencia artificial no está disponible temporalmente.') }
+  const providerId = isOpenRouter() ? 'openrouter' : 'ai-compatible'
+  const { payload } = await trackedProviderCall(providerId, async () => {
+    const response = await fetch(targetEndpoint, { method: 'POST', headers, body: JSON.stringify({ model: selectedModel, messages: [{ role: 'system', content: INTERNAL_PRIVACY_PROMPT }, ...messages], temperature: 0.45, max_tokens: Math.max(256, Math.min(3000, maxTokens)), stream: false }), signal: AbortSignal.timeout(AI_TIMEOUT_MS) })
+    const type = response.headers.get('content-type') ?? ''
+    const payload = type.includes('json') ? await response.json() as OpenRouterResponse : { error: { message: (await response.text()).slice(0, 400) } }
+    if (!response.ok) {
+      const detail = payload.error?.message || `HTTP ${response.status}`
+      logger.warn({ httpStatus: response.status, detail: detail.slice(0, 240), model: selectedModel }, 'ai provider request failed')
+      throw new Error(`${providerId}_http_${response.status}`)
+    }
+    return { response, payload }
+  }, { label: isOpenRouter() ? 'OpenRouter' : 'AI compatible' })
   const text = responseText(payload); if (!text) throw new Error('La inteligencia artificial no devolvió una respuesta utilizable.')
   logger.info({ model: payload.model ?? selectedModel, timeoutMs: AI_TIMEOUT_MS }, 'ai response completed')
   return { text, model: payload.model ?? selectedModel }
