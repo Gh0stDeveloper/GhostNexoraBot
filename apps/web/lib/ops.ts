@@ -494,12 +494,37 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
     }
 
     if (tableExists(db, 'ops_platform_groups')) {
-      snapshot.platformGroups = db.prepare(`SELECT platform, external_id AS externalId, name, kind,
-          member_count AS memberCount, admin_count AS adminCount, bot_admin AS botAdmin,
-          authoritative, source, updated_at AS updatedAt
-        FROM ops_platform_groups
-        WHERE instance_key = ?
-        ORDER BY platform ASC, name COLLATE NOCASE ASC`)
+      const hasLegacyWhatsAppGroups = tableExists(db, 'ops_groups')
+      const platformQuery = hasLegacyWhatsAppGroups
+        ? `SELECT pg.platform, pg.external_id AS externalId,
+            CASE
+              WHEN pg.platform = 'whatsapp'
+                AND (pg.name = pg.external_id OR TRIM(pg.name) = '')
+                AND og.name IS NOT NULL
+                AND og.name <> og.group_jid
+              THEN og.name
+              ELSE pg.name
+            END AS name,
+            pg.kind,
+            CASE WHEN pg.platform = 'whatsapp' THEN COALESCE(pg.member_count, og.participant_count) ELSE pg.member_count END AS memberCount,
+            CASE WHEN pg.platform = 'whatsapp' THEN COALESCE(pg.admin_count, og.admin_count) ELSE pg.admin_count END AS adminCount,
+            pg.bot_admin AS botAdmin, pg.authoritative, pg.source,
+            MAX(pg.updated_at, COALESCE(og.updated_at, 0)) AS updatedAt
+          FROM ops_platform_groups pg
+          LEFT JOIN ops_groups og
+            ON pg.platform = 'whatsapp'
+            AND og.instance_key = pg.instance_key
+            AND og.group_jid = pg.external_id
+          WHERE pg.instance_key = ?
+          ORDER BY pg.platform ASC, name COLLATE NOCASE ASC`
+        : `SELECT platform, external_id AS externalId, name, kind,
+            member_count AS memberCount, admin_count AS adminCount, bot_admin AS botAdmin,
+            authoritative, source, updated_at AS updatedAt
+          FROM ops_platform_groups
+          WHERE instance_key = ?
+          ORDER BY platform ASC, name COLLATE NOCASE ASC`
+
+      snapshot.platformGroups = db.prepare(platformQuery)
         .all(instanceKey).map((row: any) => ({
           platform: String(row.platform) as OpsPlatformGroup['platform'],
           externalId: String(row.externalId),
