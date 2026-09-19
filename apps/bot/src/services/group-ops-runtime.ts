@@ -788,13 +788,13 @@ async function processOneRequest() {
     } else {
       throw new Error('Acción de grupo no soportada.')
     }
-    opsDb.prepare("UPDATE ops_group_control_requests SET status = 'completed', completed_at = ?, error = NULL WHERE id = ?")
+    opsDb.prepare("UPDATE ops_group_control_requests SET status = 'completed', completed_at = ?, error = NULL, payload_json = NULL WHERE id = ?")
       .run(Date.now(), request.id)
     recordOpsRuntimeLog('info', 'group-control', `Completed ${request.action}${request.groupJid ? ` for ${request.groupJid}` : ''}`, instanceKey)
     setOpsAlert({ key: 'group-control:failure', severity: 'warning', title: 'Group control action failed', active: false, instanceKey })
   } catch (error) {
     const detail = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500)
-    opsDb.prepare("UPDATE ops_group_control_requests SET status = 'failed', completed_at = ?, error = ? WHERE id = ?")
+    opsDb.prepare("UPDATE ops_group_control_requests SET status = 'failed', completed_at = ?, error = ?, payload_json = NULL WHERE id = ?")
       .run(Date.now(), detail, request.id)
     recordOpsRuntimeLog('error', 'group-control', `Failed ${request.action}: ${detail}`, instanceKey)
     setOpsAlert({ key: 'group-control:failure', severity: 'warning', title: 'Group control action failed', detail, active: true, instanceKey })
