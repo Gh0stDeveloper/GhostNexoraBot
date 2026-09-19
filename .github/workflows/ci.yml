@@ -69,6 +69,12 @@ jobs:
       - name: Phase E10 real-time logs smoke
         run: node scripts/phase-e10-realtime-logs-smoke.mjs
 
+      - name: Phase E11 active jobs smoke
+        run: node scripts/phase-e11-active-jobs-smoke.mjs
+
+      - name: Adult regular-user access smoke
+        run: node scripts/adult-regular-user-access-smoke.mjs
+
       - name: Spotify, anime, adult permissions and Windows installer smoke
         run: node scripts/media-windows-permissions-smoke.mjs
 
