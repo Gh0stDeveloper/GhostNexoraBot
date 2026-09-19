@@ -12,7 +12,7 @@ export const COMMAND_CATEGORIES: readonly CommandCategory[] = [
 ]
 
 const PRESETS: Record<GroupPolicyProfile, ReadonlySet<CommandCategory>> = {
-  community: new Set<CommandCategory>(['general', 'profile', 'social', 'stickers', 'downloads', 'groups', 'economy', 'games', 'collection', 'tools']),
+  community: new Set<CommandCategory>(['general', 'profile', 'social', 'stickers', 'downloads', 'groups', 'economy', 'games', 'collection', 'subbots', 'tools']),
   gaming: new Set<CommandCategory>(['general', 'profile', 'social', 'stickers', 'economy', 'games', 'collection', 'tools']),
   support: new Set<CommandCategory>(['general', 'profile', 'downloads', 'groups', 'tools']),
   private: new Set<CommandCategory>(['general', 'profile', 'tools']),
