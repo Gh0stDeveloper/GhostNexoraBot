@@ -18,6 +18,7 @@ import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
 import { telegramCommandAliases } from '../../services/command-platform-support.js'
+import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { telegramOwner, telegramStaff } from './config.js'
 import type { TelegramAdapter } from './adapter.js'
@@ -222,6 +223,13 @@ export class TelegramCommandRouter {
     }
 
     await this.adapter.setTyping?.(normalized.chatId, true).catch(() => undefined)
+    const auditStarted = performance.now()
+    const auditIdentity = message.from
+      ? {
+          userJid: String(message.from.id),
+          displayName: [message.from.first_name, message.from.last_name].filter(Boolean).join(' ') || message.from.username,
+        }
+      : undefined
     try {
       if (parsed.command === 'start' || parsed.command === 'help') await this.help(normalized.chatId, locale, normalized.messageId)
       else if (parsed.command === 'language') await this.language(message, parsed.argText, locale)
@@ -245,8 +253,10 @@ export class TelegramCommandRouter {
         const bridge = telegramBridgeStatus()
         await this.adapter.sendText(normalized.chatId, [t(locale, 'telegram.status.active'), t(locale, 'telegram.status.bridge', { value: bridge.initialized ? t(locale, 'common.initialized') : t(locale, 'common.pending') }), t(locale, 'telegram.status.cached', { count: bridge.cachedMessages }), t(locale, 'telegram.status.channel', { value: bridge.configured ? t(locale, 'common.yes') : t(locale, 'common.no') })].join('\n'), { replyTo: normalized.messageId })
       }
+      try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, true, undefined, auditIdentity) } catch {}
       return true
     } catch (error) {
+      try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, false, undefined, auditIdentity) } catch {}
       logger.warn({ error, chatId: normalized.chatId, command: parsed.command }, 'Telegram command failed')
       const publicError = localizeLegacyText(error instanceof Error ? error.message : t(locale, 'common.internalError'), locale)
       await this.adapter.sendText(normalized.chatId, t(locale, 'telegram.error.public', { error: publicError }), { replyTo: normalized.messageId }).catch(() => undefined)
