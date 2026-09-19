@@ -21,8 +21,6 @@ opsDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ops_runtime_logs_instance_created
     ON ops_runtime_logs(instance_key, created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_ops_runtime_logs_instance_category_created
-    ON ops_runtime_logs(instance_key, category, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ops_runtime_logs_instance_level_created
     ON ops_runtime_logs(instance_key, level, created_at DESC);
 `)
@@ -33,8 +31,8 @@ const columns = new Set(
 )
 if (!columns.has('category')) {
   opsDb.exec("ALTER TABLE ops_runtime_logs ADD COLUMN category TEXT NOT NULL DEFAULT 'runtime'")
-  opsDb.exec('CREATE INDEX IF NOT EXISTS idx_ops_runtime_logs_instance_category_created ON ops_runtime_logs(instance_key, category, created_at DESC)')
 }
+opsDb.exec('CREATE INDEX IF NOT EXISTS idx_ops_runtime_logs_instance_category_created ON ops_runtime_logs(instance_key, category, created_at DESC)')
 
 function secretValues() {
   return [
