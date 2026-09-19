@@ -2,6 +2,7 @@ import { AlertTriangle, BellRing, CheckCircle2 } from 'lucide-react'
 import { opsExtraT } from '../lib/ops-extra-i18n'
 import { readOpsAlerts, type WebOpsAlert } from '../lib/ops-observability'
 import type { WebLocale } from '../lib/i18n'
+import type { OpsRuntimeStatus } from '../lib/ops'
 
 function alertClass(alert: WebOpsAlert) {
   if (alert.status === 'resolved') return 'ops-badge-good'
@@ -16,22 +17,24 @@ function severityLabel(locale: WebLocale, alert: WebOpsAlert) {
   return opsExtraT(locale, 'alerts.info')
 }
 
-export function OpsAlertCenter({ instanceKey, runtimeFresh, locale }: {
+export function OpsAlertCenter({ instanceKey, runtime, locale }: {
   instanceKey: string
-  runtimeFresh: boolean
+  runtime: OpsRuntimeStatus
   locale: WebLocale
 }) {
   const persisted = readOpsAlerts(instanceKey, 20)
   const alerts: WebOpsAlert[] = [...persisted]
-  if (!runtimeFresh) {
+  const staleExpectedRuntime = runtime.reportedConnected && runtime.updatedAt > 0 && !runtime.fresh
+  if (staleExpectedRuntime) {
+    const staleDetectedAt = runtime.updatedAt + 180_000
     alerts.unshift({
       key: 'runtime:stale-web',
       severity: 'critical',
       title: opsExtraT(locale, 'alerts.runtimeStaleTitle'),
       detail: opsExtraT(locale, 'alerts.runtimeStaleDetail'),
       status: 'open',
-      openedAt: Date.now(),
-      updatedAt: Date.now(),
+      openedAt: staleDetectedAt,
+      updatedAt: staleDetectedAt,
       resolvedAt: null,
       occurrences: 1,
     })
