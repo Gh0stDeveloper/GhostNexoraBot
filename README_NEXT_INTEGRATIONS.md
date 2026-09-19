@@ -1119,7 +1119,7 @@ Cierre:
 
 ## E12. Actualizaciones desde Dashboard
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Mostrar:
 
@@ -1136,7 +1136,7 @@ Fetch → Dependencies → Build → Migration → Restart → Healthcheck.
 
 Nunca ocultar el error real al owner.
 
-Implementación E12 en validación:
+Implementación E12:
 
 - sección Owner-only `Actualizaciones` forzada a MainBot;
 - versión instalada desde `package.json`, commit actual y rama desde Git local;
@@ -1146,13 +1146,25 @@ Implementación E12 en validación:
 - pipeline visible Fetch → Dependencies → Build → Migration → Restart → Healthcheck;
 - `update.sh` reporta progreso por etapa y healthcheck HTTP real después del restart;
 - fallos conservan contexto real del comando/log y se sanitizan antes de persistir;
-- el Owner ve el error diagnóstico completo sanitizado;
+- el Owner ve el error diagnóstico completo sanitizado, incluyendo contexto de systemd/journal cuando falla Bot, Web o LLM;
+- el estado queda en modo `0640` y conserva el owner/grupo del directorio de datos para que Web pueda leer progreso mientras el updater root trabaja;
 - botón `Actualizar ahora` protegido por permiso, CSRF, MFA y reautenticación reciente;
 - Next.js nunca ejecuta shell: sólo crea un job y el archivo fijo `update-request`;
 - `ghost-nexora-update.path`/runner root continúa siendo la única frontera que ejecuta `update.sh`;
 - protección contra solicitudes duplicadas;
 - `.actualizar` y Control API enlazan su request con el job de actualización;
-- smoke ejecutable E12 integrado al CI.
+- smoke ejecutable E12 integrado al CI;
+- `bash -n` valida tanto `update.sh` como `update-request-runner.sh`.
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E12 en verde con progreso persistente, sincronización SQLite, redacción de secretos, permisos `0640` y validación de sintaxis shell;
+- E1, E2 y E11 continúan en verde;
+- auditoría ES/EN e i18n boundary en verde;
+- Atomic wallet multi-process, Global wallet migration, Banking V10, V4 persistence y V5 compatibility en verde;
+- Windows installer, Termux Lite y suite completa de regresiones en verde;
+- CI principal #2892: success sobre `9bec819c28a04be010aa0f2e00d7e86ecf29b255`.
 
 ## E13. Backups mejorados
 
@@ -1370,22 +1382,23 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E9 | Ledger económico auditable y ranking público compacto | TERMINADO | 373f552ff59a8731ba53b6df25d1684747bb3f70 |
 | 2026-09-19 | Fase E10 | Logs en tiempo real sanitizados y aislados por instancia | TERMINADO | 098d691deb9e42be5a4604adceb9a6d395524201 |
 | 2026-09-19 | Fase E11 | Jobs activos, cancelación/reintento y acceso adulto regular corregido | TERMINADO | aa4c4b6dedb4c1f20d63119816874372ef2fdd8a |
+| 2026-09-19 | Fase E12 | Actualizaciones seguras desde Dashboard con progreso y healthcheck | TERMINADO | 9bec819c28a04be010aa0f2e00d7e86ecf29b255 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E12 · Actualizaciones desde Dashboard**.
+La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E13 · Backups mejorados**.
 
 Prioridad inmediata:
 
-1. mostrar versión instalada, commit actual y rama;
-2. detectar y mostrar una nueva versión disponible y su changelog;
-3. reflejar el estado real del update dentro del Dashboard;
-4. modelar el progreso Fetch → Dependencies → Build → Migration → Restart → Healthcheck;
-5. enlazar el progreso con los jobs de actualización creados en E11;
-6. mostrar al Owner el error real sanitizado cuando una etapa falle, sin sustituirlo por mensajes genéricos.
+1. ampliar backups automáticos con política de retención explícita;
+2. mostrar tamaño y hash verificable de cada copia;
+3. permitir descarga y restauración controladas desde Dashboard;
+4. verificar integridad y compatibilidad antes de restaurar;
+5. añadir un restore de prueba que valide la copia sin reemplazar datos activos;
+6. separar backups por tipo: economía, configuración, subbots, sesiones, grupos y completo.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
