@@ -1,5 +1,5 @@
 import { config } from '../config.js'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { CommandContext, NeutralBotCommand } from '../types.js'
 import { getBrandingAsset } from '../services/branding.js'
 import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
@@ -40,7 +40,7 @@ async function sendMenu(ctx: CommandContext, artwork: string | undefined, menu: 
   })
 }
 
-export const generalCommands: BotCommand[] = [
+export const generalCommands: NeutralBotCommand[] = [
   {
     name: 'menu', aliases: ['help', 'comandos'], category: 'general', description: 'Muestra el menú completo con imagen y accesos rápidos en un solo mensaje.',
     async handler(ctx) {
