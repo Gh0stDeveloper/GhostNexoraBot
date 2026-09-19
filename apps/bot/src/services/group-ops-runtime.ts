@@ -693,7 +693,11 @@ async function processOneRequest() {
   const request = opsDb.prepare(`SELECT id, action, group_jid AS groupJid, payload_json AS payloadJson
     FROM ops_group_control_requests
     WHERE instance_key = ? AND status = 'pending'
-    ORDER BY requested_at ASC LIMIT 1`).get(instanceKey) as { id: number; action: string; groupJid?: string | null   payloadJson?: string | null
+    ORDER BY requested_at ASC LIMIT 1`).get(instanceKey) as {
+    id: number
+    action: string
+    groupJid?: string | null
+    payloadJson?: string | null
   } | undefined
   if (!request) return
 
