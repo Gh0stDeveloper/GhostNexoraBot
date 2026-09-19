@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_SESSION_COOKIE, SUBBOT_SESSION_COOKIE, verifySession } from '../../../../lib/auth'
-import { readOpsRuntimeLogs, type WebOpsLogChannel, type WebOpsLogLevel } from '../../../../lib/ops-observability'
+import { readOpsRuntimeLogCounts, readOpsRuntimeLogs, type WebOpsLogChannel, type WebOpsLogLevel } from '../../../../lib/ops-observability'
 import { openBotDb } from '../../../../lib/runtime'
 import { hasPermission } from '../../../../lib/web-security'
 
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     instanceKey,
     rows,
+    counts: readOpsRuntimeLogCounts(instanceKey),
     latestId: rows.reduce((max, row) => Math.max(max, row.id), afterId),
     generatedAt: Date.now(),
   }, {
