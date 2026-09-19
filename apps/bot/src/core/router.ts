@@ -6,11 +6,11 @@ import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
 import { economy } from '../services/economy.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
-import { commandRuntimeDecision, markCommandCooldown } from '../services/command-runtime-config.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
 import { resolveStoredIdentity } from '../services/identity.js'
 import { settings } from './settings.js'
+import { CommandEngine } from './command-engine.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
 import { createWhatsAppAdapter, whatsappBotInstanceId } from '../platform/whatsapp/adapter.js'
@@ -84,13 +84,10 @@ function publicCommandError(commandName: string, error: unknown, locale: LocaleC
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
-  private readonly byName = new Map<string, BotCommand>()
+  private readonly engine: CommandEngine<LegacyCompatibleCommandContext>
 
   constructor(commands: BotCommand[], private readonly options: RouterOptions = {}) {
-    for (const command of commands) {
-      this.byName.set(command.name.toLowerCase(), command)
-      for (const alias of command.aliases ?? []) this.byName.set(alias.toLowerCase(), command)
-    }
+    this.engine = new CommandEngine<LegacyCompatibleCommandContext>(commands)
     try {
       performanceAudit.registerCommands(commands)
     } catch (error) {
@@ -210,7 +207,7 @@ export class CommandRouter {
       return false
     }
     const [typedName = '', ...args] = raw.split(/\s+/)
-    const command = this.byName.get(typedName.toLowerCase())
+    const command = this.engine.resolve(typedName)
     performanceAudit.recordStage('05', performance.now() - matcherStarted)
     if (!command) return false
 
