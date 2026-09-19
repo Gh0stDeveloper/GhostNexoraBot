@@ -5,6 +5,7 @@ import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '.
 import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
+import { commandRuntimeDecision, markCommandCooldown } from '../services/command-runtime-config.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
 import { resolveStoredIdentity } from '../services/identity.js'
@@ -252,6 +253,36 @@ export class CommandRouter {
         }
       }
 
+      const runtimeDecision = commandRuntimeDecision({
+        commandName: command.name,
+        category: command.category,
+        platform: 'whatsapp',
+        isGroup,
+        userId: sender,
+        isOwner,
+        isStaff: isBotStaff,
+        isSubbotOwner,
+      })
+      if (!runtimeDecision.allowed) {
+        finishFilters()
+        const runtimeMessage = runtimeDecision.reason === 'disabled'
+          ? t('router.commandDisabled')
+          : runtimeDecision.reason === 'category_disabled'
+            ? t('router.commandCategoryDisabled', { category: command.category })
+            : runtimeDecision.reason === 'platform_disabled'
+              ? t('router.commandPlatformDisabled', { platform: 'WhatsApp' })
+              : runtimeDecision.reason === 'groups_disabled'
+                ? t('router.commandGroupsDisabled')
+                : runtimeDecision.reason === 'private_disabled'
+                  ? t('router.commandPrivateDisabled')
+                  : runtimeDecision.reason === 'permission'
+                    ? t('router.commandPermission')
+                    : t('router.commandCooldown', { seconds: Math.max(1, Math.ceil(Number(runtimeDecision.remainingMs ?? 0) / 1000)) })
+        await reply(runtimeMessage)
+        await react('🚫').catch(() => undefined)
+        return true
+      }
+
       if (isGroup && !isOwner && !isBotStaff && !isSubbotOwner && !isGroupCommandCategoryAllowed(chatId, command.category)) {
         if (!senderIsGroupAdmin) {
           const metadata = await socket.groupMetadata(chatId).catch(() => null)
@@ -295,6 +326,9 @@ export class CommandRouter {
 
       const executionStarted = performance.now()
       const heapBefore = process.memoryUsage().heapUsed
+      if (!isOwner && !isBotStaff && !isSubbotOwner && runtimeDecision.config.cooldownMs > 0) {
+        markCommandCooldown('main', 'whatsapp', command.name, sender)
+      }
       try {
         await command.handler(context)
         const durationMs = performance.now() - executionStarted
