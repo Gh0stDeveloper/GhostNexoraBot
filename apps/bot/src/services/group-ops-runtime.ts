@@ -5,6 +5,10 @@ import { setOpsAlert } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 import { recordOpsRuntimeLog } from './ops-runtime-log.js'
 import { mergePlatformGroups, removePlatformGroup, upsertPlatformGroup } from './platform-group-registry.js'
+import { economy } from './economy.js'
+import { community } from './community.js'
+import { groupControlsV9 } from './group-controls-v9.js'
+import { getGroupCommandPolicy, setGroupCategoryOverride } from './group-command-policy.js'
 
 const instanceKey = opsInstanceKey()
 let currentSocket: WASocket | null = null
@@ -90,6 +94,36 @@ opsDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ops_group_daily_senders_instance_day
     ON ops_group_daily_senders(instance_key, day DESC);
+  CREATE TABLE IF NOT EXISTS ops_group_members (
+    instance_key TEXT NOT NULL,
+    group_jid TEXT NOT NULL,
+    member_jid TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    is_super_admin INTEGER NOT NULL DEFAULT 0,
+    is_bot INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(instance_key, group_jid, member_jid)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_group_members_group
+    ON ops_group_members(instance_key, group_jid, is_admin DESC, member_jid ASC);
+  CREATE TABLE IF NOT EXISTS ops_group_settings_snapshot (
+    instance_key TEXT NOT NULL,
+    group_jid TEXT NOT NULL,
+    bot_enabled INTEGER NOT NULL DEFAULT 1,
+    welcome INTEGER NOT NULL DEFAULT 0,
+    goodbye INTEGER NOT NULL DEFAULT 0,
+    anti_link INTEGER NOT NULL DEFAULT 0,
+    anti_spam INTEGER NOT NULL DEFAULT 0,
+    adult_allowed INTEGER NOT NULL DEFAULT 0,
+    restricted_mode INTEGER NOT NULL DEFAULT 0,
+    language TEXT,
+    welcome_text TEXT,
+    goodbye_text TEXT,
+    policy_profile TEXT NOT NULL DEFAULT 'community',
+    adult_category_allowed INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(instance_key, group_jid)
+  );
 `)
 
 function ensureColumn(table: string, column: string, definition: string) {
@@ -103,6 +137,7 @@ ensureColumn('ops_groups', 'picture_url', 'TEXT')
 ensureColumn('ops_groups', 'picture_updated_at', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('ops_instance_status', 'last_group_sync_attempt_at', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('ops_instance_status', 'last_group_sync_error', 'TEXT')
+ensureColumn('ops_group_control_requests', 'payload_json', 'TEXT')
 
 type ParticipatingGroup = {
   id?: string
@@ -111,7 +146,133 @@ type ParticipatingGroup = {
   restrict?: boolean
   creation?: number
   desc?: string
-  participants?: Array<{ admin?: string | null }>
+  participants?: Array<{
+    id?: string | null
+    lid?: string | null
+    phoneNumber?: string | null
+    admin?: string | null
+  }>
+}
+
+
+function normalizedParticipantJid(participant: NonNullable<ParticipatingGroup['participants']>[number]) {
+  const candidates = [participant.phoneNumber, participant.id, participant.lid]
+  for (const candidate of candidates) {
+    const raw = String(candidate ?? '').trim()
+    if (!raw) continue
+    try { return jidNormalizedUser(raw) } catch { return raw }
+  }
+  return ''
+}
+
+function syncGroupMembers(groupJid: string, participants: NonNullable<ParticipatingGroup['participants']>, stamp = Date.now()) {
+  const socket = currentSocket
+  const own = socket ? ownParticipantIds(socket) : new Set<string>()
+  opsDb.exec('BEGIN IMMEDIATE')
+  try {
+    opsDb.prepare('DELETE FROM ops_group_members WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
+    const insert = opsDb.prepare(`INSERT INTO ops_group_members(
+        instance_key, group_jid, member_jid, is_admin, is_super_admin, is_bot, updated_at
+      ) VALUES(?, ?, ?, ?, ?, ?, ?)`)
+    for (const participant of participants) {
+      const memberJid = normalizedParticipantJid(participant)
+      if (!memberJid) continue
+      const isBot = own.has(memberJid)
+      insert.run(
+        instanceKey,
+        groupJid,
+        memberJid,
+        participant.admin ? 1 : 0,
+        participant.admin === 'superadmin' ? 1 : 0,
+        isBot ? 1 : 0,
+        stamp,
+      )
+    }
+    opsDb.exec('COMMIT')
+  } catch (error) {
+    opsDb.exec('ROLLBACK')
+    throw error
+  }
+}
+
+function syncGroupSettingsSnapshot(groupJid: string) {
+  if (!groupJid.endsWith('@g.us')) return
+  const policy = economy.getGroupPolicy(groupJid)
+  const communitySettings = community.getGroupSettings(groupJid)
+  const controls = groupControlsV9.get(groupJid)
+  const commandPolicy = getGroupCommandPolicy(groupJid, instanceKey)
+  opsDb.prepare(`INSERT INTO ops_group_settings_snapshot(
+      instance_key, group_jid, bot_enabled, welcome, goodbye, anti_link, anti_spam,
+      adult_allowed, restricted_mode, language, welcome_text, goodbye_text,
+      policy_profile, adult_category_allowed, updated_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(instance_key, group_jid) DO UPDATE SET
+      bot_enabled = excluded.bot_enabled,
+      welcome = excluded.welcome,
+      goodbye = excluded.goodbye,
+      anti_link = excluded.anti_link,
+      anti_spam = excluded.anti_spam,
+      adult_allowed = excluded.adult_allowed,
+      restricted_mode = excluded.restricted_mode,
+      language = excluded.language,
+      welcome_text = excluded.welcome_text,
+      goodbye_text = excluded.goodbye_text,
+      policy_profile = excluded.policy_profile,
+      adult_category_allowed = excluded.adult_category_allowed,
+      updated_at = excluded.updated_at`)
+    .run(
+      instanceKey,
+      groupJid,
+      communitySettings.botEnabled ? 1 : 0,
+      policy.welcome ? 1 : 0,
+      communitySettings.goodbyeEnabled ? 1 : 0,
+      policy.antiLink ? 1 : 0,
+      policy.antiSpam ? 1 : 0,
+      policy.adultAllowed ? 1 : 0,
+      controls.restrictedMode ? 1 : 0,
+      communitySettings.language,
+      communitySettings.welcomeText,
+      communitySettings.goodbyeText,
+      commandPolicy.profile,
+      commandPolicy.effective.adult ? 1 : 0,
+      Date.now(),
+    )
+}
+
+function applyGroupConfiguration(groupJid: string, payload: Record<string, unknown>) {
+  const bool = (key: string, fallback = false) => {
+    const value = payload[key]
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'number') return value !== 0
+    const normalized = String(value ?? '').trim().toLowerCase()
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+    return fallback
+  }
+  const welcome = bool('welcome')
+  const goodbye = bool('goodbye')
+  const antiLink = bool('antiLink')
+  const antiSpam = bool('antiSpam')
+  const adultAllowed = bool('adultAllowed')
+  const restrictedMode = bool('restrictedMode')
+  const botEnabled = bool('botEnabled', true)
+  const languageRaw = String(payload.language ?? '').trim().toLowerCase()
+  const language = languageRaw === 'es' || languageRaw === 'en' ? languageRaw : null
+  const welcomeText = String(payload.welcomeText ?? '').trim().slice(0, 700) || null
+  const goodbyeText = String(payload.goodbyeText ?? '').trim().slice(0, 700) || null
+
+  economy.setGroupPolicy(groupJid, 'welcome', welcome)
+  economy.setGroupPolicy(groupJid, 'antiLink', antiLink)
+  economy.setGroupPolicy(groupJid, 'antiSpam', antiSpam)
+  economy.setGroupPolicy(groupJid, 'adultAllowed', adultAllowed)
+  community.setGoodbyeEnabled(groupJid, goodbye)
+  community.setGroupBotEnabled(groupJid, botEnabled)
+  community.setGroupLanguage(groupJid, language)
+  community.setGroupMessage(groupJid, 'welcome', welcomeText)
+  community.setGroupMessage(groupJid, 'goodbye', goodbyeText)
+  groupControlsV9.setRestrictedMode(groupJid, restrictedMode)
+  setGroupCategoryOverride(groupJid, 'adult', adultAllowed ? 'allow' : 'deny', instanceKey)
+  syncGroupSettingsSnapshot(groupJid)
 }
 
 function currentGroupCount() {
@@ -237,6 +398,9 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
       stamp,
     )
 
+  if (participants.length) syncGroupMembers(jid, participants, stamp)
+  syncGroupSettingsSnapshot(jid)
+
   upsertPlatformGroup('whatsapp', {
     externalId: jid,
     name: subject || jid,
@@ -297,6 +461,8 @@ function removeObservedGroup(groupJid: string) {
   if (!groupJid.endsWith('@g.us')) return
   opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
   opsDb.prepare('DELETE FROM ops_group_chat_preferences WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
+  opsDb.prepare('DELETE FROM ops_group_members WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
+  opsDb.prepare('DELETE FROM ops_group_settings_snapshot WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
   removePlatformGroup('whatsapp', groupJid, instanceKey)
   groupRefreshAt.delete(groupJid)
   touchRuntime({ groupCount: currentGroupCount() })
@@ -531,10 +697,11 @@ async function syncGroups(connectionProbe = false) {
 
 async function processOneRequest() {
   if (!currentSocket || !connectionOpen || processing || !currentSocket.authState.creds.registered) return
-  const request = opsDb.prepare(`SELECT id, action, group_jid AS groupJid
+  const request = opsDb.prepare(`SELECT id, action, group_jid AS groupJid, payload_json AS payloadJson
     FROM ops_group_control_requests
     WHERE instance_key = ? AND status = 'pending'
-    ORDER BY requested_at ASC LIMIT 1`).get(instanceKey) as { id: number; action: string; groupJid?: string | null } | undefined
+    ORDER BY requested_at ASC LIMIT 1`).get(instanceKey) as { id: number; action: string; groupJid?: string | null   payloadJson?: string | null
+  } | undefined
   if (!request) return
 
   processing = true
@@ -573,6 +740,30 @@ async function processOneRequest() {
       if (!groupJid.endsWith('@g.us')) throw new Error('JID de grupo inválido.')
       await currentSocket.groupSettingUpdate(groupJid, request.action === 'lock:on' ? 'locked' : 'unlocked')
       await syncOneGroup(groupJid, true)
+    } else if (request.action === 'config') {
+      const groupJid = String(request.groupJid ?? '')
+      if (!groupJid.endsWith('@g.us')) throw new Error('JID de grupo inválido.')
+      let payload: Record<string, unknown> = {}
+      try {
+        const parsed = request.payloadJson ? JSON.parse(request.payloadJson) : {}
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as Record<string, unknown>
+      } catch {
+        throw new Error('Configuración de grupo inválida.')
+      }
+      applyGroupConfiguration(groupJid, payload)
+    } else if (request.action === 'broadcast') {
+      const groupJid = String(request.groupJid ?? '')
+      if (!groupJid.endsWith('@g.us')) throw new Error('JID de grupo inválido.')
+      let payload: Record<string, unknown> = {}
+      try {
+        const parsed = request.payloadJson ? JSON.parse(request.payloadJson) : {}
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as Record<string, unknown>
+      } catch {
+        throw new Error('Mensaje de grupo inválido.')
+      }
+      const text = String(payload.message ?? '').trim().slice(0, 2000)
+      if (!text) throw new Error('El anuncio del grupo está vacío.')
+      await currentSocket.sendMessage(groupJid, { text })
     } else {
       throw new Error('Acción de grupo no soportada.')
     }
