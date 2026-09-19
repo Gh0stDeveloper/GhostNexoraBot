@@ -1059,7 +1059,7 @@ Cierre:
 
 ## E11. Jobs activos
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Mostrar trabajos como:
 
@@ -1083,6 +1083,25 @@ Acciones:
 - cancelar;
 - reintentar;
 - ver error.
+
+Implementación E11 en validación:
+
+- registro persistente `ops_jobs` aislado por `instance_key`;
+- requests de control `ops_job_requests` para cancelar/reintentar desde Web sin ejecutar acciones en el proceso de Next.js;
+- estados waiting/running/completed/failed/cancelled, progreso 0-100, timestamps, origen, detalle y error sanitizado;
+- retención máxima de 7 días y 500 jobs por instancia;
+- jobs activos antiguos se marcan como fallidos después de un reinicio/stale timeout;
+- yt-dlp y FFmpeg se registran como procesos cancelables reales;
+- generaciones Ollama se registran desde la cola y pueden abortarse;
+- downloads de comandos se muestran como jobs padre con progreso por etapa;
+- broadcasts reportan progreso y pueden detener el envío a los grupos restantes;
+- solicitudes de actualización segura se registran y son reintentables;
+- sección `Jobs` en Admin y Subbot con filtros por estado/tipo, búsqueda, progreso, error y auto-refresh;
+- Cancelar/Reintentar sólo se muestran cuando el job declara la capacidad correspondiente;
+- permisos `jobs:view` / `jobs:manage`, CSRF, MFA general del panel y aislamiento MainBot/subbots;
+- limpieza de jobs al eliminar permanentemente un subbot;
+- auditoría administrativa por `jobId`;
+- smoke ejecutable E11 integrado al CI.
 
 ## E12. Actualizaciones desde Dashboard
 
