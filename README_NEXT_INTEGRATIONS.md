@@ -1006,7 +1006,7 @@ Cierre:
 
 ## E10. Logs en tiempo real
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Filtros:
 
@@ -1027,13 +1027,15 @@ Sanitizar antes de mostrar:
 - credenciales;
 - session IDs.
 
-Implementación E10 en validación:
+Implementación E10:
 
 - `ops_runtime_logs` ampliado con categoría indexada y migración compatible con instalaciones existentes;
+- backfill automático de categorías para logs históricos durante la migración;
 - sanitización antes de persistir: secrets configurados, Bearer/Basic, query tokens, API keys, passwords, cookies, session IDs y JWT;
-- segunda sanitización defensiva al leer desde Web;
+- segunda sanitización defensiva al leer desde Web, incluyendo valores exactos de secrets configurados;
 - retención limitada a 72 horas y máximo 1,000 eventos por instancia;
 - stream incremental por ID mediante `/api/ops/logs`, sin cache y con aislamiento de sesión;
+- endpoint protegido por permisos y 2FA/MFA completado;
 - polling live cada 3 segundos, con pausa manual y pausa automática cuando la pestaña no está visible;
 - filtros Todos, WhatsApp, Discord, Telegram, Errores, Downloads, API y Comandos;
 - filtro adicional por nivel y búsqueda por fuente/evento;
@@ -1043,6 +1045,17 @@ Implementación E10 en validación:
 - sección `Logs` para Owner/Admin/Support y portal de subbot;
 - Owner puede cambiar de instancia; Admin/Support quedan en MainBot; un subbot sólo consulta su propia instancia;
 - smoke dedicado E10 integrado al CI.
+
+Cierre:
+
+- Typecheck y Build en verde;
+- E1 y E2 actualizados y en verde conservando navegación/diagnóstico aislados;
+- smoke E10 en verde con migración de schema antiguo, backfill de categoría y pruebas reales de redacción de secretos;
+- API live con permiso `logs:view`, aislamiento por instancia y MFA obligatorio;
+- auditoría ES/EN e i18n boundary en verde;
+- Atomic wallet multi-process, Global wallet migration, Banking V10, V4 persistence y V5 compatibility en verde;
+- Windows installer y suite completa de regresiones en verde;
+- CI principal #2831: success sobre `098d691deb9e42be5a4604adceb9a6d395524201`.
 
 ## E11. Jobs activos
 
@@ -1304,22 +1317,23 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
 | 2026-09-19 | Fase E8 | Dashboard de usuarios por instancia y permisos | TERMINADO | d8ae811b618f6c32537bcff4cfbb9d3db36d7e36 |
 | 2026-09-19 | Fase E9 | Ledger económico auditable y ranking público compacto | TERMINADO | 373f552ff59a8731ba53b6df25d1684747bb3f70 |
+| 2026-09-19 | Fase E10 | Logs en tiempo real sanitizados y aislados por instancia | TERMINADO | 098d691deb9e42be5a4604adceb9a6d395524201 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E10 · Logs en tiempo real**.
+La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E11 · Jobs activos**.
 
 Prioridad inmediata:
 
-1. mostrar un stream de logs operativos recientes con actualización continua;
-2. filtrar por WhatsApp, Discord, Telegram, errores, downloads, API y comandos;
-3. sanitizar tokens, API keys, cookies, credenciales y session IDs antes de persistir o mostrar;
-4. mantener aislamiento estricto por `instance_key` entre MainBot y subbots;
-5. limitar retención y volumen para que el panel no afecte al runtime;
-6. integrar la vista al Operations Center con permisos y smoke dedicado en CI.
+1. crear un registro unificado de trabajos activos por instancia;
+2. cubrir yt-dlp, FFmpeg, downloads, broadcasts, IA y actualizaciones;
+3. modelar estados waiting, running, completed, failed y cancelled;
+4. exponer progreso, timestamps, origen y error sanitizado;
+5. permitir cancelar y reintentar sólo cuando el tipo de job lo soporte y el rol tenga permiso;
+6. mantener aislamiento estricto MainBot/subbots e integrar smoke dedicado en CI.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
