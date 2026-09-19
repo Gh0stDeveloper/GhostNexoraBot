@@ -94,6 +94,16 @@ opsDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ops_group_daily_senders_instance_day
     ON ops_group_daily_senders(instance_key, day DESC);
+  CREATE TABLE IF NOT EXISTS ops_group_hourly_stats (
+    instance_key TEXT NOT NULL,
+    group_jid TEXT NOT NULL,
+    hour INTEGER NOT NULL,
+    messages INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(instance_key, group_jid, hour)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_group_hourly_stats_instance_hour
+    ON ops_group_hourly_stats(instance_key, hour DESC);
   CREATE TABLE IF NOT EXISTS ops_group_members (
     instance_key TEXT NOT NULL,
     group_jid TEXT NOT NULL,
@@ -121,6 +131,7 @@ opsDb.exec(`
     goodbye_text TEXT,
     policy_profile TEXT NOT NULL DEFAULT 'community',
     adult_category_allowed INTEGER NOT NULL DEFAULT 0,
+    command_categories_json TEXT NOT NULL DEFAULT '{}',
     updated_at INTEGER NOT NULL,
     PRIMARY KEY(instance_key, group_jid)
   );
@@ -138,6 +149,7 @@ ensureColumn('ops_groups', 'picture_updated_at', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('ops_instance_status', 'last_group_sync_attempt_at', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('ops_instance_status', 'last_group_sync_error', 'TEXT')
 ensureColumn('ops_group_control_requests', 'payload_json', 'TEXT')
+ensureColumn('ops_group_settings_snapshot', 'command_categories_json', "TEXT NOT NULL DEFAULT '{}'")
 
 type ParticipatingGroup = {
   id?: string
@@ -197,8 +209,8 @@ function syncGroupSettingsSnapshot(groupJid: string) {
   opsDb.prepare(`INSERT INTO ops_group_settings_snapshot(
       instance_key, group_jid, bot_enabled, welcome, goodbye, anti_link, anti_spam,
       adult_allowed, restricted_mode, language, welcome_text, goodbye_text,
-      policy_profile, adult_category_allowed, updated_at
-    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      policy_profile, adult_category_allowed, command_categories_json, updated_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_key, group_jid) DO UPDATE SET
       bot_enabled = excluded.bot_enabled,
       welcome = excluded.welcome,
@@ -212,6 +224,7 @@ function syncGroupSettingsSnapshot(groupJid: string) {
       goodbye_text = excluded.goodbye_text,
       policy_profile = excluded.policy_profile,
       adult_category_allowed = excluded.adult_category_allowed,
+      command_categories_json = excluded.command_categories_json,
       updated_at = excluded.updated_at`)
     .run(
       instanceKey,
@@ -228,6 +241,7 @@ function syncGroupSettingsSnapshot(groupJid: string) {
       communitySettings.goodbyeText,
       commandPolicy.profile,
       commandPolicy.effective.adult ? 1 : 0,
+      JSON.stringify(commandPolicy.effective),
       Date.now(),
     )
 }
@@ -430,6 +444,10 @@ function dayBucket(timestamp = Date.now()) {
   return Math.floor(timestamp / 86_400_000)
 }
 
+function hourBucket(timestamp = Date.now()) {
+  return Math.floor(timestamp / 3_600_000)
+}
+
 function senderHash(value: string) {
   return createHash('sha256').update(`${instanceKey}\u0000${value}`).digest('hex').slice(0, 32)
 }
@@ -492,6 +510,12 @@ function recordGroupMessage(message: any) {
   if (!groupJid.endsWith('@g.us') || message?.key?.fromMe) return
   const stamp = Date.now()
   const day = dayBucket(stamp)
+  const hour = hourBucket(stamp)
+  opsDb.prepare(`INSERT INTO ops_group_hourly_stats(instance_key, group_jid, hour, messages, updated_at)
+    VALUES(?, ?, ?, 1, ?)
+    ON CONFLICT(instance_key, group_jid, hour) DO UPDATE SET
+      messages = ops_group_hourly_stats.messages + 1,
+      updated_at = excluded.updated_at`).run(instanceKey, groupJid, hour, stamp)
   opsDb.prepare(`INSERT INTO ops_group_daily_stats(instance_key, group_jid, day, messages, updated_at)
     VALUES(?, ?, ?, 1, ?)
     ON CONFLICT(instance_key, group_jid, day) DO UPDATE SET
@@ -801,12 +825,14 @@ function startLoop() {
 
     if (Math.random() < 0.02) {
       const cutoffDay = dayBucket() - 45
+      const cutoffHour = hourBucket() - 72
       opsDb.prepare("DELETE FROM ops_group_control_requests WHERE status IN ('completed','failed') AND completed_at < ?")
         .run(Date.now() - 7 * 86_400_000)
       opsDb.prepare('DELETE FROM ops_group_chat_preferences WHERE muted_until > 0 AND muted_until <= ?')
         .run(Date.now())
       opsDb.prepare('DELETE FROM ops_group_daily_stats WHERE day < ?').run(cutoffDay)
       opsDb.prepare('DELETE FROM ops_group_daily_senders WHERE day < ?').run(cutoffDay)
+      opsDb.prepare('DELETE FROM ops_group_hourly_stats WHERE hour < ?').run(cutoffHour)
     }
   }, 3000)
   timer.unref?.()
