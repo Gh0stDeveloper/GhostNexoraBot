@@ -4,7 +4,7 @@
 >
 > Estado general: EN PROGRESO
 >
-> Última actualización: 2026-09-18
+> Última actualización: 2026-09-19
 >
 > Repositorio: Gh0stDeveloper/GhostNexoraBot
 
@@ -713,7 +713,7 @@ Cierre:
 
 ## E4. Dashboard de Providers y APIs
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Mostrar:
 
@@ -722,20 +722,43 @@ Mostrar:
 - Jikan;
 - Anime1v;
 - OpenRouter;
-- otros providers.
+- otros providers detectados por tráfico real.
 
 Datos:
 
-- online, degraded, offline;
+- online, degraded, offline, sin datos y no configurado;
 - requests;
 - success rate;
-- errores;
+- éxitos y fallos;
 - latencia media;
 - última latencia;
 - último éxito;
 - último fallo;
-- último error;
-- circuit breaker.
+- último error sanitizado;
+- circuit breaker cerrado, abierto o semiabierto.
+
+Implementación E4:
+
+- sección Providers dedicada en Admin/Support y portal Subbot;
+- aislamiento por `instance_key`: cada subbot solo ve su propia telemetría;
+- catálogo principal visible aunque todavía no exista tráfico;
+- estado de configuración calculado sin exponer API keys, secrets ni tokens;
+- providers adicionales aparecen automáticamente cuando publican telemetría;
+- helper compartido `trackedProviderCall()` para registrar éxito, fallo y latencia sin duplicar lógica;
+- circuit breaker persistente basado en 3 fallos consecutivos y ventana de 5 minutos;
+- LemPi mantiene telemetría global y por endpoint/provider;
+- Spotify publica telemetría de autenticación y Web API;
+- Jikan queda instrumentado en anime, colección/waifus y búsquedas auxiliares;
+- Anime1v, Consumet, WeebAPI y AnimeAPI publican telemetría individual;
+- OpenRouter publica telemetría de estado y peticiones de IA;
+- la vista Web calcula estado operativo, error rate, success rate y circuit state;
+- la telemetría detallada de providers salió de Developer/Diagnostics para evitar duplicación y ahora vive en su pantalla de producto.
+
+Cierre:
+
+- Typecheck, Build y smoke E4 obligatorios en CI;
+- E4 mantiene compatibilidad con MainBot y aislamiento de subbots;
+- no se muestran valores de configuración sensibles en la Web.
 
 ## E5. Centro de comandos
 
