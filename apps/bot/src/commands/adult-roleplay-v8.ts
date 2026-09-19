@@ -5,7 +5,7 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { economy } from '../services/economy.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 import { digitsFromJid, getContextInfo } from '../utils/message.js'
-import { pickAdultReactionMedia } from '../services/adult-media-v8.js'
+import { normalizeAdultReactionMediaForWhatsapp, pickAdultReactionMedia } from '../services/adult-media-v8.js'
 import {
   listAdultRoleplayMessages,
   renderAdultRoleplayMessage,
@@ -270,23 +270,29 @@ async function run(def: Def, ctx: CommandContext) {
 
   const local = await pickAdultReactionMedia(def.name)
   if (local) {
-    const isVideo = /video|gif|webm/i.test(local.mimeType)
+    const animated = /^(image\/gif|video\/(gif|webm))$/i.test(local.mimeType)
+    const normalized = animated
+      ? await normalizeAdultReactionMediaForWhatsapp(local.data, local.mimeType)
+      : { data: local.data, mimeType: local.mimeType }
+    const isVideo = /^video\//i.test(normalized.mimeType)
+
     if (isVideo) {
       await sendGifPlayback(
         ctx,
-        local.data,
+        normalized.data,
         caption,
         mentions,
-        local.mimeType.startsWith('video/') ? local.mimeType : 'video/mp4',
+        normalized.mimeType,
       )
       return
     }
+
     await sendMediaOrTextFallback(
       ctx,
       async () => {
         await ctx.socket.sendMessage(
           ctx.chatId,
-          { image: local.data, caption, mentions },
+          { image: normalized.data, caption, mentions },
           { quoted: ctx.message },
         )
       },
