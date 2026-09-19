@@ -86,6 +86,6 @@ export function OperationsOverview({ snapshot, platformStatuses, locale }: {
       </div>
     </section>
 
-    <OpsAlertCenter instanceKey={snapshot.instanceKey} runtimeFresh={snapshot.runtime.fresh} locale={locale}/>
+    <OpsAlertCenter instanceKey={snapshot.instanceKey} runtime={snapshot.runtime} locale={locale}/>
   </div>
 }
