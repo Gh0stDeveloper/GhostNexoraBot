@@ -16,6 +16,7 @@ import { RealtimeLogsDashboard } from '../../components/realtime-logs-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
 import { UserDashboard } from '../../components/user-dashboard'
+import { UpdateDashboard } from '../../components/update-dashboard'
 import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { readEconomyLedger } from '../../lib/economy-ledger'
 import { getWebLocale } from '../../lib/i18n-server'
@@ -26,6 +27,7 @@ import { readOpsRuntimeLogCounts, readOpsRuntimeLogs } from '../../lib/ops-obser
 import { readMainPlatformStatuses, subbotPlatformStatuses, type WebPlatformId } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 import { readUserDashboardDetail, searchUserDashboard } from '../../lib/user-dashboard'
+import { readUpdateDashboard } from '../../lib/update-dashboard'
 import { hasPermission, roleLabel, type PrivilegedWebRole } from '../../lib/web-security'
 
 export const dynamic = 'force-dynamic'
@@ -40,7 +42,7 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'users' | 'economy' | 'logs' | 'jobs' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'users' | 'economy' | 'logs' | 'jobs' | 'updates' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
@@ -53,6 +55,7 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
     ...(role === 'owner' ? [['economy', t('nav.economy'), Coins] as [AdminSection, string, typeof Bot]] : []),
     ['logs', t('nav.logs'), SquareTerminal],
     ['jobs', t('nav.jobs'), Activity],
+    ...(role === 'owner' ? [['updates', t('nav.updates'), RefreshCcw] as [AdminSection, string, typeof Bot]] : []),
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
   ]
@@ -65,7 +68,7 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'economy', 'logs', 'jobs', 'audit', 'diagnostics', 'management', 'subbots', 'security']
+    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'economy', 'logs', 'jobs', 'updates', 'audit', 'diagnostics', 'management', 'subbots', 'security']
     : ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'logs', 'jobs', 'audit', 'diagnostics', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
@@ -95,7 +98,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const totalBytes = role === 'owner' ? subbots.reduce((sum, item) => sum + Number(item.downloadBytes), 0) : 0
   db?.close()
 
-  const requestedInstance = role === 'owner' ? String(params.instance ?? 'main') : 'main'
+  const requestedInstance = role === 'owner' && section !== 'updates' ? String(params.instance ?? 'main') : 'main'
   const validSubbotIds = new Set(subbots.map((item) => item.id))
   const match = /^subbot:(\d+)$/.exec(requestedInstance)
   const selectedInstance = role === 'owner' && match?.[1] && validSubbotIds.has(Number(match[1]))
@@ -125,6 +128,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const canViewLogs = hasPermission(role, 'logs:view')
   const canViewJobs = hasPermission(role, 'jobs:view')
   const canManageJobs = hasPermission(role, 'jobs:manage')
+  const canViewUpdates = hasPermission(role, 'updates:view')
+  const canManageUpdates = hasPermission(role, 'updates:manage')
   const canViewUsers = hasPermission(role, 'users:view')
   const userPermissions = {
     financial: hasPermission(role, 'users:financial'),
@@ -161,6 +166,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const jobsSnapshot = section === 'jobs' && canViewJobs
     ? readOpsJobs(selectedInstance, { ...jobFilters, limit: 250 })
     : { rows: [], counts: { active: 0, waiting: 0, running: 0, completed: 0, failed: 0, cancelled: 0 } }
+  const updateSnapshot = section === 'updates' && canViewUpdates
+    ? await readUpdateDashboard()
+    : null
   const navIcon: Record<AdminSection, UnifiedNavIcon> = {
     overview: 'dashboard',
     platforms: 'platforms',
@@ -171,6 +179,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     economy: 'economy',
     logs: 'logs',
     jobs: 'jobs',
+    updates: 'updates',
     audit: 'audit',
     diagnostics: 'diagnostics',
     management: 'settings',
@@ -284,6 +293,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {section === 'economy' && canViewLedger && ledgerSnapshot ? <div className="mt-6"><EconomyLedgerDashboard snapshot={ledgerSnapshot} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale} filters={ledgerFilters}/></div> : null}
       {section === 'logs' && canViewLogs ? <div className="mt-6"><RealtimeLogsDashboard initialRows={realtimeLogRows} initialCounts={realtimeLogCounts} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale}/></div> : null}
       {section === 'jobs' && canViewJobs ? <div className="mt-6"><JobsDashboard snapshot={jobsSnapshot} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canManage={canManageJobs} filters={jobFilters}/></div> : null}
+      {section === 'updates' && canViewUpdates && updateSnapshot ? <div className="mt-6"><UpdateDashboard snapshot={updateSnapshot} locale={locale} csrfToken={csrfToken} canManage={canManageUpdates}/></div> : null}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
 
       {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit={canResetAudit}/></div>}
