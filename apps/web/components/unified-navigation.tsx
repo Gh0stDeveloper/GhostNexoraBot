@@ -63,16 +63,19 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   account: UserRound,
 }
 
-function NavigationList({ items, close, ariaLabel }: { items: UnifiedNavItem[]; close?: () => void; ariaLabel: string }) {
+function NavigationList({ items, close, ariaLabel, hash }: { items: UnifiedNavItem[]; close?: () => void; ariaLabel: string; hash: string }) {
   return <nav className="ops-sidebar-nav" aria-label={ariaLabel}>
     {items.map((item) => {
       const Icon = icons[item.icon]
+      const anchorActive = item.href.startsWith('#')
+        ? (hash ? item.href === hash : item.id === 'home')
+        : item.active
       return <a
         key={item.id}
         href={item.href}
         onClick={close}
-        aria-current={item.active ? 'page' : undefined}
-        className={item.active ? 'ops-sidebar-link ops-sidebar-link-active' : 'ops-sidebar-link'}
+        aria-current={anchorActive ? 'page' : undefined}
+        className={anchorActive ? 'ops-sidebar-link ops-sidebar-link-active' : 'ops-sidebar-link'}
       >
         <Icon className="size-4 shrink-0"/>
         <span className="truncate">{item.label}</span>
@@ -103,6 +106,14 @@ export function UnifiedNavigation({
   closeLabel: string
 }) {
   const [open, setOpen] = useState(false)
+  const [hash, setHash] = useState('')
+
+  useEffect(() => {
+    const syncHash = () => setHash(window.location.hash)
+    syncHash()
+    window.addEventListener('hashchange', syncHash)
+    return () => window.removeEventListener('hashchange', syncHash)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -133,7 +144,7 @@ export function UnifiedNavigation({
       {badge ? <div className="px-3 pb-2"><span className="ops-badge-good">{badge}</span></div> : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-        <NavigationList items={items} ariaLabel={ariaLabel}/>
+        <NavigationList items={items} ariaLabel={ariaLabel} hash={hash}/>
       </div>
 
       {actionHref && actionLabel ? <div className="border-t border-white/[.07] p-3">
@@ -176,7 +187,7 @@ export function UnifiedNavigation({
         </div>
         {badge ? <div className="px-4 pt-4"><span className="ops-badge-good">{badge}</span></div> : null}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <NavigationList items={items} close={() => setOpen(false)} ariaLabel={ariaLabel}/>
+          <NavigationList items={items} close={() => setOpen(false)} ariaLabel={ariaLabel} hash={hash}/>
         </div>
         {actionHref && actionLabel ? <div className="border-t border-white/[.07] p-4">
           <a href={actionHref} onClick={() => setOpen(false)} className="ops-button-primary w-full"><LogIn className="size-4"/>{actionLabel}</a>
