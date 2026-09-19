@@ -261,6 +261,27 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+      - name: Windows immediate CLI shim smoke
+        shell: powershell
+        run: |
+          $source = Get-Content scripts\install-windows.ps1 -Raw
+          if ($source -notmatch "Microsoft\\WindowsApps") { throw 'Installer no crea el shim inmediato en WindowsApps.' }
+          if ($source -notmatch 'ghostnexora\.cmd') { throw 'Installer no publica ghostnexora.cmd.' }
+          if ($source -notmatch 'ExecutionPolicy Bypass') { throw 'Launcher debe seguir evitando la policy para su script administrado.' }
+
+          $windowsApps = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+          New-Item -ItemType Directory -Force -Path $windowsApps | Out-Null
+          $probe = Join-Path $windowsApps 'ghostnexora-ci-probe.cmd'
+          Set-Content -LiteralPath $probe -Value "@echo off`r`nexit /b 0" -Encoding ascii
+          try {
+            $resolved = Get-Command ghostnexora-ci-probe.cmd -ErrorAction Stop
+            if (-not $resolved) { throw 'PowerShell no resolvió el comando colocado en WindowsApps.' }
+            & ghostnexora-ci-probe.cmd
+            if ($LASTEXITCODE -ne 0) { throw 'El shim CMD inmediato no se pudo ejecutar.' }
+          } finally {
+            Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Windows manager help smoke
         shell: powershell
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/ghostnexora.ps1 help
