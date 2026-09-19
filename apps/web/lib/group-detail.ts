@@ -153,11 +153,15 @@ export function readGroupDetail(instanceKey: string, groupJid: string): GroupDet
 
     let settings = defaultSettings()
     if (tableExists(db, 'ops_group_settings_snapshot')) {
+      const settingsColumns = tableColumns(db, 'ops_group_settings_snapshot')
+      const commandCategoriesColumn = settingsColumns.has('command_categories_json')
+        ? 'command_categories_json AS commandCategoriesJson'
+        : "'{}' AS commandCategoriesJson"
       const row = db.prepare(`SELECT bot_enabled AS botEnabled, welcome, goodbye, anti_link AS antiLink,
           anti_spam AS antiSpam, adult_allowed AS adultAllowed, restricted_mode AS restrictedMode,
           language, welcome_text AS welcomeText, goodbye_text AS goodbyeText,
           policy_profile AS policyProfile, adult_category_allowed AS adultCategoryAllowed,
-          command_categories_json AS commandCategoriesJson, updated_at AS updatedAt
+          ${commandCategoriesColumn}, updated_at AS updatedAt
         FROM ops_group_settings_snapshot WHERE instance_key = ? AND group_jid = ?`)
         .get(instanceKey, groupJid) as Record<string, unknown> | undefined
       if (row) {
