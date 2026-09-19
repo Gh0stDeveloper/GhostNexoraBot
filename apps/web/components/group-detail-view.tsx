@@ -261,7 +261,7 @@ export function GroupDetailView({
           </div>
           <label className="mt-4 block text-xs font-semibold text-zinc-500"><Languages className="mr-1.5 inline size-3.5"/>{labels.language}
             <select name="language" defaultValue={detail.settings.language ?? ''} className="ops-input mt-2 w-full" disabled={!canManage}>
-              <option value="">{labels.automatic}</option><option value="es">Español</option><option value="en">English</option>
+              <option value="">{labels.automatic}</option><option value="es">ES</option><option value="en">EN</option>
             </select>
           </label>
           <label className="mt-4 block text-xs font-semibold text-zinc-500">{labels.welcomeText}
