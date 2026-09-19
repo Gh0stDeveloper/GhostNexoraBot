@@ -288,6 +288,7 @@ export function claimCurrentWaifu(userJid: string) {
         roll.favorites, roll.rarity, roll.value, roll.claimPrice, now())
     db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
       .run(userJid, 'waifu_claim', -roll.claimPrice, `MAL:${roll.characterId} ${roll.name}`, now())
+    economy.recordGlobalLedger(userJid, 'waifu_claim', -roll.claimPrice, undefined, `MAL:${roll.characterId} ${roll.name}`)
     db.prepare('DELETE FROM waifu_rolls WHERE user_jid = ?').run(userJid)
     db.exec('COMMIT')
   } catch (error) {
@@ -339,6 +340,7 @@ export function sellWaifu(ownerJid: string, characterId: number) {
     db.prepare('UPDATE economy_users SET wallet = wallet + ? WHERE user_jid = ?').run(payout, ownerJid)
     db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
       .run(ownerJid, 'waifu_sell', payout, `MAL:${characterId} ${claim.name}`, now())
+    economy.recordGlobalLedger(ownerJid, 'waifu_sell', payout, undefined, `MAL:${characterId} ${claim.name}`)
     db.exec('COMMIT')
   } catch (error) {
     db.exec('ROLLBACK')
