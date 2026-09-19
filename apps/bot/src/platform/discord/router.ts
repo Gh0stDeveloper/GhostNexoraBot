@@ -17,6 +17,7 @@ import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
 import { discordCommandAliases } from '../../services/command-platform-support.js'
+import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import type { DiscordAdapter } from './adapter.js'
@@ -379,8 +380,42 @@ export class DiscordCommandRouter {
   }
 
   private async execute(invocation: Invocation) {
-    const auditStarted = performance.now()
     const locale = this.locale(invocation)
+    const isOwner = discordOwner(invocation.user.id)
+    const isStaff = discordStaff(invocation.user.id)
+    const category = resolveConfiguredCommandCategory(invocation.command)
+    const runtimeDecision = commandRuntimeDecision({
+      commandName: invocation.command,
+      category,
+      platform: 'discord',
+      isGroup: Boolean(invocation.guildId),
+      userId: invocation.user.id,
+      isOwner,
+      isStaff,
+    })
+    if (!runtimeDecision.allowed) {
+      const message = runtimeDecision.reason === 'disabled'
+        ? t(locale, 'router.commandDisabled')
+        : runtimeDecision.reason === 'category_disabled'
+          ? t(locale, 'router.commandCategoryDisabled', { category })
+          : runtimeDecision.reason === 'platform_disabled'
+            ? t(locale, 'router.commandPlatformDisabled', { platform: 'Discord' })
+            : runtimeDecision.reason === 'groups_disabled'
+              ? t(locale, 'router.commandGroupsDisabled')
+              : runtimeDecision.reason === 'private_disabled'
+                ? t(locale, 'router.commandPrivateDisabled')
+                : runtimeDecision.reason === 'permission'
+                  ? t(locale, 'router.commandPermission')
+                  : t(locale, 'router.commandCooldown', { seconds: Math.max(1, Math.ceil(Number(runtimeDecision.remainingMs ?? 0) / 1000)) })
+      await this.adapter.sendText(invocation.channelId, message, invocation.messageId ? { replyTo: invocation.messageId } : undefined)
+      return true
+    }
+
+    if (!isStaff && runtimeDecision.config.cooldownMs > 0) {
+      markCommandCooldown('discord', runtimeDecision.commandName, invocation.user.id)
+    }
+
+    const auditStarted = performance.now()
     await this.adapter.setTyping?.(invocation.channelId, true).catch(() => undefined)
     try {
       if (invocation.command === 'help') await this.help(invocation, locale)
