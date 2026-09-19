@@ -72,6 +72,9 @@ jobs:
       - name: Phase E11 active jobs smoke
         run: node scripts/phase-e11-active-jobs-smoke.mjs
 
+      - name: Phase E12 dashboard updater smoke
+        run: node scripts/phase-e12-dashboard-update-smoke.mjs
+
       - name: Adult regular-user access smoke
         run: node scripts/adult-regular-user-access-smoke.mjs
 
