@@ -1,18 +1,17 @@
-import type { WAMessage, WASocket } from 'baileys'
-import type { NormalizedMessage, PlatformAdapter, PlatformId } from '@ghostnexora/platform-contracts'
+import type {
+  NormalizedMessage,
+  NormalizedUi,
+  OutgoingMedia,
+  PlatformAdapter,
+  PlatformId,
+  SendOptions,
+  SentMessage,
+} from '@ghostnexora/platform-contracts'
+import type { LegacyWhatsAppCommandContext } from './core/legacy-whatsapp-command-context.js'
 import type { SettingsStore } from './core/settings.js'
 import type { LocaleCode, TranslationValues } from './i18n/types.js'
 
-/**
- * Project-local socket type retained as a V1 compatibility bridge.
- *
- * New shared command work must prefer `adapter` + `normalizedMessage`. Existing
- * WhatsApp-specific commands keep `socket`/`message` until they are migrated in
- * controlled batches, so Phase 1 does not break the current command registry.
- */
-export type NexoraSocket = Omit<WASocket, 'sendMessage'> & {
-  sendMessage: (...args: any[]) => Promise<any>
-}
+export type { NexoraSocket } from './core/legacy-whatsapp-command-context.js'
 
 export type CommandCategory =
   | 'general'
@@ -29,16 +28,17 @@ export type CommandCategory =
   | 'tools'
   | 'owner'
 
+/**
+ * Neutral command execution contract.
+ *
+ * B1 intentionally keeps Baileys outside this interface. Commands migrated to
+ * this surface can execute through any PlatformAdapter without knowing about a
+ * WhatsApp socket or WAMessage.
+ */
 export interface CommandContext {
-  /** Neutral V2 transport surface. */
   platform: PlatformId
   adapter: PlatformAdapter
   normalizedMessage: NormalizedMessage
-
-  /** @deprecated V1 WhatsApp compatibility surface. */
-  socket: NexoraSocket
-  /** @deprecated V1 WhatsApp compatibility surface. */
-  message: WAMessage
 
   chatId: string
   sender: string
@@ -56,9 +56,28 @@ export interface CommandContext {
   isSubbotOwner: boolean
   instanceId?: number
   instanceOwnerJid?: string
+
+  /** Reply to the incoming normalized message. */
   reply: (text: string) => Promise<unknown>
+  /** React to the incoming normalized message when the platform supports it. */
   react: (emoji: string) => Promise<unknown>
+
+  /** Neutral transport helpers bound to the current chat. */
+  sendText: (text: string, options?: SendOptions) => Promise<SentMessage>
+  sendMedia: (media: OutgoingMedia, options?: SendOptions) => Promise<SentMessage>
+  sendUi: (ui: NormalizedUi, options?: SendOptions) => Promise<SentMessage>
+  setTyping: (active: boolean) => Promise<void>
+  editMessage: (messageId: string, text: string) => Promise<void>
 }
+
+/**
+ * Transitional handler type while the existing WhatsApp command catalog is
+ * migrated in controlled batches.
+ *
+ * New commands should type against CommandContext and must not use socket /
+ * message. Existing V1 commands continue compiling until their B1/B2 migration.
+ */
+export type LegacyCompatibleCommandContext = CommandContext & LegacyWhatsAppCommandContext
 
 export interface BotCommand {
   name: string
@@ -72,5 +91,5 @@ export interface BotCommand {
   groupOnly?: boolean
   adminOnly?: boolean
   botAdminOnly?: boolean
-  handler: (ctx: CommandContext) => Promise<unknown>
+  handler: (ctx: LegacyCompatibleCommandContext) => Promise<unknown>
 }
