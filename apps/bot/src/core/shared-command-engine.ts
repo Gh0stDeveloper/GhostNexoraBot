@@ -79,7 +79,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   const chatId = request.chatId
   const currentReplyTo = replyToMessageId === null
     ? undefined
-    : (replyToMessageId ?? normalizedMessage.messageId || undefined)
+    : ((replyToMessageId ?? normalizedMessage.messageId) || undefined)
   const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
     ...options,
     replyTo: options?.replyTo ?? currentReplyTo,
