@@ -1,16 +1,10 @@
-import { Activity, GitBranch, RefreshCcw, RotateCcw, ServerCog } from 'lucide-react'
-import type { OpsProviderHealth, OpsSnapshot } from '../lib/ops'
+import { GitBranch, RefreshCcw, RotateCcw, ServerCog } from 'lucide-react'
+import type { OpsSnapshot } from '../lib/ops'
 import { webIntlLocale, webT, type WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
 import { CommandAuditTable } from './command-audit-table'
 import { OpsAutoRefresh } from './ops-client-controls'
 import { RuntimeDiagnosticsPanel } from './runtime-diagnostics-panel'
-
-function latencyMs(ms: number) {
-  if (!ms) return '0 ms'
-  if (ms >= 1000) return `${(ms / 1000).toFixed(2)} s`
-  return `${Math.round(ms)} ms`
-}
 
 function relativeTime(timestamp: number, locale: WebLocale) {
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
@@ -20,16 +14,6 @@ function relativeTime(timestamp: number, locale: WebLocale) {
   if (diff < 3_600_000) return t('ops.relative.minutes', { value: Math.round(diff / 60_000) })
   if (diff < 86_400_000) return t('ops.relative.hours', { value: Math.round(diff / 3_600_000) })
   return t('ops.relative.days', { value: Math.round(diff / 86_400_000) })
-}
-
-function providerBadge(provider: OpsProviderHealth, locale: WebLocale) {
-  const className = provider.status === 'online'
-    ? 'ops-badge-good'
-    : provider.status === 'degraded' || provider.status === 'unknown'
-      ? 'ops-badge-warn'
-      : 'ops-badge-bad'
-  const key = `provider.status.${provider.status}` as Parameters<typeof opsExtraT>[1]
-  return <span className={className}>{opsExtraT(locale, key)}</span>
 }
 
 export function DeveloperDiagnostics({ snapshot, instanceLabel, locale, csrfToken, canResetAudit }: {
@@ -83,27 +67,5 @@ export function DeveloperDiagnostics({ snapshot, instanceLabel, locale, csrfToke
 
     <CommandAuditTable commands={snapshot.commands} locale={locale}/>
 
-    <section className="ops-panel overflow-hidden">
-      <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-4"><Activity className="size-5 shrink-0 text-blue-400"/><div><h2 className="font-bold text-white">{x('diagnostics.providerTelemetry')}</h2><p className="mt-1 text-xs text-zinc-500">{x('diagnostics.providerTelemetryText')}</p></div></div>
-        <span className="font-mono text-xs text-zinc-600">{snapshot.providers.length.toLocaleString(intl)}</span>
-      </div>
-      {snapshot.providers.length ? <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-        {snapshot.providers.map((provider) => <article key={provider.providerId} className="ops-node">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0"><p className="truncate font-bold text-zinc-100">{provider.label}</p><p className="mt-1 font-mono text-[10px] text-zinc-700">{provider.providerId}</p></div>
-            {providerBadge(provider, locale)}
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.avg')}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.averageLatencyMs)}</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.last')}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.lastLatencyMs)}</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.errors')}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.errorRate.toFixed(1)}%</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.requests')}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.requests.toLocaleString(intl)}</strong></div>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-zinc-600"><span>{x('provider.lastFailure')}</span><span className="text-right">{provider.lastFailureAt ? relativeTime(provider.lastFailureAt, locale) : x('provider.noFailure')}</span></div>
-          {provider.lastError && <p className="mt-2 truncate rounded-md border border-red-500/10 bg-red-500/[.04] px-2 py-1.5 font-mono text-[10px] text-red-400/70" title={provider.lastError}>{provider.lastError}</p>}
-        </article>)}
-      </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{x('provider.empty')}</div>}
-    </section>
   </div>
 }
