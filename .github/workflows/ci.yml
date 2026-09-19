@@ -78,6 +78,9 @@ jobs:
       - name: Adult regular-user access smoke
         run: node scripts/adult-regular-user-access-smoke.mjs
 
+      - name: Adult saved GIF compatibility smoke
+        run: node scripts/adult-saved-gif-smoke.mjs
+
       - name: Spotify, anime, adult permissions and Windows installer smoke
         run: node scripts/media-windows-permissions-smoke.mjs
 
