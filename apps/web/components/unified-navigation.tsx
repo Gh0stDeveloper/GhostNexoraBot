@@ -31,6 +31,7 @@ export type UnifiedNavIcon =
   | 'modules'
   | 'security'
   | 'platforms'
+  | 'providers'
   | 'groups'
   | 'audit'
   | 'diagnostics'
@@ -55,6 +56,7 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   modules: Boxes,
   security: Fingerprint,
   platforms: Activity,
+  providers: Boxes,
   groups: UsersRound,
   audit: Gauge,
   diagnostics: Wrench,
