@@ -225,7 +225,7 @@ Solicitar confirmación adicional para acciones como:
 
 # FASE B — Núcleo multiplataforma compartido
 
-Estado: TERMINADO
+Estado: EN PROGRESO
 
 ## Objetivo
 
@@ -243,7 +243,7 @@ Adapters objetivo:
 
 ## B1. Eliminar dependencia progresiva de Baileys en CommandContext
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Objetivo:
 
