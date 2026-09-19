@@ -249,10 +249,15 @@ export class TelegramCommandRouter {
         metadata?.requiredCapabilities ?? [],
       )
       if (capabilityResolution.missing.length) {
-        throw new Error(t(locale, 'router.capabilityUnavailable', {
-          platform: 'Telegram',
-          capabilities: capabilityResolution.missing.join(', '),
-        }))
+        await this.adapter.sendText(
+          normalized.chatId,
+          t(locale, 'router.capabilityUnavailable', {
+            platform: 'Telegram',
+            capabilities: capabilityResolution.missing.join(', '),
+          }),
+          { replyTo: normalized.messageId },
+        )
+        return true
       }
     }
     const category = sharedCommand?.category ?? resolveConfiguredCommandCategory(parsed.command)

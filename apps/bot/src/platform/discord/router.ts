@@ -352,10 +352,15 @@ export class DiscordCommandRouter {
         metadata?.requiredCapabilities ?? [],
       )
       if (capabilityResolution.missing.length) {
-        throw new Error(t(locale, 'router.capabilityUnavailable', {
-          platform: 'Discord',
-          capabilities: capabilityResolution.missing.join(', '),
-        }))
+        await this.adapter.sendText(
+          invocation.channelId,
+          t(locale, 'router.capabilityUnavailable', {
+            platform: 'Discord',
+            capabilities: capabilityResolution.missing.join(', '),
+          }),
+          invocation.messageId ? { replyTo: invocation.messageId } : undefined,
+        )
+        return true
       }
     }
     const category = sharedCommand?.category ?? resolveConfiguredCommandCategory(invocation.command)
