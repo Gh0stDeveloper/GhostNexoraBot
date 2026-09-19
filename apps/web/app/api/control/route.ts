@@ -253,12 +253,16 @@ function localOpsAction(action: string, instance: string, payload: Record<string
     const groupActions = new Set([
       'leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
       'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
+      'group_config_update', 'group_broadcast',
     ])
     if (groupActions.has(action)) {
       const groupJid = String(payload.groupJid ?? '')
       if (!groupJid.endsWith('@g.us')) return { ok: false, error: 'invalid_group' }
       const group = db.prepare('SELECT name FROM ops_groups WHERE instance_key = ? AND group_jid = ?').get(instance, groupJid) as { name?: string } | undefined
       if (!group) return { ok: false, error: 'group_not_registered_for_instance' }
+
+      const requestColumns = new Set((db.prepare('PRAGMA table_info(ops_group_control_requests)').all() as Array<{ name?: string }>).map((column) => String(column.name ?? '')))
+      if (!requestColumns.has('payload_json')) db.exec('ALTER TABLE ops_group_control_requests ADD COLUMN payload_json TEXT')
 
       const actionMap: Record<string, string> = {
         leave_group: 'leave',
@@ -269,12 +273,53 @@ function localOpsAction(action: string, instance: string, payload: Record<string
         group_announce_off: 'announce:off',
         group_lock_on: 'lock:on',
         group_lock_off: 'lock:off',
+        group_config_update: 'config',
+        group_broadcast: 'broadcast',
       }
       const requestAction = actionMap[action]
+      let requestPayload: Record<string, unknown> | null = null
+
+      if (action === 'group_config_update') {
+        const bool = (key: string, fallback = false) => {
+          const value = payload[key]
+          if (typeof value === 'boolean') return value
+          if (typeof value === 'number') return value !== 0
+          const normalized = String(value ?? '').trim().toLowerCase()
+          if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+          if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+          return fallback
+        }
+        const languageRaw = String(payload.language ?? '').trim().toLowerCase()
+        const language = languageRaw === 'es' || languageRaw === 'en' ? languageRaw : ''
+        requestPayload = {
+          botEnabled: bool('botEnabled', false),
+          welcome: bool('welcome'),
+          goodbye: bool('goodbye'),
+          antiLink: bool('antiLink'),
+          antiSpam: bool('antiSpam'),
+          adultAllowed: bool('adultAllowed'),
+          restrictedMode: bool('restrictedMode'),
+          language,
+          welcomeText: String(payload.welcomeText ?? '').trim().slice(0, 700),
+          goodbyeText: String(payload.goodbyeText ?? '').trim().slice(0, 700),
+        }
+      } else if (action === 'group_broadcast') {
+        const message = String(payload.message ?? '').trim()
+        if (!message || message.length > 2000) return { ok: false, error: 'invalid_group_broadcast' }
+        requestPayload = { message }
+      }
+
       const duplicate = db.prepare("SELECT id FROM ops_group_control_requests WHERE instance_key = ? AND action = ? AND group_jid = ? AND status IN ('pending','processing') LIMIT 1")
         .get(instance, requestAction, groupJid)
-      if (!duplicate) db.prepare(`INSERT INTO ops_group_control_requests(instance_key, action, group_jid, requested_by, status, requested_at)
-        VALUES(?, ?, ?, ?, 'pending', ?)`).run(instance, requestAction, groupJid, requestedBy, Date.now())
+      if (!duplicate) db.prepare(`INSERT INTO ops_group_control_requests(instance_key, action, group_jid, requested_by, status, requested_at, payload_json)
+        VALUES(?, ?, ?, ?, 'pending', ?, ?)`).run(
+          instance,
+          requestAction,
+          groupJid,
+          requestedBy,
+          Date.now(),
+          requestPayload ? JSON.stringify(requestPayload) : null,
+        )
       return { ok: true, action, instance, groupJid, groupName: group.name, queued: true }
     }
 
@@ -302,7 +347,7 @@ async function sendBotControl(outgoing: Record<string, unknown>, action: string)
 
 function permissionForAction(action: string): WebPermission | null {
   if (action === 'sync_groups') return 'groups:sync'
-  if (['mute_group_8h', 'mute_group_7d', 'unmute_group', 'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off'].includes(action)) return 'groups:manage'
+  if (['mute_group_8h', 'mute_group_7d', 'unmute_group', 'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off', 'group_config_update', 'group_broadcast'].includes(action)) return 'groups:manage'
   if (action === 'leave_group') return 'groups:leave'
   if (['save_command_config', 'reset_command_config', 'set_command_category'].includes(action)) return 'commands:manage'
   if (action === 'reset_audit') return 'audit:reset'
@@ -416,6 +461,7 @@ async function handlePost(request: NextRequest) {
   const localActions = new Set([
     'leave_group', 'sync_groups', 'reset_audit', 'save_command_config', 'reset_command_config', 'set_command_category', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
     'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
+    'group_config_update', 'group_broadcast',
   ])
 
   if (localActions.has(action)) {
