@@ -91,6 +91,40 @@ function styleFromSourcePath(filePath, extractionRoot) {
   return undefined
 }
 
+function extractArchive(archivePath, extractionRoot) {
+  if (process.platform === 'win32') {
+    const powershell = process.env.SystemRoot
+      ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      : 'powershell.exe'
+    const env = {
+      ...process.env,
+      GHOST_NEXORA_WAIFU_ARCHIVE: archivePath,
+      GHOST_NEXORA_WAIFU_DEST: extractionRoot,
+    }
+    const command = [
+      "$ErrorActionPreference = 'Stop'",
+      "Add-Type -AssemblyName System.IO.Compression.FileSystem",
+      "$archive = $env:GHOST_NEXORA_WAIFU_ARCHIVE",
+      "$destination = $env:GHOST_NEXORA_WAIFU_DEST",
+      "if (-not (Test-Path -LiteralPath $archive)) { throw 'ZIP not found' }",
+      "[System.IO.Compression.ZipFile]::ExtractToDirectory($archive, $destination)",
+    ].join('; ')
+    execFileSync(powershell, [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command,
+    ], { stdio: 'ignore', env })
+    return
+  }
+
+  execFileSync('unzip', ['-tq', archivePath], { stdio: 'ignore' })
+  execFileSync('unzip', ['-oq', archivePath, '-d', extractionRoot], { stdio: 'ignore' })
+}
+
 if (!existsSync(bundleDir)) {
   throw new Error(`No existe el directorio de assets locales: ${bundleDir}`)
 }
@@ -102,10 +136,12 @@ for (const archivePath of archivePaths) {
   }
 }
 
-try {
-  execFileSync('unzip', ['-v'], { stdio: 'ignore' })
-} catch {
-  throw new Error('Se requiere el comando unzip para preparar los assets locales de waifus.')
+if (process.platform !== 'win32') {
+  try {
+    execFileSync('unzip', ['-v'], { stdio: 'ignore' })
+  } catch {
+    throw new Error('Se requiere el comando unzip para preparar los assets locales de waifus en este sistema.')
+  }
 }
 
 const digestHash = createHash('sha256')
@@ -140,10 +176,9 @@ try {
   const collected = []
 
   archivePaths.forEach((archivePath, archiveIndex) => {
-    execFileSync('unzip', ['-tq', archivePath], { stdio: 'ignore' })
     const extractionRoot = path.join(workDir, `archive-${archiveIndex + 1}`)
     mkdirSync(extractionRoot, { recursive: true })
-    execFileSync('unzip', ['-oq', archivePath, '-d', extractionRoot], { stdio: 'ignore' })
+    extractArchive(archivePath, extractionRoot)
 
     for (const filePath of walkFiles(extractionRoot)) {
       const extension = path.extname(filePath).toLowerCase()
