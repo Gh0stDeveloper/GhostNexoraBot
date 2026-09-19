@@ -5,6 +5,7 @@ import { BackupPanel } from '../../components/backup-panel'
 import { CommandCenter } from '../../components/command-center'
 import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
 import { EconomyLedgerDashboard } from '../../components/economy-ledger-dashboard'
+import { JobsDashboard } from '../../components/jobs-dashboard'
 import { OperationsOverview } from '../../components/operations-overview'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
@@ -20,6 +21,7 @@ import { readEconomyLedger } from '../../lib/economy-ledger'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { readOpsJobs } from '../../lib/ops-jobs'
 import { readOpsRuntimeLogCounts, readOpsRuntimeLogs } from '../../lib/ops-observability'
 import { readMainPlatformStatuses, subbotPlatformStatuses, type WebPlatformId } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
@@ -38,7 +40,7 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'users' | 'economy' | 'logs' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'users' | 'economy' | 'logs' | 'jobs' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
@@ -50,6 +52,7 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
     ['users', t('nav.users'), UsersRound],
     ...(role === 'owner' ? [['economy', t('nav.economy'), Coins] as [AdminSection, string, typeof Bot]] : []),
     ['logs', t('nav.logs'), SquareTerminal],
+    ['jobs', t('nav.jobs'), Activity],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
   ]
@@ -62,12 +65,12 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'economy', 'logs', 'audit', 'diagnostics', 'management', 'subbots', 'security']
-    : ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'logs', 'audit', 'diagnostics', 'security']
+    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'economy', 'logs', 'jobs', 'audit', 'diagnostics', 'management', 'subbots', 'security']
+    : ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'logs', 'jobs', 'audit', 'diagnostics', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; instance?: string; section?: string; focus?: string; logs?: string; q?: string; user?: string; ledgerUser?: string; ledgerKind?: string; ledgerSource?: string; ledgerDays?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; instance?: string; section?: string; focus?: string; logs?: string; q?: string; user?: string; ledgerUser?: string; ledgerKind?: string; ledgerSource?: string; ledgerDays?: string; jobQ?: string; jobStatus?: string; jobType?: string }> }) {
   const cookieStore = await cookies()
   const session = verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
   if (!session || session.role === 'subbot') redirect('/login')
@@ -120,6 +123,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const canManageCommands = hasPermission(role, 'commands:manage')
   const canViewLedger = hasPermission(role, 'economy:ledger')
   const canViewLogs = hasPermission(role, 'logs:view')
+  const canViewJobs = hasPermission(role, 'jobs:view')
+  const canManageJobs = hasPermission(role, 'jobs:manage')
   const canViewUsers = hasPermission(role, 'users:view')
   const userPermissions = {
     financial: hasPermission(role, 'users:financial'),
@@ -148,6 +153,14 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const realtimeLogCounts = section === 'logs' && canViewLogs
     ? readOpsRuntimeLogCounts(selectedInstance)
     : { total: 0, errors: 0, warnings: 0, commands: 0, api: 0, downloads: 0 }
+  const jobFilters = {
+    query: section === 'jobs' ? String(params.jobQ ?? '').trim().slice(0, 100) : '',
+    status: section === 'jobs' ? String(params.jobStatus ?? '').trim().toLowerCase() : '',
+    type: section === 'jobs' ? String(params.jobType ?? '').trim().toLowerCase() : '',
+  }
+  const jobsSnapshot = section === 'jobs' && canViewJobs
+    ? readOpsJobs(selectedInstance, { ...jobFilters, limit: 250 })
+    : { rows: [], counts: { active: 0, waiting: 0, running: 0, completed: 0, failed: 0, cancelled: 0 } }
   const navIcon: Record<AdminSection, UnifiedNavIcon> = {
     overview: 'dashboard',
     platforms: 'platforms',
@@ -157,6 +170,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     users: 'users',
     economy: 'economy',
     logs: 'logs',
+    jobs: 'jobs',
     audit: 'audit',
     diagnostics: 'diagnostics',
     management: 'settings',
@@ -269,6 +283,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {section === 'users' && canViewUsers ? <div className="mt-6"><UserDashboard rows={userRows} detail={userDetail} query={userQuery} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale} permissions={userPermissions}/></div> : null}
       {section === 'economy' && canViewLedger && ledgerSnapshot ? <div className="mt-6"><EconomyLedgerDashboard snapshot={ledgerSnapshot} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale} filters={ledgerFilters}/></div> : null}
       {section === 'logs' && canViewLogs ? <div className="mt-6"><RealtimeLogsDashboard initialRows={realtimeLogRows} initialCounts={realtimeLogCounts} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale}/></div> : null}
+      {section === 'jobs' && canViewJobs ? <div className="mt-6"><JobsDashboard snapshot={jobsSnapshot} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canManage={canManageJobs} filters={jobFilters}/></div> : null}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
 
       {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit={canResetAudit}/></div>}
