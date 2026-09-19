@@ -584,7 +584,7 @@ En móvil usar drawer o hamburger.
 
 ## E2. Separar información operativa de diagnóstico
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 La vista principal debe priorizar:
 
@@ -618,6 +618,14 @@ Implementación E2 en curso:
 - Auditoría queda enfocada en historial de acciones administrativas;
 - actividad detallada de grupos se mueve a Grupos;
 - aislamiento de MainBot/subbots se mantiene.
+
+Cierre:
+
+- PR: #78 `feat: complete Phase E2 operations diagnostics split`;
+- merge a `main`: `dc27f30eb0a11739c900593b51b2e3e7203940aa`;
+- CI principal: success;
+- V2 Phase 0, Phase 6 y Phase 8: success;
+- Typecheck, Build, smoke E2, E3, V19, dashboard histórico e i18n: success.
 
 ## E3. Pantalla Plataformas
 
