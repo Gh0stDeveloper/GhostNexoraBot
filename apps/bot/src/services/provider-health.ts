@@ -31,6 +31,13 @@ const PROVIDER_LABELS: Record<string, string> = {
   likee: 'Likee',
   terabox: 'TeraBox',
   pinterest: 'Pinterest',
+  spotify: 'Spotify',
+  jikan: 'Jikan',
+  anime1v: 'Anime1v',
+  consumet: 'Consumet',
+  weeb: 'WeebAPI',
+  animeapi: 'AnimeAPI',
+  openrouter: 'OpenRouter',
   deepseek: 'DeepSeek',
   'x-official': 'X Official API',
   'x-ytdlp': 'X yt-dlp',
@@ -212,4 +219,59 @@ export function providerCircuitState(providerId: string, input: {
 
 export function providerCircuitAllows(providerId: string, input: Parameters<typeof providerCircuitState>[1] = {}) {
   return providerCircuitState(providerId, input) !== 'open'
+}
+
+function providerErrorCode(error: unknown) {
+  if (error instanceof Error) {
+    const text = [error.name, error.message].filter(Boolean).join(':')
+    return safeErrorCode(text) ?? 'request_failed'
+  }
+  return safeErrorCode(String(error)) ?? 'request_failed'
+}
+
+export async function trackedProviderCall<T>(
+  providerId: string,
+  task: () => Promise<T>,
+  input: {
+    label?: string
+    instanceKey?: string
+    useCircuitBreaker?: boolean
+  } = {},
+): Promise<T> {
+  const instanceKey = input.instanceKey ?? opsInstanceKey()
+  if (input.useCircuitBreaker !== false) {
+    try {
+      if (!providerCircuitAllows(providerId, { instanceKey })) {
+        throw new Error(`provider_circuit_open:${normalizedProviderId(providerId)}`)
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('provider_circuit_open:')) throw error
+      // Telemetry must never make a provider unusable if its local database is unavailable.
+    }
+  }
+
+  const started = performance.now()
+  try {
+    const result = await task()
+    try {
+      recordProviderAttempt(providerId, {
+        ok: true,
+        latencyMs: Math.max(0, performance.now() - started),
+        label: input.label,
+        instanceKey,
+      })
+    } catch {}
+    return result
+  } catch (error) {
+    try {
+      recordProviderAttempt(providerId, {
+        ok: false,
+        latencyMs: Math.max(0, performance.now() - started),
+        label: input.label,
+        errorCode: providerErrorCode(error),
+        instanceKey,
+      })
+    } catch {}
+    throw error
+  }
 }
