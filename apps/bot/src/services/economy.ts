@@ -245,6 +245,32 @@ export class EconomyStore {
         );
       END;
 
+      DROP TRIGGER IF EXISTS gn_e9_account_closing;
+      CREATE TRIGGER gn_e9_account_closing
+      AFTER DELETE ON global_economy_users
+      BEGIN
+        INSERT INTO economy_transactions(
+          transaction_id, user_jid, kind, amount, wallet_delta, bank_delta,
+          wallet_before, bank_before, balance_before,
+          wallet_after, bank_after, balance_after, source, created_at
+        ) VALUES(
+          'nxc_' || lower(hex(randomblob(16))),
+          OLD.user_jid,
+          'account_closing_or_merge',
+          -(OLD.wallet + OLD.bank),
+          -OLD.wallet,
+          -OLD.bank,
+          OLD.wallet,
+          OLD.bank,
+          OLD.wallet + OLD.bank,
+          0,
+          0,
+          0,
+          'automatic_guard',
+          unixepoch('subsec') * 1000
+        );
+      END;
+
       DROP TRIGGER IF EXISTS gn_e9_balance_change;
       CREATE TRIGGER gn_e9_balance_change
       AFTER UPDATE OF wallet, bank ON global_economy_users
