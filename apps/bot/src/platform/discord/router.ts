@@ -16,6 +16,7 @@ import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore 
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
+import { discordCommandAliases } from '../../services/command-platform-support.js'
 import { logger } from '../../utils/logger.js'
 import type { DiscordAdapter } from './adapter.js'
 import { discordConfig, discordOwner, discordStaff } from './config.js'
@@ -29,18 +30,7 @@ import type {
   DiscordUser,
 } from './types.js'
 
-const aliases = new Map<string, string>([
-  ['start', 'help'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
-  ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
-  ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
-  ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
-  ['apkmirror', 'apkmirror'], ['apkm', 'apkmirror'], ['amirror', 'apkmirror'],
-  ['apkmirrordl', 'apkmirrordl'], ['amdl', 'apkmirrordl'],
-  ['apkpure', 'apkpure'], ['apkp', 'apkpure'], ['pureapk', 'apkpure'],
-  ['apkpuredl', 'apkpuredl'], ['apdl', 'apkpuredl'],
-  ['providerhealth', 'providerhealth'], ['dlhealth', 'providerhealth'],
-  ['discordstatus', 'discordstatus'], ['dcstatus', 'discordstatus'],
-])
+const aliases = discordCommandAliases
 
 function localizedDescription(key: string) {
   return {
