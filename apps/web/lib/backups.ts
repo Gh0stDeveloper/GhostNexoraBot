@@ -52,6 +52,32 @@ function backupType(value: unknown): WebBackupType {
 async function inspectBackup(fileName: string): Promise<WebBackupInfo> {
   const filePath = path.join(backupDirectory(), fileName)
   const info = await stat(filePath)
+  const sidecarPath = `${filePath}.meta.json`
+
+  try {
+    const sidecar = JSON.parse(await readFile(sidecarPath, 'utf8')) as Partial<WebBackupInfo>
+    if (
+      sidecar.fileName === fileName
+      && /^[a-f0-9]{64}$/i.test(String(sidecar.sha256 ?? ''))
+    ) {
+      return {
+        id: fileName,
+        fileName,
+        size: info.size,
+        createdAt: Number(sidecar.createdAt ?? info.mtimeMs),
+        type: backupType(sidecar.type),
+        reason: sidecar.reason === 'scheduled' ? 'scheduled' : 'manual',
+        sha256: String(sidecar.sha256),
+        verified: Boolean(sidecar.verified),
+        files: Number(sidecar.files ?? 0),
+        tables: Number(sidecar.tables ?? 0),
+        sessionIncluded: Boolean(sidecar.sessionIncluded),
+      }
+    }
+  } catch {
+    // Backups created before E13 do not have metadata sidecars.
+  }
+
   const compressed = await readFile(filePath)
   const hash = createHash('sha256').update(compressed).digest('hex')
   if (compressed.length > MAX_PARSE_BYTES) {
