@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { chmodSync, chownSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -85,7 +85,14 @@ const next = {
 }
 
 const tempFile = `${statusFile}.tmp-${process.pid}`
-writeFileSync(tempFile, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 })
+writeFileSync(tempFile, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o640 })
+try {
+  const owner = statSync(dataDir)
+  chownSync(tempFile, owner.uid, owner.gid)
+  chmodSync(tempFile, 0o640)
+} catch {
+  // Best effort: installations without POSIX ownership still keep the status file.
+}
 renameSync(tempFile, statusFile)
 
 const dbFile = path.join(dataDir, 'ghostnexora.sqlite')
