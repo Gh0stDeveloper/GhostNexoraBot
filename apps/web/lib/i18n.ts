@@ -165,6 +165,7 @@ const es = {
 
   'nav.overview': 'Resumen',
   'nav.platforms': 'Plataformas',
+  'nav.providers': 'Providers',
   'nav.groups': 'Grupos',
   'nav.audit': 'Auditoría',
   'nav.diagnostics': 'Diagnóstico',
@@ -535,6 +536,7 @@ const en: Record<WebMessageKey, string> = {
 
   'nav.overview': 'Overview',
   'nav.platforms': 'Platforms',
+  'nav.providers': 'Providers',
   'nav.groups': 'Groups',
   'nav.audit': 'Audit',
   'nav.diagnostics': 'Diagnostics',
