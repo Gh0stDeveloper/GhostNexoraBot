@@ -264,6 +264,22 @@ El bot **no se inicia automáticamente**. El pairing tampoco se ejecuta sin que 
 
 ## Comandos del gestor
 
+Durante la instalación se crea el gestor real en:
+
+```text
+%LOCALAPPDATA%\GhostNexora\bin\ghostnexora.cmd
+```
+
+y, cuando Windows dispone del directorio estándar de alias de usuario, también se crea un shim en:
+
+```text
+%LOCALAPPDATA%\Microsoft\WindowsApps\ghostnexora.cmd
+```
+
+`WindowsApps` ya forma parte del `PATH` normal de Windows 10/11, por lo que `ghostnexora` queda disponible incluso en la terminal que estaba abierta antes de ejecutar el instalador. El instalador también conserva `%LOCALAPPDATA%\GhostNexora\bin` en el `PATH` de usuario como respaldo para terminales futuras.
+
+No hace falta ejecutar `npm start` ni cambiar la `ExecutionPolicy` de PowerShell. El gestor llama internamente a `node.exe` y `npm.cmd`, evitando el `npm.ps1` que Windows puede bloquear cuando la política de scripts está restringida.
+
 ```text
 ghostnexora configure
 ghostnexora start
