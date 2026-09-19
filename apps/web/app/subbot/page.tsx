@@ -9,6 +9,7 @@ import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { ProvidersDashboard } from '../../components/providers-dashboard'
+import { JobsDashboard } from '../../components/jobs-dashboard'
 import { RealtimeLogsDashboard } from '../../components/realtime-logs-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
@@ -16,20 +17,21 @@ import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../li
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { readOpsJobs } from '../../lib/ops-jobs'
 import { readOpsRuntimeLogCounts, readOpsRuntimeLogs } from '../../lib/ops-observability'
 import { subbotPlatformStatuses } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
-type SubbotSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'logs' | 'audit' | 'diagnostics' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'audit', 'diagnostics', 'account']
+type SubbotSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'logs' | 'jobs' | 'audit' | 'diagnostics' | 'account'
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
 }
 
-export default async function SubbotPortal({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; section?: string }> }) {
+export default async function SubbotPortal({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; section?: string; jobQ?: string; jobStatus?: string; jobType?: string }> }) {
   const cookieStore = await cookies()
   const session = verifySession(cookieStore.get(SUBBOT_SESSION_COOKIE)?.value)
   if (!session || session.role !== 'subbot') redirect('/login?mode=subbot')
@@ -44,6 +46,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     ['commands', t('nav.commands'), SquareTerminal],
     ['groups', t('nav.groups'), UsersRound],
     ['logs', t('nav.logs'), SquareTerminal],
+    ['jobs', t('nav.jobs'), Activity],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
     ['account', t('nav.account'), Settings],
@@ -63,6 +66,14 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const realtimeLogCounts = section === 'logs'
     ? readOpsRuntimeLogCounts(instanceKey)
     : { total: 0, errors: 0, warnings: 0, commands: 0, api: 0, downloads: 0 }
+  const jobFilters = {
+    query: section === 'jobs' ? String(params.jobQ ?? '').trim().slice(0, 100) : '',
+    status: section === 'jobs' ? String(params.jobStatus ?? '').trim().toLowerCase() : '',
+    type: section === 'jobs' ? String(params.jobType ?? '').trim().toLowerCase() : '',
+  }
+  const jobsSnapshot = section === 'jobs'
+    ? readOpsJobs(instanceKey, { ...jobFilters, limit: 250 })
+    : { rows: [], counts: { active: 0, waiting: 0, running: 0, completed: 0, failed: 0, cancelled: 0 } }
   const labels: Record<string,string> = {
     pending: t('subbot.pending'), pairing: t('subbot.pairing'), online: t('common.online'), offline: t('subbot.offline'), logged_out: t('subbot.loggedOut'), revoked: t('subbot.revoked'),
   }
@@ -76,6 +87,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     commands: 'commands',
     groups: 'groups',
     logs: 'logs',
+    jobs: 'jobs',
     audit: 'audit',
     diagnostics: 'diagnostics',
     account: 'account',
@@ -152,6 +164,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
         <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups/>
       </div>}
       {section === 'logs' ? <div className="mt-6"><RealtimeLogsDashboard initialRows={realtimeLogRows} initialCounts={realtimeLogCounts} instanceKey={instanceKey} instanceLabel={instanceLabel} locale={locale}/></div> : null}
+      {section === 'jobs' ? <div className="mt-6"><JobsDashboard snapshot={jobsSnapshot} instanceKey={instanceKey} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canManage filters={jobFilters}/></div> : null}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
 
       {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit/></div>}
