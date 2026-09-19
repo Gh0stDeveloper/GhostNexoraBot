@@ -1,4 +1,4 @@
-import type { NeutralBotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { community } from '../services/community.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import {
@@ -12,11 +12,11 @@ import {
 } from '../i18n/index.js'
 import { isSupportedLocale } from '../i18n/types.js'
 
-function canManageGlobal(ctx: CommandContext) {
+function canManageGlobal(ctx: LegacyCompatibleCommandContext) {
   return ctx.isOwner || ctx.isBotStaff || ctx.isSubbotOwner
 }
 
-async function requireGroupManager(ctx: CommandContext) {
+async function requireGroupManager(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isGroup) throw new Error(ctx.t('language.error.groupOnly'))
   if (!(await isGroupAdministrator(ctx))) throw new Error(ctx.t('language.error.groupAdmin'))
 }
@@ -33,11 +33,11 @@ function isInherit(raw?: string) {
   return ['inherit', 'heredar', 'default', 'global', 'auto', 'clear', 'reset'].includes(raw?.trim().toLowerCase() ?? '')
 }
 
-function platformContext(ctx: CommandContext) {
+function platformContext(ctx: LegacyCompatibleCommandContext) {
   return { platform: 'whatsapp' as const, botInstanceId: ctx.adapter.botInstanceId }
 }
 
-async function status(ctx: CommandContext) {
+async function status(ctx: LegacyCompatibleCommandContext) {
   const platform = platformContext(ctx)
   const global = ctx.settings.language
   const legacyGroup = ctx.isGroup ? community.getGroupSettings(ctx.chatId).language : null
@@ -58,7 +58,7 @@ async function status(ctx: CommandContext) {
   await ctx.reply(lines.join('\n'))
 }
 
-async function setGlobal(ctx: CommandContext, rawLocale?: string) {
+async function setGlobal(ctx: LegacyCompatibleCommandContext, rawLocale?: string) {
   if (!canManageGlobal(ctx)) throw new Error(ctx.t('language.error.globalPermission'))
   const locale = parseLocale(rawLocale)
   if (!locale) throw new Error(ctx.t('language.error.invalid'))
@@ -66,7 +66,7 @@ async function setGlobal(ctx: CommandContext, rawLocale?: string) {
   await ctx.reply(translate(locale, 'language.changed.global', { language: localeName(locale, locale) }))
 }
 
-async function setGroup(ctx: CommandContext, rawLocale?: string) {
+async function setGroup(ctx: LegacyCompatibleCommandContext, rawLocale?: string) {
   await requireGroupManager(ctx)
   const platform = platformContext(ctx)
   if (isInherit(rawLocale)) {
@@ -84,7 +84,7 @@ async function setGroup(ctx: CommandContext, rawLocale?: string) {
   await ctx.reply(translate(locale, 'language.changed.group', { language: localeName(locale, locale) }))
 }
 
-async function setUser(ctx: CommandContext, rawLocale?: string) {
+async function setUser(ctx: LegacyCompatibleCommandContext, rawLocale?: string) {
   const platform = platformContext(ctx)
   if (isInherit(rawLocale)) {
     clearPlatformLocale(platform, 'user', ctx.sender)
@@ -98,7 +98,7 @@ async function setUser(ctx: CommandContext, rawLocale?: string) {
   await ctx.reply(translate(locale, 'language.changed.user', { language: localeName(locale, locale) }))
 }
 
-async function setBot(ctx: CommandContext, rawLocale?: string) {
+async function setBot(ctx: LegacyCompatibleCommandContext, rawLocale?: string) {
   if (!canManageGlobal(ctx)) throw new Error(ctx.t('language.error.botPermission'))
   const platform = platformContext(ctx)
   if (isInherit(rawLocale)) {
@@ -113,7 +113,7 @@ async function setBot(ctx: CommandContext, rawLocale?: string) {
   await ctx.reply(translate(locale, 'language.changed.bot', { language: localeName(locale, locale) }))
 }
 
-async function languageCommand(ctx: CommandContext) {
+async function languageCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? '').trim().toLowerCase()
   if (!action || ['status', 'estado', 'current', 'actual'].includes(action)) {
     await status(ctx)
@@ -135,7 +135,7 @@ async function languageCommand(ctx: CommandContext) {
   throw new Error(ctx.t('language.usage.phase6', { command: `${ctx.prefix}language` }))
 }
 
-export const languageCommands: NeutralBotCommand[] = [
+export const languageCommands: BotCommand[] = [
   {
     name: 'language',
     aliases: ['lang', 'idioma'],

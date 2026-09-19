@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { NeutralBotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { resolveTarget } from '../utils/target.js'
 
 const COUNTRIES = [
@@ -16,7 +16,7 @@ const FAKE_PROVIDERS = ['GhostTel', 'Nexora Mobile', 'SpectraNet', 'Phantom Wire
 const FAKE_DEVICES = ['Android', 'iPhone', 'PC', 'Tablet', 'Dispositivo desconocido'] as const
 const FAKE_NETWORKS = ['4G', '5G', 'Wi-Fi', 'LTE', 'Red privada'] as const
 
-function deterministicBytes(ctx: CommandContext, target: string) {
+function deterministicBytes(ctx: LegacyCompatibleCommandContext, target: string) {
   return createHash('sha256')
     .update(`ghost-nexora-doxsim-v1|${ctx.chatId}|${target}`)
     .digest()
@@ -41,7 +41,7 @@ function operationId(bytes: Buffer) {
   return `GN-${bytes.subarray(0, 4).toString('hex').toUpperCase()}`
 }
 
-async function handleDoxSimulation(ctx: CommandContext) {
+async function handleDoxSimulation(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, {
     allowNumber: false,
     requiredMessage: `Responde al mensaje de alguien o menciona a un usuario.\nEjemplo: *${ctx.prefix}doxear @usuario*`,
@@ -78,7 +78,7 @@ async function handleDoxSimulation(ctx: CommandContext) {
   ].join('\n'))
 }
 
-export const doxSimulationCommands: NeutralBotCommand[] = [
+export const doxSimulationCommands: BotCommand[] = [
   {
     name: 'doxear',
     aliases: ['doxer', 'doxeo', 'doxsim'],

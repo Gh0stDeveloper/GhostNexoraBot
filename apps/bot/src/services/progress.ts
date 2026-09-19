@@ -18,9 +18,7 @@ export async function createDownloadProgress(ctx: CommandContext, subject: strin
   })
   job.start('preparing')
 
-  const sent = await ctx.socket.sendMessage(ctx.chatId, {
-    text: `⬇️ *${subject}*\n━━━━━━━━━━━━━━\n⏳ ${labels.preparing}…`,
-  }, { quoted: ctx.message })
+  const sent = await ctx.sendText(`⬇️ *${subject}*\n━━━━━━━━━━━━━━\n⏳ ${labels.preparing}…`)
 
   async function update(stage: DownloadStage, detail?: string) {
     const progress = stage === 'preparing' ? 5
@@ -31,10 +29,10 @@ export async function createDownloadProgress(ctx: CommandContext, subject: strin
     if (stage === 'done') job.complete(detail ?? 'done')
     else job.update(progress, detail ?? stage)
 
-    if (!sent?.key) return
+    if (!sent.messageId) return
     const icon = stage === 'done' ? '✅' : stage === 'sending' ? '📤' : stage === 'processing' ? '⚙️' : '⬇️'
     const text = `${icon} *${subject}*\n━━━━━━━━━━━━━━\n${stage === 'done' ? '✅' : '⏳'} ${labels[stage]}…${detail ? `\n${detail}` : ''}`
-    await ctx.socket.sendMessage(ctx.chatId, { text, edit: sent.key }).catch(() => undefined)
+    await ctx.editMessage(sent.messageId, text).catch(() => undefined)
   }
 
   return {

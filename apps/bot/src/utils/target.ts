@@ -1,4 +1,4 @@
-import type { CommandContext } from '../types.js'
+import type { LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from './message.js'
 import { preferredJid, registerIdentity, resolveStoredIdentity } from '../services/identity.js'
 
@@ -7,7 +7,7 @@ export type ResolveTargetOptions = {
   requiredMessage?: string
 }
 
-export async function canonicalizeTarget(ctx: CommandContext, candidate: string) {
+export async function canonicalizeTarget(ctx: LegacyCompatibleCommandContext, candidate: string) {
   if (!candidate) return ''
   if (!ctx.isGroup) return resolveStoredIdentity(candidate)
   const metadata = await ctx.socket.groupMetadata(ctx.chatId).catch(() => null)
@@ -18,7 +18,7 @@ export async function canonicalizeTarget(ctx: CommandContext, candidate: string)
   return canonical ? registerIdentity(ctx.chatId, aliases, canonical) : resolveStoredIdentity(candidate)
 }
 
-export async function resolveTarget(ctx: CommandContext, options: ResolveTargetOptions = {}) {
+export async function resolveTarget(ctx: LegacyCompatibleCommandContext, options: ResolveTargetOptions = {}) {
   const context = getContextInfo(ctx.message)
   const mentioned = context?.mentionedJid?.[0]
   const replied = context?.participant
@@ -36,7 +36,7 @@ export async function resolveTarget(ctx: CommandContext, options: ResolveTargetO
   return canonicalizeTarget(ctx, candidate)
 }
 
-export async function isGroupAdministrator(ctx: CommandContext) {
+export async function isGroupAdministrator(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isGroup) return ctx.isBotStaff || ctx.isOwner || ctx.isSubbotOwner
   if (ctx.isBotStaff || ctx.isOwner || ctx.isSubbotOwner) return true
   const metadata = await ctx.socket.groupMetadata(ctx.chatId).catch(() => null)
