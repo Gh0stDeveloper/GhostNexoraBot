@@ -1,5 +1,6 @@
 import { economy } from './economy.js'
 import { getClaim, listHarem, type WaifuClaim } from './waifu.js'
+import { trackedProviderCall } from './provider-health.js'
 
 const db = economy.db
 const now = () => Date.now()
@@ -183,21 +184,23 @@ export function acceptTrade(targetJid: string, tradeId: number) {
 }
 
 async function jikan<T>(url: string): Promise<T> {
-  let last: unknown
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const response = await fetch(url, {
-        headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
-        signal: AbortSignal.timeout(18_000),
-      })
-      if (!response.ok) throw new Error(`Jikan HTTP ${response.status}`)
-      return await response.json() as T
-    } catch (error) {
-      last = error
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)))
+  return trackedProviderCall('jikan', async () => {
+    let last: unknown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(url, {
+          headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
+          signal: AbortSignal.timeout(18_000),
+        })
+        if (!response.ok) throw new Error(`jikan_http_${response.status}`)
+        return await response.json() as T
+      } catch (error) {
+        last = error
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)))
+      }
     }
-  }
-  throw last instanceof Error ? last : new Error('Jikan no respondió.')
+    throw last instanceof Error ? last : new Error('jikan_no_response')
+  }, { label: 'Jikan' })
 }
 
 export async function searchAnimeSeries(query: string, limit = 8) {
