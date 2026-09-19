@@ -230,7 +230,7 @@ export class CommandRouter {
         groupRolesLoaded = true
       }
 
-      if (isGroup && (command.adminOnly || command.botAdminOnly)) await loadGroupRoles()
+      if (isGroup && (command.adminOnly || command.botAdminOnly || command.name === 'language')) await loadGroupRoles()
 
       const context: LegacyCompatibleCommandContext = {
         platform: 'whatsapp',
