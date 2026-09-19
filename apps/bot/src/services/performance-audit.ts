@@ -1,6 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { commandPlatformSupport } from './command-platform-support.js'
-import { registerCommandTokens } from './command-runtime-config.js'
+import { registerCommandTokens, resolveConfiguredCommandName } from './command-runtime-config.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 const now = () => Date.now()
@@ -277,7 +277,7 @@ export const performanceAudit = {
     instanceKey = opsInstanceKey(),
     identity?: CommandAuditIdentity,
   ) {
-    const name = commandName.trim().toLowerCase()
+    const name = resolveConfiguredCommandName(commandName, instanceKey)
     if (!name) return
     const value = micros(durationMs)
     const stamp = now()
