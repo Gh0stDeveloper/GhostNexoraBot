@@ -12,12 +12,14 @@ import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { ProvidersDashboard } from '../../components/providers-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
+import { UserDashboard } from '../../components/user-dashboard'
 import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
 import { readMainPlatformStatuses, subbotPlatformStatuses, type WebPlatformId } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
+import { readUserDashboardDetail, searchUserDashboard } from '../../lib/user-dashboard'
 import { hasPermission, roleLabel, type PrivilegedWebRole } from '../../lib/web-security'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +34,7 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'users' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
@@ -41,6 +43,7 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
     ['providers', t('nav.providers'), ServerCog],
     ['commands', t('nav.commands'), SquareTerminal],
     ['groups', t('nav.groups'), UsersRound],
+    ['users', t('nav.users'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
   ]
@@ -53,12 +56,12 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security']
-    : ['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'security']
+    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'audit', 'diagnostics', 'management', 'subbots', 'security']
+    : ['overview', 'platforms', 'providers', 'commands', 'groups', 'users', 'audit', 'diagnostics', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; instance?: string; section?: string; focus?: string; logs?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; instance?: string; section?: string; focus?: string; logs?: string; q?: string; user?: string }> }) {
   const cookieStore = await cookies()
   const session = verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
   if (!session || session.role === 'subbot') redirect('/login')
@@ -109,12 +112,27 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const canLeaveGroups = hasPermission(role, 'groups:leave')
   const canResetAudit = hasPermission(role, 'audit:reset')
   const canManageCommands = hasPermission(role, 'commands:manage')
+  const canViewUsers = hasPermission(role, 'users:view')
+  const userPermissions = {
+    financial: hasPermission(role, 'users:financial'),
+    moderation: hasPermission(role, 'users:moderation'),
+    subbots: hasPermission(role, 'users:subbots'),
+  }
+  const userQuery = section === 'users' ? String(params.q ?? '').trim().slice(0, 120) : ''
+  const userRows = section === 'users' && canViewUsers
+    ? searchUserDashboard(selectedInstance, userQuery, userPermissions)
+    : []
+  const selectedUserJid = section === 'users' ? String(params.user ?? '').trim().slice(0, 180) : ''
+  const userDetail = section === 'users' && canViewUsers && selectedUserJid
+    ? readUserDashboardDetail(selectedInstance, selectedUserJid, userPermissions)
+    : null
   const navIcon: Record<AdminSection, UnifiedNavIcon> = {
     overview: 'dashboard',
     platforms: 'platforms',
     providers: 'providers',
     commands: 'commands',
     groups: 'groups',
+    users: 'users',
     audit: 'audit',
     diagnostics: 'diagnostics',
     management: 'settings',
@@ -224,6 +242,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses} detailBasePath="/admin/groups"/>
         <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups}/>
       </div>}
+      {section === 'users' && canViewUsers ? <div className="mt-6"><UserDashboard rows={userRows} detail={userDetail} query={userQuery} instanceKey={selectedInstance} instanceLabel={instanceLabel} locale={locale} permissions={userPermissions}/></div> : null}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
 
       {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit={canResetAudit}/></div>}
