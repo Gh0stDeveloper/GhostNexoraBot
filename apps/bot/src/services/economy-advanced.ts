@@ -11,6 +11,7 @@ function walletDebit(userJid: string, amount: number, kind: string, note?: strin
   db.prepare('UPDATE economy_users SET wallet = wallet - ? WHERE user_jid = ?').run(value, userJid)
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
     .run(userJid, kind, -value, note ?? null, now())
+  economy.recordGlobalLedger(userJid, kind, -value, undefined, note)
 }
 
 function walletCredit(userJid: string, amount: number, kind: string, note?: string) {
@@ -19,6 +20,7 @@ function walletCredit(userJid: string, amount: number, kind: string, note?: stri
   db.prepare('UPDATE economy_users SET wallet = wallet + ? WHERE user_jid = ?').run(value, userJid)
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
     .run(userJid, kind, value, note ?? null, now())
+  economy.recordGlobalLedger(userJid, kind, value, undefined, note)
 }
 
 db.exec(`
