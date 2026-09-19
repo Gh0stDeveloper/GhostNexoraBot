@@ -219,8 +219,7 @@ export class EconomyStore {
       CREATE INDEX IF NOT EXISTS idx_economy_transactions_instance
         ON economy_transactions(instance_role, instance_id, created_at DESC);
 
-      DROP TRIGGER IF EXISTS gn_e9_account_opening;
-      CREATE TRIGGER gn_e9_account_opening
+      CREATE TRIGGER IF NOT EXISTS gn_e9_account_opening
       AFTER INSERT ON global_economy_users
       BEGIN
         INSERT INTO economy_transactions(
@@ -245,8 +244,7 @@ export class EconomyStore {
         );
       END;
 
-      DROP TRIGGER IF EXISTS gn_e9_account_closing;
-      CREATE TRIGGER gn_e9_account_closing
+      CREATE TRIGGER IF NOT EXISTS gn_e9_account_closing
       AFTER DELETE ON global_economy_users
       BEGIN
         INSERT INTO economy_transactions(
@@ -271,8 +269,7 @@ export class EconomyStore {
         );
       END;
 
-      DROP TRIGGER IF EXISTS gn_e9_balance_change;
-      CREATE TRIGGER gn_e9_balance_change
+      CREATE TRIGGER IF NOT EXISTS gn_e9_balance_change
       AFTER UPDATE OF wallet, bank ON global_economy_users
       WHEN OLD.wallet <> NEW.wallet OR OLD.bank <> NEW.bank
       BEGIN
@@ -302,8 +299,7 @@ export class EconomyStore {
         );
       END;
 
-      DROP TRIGGER IF EXISTS gn_e9_enrich_from_global_ledger;
-      CREATE TRIGGER gn_e9_enrich_from_global_ledger
+      CREATE TRIGGER IF NOT EXISTS gn_e9_enrich_from_global_ledger
       AFTER INSERT ON economy_global_ledger
       BEGIN
         UPDATE economy_transactions
