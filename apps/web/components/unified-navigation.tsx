@@ -63,8 +63,8 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   account: UserRound,
 }
 
-function NavigationList({ items, close }: { items: UnifiedNavItem[]; close?: () => void }) {
-  return <nav className="ops-sidebar-nav" aria-label="Primary navigation">
+function NavigationList({ items, close, ariaLabel }: { items: UnifiedNavItem[]; close?: () => void; ariaLabel: string }) {
+  return <nav className="ops-sidebar-nav" aria-label={ariaLabel}>
     {items.map((item) => {
       const Icon = icons[item.icon]
       return <a
@@ -90,6 +90,7 @@ export function UnifiedNavigation({
   actionHref,
   actionLabel,
   ariaLabel,
+  closeLabel,
 }: {
   items: UnifiedNavItem[]
   brandTitle?: string
@@ -99,6 +100,7 @@ export function UnifiedNavigation({
   actionHref?: string
   actionLabel?: string
   ariaLabel: string
+  closeLabel: string
 }) {
   const [open, setOpen] = useState(false)
 
@@ -131,7 +133,7 @@ export function UnifiedNavigation({
       {badge ? <div className="px-3 pb-2"><span className="ops-badge-good">{badge}</span></div> : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-        <NavigationList items={items}/>
+        <NavigationList items={items} ariaLabel={ariaLabel}/>
       </div>
 
       {actionHref && actionLabel ? <div className="border-t border-white/[.07] p-3">
@@ -160,7 +162,7 @@ export function UnifiedNavigation({
     </div>
 
     {open ? <div className="ops-drawer-layer lg:hidden">
-      <button className="ops-drawer-overlay" type="button" aria-label="Close navigation" onClick={() => setOpen(false)}/>
+      <button className="ops-drawer-overlay" type="button" aria-label={closeLabel} onClick={() => setOpen(false)}/>
       <aside id="ghost-nexora-mobile-navigation" className="ops-drawer" aria-label={ariaLabel}>
         <div className="flex items-center justify-between gap-3 border-b border-white/[.07] p-4">
           <a href={brandHref} onClick={() => setOpen(false)} className="flex min-w-0 items-center gap-3">
@@ -170,11 +172,11 @@ export function UnifiedNavigation({
               <span className="block truncate text-[9px] font-semibold uppercase tracking-[.12em] text-zinc-500">{brandSubtitle}</span>
             </span>
           </a>
-          <button type="button" className="ops-mobile-menu-button" aria-label="Close navigation" onClick={() => setOpen(false)}><X className="size-5"/></button>
+          <button type="button" className="ops-mobile-menu-button" aria-label={closeLabel} onClick={() => setOpen(false)}><X className="size-5"/></button>
         </div>
         {badge ? <div className="px-4 pt-4"><span className="ops-badge-good">{badge}</span></div> : null}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <NavigationList items={items} close={() => setOpen(false)}/>
+          <NavigationList items={items} close={() => setOpen(false)} ariaLabel={ariaLabel}/>
         </div>
         {actionHref && actionLabel ? <div className="border-t border-white/[.07] p-4">
           <a href={actionHref} onClick={() => setOpen(false)} className="ops-button-primary w-full"><LogIn className="size-4"/>{actionLabel}</a>
