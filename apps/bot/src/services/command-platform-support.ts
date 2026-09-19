@@ -24,7 +24,7 @@ export const DISCORD_COMMAND_ALIAS_ENTRIES = [
 ] as const satisfies ReadonlyArray<readonly [string, string]>
 
 export const TELEGRAM_COMMAND_ALIAS_ENTRIES = [
-  ['start', 'start'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
+  ['start', 'help'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
   ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
   ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
   ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
