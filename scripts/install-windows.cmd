@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul 2>nul
 setlocal EnableExtensions
 title Ghost Nexora Bot - Instalador Windows
 color 0B
@@ -34,7 +35,25 @@ if errorlevel 1 (
   goto :cleanup_failed
 )
 
-echo [ OK ] Instalador descargado.
+echo [1/2] Normalizando UTF-8 para Windows PowerShell 5.1...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:GN_INSTALLER; $text=Get-Content -LiteralPath $p -Raw -Encoding UTF8; Set-Content -LiteralPath $p -Value $text -Encoding UTF8"
+if errorlevel 1 (
+  color 0C
+  echo.
+  echo [ERROR] No se pudo normalizar el instalador a UTF-8 con BOM.
+  goto :cleanup_failed
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:GN_INSTALLER,[ref]$tokens,[ref]$errors) ^| Out-Null; if($errors.Count -gt 0){ $errors ^| ForEach-Object { Write-Error $_.Message }; exit 1 }"
+if errorlevel 1 (
+  color 0C
+  echo.
+  echo [ERROR] El instalador descargado contiene un error de sintaxis o codificacion.
+  echo         No se ejecutara un script corrupto.
+  goto :cleanup_failed
+)
+
+echo [ OK ] Instalador descargado y validado en UTF-8.
 echo [2/2] Iniciando asistente interactivo en esta misma terminal...
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%GN_INSTALLER%" %*
