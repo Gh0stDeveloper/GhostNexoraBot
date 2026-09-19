@@ -196,7 +196,7 @@ export class CommandRouter {
     if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && !disabledGroupBootstrapCommands.has(command.name)) return false
 
     try {
-      await react('⚡')
+      await react('⚡').catch(() => undefined)
       const filtersStarted = performance.now()
       let filtersRecorded = false
       const finishFilters = () => {
@@ -208,19 +208,19 @@ export class CommandRouter {
       if (command.ownerOnly && !isOwner) {
         finishFilters()
         await reply(t('router.ownerOnly'))
-        await react('🚫')
+        await react('🚫').catch(() => undefined)
         return true
       }
       if (command.staffOnly && !isBotStaff && !(command.subbotOwnerAllowed && isSubbotOwner)) {
         finishFilters()
         await reply(t('router.staffOnly'))
-        await react('🚫')
+        await react('🚫').catch(() => undefined)
         return true
       }
       if (command.groupOnly && !isGroup) {
         finishFilters()
         await reply(t('router.groupOnly'))
-        await react('🚫')
+        await react('🚫').catch(() => undefined)
         return true
       }
 
@@ -228,7 +228,7 @@ export class CommandRouter {
         if (!isGroup) {
           finishFilters()
           await reply(t('router.groupRequired'))
-          await react('🚫')
+          await react('🚫').catch(() => undefined)
           return true
         }
         const metadata = await socket.groupMetadata(chatId)
@@ -241,13 +241,13 @@ export class CommandRouter {
         if (command.adminOnly && !senderIsAdmin) {
           finishFilters()
           await reply(t('router.adminOnly'))
-          await react('🚫')
+          await react('🚫').catch(() => undefined)
           return true
         }
         if (command.botAdminOnly && !botIsAdmin) {
           finishFilters()
           await reply(t('router.botAdminOnly'))
-          await react('🚫')
+          await react('🚫').catch(() => undefined)
           return true
         }
       }
@@ -261,7 +261,7 @@ export class CommandRouter {
         if (!senderIsGroupAdmin) {
           finishFilters()
           await reply(t('router.categoryDisabled', { category: command.category }))
-          await react('🚫')
+          await react('🚫').catch(() => undefined)
           return true
         }
       }
@@ -308,7 +308,7 @@ export class CommandRouter {
       }
 
       community.awardCommandXp(sender)
-      await react('✅')
+      await react('✅').catch(() => undefined)
       return true
     } catch (error) {
       logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')
