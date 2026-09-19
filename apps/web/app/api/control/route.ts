@@ -1,3 +1,6 @@
+import { randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import {
@@ -55,7 +58,7 @@ function normalizeSection(value: unknown, session: WebSession) {
   const allowed = session.role === 'subbot'
     ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'account'])
     : owner
-      ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
+      ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'updates', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
       : privileged
         ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'security'])
         : new Set(['overview'])
@@ -110,6 +113,61 @@ function localOpsAction(action: string, instance: string, payload: Record<string
   if (!db) return { ok: false, error: 'bot_database_unavailable' }
   try {
     const table = (name: string) => Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name))
+
+    if (action === 'request_update') {
+      if (instance !== 'main' || role !== 'owner') return { ok: false, error: 'forbidden' }
+      if (!table('ops_jobs')) return { ok: false, error: 'jobs_runtime_not_ready' }
+      if (!existsSync('/etc/systemd/system/ghost-nexora-update.path')) return { ok: false, error: 'update_trigger_not_installed' }
+
+      const active = db.prepare(`SELECT id FROM ops_jobs
+        WHERE instance_key = 'main' AND job_type = 'update' AND status IN ('waiting','running')
+        ORDER BY updated_at DESC LIMIT 1`).get() as { id?: string } | undefined
+      if (active?.id || existsSync(path.join(runtime.dataDir, 'update-request'))) {
+        return { ok: false, error: 'update_already_running' }
+      }
+
+      const jobId = `job_${randomBytes(12).toString('base64url')}`
+      const stamp = Date.now()
+      db.prepare(`INSERT INTO ops_jobs(
+          id, instance_key, job_type, label, source, status, progress, detail, error,
+          cancellable, retryable, retry_of, created_at, started_at, completed_at, updated_at
+        ) VALUES(?, 'main', 'update', 'Dashboard update', 'web-dashboard', 'waiting', 0,
+          'safe_update_request_queued', NULL, 0, 0, NULL, ?, NULL, NULL, ?)`)
+        .run(jobId, stamp, stamp)
+
+      try {
+        mkdirSync(runtime.dataDir, { recursive: true })
+        writeFileSync(path.join(runtime.dataDir, 'update-status.json'), `${JSON.stringify({
+          schemaVersion: 1,
+          jobId,
+          stage: 'fetch',
+          status: 'waiting',
+          progress: 0,
+          message: 'safe_update_request_queued',
+          error: null,
+          branch: null,
+          oldSha: null,
+          newSha: null,
+          version: null,
+          startedAt: stamp,
+          updatedAt: stamp,
+          completedAt: null,
+        }, null, 2)}\n`, { mode: 0o600 })
+        writeFileSync(path.join(runtime.dataDir, 'update-request'), `${JSON.stringify({
+          source: 'web-dashboard',
+          requestedAt: new Date(stamp).toISOString(),
+          requestedBy,
+          jobId,
+        })}\n`, { mode: 0o600 })
+      } catch (error) {
+        const detail = error instanceof Error ? error.message.slice(0, 500) : 'update_request_write_failed'
+        db.prepare(`UPDATE ops_jobs SET status = 'failed', error = ?, completed_at = ?, updated_at = ?
+          WHERE id = ? AND instance_key = 'main'`).run(detail, Date.now(), Date.now(), jobId)
+        return { ok: false, error: 'update_request_write_failed' }
+      }
+
+      return { ok: true, action, instance: 'main', jobId, queued: true }
+    }
 
     if (action === 'cancel_job' || action === 'retry_job') {
       if (!table('ops_jobs') || !table('ops_job_requests')) return { ok: false, error: 'jobs_runtime_not_ready' }
@@ -383,6 +441,7 @@ function permissionForAction(action: string): WebPermission | null {
   if (['save_command_config', 'reset_command_config', 'set_command_category'].includes(action)) return 'commands:manage'
   if (action === 'reset_audit') return 'audit:reset'
   if (['cancel_job', 'retry_job'].includes(action)) return 'jobs:manage'
+  if (action === 'request_update') return 'updates:manage'
   if (action === 'add_nxc') return 'management:economy'
   if (['grant_subbot', 'reset_subbot'].includes(action)) return 'management:subbots'
   if (action === 'broadcast') return 'management:broadcast'
@@ -393,7 +452,7 @@ function permissionForAction(action: string): WebPermission | null {
 function requiresFreshAuth(action: string) {
   return new Set([
     'leave_group', 'reset_subbot', 'reset_own_subbot', 'broadcast',
-    'create_backup', 'restore_backup', 'add_nxc', 'grant_subbot',
+    'create_backup', 'restore_backup', 'add_nxc', 'grant_subbot', 'request_update',
   ]).has(action)
 }
 
@@ -493,7 +552,7 @@ async function handlePost(request: NextRequest) {
   const localActions = new Set([
     'leave_group', 'sync_groups', 'reset_audit', 'save_command_config', 'reset_command_config', 'set_command_category', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
     'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
-    'group_config_update', 'group_broadcast', 'cancel_job', 'retry_job',
+    'group_config_update', 'group_broadcast', 'cancel_job', 'retry_job', 'request_update',
   ])
 
   if (localActions.has(action)) {
