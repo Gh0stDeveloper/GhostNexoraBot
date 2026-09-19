@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { downloadFdroidApk, searchFdroid } from '../services/resources.js'
@@ -293,7 +293,7 @@ function bytes(value: number) {
   return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
-async function downloadExternal(ctx: CommandContext, store: ExtraStore, token: string) {
+async function downloadExternal(ctx: LegacyCompatibleCommandContext, store: ExtraStore, token: string) {
   const item = getItem(token, store)
   if (store === 'fdroid') {
     const file = await downloadFdroidApk(item.pageUrl)
@@ -348,7 +348,7 @@ function body(item: ExtraItem) {
   return [item.version ? `Versión: ${item.version}` : '', item.sizeLabel ? `Peso: ${item.sizeLabel}` : '', item.summary?.slice(0, 100) ?? ''].filter(Boolean).join('\n').slice(0, 135) || 'Aplicación Android'
 }
 
-async function showStore(ctx: CommandContext, store: ExtraStore, query: string) {
+async function showStore(ctx: LegacyCompatibleCommandContext, store: ExtraStore, query: string) {
   const results = store === 'fdroid' ? await searchFdroidStore(query) : store === 'apktools' ? await searchApkTools(query) : await searchAndroForever(query)
   if (!results.length) throw new Error(`${label(store)} no encontró resultados realmente relacionados con “${query}”.`)
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -364,7 +364,7 @@ async function showStore(ctx: CommandContext, store: ExtraStore, query: string) 
   })
 }
 
-async function selectStore(ctx: CommandContext, store: ExtraStore) {
+async function selectStore(ctx: LegacyCompatibleCommandContext, store: ExtraStore) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}${store} <aplicación>.`)
   const item = getItem(token, store)
@@ -377,7 +377,7 @@ async function selectStore(ctx: CommandContext, store: ExtraStore) {
   })
 }
 
-function requireQuery(ctx: CommandContext, command: string) {
+function requireQuery(ctx: LegacyCompatibleCommandContext, command: string) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}${command} <aplicación>`)
   return query.slice(0, 120)

@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { htmlGameUnavailableText, sendAiHtmlMessage } from '../services/ai-html.js'
 import {
   build2048GameHtml,
@@ -9,7 +9,7 @@ import {
   buildPongGameHtml,
 } from '../services/arcade-games-v17.js'
 
-async function sendGame(ctx: CommandContext, command: string, title: string, icon: string, build: () => string) {
+async function sendGame(ctx: LegacyCompatibleCommandContext, command: string, title: string, icon: string, build: () => string) {
   try {
     await sendAiHtmlMessage(ctx.socket, ctx.chatId, build(), {
       title: `${title} · Ghost Nexora`,

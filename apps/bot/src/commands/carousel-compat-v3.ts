@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy, COIN_SYMBOL } from '../services/economy.js'
@@ -12,13 +12,13 @@ import { recordSubbotDownload } from '../services/subbot-metrics.js'
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
 const mb = (value: number) => `${(value / 1024 / 1024).toFixed(1)} MB`
 
-async function botAvatar(ctx: CommandContext) {
+async function botAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-async function jobCarousel(ctx: CommandContext) {
+async function jobCarousel(ctx: LegacyCompatibleCommandContext) {
   const requested = ctx.argText.trim()
   const lower = requested.toLowerCase()
   const requestedPage = /^\d+$/.test(lower) ? Number(lower) : 1
@@ -70,7 +70,7 @@ const shopProducts = [
   { id: 'subbot30d', icon: '👑', title: 'Subbot · 30 días', price: 100000, description: 'Subbot independiente durante 30 días.' },
 ] as const
 
-async function shopCarousel(ctx: CommandContext) {
+async function shopCarousel(ctx: LegacyCompatibleCommandContext) {
   const avatar = await botAvatar(ctx)
   const balance = economy.balance(ctx.sender)
   const miner = mining.summary(ctx.sender)
@@ -109,7 +109,7 @@ async function shopCarousel(ctx: CommandContext) {
   })
 }
 
-function assertAdult(ctx: CommandContext) {
+function assertAdult(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`El módulo 18+ está desactivado en este grupo. Un administrador puede usar ${ctx.prefix}adultmode on.`)
   } else if (!settings.adultEnabled || !config.adultPrivateEnabled) {
@@ -124,7 +124,7 @@ function isUrl(value: string) {
 
 function safeUrlForCommand(url: string) { return url.replace(/\s/g, '%20') }
 
-async function adultVideo(ctx: CommandContext, provider: string, url: string) {
+async function adultVideo(ctx: LegacyCompatibleCommandContext, provider: string, url: string) {
   assertAdult(ctx)
   const progress = await createDownloadProgress(ctx, `${provider.toUpperCase()} · video`)
   await progress.update('downloading', 'Extrayendo fuente directa y validando el archivo')
@@ -143,7 +143,7 @@ async function adultVideo(ctx: CommandContext, provider: string, url: string) {
   } finally { await result.cleanup() }
 }
 
-async function adultCarousel(ctx: CommandContext, provider: AdultProvider) {
+async function adultCarousel(ctx: LegacyCompatibleCommandContext, provider: AdultProvider) {
   assertAdult(ctx)
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}${provider} <búsqueda|url>`)

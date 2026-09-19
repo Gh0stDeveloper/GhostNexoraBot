@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -31,7 +31,7 @@ function getCachedResult(token: string) {
   return entry
 }
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   const isGroup = ctx.chatId.endsWith('@g.us')
   if (isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
@@ -48,7 +48,7 @@ function assertAdultAccess(ctx: CommandContext) {
   }
 }
 
-async function sendAdultVideo(ctx: CommandContext, provider: string, url: string) {
+async function sendAdultVideo(ctx: LegacyCompatibleCommandContext, provider: string, url: string) {
   await ctx.reply(`⬇️ *${provider.toUpperCase()}*\nPreparando el video...`)
   const result = await downloadAdult(url)
   try {
@@ -88,7 +88,7 @@ async function sendAdultVideo(ctx: CommandContext, provider: string, url: string
  * (no URLs largas) y tarjeta de navegación separada. Evita el aviso de
  * "actualiza WhatsApp" por payloads interactivos demasiado pesados.
  */
-async function searchOrDownload(ctx: CommandContext, provider: AdultProvider) {
+async function searchOrDownload(ctx: LegacyCompatibleCommandContext, provider: AdultProvider) {
   assertAdultAccess(ctx)
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}${provider} <búsqueda|url>`)

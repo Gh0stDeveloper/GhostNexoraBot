@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { askAI, aiConfigured, getAIStatus } from '../services/ai.js'
 import { googleSearch, wikipediaSearch, type WebSearchResult } from '../services/web-search.js'
 import { sendAssistantReply } from '../services/assistant-reply.js'
@@ -12,7 +12,7 @@ const SYSTEM_PROMPT_BASE = [
   'Puedes firmar mentalmente como Ghost Nexora, pero no repitas el watermark en cada línea.',
 ].join(' ')
 
-function systemPrompt(ctx: CommandContext) {
+function systemPrompt(ctx: LegacyCompatibleCommandContext) {
   return `${SYSTEM_PROMPT_BASE} ${ctx.t('assistant.languageInstruction')}`
 }
 

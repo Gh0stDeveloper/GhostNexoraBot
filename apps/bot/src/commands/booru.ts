@@ -1,10 +1,10 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { economy } from '../services/economy.js'
 import { sendCarousel } from '../services/interactive.js'
 import { searchE621, searchGelbooru, searchSafebooru, type BooruPost } from '../services/booru.js'
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no tiene NSFW activo. Un admin puede usar ${ctx.prefix}adultmode on.`)
   } else {
@@ -13,7 +13,7 @@ function assertAdultAccess(ctx: CommandContext) {
   if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) throw new Error(`Confirma primero que eres mayor de edad con ${ctx.prefix}adult18 accept.`)
 }
 
-async function sendResults(ctx: CommandContext, title: string, query: string, posts: BooruPost[]) {
+async function sendResults(ctx: LegacyCompatibleCommandContext, title: string, query: string, posts: BooruPost[]) {
   if (!posts.length) throw new Error('No encontré imágenes para esas etiquetas.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title,

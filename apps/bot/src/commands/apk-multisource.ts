@@ -1,9 +1,9 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import { downloadAndroidApk, getAndroidApk, searchAndroidApks, type UnifiedApkItem } from '../services/apk-sources.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
-function requireQuery(ctx: CommandContext) {
+function requireQuery(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}aptoide <nombre de aplicación>`)
   return query
@@ -47,7 +47,7 @@ function itemBody(item: UnifiedApkItem) {
   ].filter(Boolean).join('\n')
 }
 
-function resultButtons(ctx: CommandContext, item: UnifiedApkItem): InteractiveButton[] {
+function resultButtons(ctx: LegacyCompatibleCommandContext, item: UnifiedApkItem): InteractiveButton[] {
   const buttons: InteractiveButton[] = [
     { type: 'reply', text: '⬇️ Descargar APK', id: `${ctx.prefix}apkdl ${item.token}` },
     { type: 'reply', text: 'ℹ️ Detalles', id: `${ctx.prefix}apkinfo ${item.token}` },
@@ -56,7 +56,7 @@ function resultButtons(ctx: CommandContext, item: UnifiedApkItem): InteractiveBu
   return buttons
 }
 
-async function showApkResults(ctx: CommandContext, query: string) {
+async function showApkResults(ctx: LegacyCompatibleCommandContext, query: string) {
   await ctx.reply(`🔎 *APTOIDE / MULTI-FUENTE*\n━━━━━━━━━━━━━━\nConsultando Aptoide, APK.Tools y AndroForever para *${query}*...\n\n💡 Oficiales: ${ctx.prefix}apk · Mods: ${ctx.prefix}happymod`)
   const results = await searchAndroidApks(query, 12)
   if (!results.length) throw new Error('No encontré APKs para esa búsqueda en las fuentes disponibles.')

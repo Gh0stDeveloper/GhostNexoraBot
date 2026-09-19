@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import {
   downloadAnimeEpisode,
   getAnimeEpisodes,
@@ -22,7 +22,7 @@ const formatBytes = (bytes: number) => {
 const sourceQuality = (quality: string) => quality && quality !== 'unknown' ? quality : 'calidad disponible'
 const clampPage = (page: number, total: number) => Math.max(1, Math.min(total, Number.isInteger(page) ? page : 1))
 
-async function animeSearchCarousel(ctx: CommandContext, query: string, page: number) {
+async function animeSearchCarousel(ctx: LegacyCompatibleCommandContext, query: string, page: number) {
   const allResults = await searchAnime(query, 20)
   if (!allResults.length) throw new Error('No encontré ese anime en las fuentes disponibles.')
 
@@ -58,7 +58,7 @@ async function animeSearchCarousel(ctx: CommandContext, query: string, page: num
   })
 }
 
-async function animeEpisodesCarousel(ctx: CommandContext, animeId: string, seasonNumber?: number, page = 1) {
+async function animeEpisodesCarousel(ctx: LegacyCompatibleCommandContext, animeId: string, seasonNumber?: number, page = 1) {
   const seasons = await getAnimeSeasons(animeId)
   if (!seasons.length) throw new Error('No pude obtener las temporadas disponibles.')
 
@@ -117,7 +117,7 @@ async function animeEpisodesCarousel(ctx: CommandContext, animeId: string, seaso
   })
 }
 
-async function sendSeasonCarousel(ctx: CommandContext, animeId: string, seasons: number[]) {
+async function sendSeasonCarousel(ctx: LegacyCompatibleCommandContext, animeId: string, seasons: number[]) {
   const cards: CarouselCard[] = seasons.slice(0, 12).map((season) => ({
     title: `Temporada ${season}`,
     body: `Explora los episodios disponibles de la temporada ${season}.`,

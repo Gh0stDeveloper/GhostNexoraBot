@@ -1,14 +1,14 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { config } from '../config.js'
 import { fetchChannelMessages, postServerId, publishChannelText, reactChannelMessage, resolveOfficialChannel, shareChannelPostToGroup, updateChannel, channelMessageIdFromUrl } from '../services/channel-v8.js'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-function requireChannelStaff(ctx: CommandContext) { if (!ctx.isBotStaff && !ctx.isOwner && !(ctx.instanceId && ctx.isSubbotOwner)) throw new Error('Necesitas permisos de staff/owner para administrar el canal.') }
-function requireChannelOwner(ctx: CommandContext) { if (!ctx.isOwner && !ctx.isSubbotOwner) throw new Error('Solo el owner del bot o del subbot puede modificar el canal.') }
+function requireChannelStaff(ctx: LegacyCompatibleCommandContext) { if (!ctx.isBotStaff && !ctx.isOwner && !(ctx.instanceId && ctx.isSubbotOwner)) throw new Error('Necesitas permisos de staff/owner para administrar el canal.') }
+function requireChannelOwner(ctx: LegacyCompatibleCommandContext) { if (!ctx.isOwner && !ctx.isSubbotOwner) throw new Error('Solo el owner del bot o del subbot puede modificar el canal.') }
 
-async function channelInfo(ctx: CommandContext) {
+async function channelInfo(ctx: LegacyCompatibleCommandContext) {
   const { metadata, jid } = await resolveOfficialChannel(ctx.socket)
   await ctx.reply([
     '📢 *CANAL OFICIAL DE WHATSAPP*',
@@ -21,7 +21,7 @@ async function channelInfo(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function channelPost(ctx: CommandContext) {
+async function channelPost(ctx: LegacyCompatibleCommandContext) {
   requireChannelStaff(ctx)
   const text = ctx.argText.trim()
   if (!text) throw new Error(`Uso: ${ctx.prefix}channelpost <mensaje>`)
@@ -30,7 +30,7 @@ async function channelPost(ctx: CommandContext) {
   await ctx.reply('✅ Publicación enviada al canal oficial.')
 }
 
-async function channelShare(ctx: CommandContext) {
+async function channelShare(ctx: LegacyCompatibleCommandContext) {
   requireChannelStaff(ctx)
   const url = ctx.args[0]
   if (!url) throw new Error(`Uso: ${ctx.prefix}channelshare <https://whatsapp.com/channel/.../mensaje> [all]`)
@@ -49,7 +49,7 @@ async function channelShare(ctx: CommandContext) {
   await ctx.reply(`📢 *PUBLICACIÓN COMPARTIDA*\n━━━━━━━━━━━━━━\nGrupos alcanzados: *${sent}/${targets.length}*`)
 }
 
-async function channelReact(ctx: CommandContext) {
+async function channelReact(ctx: LegacyCompatibleCommandContext) {
   requireChannelStaff(ctx)
   const url = ctx.args[0]
   const emoji = ctx.args[1] || '👍'
@@ -60,8 +60,8 @@ async function channelReact(ctx: CommandContext) {
   await ctx.reply(`✅ Reacción *${emoji}* aplicada.`)
 }
 
-async function channelName(ctx: CommandContext) { requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channelname <nombre>`); const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'name', value); await ctx.reply('✅ Nombre del canal actualizado.') }
-async function channelDescription(ctx: CommandContext) { requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channeldescription <descripción>`); const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'description', value); await ctx.reply('✅ Descripción del canal actualizada.') }
+async function channelName(ctx: LegacyCompatibleCommandContext) { requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channelname <nombre>`); const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'name', value); await ctx.reply('✅ Nombre del canal actualizado.') }
+async function channelDescription(ctx: LegacyCompatibleCommandContext) { requireChannelOwner(ctx); const value = ctx.argText.trim(); if (!value) throw new Error(`Uso: ${ctx.prefix}channeldescription <descripción>`); const { jid } = await resolveOfficialChannel(ctx.socket); await updateChannel(ctx.socket, jid, 'description', value); await ctx.reply('✅ Descripción del canal actualizada.') }
 
 function humanPermission(command: BotCommand) {
   const labels: string[] = []
@@ -104,7 +104,7 @@ function formatFeatureList(features: Record<string, unknown> | undefined) {
   })
 }
 
-async function channelCatalog(ctx: CommandContext) {
+async function channelCatalog(ctx: LegacyCompatibleCommandContext) {
   requireChannelStaff(ctx)
   const { jid } = await resolveOfficialChannel(ctx.socket)
   const manifest = await readCatalogManifest()

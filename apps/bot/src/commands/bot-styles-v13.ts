@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import {
   getBotVisualStyle,
@@ -14,22 +14,22 @@ import {
 const PAGE_SIZE = 6
 const IMAGE_PAGE_SIZE = 8
 
-async function currentAvatar(ctx: CommandContext) {
+async function currentAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-function requireStyleManager(ctx: CommandContext) {
+function requireStyleManager(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isOwner || ctx.isSubbotOwner || ctx.isBotStaff) return
   throw new Error('Solo el owner, el owner de este subbot o el staff del bot puede cambiar su estilo visual.')
 }
 
-function styleIdFromArgs(ctx: CommandContext, startAt = 1) {
+function styleIdFromArgs(ctx: LegacyCompatibleCommandContext, startAt = 1) {
   return ctx.args.slice(startAt).join(' ').trim()
 }
 
-async function sendStylesNavigation(ctx: CommandContext, page: number, totalPages: number) {
+async function sendStylesNavigation(ctx: LegacyCompatibleCommandContext, page: number, totalPages: number) {
   if (totalPages <= 1) return
   const buttons = [] as Array<{ type: 'reply'; text: string; id: string }>
   if (page > 1) buttons.push({ type: 'reply', text: '⬅️ Anterior', id: `${ctx.prefix}styles ${page - 1}` })
@@ -45,7 +45,7 @@ async function sendStylesNavigation(ctx: CommandContext, page: number, totalPage
 }
 
 async function sendVariantNavigation(
-  ctx: CommandContext,
+  ctx: LegacyCompatibleCommandContext,
   styleId: string,
   page: number,
   totalPages: number,
@@ -63,7 +63,7 @@ async function sendVariantNavigation(
   })
 }
 
-async function stylesCarousel(ctx: CommandContext) {
+async function stylesCarousel(ctx: LegacyCompatibleCommandContext) {
   // El catálogo principal es exclusivamente de waifus. Default sigue disponible
   // mediante `.style reset`, pero no ocupa una tarjeta dentro del catálogo visual.
   const styles = listBotVisualStyles().filter((style) => style.id !== 'default')
@@ -114,7 +114,7 @@ async function stylesCarousel(ctx: CommandContext) {
   await sendStylesNavigation(ctx, page, totalPages)
 }
 
-async function styleImagesCarousel(ctx: CommandContext, rawStyleId: string, requestedPage = 1) {
+async function styleImagesCarousel(ctx: LegacyCompatibleCommandContext, rawStyleId: string, requestedPage = 1) {
   const style = getBotVisualStyle(rawStyleId)
   if (!style || style.id === 'default') throw new Error(`Waifu no encontrada. Usa ${ctx.prefix}styles.`)
   const images = listBotVisualStyleImages(style)
@@ -169,7 +169,7 @@ async function styleImagesCarousel(ctx: CommandContext, rawStyleId: string, requ
   await sendVariantNavigation(ctx, style.id, page, totalPages)
 }
 
-async function styleImageCommand(ctx: CommandContext) {
+async function styleImageCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'current').toLowerCase()
 
   if (['current', 'actual', 'status'].includes(action)) {
@@ -218,7 +218,7 @@ async function styleImageCommand(ctx: CommandContext) {
   await styleImagesCarousel(ctx, action, page)
 }
 
-async function styleCommand(ctx: CommandContext) {
+async function styleCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'current').toLowerCase()
 
   if (['list', 'lista', 'styles', 'estilos'].includes(action)) {

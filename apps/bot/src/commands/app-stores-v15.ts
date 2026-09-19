@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { downloadAptoideApk, getAptoideApp, searchAptoideApps, type AptoideApp } from '../services/aptoide.js'
@@ -77,7 +77,7 @@ function rankRelevant<T>(query: string, items: T[], fields: (item: T) => { name:
     .map((row) => row.item)
 }
 
-function requireQuery(ctx: CommandContext, command: string) {
+function requireQuery(ctx: LegacyCompatibleCommandContext, command: string) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}${command} <aplicación>`)
   return query.slice(0, 120)
@@ -250,7 +250,7 @@ function safeFile(value: string) {
   return value.normalize('NFKD').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 80) || 'android-app'
 }
 
-async function downloadWebStore(ctx: CommandContext, store: WebStore, token: string) {
+async function downloadWebStore(ctx: LegacyCompatibleCommandContext, store: WebStore, token: string) {
   const item = getWebItem(token, store)
   const direct = await resolveWebPackage(item)
   const dir = await mkdtemp(path.join(os.tmpdir(), `ghostnexora-${store}-`))
@@ -300,7 +300,7 @@ function webCardBody(item: WebStoreItem) {
     .filter(Boolean).join('\n').slice(0, 130) || 'Aplicación Android'
 }
 
-async function showWebStore(ctx: CommandContext, store: WebStore, query: string) {
+async function showWebStore(ctx: LegacyCompatibleCommandContext, store: WebStore, query: string) {
   const results = await searchWebStore(store, query)
   const label = store === 'uptodown' ? 'UPTODOWN' : 'LITEAPKS'
   if (!results.length) throw new Error(`No encontré resultados realmente relacionados con “${query}” en ${label}.`)
@@ -317,7 +317,7 @@ async function showWebStore(ctx: CommandContext, store: WebStore, query: string)
   })
 }
 
-async function selectWebStore(ctx: CommandContext, store: WebStore) {
+async function selectWebStore(ctx: LegacyCompatibleCommandContext, store: WebStore) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}${store} <aplicación>.`)
   const item = getWebItem(token, store)
@@ -341,7 +341,7 @@ function aptoideBody(app: AptoideApp) {
   ].filter(Boolean).join('\n').slice(0, 130)
 }
 
-async function showAptoide(ctx: CommandContext, query: string) {
+async function showAptoide(ctx: LegacyCompatibleCommandContext, query: string) {
   const raw = await searchAptoideApps(query, 10)
   const results = rankRelevant(query, raw, (app) => ({ name: app.name, extra: `${app.packageName} ${app.developer ?? ''} ${app.summary ?? ''}` })).slice(0, MAX_RESULTS)
   if (!results.length) throw new Error(`Aptoide no encontró resultados realmente relacionados con “${query}”.`)
@@ -358,7 +358,7 @@ async function showAptoide(ctx: CommandContext, query: string) {
   })
 }
 
-async function selectAptoide(ctx: CommandContext) {
+async function selectAptoide(ctx: LegacyCompatibleCommandContext) {
   const id = ctx.args[0] ?? ''
   if (!id) throw new Error(`Usa primero ${ctx.prefix}aptoide <aplicación>.`)
   const app = await getAptoideApp(id)
@@ -371,7 +371,7 @@ async function selectAptoide(ctx: CommandContext) {
   })
 }
 
-async function downloadAptoide(ctx: CommandContext) {
+async function downloadAptoide(ctx: LegacyCompatibleCommandContext) {
   const id = ctx.args[0] ?? ''
   if (!id) throw new Error(`Usa primero ${ctx.prefix}aptoide <aplicación>.`)
   const result = await downloadAptoideApk(id)
@@ -391,7 +391,7 @@ function happyBody(item: HappyModItem) {
   return [item.version ? `Versión: ${item.version}` : '', item.sizeLabel ? `Peso: ${item.sizeLabel}` : '', item.summary?.slice(0, 90) ?? ''].filter(Boolean).join('\n').slice(0, 130) || 'HappyMod'
 }
 
-async function showHappyMod(ctx: CommandContext, query: string) {
+async function showHappyMod(ctx: LegacyCompatibleCommandContext, query: string) {
   const raw = await searchHappyMod(query, 12)
   // La búsqueda remota ya aplica la consulta. Priorizamos coincidencias fuertes,
   // pero nunca descartamos una respuesta válida solo porque el nombre no contenga
@@ -412,7 +412,7 @@ async function showHappyMod(ctx: CommandContext, query: string) {
   })
 }
 
-async function selectHappyMod(ctx: CommandContext) {
+async function selectHappyMod(ctx: LegacyCompatibleCommandContext) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}happymod <aplicación>.`)
   const item = getHappyModItem(token)
@@ -425,7 +425,7 @@ async function selectHappyMod(ctx: CommandContext) {
   })
 }
 
-async function downloadHappyMod(ctx: CommandContext) {
+async function downloadHappyMod(ctx: LegacyCompatibleCommandContext) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}happymod <aplicación>.`)
   const result = await downloadHappyModApk(token)
