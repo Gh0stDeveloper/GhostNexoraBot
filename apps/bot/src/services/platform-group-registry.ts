@@ -99,6 +99,25 @@ export function upsertPlatformGroup(
   return true
 }
 
+
+export function mergePlatformGroups(
+  platform: OpsPlatform,
+  groups: PlatformGroupRecord[],
+  instanceKey = opsInstanceKey(),
+  stamp = Date.now(),
+) {
+  opsDb.exec('BEGIN IMMEDIATE')
+  try {
+    for (const group of groups) {
+      upsertPlatformGroup(platform, { ...group, authoritative: true }, instanceKey, stamp)
+    }
+    opsDb.exec('COMMIT')
+  } catch (error) {
+    opsDb.exec('ROLLBACK')
+    throw error
+  }
+}
+
 export function replacePlatformGroups(
   platform: OpsPlatform,
   groups: PlatformGroupRecord[],
