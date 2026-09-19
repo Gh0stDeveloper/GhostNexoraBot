@@ -1,4 +1,3 @@
-import { execa } from 'execa'
 import type { BotCommand, CommandContext } from '../types.js'
 import { downloadMessageMedia } from '../utils/message.js'
 import {
@@ -8,6 +7,7 @@ import {
   importAdultReactionMediaFromUrl,
   listAdultReactionMedia,
   listAllowedAdultMediaCommands,
+  normalizeAdultReactionMediaForWhatsapp,
   removeAdultReactionMedia,
 } from '../services/adult-media-v8.js'
 
@@ -26,32 +26,6 @@ function mimeFromFileName(fileName?: string | null) {
   if (name.endsWith('.png')) return 'image/png'
   if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg'
   return null
-}
-
-async function normalizeForWhatsappPlayback(buffer: Buffer, mimeType: string) {
-  if (!/^(image\/gif|video\/(gif|webm))$/i.test(mimeType)) {
-    return { buffer, mimeType }
-  }
-
-  try {
-    const { stdout } = await execa('ffmpeg', [
-      '-hide_banner', '-loglevel', 'error',
-      '-i', 'pipe:0',
-      '-vf', "scale='min(480,iw)':-2:flags=lanczos,fps=15",
-      '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-      '-movflags', 'frag_keyframe+empty_moov',
-      '-f', 'mp4', 'pipe:1',
-    ], {
-      input: buffer,
-      encoding: 'buffer',
-      timeout: 45_000,
-      maxBuffer: 25 * 1024 * 1024,
-    })
-    return { buffer: Buffer.from(stdout), mimeType: 'video/mp4' }
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`No pude convertir el GIF/WEBM a MP4 para WhatsApp: ${detail}`)
-  }
 }
 
 async function add(ctx: CommandContext) {
@@ -86,10 +60,10 @@ async function add(ctx: CommandContext) {
   }
 
   const sourceMime = inferred ?? mimetype
-  const normalized = await normalizeForWhatsappPlayback(media.buffer, sourceMime)
+  const normalized = await normalizeAdultReactionMediaForWhatsapp(media.buffer, sourceMime)
   const saved = await addAdultReactionMedia(
     command,
-    normalized.buffer,
+    normalized.data,
     normalized.mimeType,
     ctx.sender,
     media.fileName ?? undefined,
