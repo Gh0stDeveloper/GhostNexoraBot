@@ -81,7 +81,10 @@ function PlatformSection({ platform, rows, locale, status }: {
       {rows.map((row) => <article key={platform + ':' + row.externalId} className="px-5 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="truncate font-semibold text-zinc-100">{row.name}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">{x('platformGroups.name')}</p>
+            <p className="mt-1 truncate font-semibold text-zinc-100">
+              {row.name && row.name !== row.externalId ? row.name : x('platformGroups.unknown')}
+            </p>
             <p className="mt-1 break-all font-mono text-[10px] text-zinc-700">{x('platformGroups.id')}: {row.externalId}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
