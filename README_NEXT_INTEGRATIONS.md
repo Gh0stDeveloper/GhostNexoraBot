@@ -902,7 +902,7 @@ Cierre:
 
 ## E8. Dashboard de usuarios
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Buscar por:
 
@@ -924,7 +924,7 @@ Mostrar, según permisos:
 - ban;
 - subbots.
 
-Implementación E8 en validación:
+Implementación E8:
 
 - nueva sección `Usuarios` en Operations Center;
 - búsqueda por número, JID o `display_name` observado por la telemetría;
@@ -935,8 +935,17 @@ Implementación E8 en validación:
 - warnings por grupo para roles con permiso de moderación;
 - cartera y banco leídos directamente desde la economía global compartida, sólo para Owner;
 - inventario y subbots visibles únicamente con permisos específicos;
-- estado de ban distingue entre activo, sin ban y registro de bans no disponible;
+- estado de ban distingue entre activo, sin ban y registro de bans no disponible, sin inventar un subsistema de bans que no exista;
+- permisos específicos `users:view`, `users:financial`, `users:moderation` y `users:subbots`;
 - smoke dedicado `scripts/phase-e8-user-dashboard-smoke.mjs` integrado al CI.
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E8 en verde;
+- aislamiento ES/EN y auditor i18n boundary en verde;
+- Windows installer, Termux y suite completa de regresiones en verde;
+- CI principal #2778: success sobre `d8ae811b618f6c32537bcff4cfbb9d3db36d7e36`.
 
 ## E9. Ledger de economía
 
@@ -1245,23 +1254,23 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-18 | Fase E | Dashboard Web V2 · inventario de grupos por plataforma | EN PROGRESO | feat/phase-e-platform-groups-dashboard |
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
 | 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
+| 2026-09-19 | Fase E8 | Dashboard de usuarios por instancia y permisos | TERMINADO | d8ae811b618f6c32537bcff4cfbb9d3db36d7e36 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial es **FASE E — Dashboard Web V2**, comenzando por inventario y sincronización de grupos por plataforma.
+La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E9 · Ledger de economía**.
 
 Prioridad inmediata:
 
-1. corregir la sincronización de grupos de WhatsApp;
-2. mostrar diagnóstico de sincronización y última actualización;
-3. separar grupos/servidores por plataforma: WhatsApp, Discord y Telegram;
-4. mantener acciones administrativas de WhatsApp sobre grupos reales de la instancia;
-5. registrar de forma persistente guilds de Discord;
-6. registrar grupos/supergrupos observados por Telegram, indicando la limitación de Bot API para enumerar chats históricos;
-7. continuar después con el resto de Dashboard Web V2.
+1. registrar cada movimiento económico con identificador único;
+2. conservar saldo anterior y posterior;
+3. identificar origen/tipo de cada movimiento;
+4. unificar auditoría de MainBot y subbots sobre la economía global compartida;
+5. exponer el ledger desde la Web con filtros por usuario, tipo y fecha;
+6. validar que ningún cambio de NXC pueda quedar sin trazabilidad.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
