@@ -211,8 +211,14 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
           THEN ops_groups.name
         ELSE excluded.name
       END,
-      participant_count = excluded.participant_count,
-      admin_count = excluded.admin_count,
+      participant_count = CASE
+        WHEN excluded.participant_count > 0 THEN excluded.participant_count
+        ELSE ops_groups.participant_count
+      END,
+      admin_count = CASE
+        WHEN excluded.participant_count > 0 THEN excluded.admin_count
+        ELSE ops_groups.admin_count
+      END,
       announce = excluded.announce,
       restrict_mode = excluded.restrict_mode,
       description = excluded.description,
