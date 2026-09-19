@@ -26,6 +26,9 @@ try {
   assert.equal(resolveChatLocale('5210000000000@s.whatsapp.net'), 'es')
   assert.equal(translate('en', 'menu.button.shop'), 'Shop')
   assert.equal(translate('es', 'menu.button.shop'), 'Tienda')
+  assert.notEqual(translate('es', 'router.categoryDisabled', { category: 'games' }), 'router.categoryDisabled')
+  assert.match(translate('es', 'router.categoryDisabled', { category: 'games' }), /games/)
+  assert.notEqual(translate('en', 'router.categoryDisabled', { category: 'games' }), 'router.categoryDisabled')
   assert.equal(localizeLegacyText('Resultados para: Minecraft · Descargar', 'en'), 'Results for: Minecraft · Download')
   assert.equal(
     localizeLegacyText('Descargar\n```js\nconst label = "Seleccionar"\n```\nSiguiente', 'en'),
