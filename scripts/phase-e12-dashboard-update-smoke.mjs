@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -91,6 +91,7 @@ try {
   ])
 
   status = JSON.parse(readFileSync(path.join(dataDir, 'update-status.json'), 'utf8'))
+  assert.equal(statSync(path.join(dataDir, 'update-status.json')).mode & 0o777, 0o640, 'E12 progress file must remain readable by the service group')
   assert.equal(status.status, 'failed')
   assert.ok(!String(status.error).includes('phase-e12-secret-token'), 'E12 failure leaked configured secret')
   assert.match(String(status.error), /REDACTED/, 'E12 error must remain diagnostic but sanitized')
@@ -100,6 +101,11 @@ try {
   assert.equal(row?.status, 'failed')
   assert.ok(Number(row?.completedAt) > 0)
   check.close()
+
+  const updateSyntax = spawnSync('bash', ['-n', path.join(root, 'scripts/update.sh')], { cwd: root, encoding: 'utf8' })
+  assert.equal(updateSyntax.status, 0, updateSyntax.stderr || 'update.sh syntax invalid')
+  const runnerSyntax = spawnSync('bash', ['-n', path.join(root, 'scripts/update-request-runner.sh')], { cwd: root, encoding: 'utf8' })
+  assert.equal(runnerSyntax.status, 0, runnerSyntax.stderr || 'update-request-runner.sh syntax invalid')
 
   const updater = readFileSync(path.join(root, 'scripts/update.sh'), 'utf8')
   const runner = readFileSync(path.join(root, 'scripts/update-request-runner.sh'), 'utf8')
