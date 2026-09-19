@@ -33,6 +33,11 @@
       "minimatch": "3.1.5"
     }
   },
+  "allowScripts": {
+    "baileys@7.0.0-rc14": true,
+    "esbuild@0.28.2": true,
+    "protobufjs@7.6.6": true
+  },
   "dependencies": {
     "pdf-parse": "^1.1.1",
     "mammoth": "^1.8.0"
