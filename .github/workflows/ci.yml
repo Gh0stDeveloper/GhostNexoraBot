@@ -78,6 +78,9 @@ jobs:
       - name: Phase E13 typed backups smoke
         run: node scripts/phase-e13-backups-smoke.mjs
 
+      - name: Phase E14 visual polish smoke
+        run: node scripts/phase-e14-visual-polish-smoke.mjs
+
       - name: Adult regular-user access smoke
         run: node scripts/adult-regular-user-access-smoke.mjs
 
