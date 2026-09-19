@@ -18,8 +18,8 @@ const opsExtraI18n = read('apps/web/lib/ops-extra-i18n.ts')
 const adminPage = read('apps/web/app/admin/page.tsx')
 const subbotPage = read('apps/web/app/subbot/page.tsx')
 
-assert.match(roadmap, /Fase E \| Dashboard Web V2 \| EN PROGRESO/, 'Phase E must be prioritized')
-assert.match(roadmap, /Fase B \| Núcleo multiplataforma compartido \| POSPUESTO/, 'Phase B must remain postponed')
+assert.match(roadmap, /Fase E \| Dashboard Web V2 \| TERMINADO/, 'Phase E must remain completed')
+assert.match(roadmap, /Fase B \| Núcleo multiplataforma compartido \| EN PROGRESO/, 'Phase B must remain active after Phase E completion')
 assert.match(roadmap, /Fase C \| Paridad Discord y Telegram \| POSPUESTO/, 'Phase C must remain postponed')
 assert.match(roadmap, /Fase D \| Runtime y entrega WhatsApp \| POSPUESTO/, 'Phase D must remain postponed')
 
