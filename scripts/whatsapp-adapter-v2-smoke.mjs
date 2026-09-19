@@ -143,8 +143,7 @@ try {
   assert.match(router, /createWhatsAppAdapter/)
   assert.match(router, /platform: 'whatsapp'/)
   assert.match(router, /adapter,\s*\n\s*normalizedMessage/)
-  assert.match(router, /const sendText: LegacyCompatibleCommandContext\['sendText'\]/)
-  assert.match(router, /const sent = await sendText\(replyText\)/)
+  assert.match(router, /adapter\.sendText\(chatId, replyText/)
   assert.match(types, /adapter: PlatformAdapter/)
   assert.match(types, /normalizedMessage: NormalizedMessage/)
 

@@ -146,9 +146,8 @@ try {
   const deleteIndex = requests.findIndex((request) => request.url.includes('/webhooks/901/slash-token/messages/@original') && request.method === 'DELETE')
   assert.ok(ackIndex >= 0 && sendIndex > ackIndex, 'slash interaction must be acknowledged before normal response')
   assert.ok(
-    typeof requests[sendIndex]?.body?.content === 'string'
-    && requests[sendIndex].body.content.includes('PONG'),
-    'slash ping must use the canonical B2 shared response',
+    String(requests[sendIndex].body?.content || '').includes('PONG'),
+    'slash ping must execute the shared neutral ping handler',
   )
   assert.ok(deleteIndex > sendIndex, 'deferred placeholder must be removed after shared adapter response')
   assert.equal(requests[ackIndex].body.type, 5)

@@ -1,5 +1,4 @@
 import type { BotCommand } from '../types.js'
-import { sharedNeutralCommands } from '../commands/shared-neutral.js'
 
 export type CommandPlatformSupport = {
   whatsapp: boolean
@@ -13,7 +12,7 @@ export type CommandPlatformSupport = {
 // that the full WhatsApp registry is already multiplatform.
 export const DISCORD_COMMAND_ALIAS_ENTRIES = [
   ['start', 'help'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
-  ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
+  ['ping', 'ping'], ['info', 'info'], ['version', 'version'], ['botinfo', 'info'],
   ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
   ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
   ['apkmirror', 'apkmirror'], ['apkm', 'apkmirror'], ['amirror', 'apkmirror'],
@@ -26,7 +25,7 @@ export const DISCORD_COMMAND_ALIAS_ENTRIES = [
 
 export const TELEGRAM_COMMAND_ALIAS_ENTRIES = [
   ['start', 'help'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
-  ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
+  ['ping', 'ping'], ['info', 'info'], ['version', 'version'], ['botinfo', 'info'],
   ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
   ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
   ['apkmirror', 'apkmirror'], ['apkm', 'apkmirror'], ['amirror', 'apkmirror'],
@@ -42,11 +41,6 @@ export const telegramCommandAliases = new Map<string, string>(TELEGRAM_COMMAND_A
 
 const discordTokens = new Set<string>(DISCORD_COMMAND_ALIAS_ENTRIES.map(([token]) => token))
 const telegramTokens = new Set<string>(TELEGRAM_COMMAND_ALIAS_ENTRIES.map(([token]) => token))
-const sharedNeutralTokens = new Set<string>(
-  sharedNeutralCommands.flatMap((command) => [command.name, ...(command.aliases ?? [])])
-    .map((token) => token.trim().toLowerCase())
-    .filter(Boolean),
-)
 
 function normalizedTokens(command: Pick<BotCommand, 'name' | 'aliases'>) {
   return [command.name, ...(command.aliases ?? [])]
@@ -58,8 +52,8 @@ export function commandPlatformSupport(command: Pick<BotCommand, 'name' | 'alias
   const tokens = normalizedTokens(command)
   return {
     whatsapp: true,
-    discord: tokens.some((token) => discordTokens.has(token) || sharedNeutralTokens.has(token)),
-    telegram: tokens.some((token) => telegramTokens.has(token) || sharedNeutralTokens.has(token)),
+    discord: tokens.some((token) => discordTokens.has(token)),
+    telegram: tokens.some((token) => telegramTokens.has(token)),
   }
 }
 

@@ -50,7 +50,7 @@ jobs:
       - name: Phase B1 neutral CommandContext smoke
         run: node scripts/phase-b1-neutral-command-context-smoke.mjs
 
-      - name: Phase B2 shared Command Engine smoke
+      - name: Phase B2 shared CommandEngine smoke
         run: node scripts/phase-b2-shared-command-engine-smoke.mjs
 
       - name: Phase E platform groups dashboard smoke

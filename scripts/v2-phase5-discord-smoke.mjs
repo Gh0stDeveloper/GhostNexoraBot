@@ -147,15 +147,12 @@ const beforePing = rest.calls.length
 assert.equal(await router.handleMessage(incoming), true)
 const pingCalls = rest.calls.slice(beforePing)
 assert.ok(pingCalls.some((call) => call[0] === 'triggerTyping'))
-assert.ok(pingCalls.some((call) =>
-  call[0] === 'createMessage'
-  && typeof call[2]?.content === 'string'
-  && call[2].content.includes('PONG')
-  && call[2].content.includes('Latencia')
-  && call[2].content.includes('Estado')
-), 'Discord ping must execute the canonical B2 shared ping handler')
+assert.ok(
+  pingCalls.some((call) => call[0] === 'createMessage' && String(call[2].content).includes('PONG')),
+  'Discord ping must execute the shared neutral ping handler',
+)
 
 const ignored = { ...incoming, id: '666', content: 'ping' }
 assert.equal(await router.handleMessage(ignored), false, 'plain guild text without prefix/mention must be ignored')
 
-console.log('[V2 PHASE 5] OK — Discord adapter/router normalize messages and enforce text, embed, component, file, edit, typing and reaction limits.')
+console.log('[V2 PHASE 5] OK — Discord adapter/router normalize messages, execute shared commands and enforce text, embed, component, file, edit, typing and reaction limits.')

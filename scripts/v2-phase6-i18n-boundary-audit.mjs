@@ -36,12 +36,12 @@ check('WhatsApp language command uses namespaced preferences', /setPlatformLocal
 
 check('Telegram uses platform locale resolver', /resolvePlatformLocale/.test(telegram))
 check('Telegram consumes language_code', /language_code/.test(telegram))
-check('Telegram exposes language command', /['"]language['"]/.test(telegram) && /setPlatformLocale/.test(telegram))
+check('Telegram delegates language to shared engine', /CommandEngine/.test(telegram) && /sharedNeutralCommands/.test(telegram) && /platform: ctx\.platform/.test(language))
 check('Discord uses platform locale resolver', /resolvePlatformLocale/.test(discord))
 check('Discord consumes interaction locale', /clientLocale/.test(discord) && /interaction\.locale/.test(discord))
 check('Discord supports guild_locale', /guild_locale/.test(discordTypes))
 check('Discord application commands localize descriptions', /description_localizations/.test(discord) && /en-US/.test(discord))
-check('Discord exposes language command', /['"]language['"]/.test(discord) && /setPlatformLocale/.test(discord))
+check('Discord delegates language to shared engine', /CommandEngine/.test(discord) && /sharedNeutralCommands/.test(discord) && /platform: ctx\.platform/.test(language))
 
 check('Web detects Accept-Language', /accept-language/i.test(webServer))
 check('Web persists locale cookie', /gnb_locale/.test(webServer) && /gnb_locale/.test(webProvider))
