@@ -15,7 +15,11 @@ let syncing = false
 let processing = false
 let connectionOpen = false
 let emptyFullSyncStreak = 0
+let disconnectAlertTimer: NodeJS.Timeout | null = null
+let lastHydrationSweepAt = 0
 const EMPTY_SYNC_CONFIRMATIONS = 3
+const CONNECTION_ALERT_GRACE_MS = 12_000
+const GROUP_HYDRATION_SWEEP_MS = 15_000
 const groupRefreshAt = new Map<string, number>()
 const PICTURE_REFRESH_MS = 6 * 60 * 60_000
 
@@ -364,6 +368,44 @@ async function syncOneGroup(groupJid: string, force = false) {
   }
 }
 
+async function hydrateNextObservedGroup() {
+  const socket = currentSocket
+  if (!socket || !socket.authState.creds.registered) return
+  const row = opsDb.prepare(`SELECT group_jid AS groupJid
+    FROM ops_groups
+    WHERE instance_key = ?
+      AND (name = group_jid OR TRIM(name) = '' OR participant_count = 0)
+    ORDER BY updated_at DESC
+    LIMIT 1`).get(instanceKey) as { groupJid?: string } | undefined
+  const groupJid = String(row?.groupJid ?? '')
+  if (!groupJid.endsWith('@g.us')) return
+  await syncOneGroup(groupJid, true)
+}
+
+function clearPendingDisconnectAlert() {
+  if (!disconnectAlertTimer) return
+  clearTimeout(disconnectAlertTimer)
+  disconnectAlertTimer = null
+}
+
+function schedulePersistentDisconnectAlert() {
+  clearPendingDisconnectAlert()
+  disconnectAlertTimer = setTimeout(() => {
+    disconnectAlertTimer = null
+    if (connectionOpen) return
+    recordOpsRuntimeLog('warn', 'whatsapp', 'WhatsApp transport disconnected for more than 12 seconds', instanceKey)
+    setOpsAlert({
+      key: 'whatsapp:connection',
+      severity: 'critical',
+      title: 'WhatsApp transport disconnected',
+      detail: 'La desconexión persistió más de 12 segundos; se requiere atención si no reconecta automáticamente.',
+      active: true,
+      instanceKey,
+    })
+  }, CONNECTION_ALERT_GRACE_MS)
+  disconnectAlertTimer.unref?.()
+}
+
 async function syncGroups(connectionProbe = false) {
   const socket = currentSocket
   if (!socket || syncing || !socket.authState.creds.registered || (!connectionOpen && !connectionProbe)) return
@@ -545,6 +587,11 @@ function startLoop() {
       void syncGroups(true)
     }
 
+    if (registered && socket && Date.now() - lastHydrationSweepAt >= GROUP_HYDRATION_SWEEP_MS) {
+      lastHydrationSweepAt = Date.now()
+      void hydrateNextObservedGroup()
+    }
+
     if (Math.random() < 0.02) {
       const cutoffDay = dayBucket() - 45
       opsDb.prepare("DELETE FROM ops_group_control_requests WHERE status IN ('completed','failed') AND completed_at < ?")
@@ -563,6 +610,7 @@ export function registerOpsSocket(socket: WASocket) {
   connectionOpen = false
   lastSyncAt = 0
   lastSyncAttemptAt = 0
+  lastHydrationSweepAt = 0
   emptyFullSyncStreak = 0
   touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
   startLoop()
@@ -622,10 +670,12 @@ export function registerOpsSocket(socket: WASocket) {
   socket.ev.on('connection.update', ({ connection }) => {
     if (currentSocket !== socket) return
     if (connection === 'open') {
+      clearPendingDisconnectAlert()
       connectionOpen = true
       currentSocket = socket
       lastSyncAt = 0
       lastSyncAttemptAt = 0
+      lastHydrationSweepAt = 0
       emptyFullSyncStreak = 0
       touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, connectedAt: Date.now() })
       recordOpsRuntimeLog('info', 'whatsapp', 'WhatsApp transport connected', instanceKey)
@@ -638,8 +688,8 @@ export function registerOpsSocket(socket: WASocket) {
     } else if (connection === 'close') {
       connectionOpen = false
       touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
-      recordOpsRuntimeLog('warn', 'whatsapp', 'WhatsApp transport disconnected', instanceKey)
-      setOpsAlert({ key: 'whatsapp:connection', severity: 'critical', title: 'WhatsApp transport disconnected', active: true, instanceKey })
+      recordOpsRuntimeLog('info', 'whatsapp', 'WhatsApp transport reconnecting; transient disconnect grace period started', instanceKey)
+      schedulePersistentDisconnectAlert()
       if (currentSocket === socket) currentSocket = null
     }
   })
