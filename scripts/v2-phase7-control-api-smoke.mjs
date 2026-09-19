@@ -28,6 +28,13 @@ try {
   const deps = {
     whatsappConnected: () => whatsappConnected,
     whatsappAccountLabel: () => '5215550000000@s.whatsapp.net',
+    whatsappRuntimeMetrics: () => ({
+      connectedAt: '2026-09-18T20:00:00.000Z',
+      lastActivityAt: '2026-09-18T20:01:00.000Z',
+      messagesPerMinute: 7,
+      messagesProcessed: 123,
+      reconnects: 2,
+    }),
     connectWhatsApp: async () => { connects += 1; whatsappConnected = true },
     disconnectWhatsApp: async () => { disconnects += 1; whatsappConnected = false },
     startWhatsAppPairing: async (request) => ({ pairingCode: request.mode === 'code' ? '1234-5678' : null, detail: 'smoke' }),
@@ -58,7 +65,11 @@ try {
   assert.equal(status.status, 200)
   assert.equal(status.body.apiVersion, 'v2')
   assert.equal(status.body.runtime.state, 'online')
-  assert.equal(status.body.platforms.find((row) => row.id === 'whatsapp').connected, true)
+  const whatsappStatus = status.body.platforms.find((row) => row.id === 'whatsapp')
+  assert.equal(whatsappStatus.connected, true)
+  assert.equal(whatsappStatus.metrics.messagesPerMinute, 7)
+  assert.equal(whatsappStatus.metrics.eventsProcessed, 123)
+  assert.equal(whatsappStatus.metrics.reconnects, 2)
   assert.equal(status.body.platforms.length, 3)
 
   const metrics = await request('GET', '/v2/metrics')
@@ -75,6 +86,11 @@ try {
   assert.equal(whatsappConnected, false)
   await request('POST', '/v2/platforms/whatsapp/connect', {})
   assert.equal(connects, 1)
+  assert.equal(whatsappConnected, true)
+
+  await request('POST', '/v2/platforms/whatsapp/restart', {})
+  assert.equal(disconnects, 2)
+  assert.equal(connects, 2)
   assert.equal(whatsappConnected, true)
 
   const pair = await request('POST', '/v2/pair/start', { platform: 'whatsapp', mode: 'code', phoneNumber: '525512345678' })
@@ -99,7 +115,7 @@ try {
   assert.equal(lifecycle.body.managerRequired, true)
 
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
-  console.log('[V2 PHASE 7] OK — authenticated Control API V2, redaction, config, platform controls and safe updater validated.')
+  console.log('[V2 PHASE 7] OK — authenticated Control API V2, platform metrics/restart, redaction, config and safe updater validated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
