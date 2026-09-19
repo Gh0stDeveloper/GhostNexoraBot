@@ -6,17 +6,15 @@ import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
 import { economy } from '../services/economy.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
-import { commandRuntimeDecision, markCommandCooldown } from '../services/command-runtime-config.js'
 import { performanceAudit } from '../services/performance-audit.js'
 import { canProcessPrivateMessage } from '../services/private-chat-policy.js'
 import { resolveStoredIdentity } from '../services/identity.js'
 import { settings } from './settings.js'
+import { CommandEngine } from './command-engine.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
 import { createWhatsAppAdapter, whatsappBotInstanceId } from '../platform/whatsapp/adapter.js'
 import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
-import { SharedCommandEngine } from './shared-command-engine.js'
-import { sharedNeutralCommands } from '../commands/shared-neutral.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -86,10 +84,10 @@ function publicCommandError(commandName: string, error: unknown, locale: LocaleC
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
-  private readonly engine: SharedCommandEngine
+  private readonly engine: CommandEngine<LegacyCompatibleCommandContext>
 
   constructor(commands: BotCommand[], private readonly options: RouterOptions = {}) {
-    this.engine = new SharedCommandEngine(commands, sharedNeutralCommands)
+    this.engine = new CommandEngine<LegacyCompatibleCommandContext>(commands)
     try {
       performanceAudit.registerCommands(commands)
     } catch (error) {
@@ -218,109 +216,21 @@ export class CommandRouter {
     try {
       await react('⚡').catch(() => undefined)
       const filtersStarted = performance.now()
-      let filtersRecorded = false
-      const finishFilters = () => {
-        if (filtersRecorded) return
-        filtersRecorded = true
-        performanceAudit.recordStage('04', performance.now() - filtersStarted)
-      }
+      let botIsGroupAdmin = false
+      let groupRolesLoaded = false
 
-      if (command.ownerOnly && !isOwner) {
-        finishFilters()
-        await reply(t('router.ownerOnly'))
-        await react('🚫').catch(() => undefined)
-        return true
-      }
-      if (command.staffOnly && !isBotStaff && !(command.subbotOwnerAllowed && isSubbotOwner)) {
-        finishFilters()
-        await reply(t('router.staffOnly'))
-        await react('🚫').catch(() => undefined)
-        return true
-      }
-      if (command.groupOnly && !isGroup) {
-        finishFilters()
-        await reply(t('router.groupOnly'))
-        await react('🚫').catch(() => undefined)
-        return true
-      }
-
-      if (command.adminOnly || command.botAdminOnly) {
-        if (!isGroup) {
-          finishFilters()
-          await reply(t('router.groupRequired'))
-          await react('🚫').catch(() => undefined)
-          return true
-        }
-        const metadata = await socket.groupMetadata(chatId)
-        const senderParticipant = metadata.participants.find((participant) => participantMatches(participant, senderCandidates))
+      const loadGroupRoles = async () => {
+        if (!isGroup || groupRolesLoaded) return
+        const metadata = await socket.groupMetadata(chatId).catch(() => null)
+        const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
         const botCandidates = selfCandidates.flatMap((candidate) => identityCandidates(candidate)).filter(Boolean)
-        const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
+        const botParticipant = metadata?.participants.find((participant) => participantMatches(participant, botCandidates))
         senderIsGroupAdmin = senderIsGroupAdmin || Boolean(senderParticipant?.admin)
-        const senderIsAdmin = senderIsGroupAdmin || isBotStaff || isSubbotOwner
-        const botIsAdmin = Boolean(botParticipant?.admin)
-        if (command.adminOnly && !senderIsAdmin) {
-          finishFilters()
-          await reply(t('router.adminOnly'))
-          await react('🚫').catch(() => undefined)
-          return true
-        }
-        if (command.botAdminOnly && !botIsAdmin) {
-          finishFilters()
-          await reply(t('router.botAdminOnly'))
-          await react('🚫').catch(() => undefined)
-          return true
-        }
+        botIsGroupAdmin = Boolean(botParticipant?.admin)
+        groupRolesLoaded = true
       }
 
-      const runtimeDecision = commandRuntimeDecision({
-        commandName: command.name,
-        category: command.category,
-        platform: 'whatsapp',
-        isGroup,
-        userId: sender,
-        isOwner,
-        isStaff: isBotStaff,
-        isSubbotOwner,
-      })
-      if (!runtimeDecision.allowed) {
-        finishFilters()
-        const runtimeMessage = runtimeDecision.reason === 'disabled'
-          ? t('router.commandDisabled')
-          : runtimeDecision.reason === 'category_disabled'
-            ? t('router.commandCategoryDisabled', { category: command.category })
-            : runtimeDecision.reason === 'platform_disabled'
-              ? t('router.commandPlatformDisabled', { platform: 'WhatsApp' })
-              : runtimeDecision.reason === 'groups_disabled'
-                ? t('router.commandGroupsDisabled')
-                : runtimeDecision.reason === 'private_disabled'
-                  ? t('router.commandPrivateDisabled')
-                  : runtimeDecision.reason === 'permission'
-                    ? t('router.commandPermission')
-                    : t('router.commandCooldown', { seconds: Math.max(1, Math.ceil(Number(runtimeDecision.remainingMs ?? 0) / 1000)) })
-        await reply(runtimeMessage)
-        await react('🚫').catch(() => undefined)
-        return true
-      }
-
-      if (isGroup && !isOwner && !isBotStaff && !isSubbotOwner) {
-        const categoryAllowed = command.category === 'adult'
-          ? economy.getGroupPolicy(chatId).adultAllowed || adultConsentBootstrapCommands.has(command.name)
-          : isGroupCommandCategoryAllowed(chatId, command.category)
-        if (!categoryAllowed) {
-          if (!senderIsGroupAdmin) {
-            const metadata = await socket.groupMetadata(chatId).catch(() => null)
-            const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
-            senderIsGroupAdmin = Boolean(senderParticipant?.admin)
-          }
-          if (!senderIsGroupAdmin) {
-            finishFilters()
-            await reply(t('router.categoryDisabled', { category: command.category }))
-            await react('🚫').catch(() => undefined)
-            return true
-          }
-        }
-      }
-      finishFilters()
+      if (isGroup && (command.adminOnly || command.botAdminOnly || command.name === 'language')) await loadGroupRoles()
 
       const context: LegacyCompatibleCommandContext = {
         platform: 'whatsapp',
@@ -341,6 +251,8 @@ export class CommandRouter {
         isOwner,
         isBotStaff,
         isGroup,
+        isGroupAdmin: senderIsGroupAdmin,
+        isBotGroupAdmin: botIsGroupAdmin,
         isSubbotOwner,
         instanceId: this.options.instanceId,
         instanceOwnerJid: this.options.instanceOwnerJid,
@@ -353,25 +265,26 @@ export class CommandRouter {
         editMessage,
       }
 
-      const executionStarted = performance.now()
-      const heapBefore = process.memoryUsage().heapUsed
-      if (!isOwner && !isBotStaff && !isSubbotOwner && runtimeDecision.config.cooldownMs > 0) {
-        markCommandCooldown('whatsapp', command.name, sender)
-      }
-      try {
-        await this.engine.execute(command, context, { allowLegacy: true, enforceMetadata: false })
-        const durationMs = performance.now() - executionStarted
-        performanceAudit.recordStage('06', durationMs)
-        performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
-      } catch (error) {
-        const durationMs = performance.now() - executionStarted
-        performanceAudit.recordStage('06', durationMs)
-        performanceAudit.recordCommand(command, durationMs, false, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
-        throw error
-      }
+      performanceAudit.recordStage('04', performance.now() - filtersStarted)
+      const result = await this.engine.execute(command, context, {
+        auditIdentity: { userJid: sender, displayName: pushName },
+        authorize: async (candidate) => {
+          if (!isGroup || isOwner || isBotStaff || isSubbotOwner) return null
+          const categoryAllowed = candidate.category === 'adult'
+            ? economy.getGroupPolicy(chatId).adultAllowed || adultConsentBootstrapCommands.has(candidate.name)
+            : isGroupCommandCategoryAllowed(chatId, candidate.category)
+          if (categoryAllowed) return null
+          await loadGroupRoles()
+          context.isGroupAdmin = senderIsGroupAdmin
+          context.isBotGroupAdmin = botIsGroupAdmin
+          return senderIsGroupAdmin ? null : t('router.categoryDisabled', { category: candidate.category })
+        },
+      })
 
-      community.awardCommandXp(sender)
-      await react('✅').catch(() => undefined)
+      if (result.allowed) {
+        community.awardCommandXp(sender)
+        await react('✅').catch(() => undefined)
+      }
       return true
     } catch (error) {
       logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')

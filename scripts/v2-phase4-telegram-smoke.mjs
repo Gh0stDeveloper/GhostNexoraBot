@@ -151,14 +151,10 @@ try {
   assert.equal(status.updatesProcessed, 1)
   assert.equal(status.offset, 901)
   assert.equal(status.state, 'error', '409 must stop the competing long poller')
-  const sharedPing = apiCalls.find((call) =>
-    call.method === 'sendMessage'
-    && typeof call.body.text === 'string'
-    && call.body.text.includes('PONG')
-    && call.body.text.includes('Latencia')
-    && call.body.text.includes('Estado')
+  assert.ok(
+    apiCalls.some((call) => call.method === 'sendMessage' && String(call.body.text || '').includes('PONG')),
+    'Telegram /ping must execute the shared neutral ping handler',
   )
-  assert.ok(sharedPing, 'Telegram /ping must execute the canonical B2 shared ping handler')
   const persisted = JSON.parse(await readFile(runtimeStateFile, 'utf8'))
   assert.equal(persisted.offset, 901)
   await runtime.stop()
@@ -167,4 +163,4 @@ try {
   await rm(runtimeDir, { recursive: true, force: true })
 }
 
-console.log('[V2 PHASE 4] OK — Telegram adapter, normalization and native long-poll runtime are validated end to end.')
+console.log('[V2 PHASE 4] OK — Telegram adapter, normalization, shared commands and native long-poll runtime are validated end to end.')

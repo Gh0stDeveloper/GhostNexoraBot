@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import type { BotCommand } from '../types.js'
+import type { NeutralBotCommand } from '../types.js'
 import { config } from '../config.js'
 
 export const BOT_VERSION = (() => {
@@ -13,7 +13,7 @@ export const BOT_VERSION = (() => {
 
 export const BOT_STATUS = 'BETA · EN DESARROLLO'
 
-export const versionV8Commands: BotCommand[] = [{
+export const versionV8Commands: NeutralBotCommand[] = [{
   name: 'version',
   aliases: ['ver', 'botversion'],
   category: 'general',
@@ -25,7 +25,7 @@ export const versionV8Commands: BotCommand[] = [{
     `📦 Versión » *v${BOT_VERSION}*`,
     `🛠️ Estado » *${BOT_STATUS}*`,
     `🤖 Nombre » *${ctx.settings.botDisplayName || config.botName}*`,
-    `💬 Plataforma » *WhatsApp / Baileys*`,
+    `💬 Plataforma » *${ctx.platform.toUpperCase()}*`,
     `⚙️ Runtime » *Node.js ${process.version}*`,
     `⌨️ Prefijo » *${ctx.prefix}*`,
     `🧩 Instancia » *${ctx.instanceId === undefined ? 'Principal' : `Subbot #${ctx.instanceId}`}*`,

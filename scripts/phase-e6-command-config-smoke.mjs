@@ -87,6 +87,7 @@ try {
   const [
     roadmap,
     router,
+    commandEngine,
     discord,
     telegram,
     menuSource,
@@ -102,6 +103,7 @@ try {
   ] = await Promise.all([
     readFile(new URL('../README_NEXT_INTEGRATIONS.md', import.meta.url), 'utf8'),
     readFile(new URL('../apps/bot/src/core/router.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../apps/bot/src/core/command-engine.ts', import.meta.url), 'utf8'),
     readFile(new URL('../apps/bot/src/platform/discord/router.ts', import.meta.url), 'utf8'),
     readFile(new URL('../apps/bot/src/platform/telegram/router.ts', import.meta.url), 'utf8'),
     readFile(new URL('../apps/bot/src/commands/menu-v5.ts', import.meta.url), 'utf8'),
@@ -118,10 +120,11 @@ try {
 
   assert.match(roadmap, /## E6\. Editor de configuración de comandos[\s\S]*Estado: (?:EN PROGRESO|TERMINADO)/, 'E6 roadmap must track active/completed implementation')
 
-  for (const [label, source] of [['WhatsApp', router], ['Discord', discord], ['Telegram', telegram]]) {
-    assert.match(source, /commandRuntimeDecision/, `${label} router must enforce E6 settings`)
-    assert.match(source, /markCommandCooldown/, `${label} router must enforce E6 cooldowns`)
-  }
+  assert.match(commandEngine, /commandRuntimeDecision/, 'B2 CommandEngine must enforce E6 settings centrally')
+  assert.match(commandEngine, /markCommandCooldown/, 'B2 CommandEngine must enforce E6 cooldowns centrally')
+  assert.match(router, /this\.engine\.execute/, 'WhatsApp router must delegate E6 enforcement to CommandEngine')
+  assert.match(discord, /this\.engine\.execute/, 'Discord router must delegate shared command policy to CommandEngine')
+  assert.match(telegram, /this\.engine\.execute/, 'Telegram router must delegate shared command policy to CommandEngine')
 
   assert.match(menuSource, /commandRuntimeDecision/, 'WhatsApp menu must honor E6 runtime visibility')
   assert.match(menuSource, /checkCooldown: false/, 'WhatsApp menu must not hide commands only because a user is cooling down')

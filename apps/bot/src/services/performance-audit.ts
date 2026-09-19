@@ -251,7 +251,7 @@ export const performanceAudit = {
       .run(instanceKey, stage.id, stage.name, value, value, value, value, stamp, stamp)
   },
 
-  recordCommand(command: CommandAuditInput, durationMs: number, success: boolean, heapDeltaBytes = 0, instanceKey = opsInstanceKey(), identity?: CommandAuditIdentity) {
+  recordCommand(command: CommandAuditInput, durationMs: number, success: boolean, heapDeltaBytes = 0, instanceKey = opsInstanceKey(), identity?: CommandAuditIdentity, platform = 'whatsapp') {
     const name = command.name.toLowerCase()
     const value = micros(durationMs)
     const stamp = now()
@@ -301,7 +301,7 @@ export const performanceAudit = {
       durationMs,
       success,
       instanceKey,
-      platform: 'whatsapp',
+      platform,
     })
   },
 
