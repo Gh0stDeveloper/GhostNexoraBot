@@ -1,5 +1,4 @@
-import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
-import { sendCarousel } from '../services/interactive.js'
+import type { CommandContext, NeutralBotCommand } from '../types.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { downloadVkVideo } from '../services/download-providers/vk.js'
@@ -7,7 +6,6 @@ import {
   downloadPhase3Apk,
   searchApkMirror,
   searchApkPure,
-  type Phase3ApkItem,
   type Phase3ApkStore,
 } from '../services/download-providers/apk-stores.js'
 import { withProviderLease } from '../services/download-providers/lease.js'
@@ -28,31 +26,40 @@ function storeLabel(store: Phase3ApkStore) {
   return store === 'apkmirror' ? 'APKMirror' : 'APKPure'
 }
 
-async function showStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkStore) {
+function uploadLimit(ctx: CommandContext) {
+  const limit = Number(ctx.adapter.capabilities.maxUploadBytes || 0)
+  return Number.isFinite(limit) && limit > 0 ? limit : Number.POSITIVE_INFINITY
+}
+
+async function showStore(ctx: CommandContext, store: Phase3ApkStore) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}${store} <aplicación|package>`)
   const results = store === 'apkmirror' ? await searchApkMirror(query) : await searchApkPure(query)
   const command = store === 'apkmirror' ? 'apkmirrordl' : 'apkpuredl'
 
-  await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
+  await ctx.sendUi({
+    kind: 'carousel',
     title: `${storeLabel(store)} · resultados`,
-    body: `Búsqueda: ${query.slice(0, 90)}\nFuente consultada directamente: ${storeLabel(store)}`,
-    footer: 'Ghost Nexora Bot · V2 provider engine',
-    cards: results.map((item: Phase3ApkItem) => ({
+    cards: results.map((item) => ({
+      id: item.token,
       title: item.name,
       body: [
         item.packageName ? `Package: ${item.packageName}` : undefined,
         item.version ? `Versión: ${item.version}` : undefined,
         item.sizeLabel ? `Tamaño: ${item.sizeLabel}` : undefined,
       ].filter(Boolean).join('\n') || 'Release disponible',
-      footer: storeLabel(store),
+      footer: `${storeLabel(store)} · Ghost Nexora Bot`,
       imageUrl: item.icon,
-      buttons: [{ type: 'reply' as const, text: 'Descargar', id: `${ctx.prefix}${command} ${item.token}` }],
+      buttons: [{
+        kind: 'command',
+        label: 'Descargar',
+        value: `${ctx.prefix}${command} ${item.token}`,
+      }],
     })),
   })
 }
 
-async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkStore) {
+async function downloadStore(ctx: CommandContext, store: Phase3ApkStore) {
   const token = ctx.args[0]?.trim()
   if (!token) throw new Error(`Selecciona primero una aplicación con ${ctx.prefix}${store} <búsqueda>.`)
   const progress = await createDownloadProgress(ctx, `${storeLabel(store)} · paquete Android`)
@@ -60,9 +67,6 @@ async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3A
     ? 'Esperando turno y resolviendo la cadena firmada de APKMirror'
     : 'Resolviendo la cadena de descarga actual del proveedor')
 
-  // APKMirror documenta bloqueos temporales ante descargas simultáneas desde la
-  // misma IP. MainBot y subbots usan procesos separados, por lo que el lease se
-  // coordina mediante almacenamiento global y cubre resolución + descarga.
   const result = store === 'apkmirror'
     ? await withProviderLease('apkmirror', () => downloadPhase3Apk(token))
     : await downloadPhase3Apk(token)
@@ -73,10 +77,15 @@ async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3A
   }
 
   try {
-    await progress.update('sending', `${result.packageKind} · ${humanBytes(result.size)} · enviando a WhatsApp`)
-    await ctx.socket.sendMessage(ctx.chatId, {
-      document: { url: result.filePath },
-      mimetype: result.packageKind === 'APK' ? 'application/vnd.android.package-archive' : 'application/zip',
+    const limit = uploadLimit(ctx)
+    if (result.size > limit) {
+      throw new Error(`El archivo pesa ${humanBytes(result.size)} y supera el límite de ${humanBytes(limit)} de ${ctx.platform}.`)
+    }
+    await progress.update('sending', `${result.packageKind} · ${humanBytes(result.size)} · enviando a ${ctx.platform}`)
+    await ctx.sendMedia({
+      kind: 'document',
+      source: { kind: 'path', value: result.filePath },
+      mimeType: result.packageKind === 'APK' ? 'application/vnd.android.package-archive' : 'application/zip',
       fileName: result.fileName,
       caption: [
         `${storeLabel(store)} · ${result.item.name}`,
@@ -85,7 +94,7 @@ async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3A
         `Formato: ${result.packageKind}`,
         `Tamaño: ${humanBytes(result.size)}`,
       ].filter(Boolean).join('\n'),
-    }, { quoted: ctx.message })
+    })
     recordSubbotDownload(ctx.instanceId, result.size)
     await progress.update('done', `${result.packageKind} enviado correctamente.`)
   } finally {
@@ -93,19 +102,25 @@ async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3A
   }
 }
 
-async function vk(ctx: LegacyCompatibleCommandContext) {
+async function vk(ctx: CommandContext) {
   const url = ctx.argText.trim()
   if (!isUrl(url)) throw new Error(`Uso: ${ctx.prefix}vk <url de vk.com|vkvideo.ru|live.vkvideo.ru>`)
   const progress = await createDownloadProgress(ctx, 'VK Video · video')
   await progress.update('downloading', 'Probando VK API 5.199 cuando hay token; fallback público con yt-dlp')
   const result = await downloadVkVideo(url)
   try {
+    const limit = uploadLimit(ctx)
+    if (result.size > limit) {
+      throw new Error(`El video pesa ${humanBytes(result.size)} y supera el límite de ${humanBytes(limit)} de ${ctx.platform}.`)
+    }
     await progress.update('sending', `${humanBytes(result.size)} · ${result.provider}${result.quality ? ` · ${result.quality}p` : ''}`)
-    await ctx.socket.sendMessage(ctx.chatId, {
-      video: { url: result.filePath },
-      mimetype: 'video/mp4',
+    await ctx.sendMedia({
+      kind: 'video',
+      source: { kind: 'path', value: result.filePath },
+      mimeType: 'video/mp4',
+      fileName: 'vk-video.mp4',
       caption: `VK Video · ${result.quality ? `${result.quality}p · ` : ''}${humanBytes(result.size)}`,
-    }, { quoted: ctx.message })
+    })
     recordSubbotDownload(ctx.instanceId, result.size)
     await progress.update('done', 'Video enviado correctamente.')
   } finally {
@@ -113,7 +128,7 @@ async function vk(ctx: LegacyCompatibleCommandContext) {
   }
 }
 
-async function providerHealth(ctx: LegacyCompatibleCommandContext) {
+async function providerHealth(ctx: CommandContext) {
   const rows = providerHealthSnapshot()
   if (!rows.length) {
     await ctx.reply('Aún no hay intentos de providers registrados desde el último inicio del proceso.')
@@ -129,7 +144,7 @@ async function providerHealth(ctx: LegacyCompatibleCommandContext) {
   ].join('\n'))
 }
 
-export const downloadProvidersV3Commands: BotCommand[] = [
+export const downloadProvidersV3Commands: NeutralBotCommand[] = [
   {
     name: 'vk',
     aliases: ['vkvideo', 'vkd'],

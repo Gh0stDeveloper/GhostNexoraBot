@@ -110,6 +110,7 @@ try {
   assert.equal(archivedSessions.every((file) => /^sessions\/(main|subbots\/\d+)\//.test(String(file.name))), true, 'session backup paths must remain confined to declared session roots')
 
   const routerSource = await readFile(new URL('../apps/bot/src/core/router.ts', import.meta.url), 'utf8')
+  const commandEngineSource = await readFile(new URL('../apps/bot/src/core/command-engine.ts', import.meta.url), 'utf8')
   const sessionSource = await readFile(new URL('../apps/bot/src/core/session.ts', import.meta.url), 'utf8')
   const groupRuntimeSource = await readFile(new URL('../apps/bot/src/services/group-ops-runtime.ts', import.meta.url), 'utf8')
   const providerHealthSource = await readFile(new URL('../apps/bot/src/services/provider-health.ts', import.meta.url), 'utf8')
@@ -132,8 +133,9 @@ try {
   const publicSource = await readFile(new URL('../apps/web/app/page.tsx', import.meta.url), 'utf8')
   const webI18nSource = await readFile(new URL('../apps/web/lib/i18n.ts', import.meta.url), 'utf8')
 
-  assert.ok(routerSource.includes('performanceAudit.recordCommand'), 'router must audit every command execution')
-  assert.ok(routerSource.includes("performanceAudit.recordStage('06'"), 'router must instrument plugin execution stage')
+  assert.ok(routerSource.includes('this.engine.execute'), 'router must delegate every command execution to the B2 engine')
+  assert.ok(commandEngineSource.includes('performanceAudit.recordCommand'), 'B2 engine must audit every command execution')
+  assert.ok(commandEngineSource.includes("performanceAudit.recordStage('06'"), 'B2 engine must instrument plugin execution stage')
   assert.ok(sessionSource.includes("performanceAudit.recordStage('07'"), 'socket dispatch stage must be measured')
   assert.ok(sessionSource.includes('registerOpsSocket(socket)'), 'every Baileys instance must register its group runtime')
   assert.ok(groupRuntimeSource.includes('groupFetchAllParticipating'), 'group registry must come from the live WhatsApp socket')

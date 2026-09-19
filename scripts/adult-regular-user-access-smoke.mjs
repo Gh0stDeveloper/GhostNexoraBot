@@ -69,7 +69,7 @@ try {
   const adultMode = readFileSync(path.join(root, 'apps/bot/src/commands/group-adult-mode.ts'), 'utf8')
 
   assert.match(router, /adultConsentBootstrapCommands = new Set\(\['adult18'\]\)/, 'adult18 must remain available as consent bootstrap')
-  assert.match(router, /command\.category === 'adult'[\s\S]*economy\.getGroupPolicy\(chatId\)\.adultAllowed/, 'adultmode must be authoritative for regular members')
+  assert.match(router, /candidate\.category === 'adult'[\s\S]*economy\.getGroupPolicy\(chatId\)\.adultAllowed/, 'adultmode must be authoritative for regular members through the B2 authorization hook')
   assert.match(roleplay, /name: 'dick'/, 'dick command missing')
   assert.match(roleplay, /name: 'fuck'/, 'fuck command missing')
   assert.match(roleplay, /name: 'cum'/, 'cum command missing')

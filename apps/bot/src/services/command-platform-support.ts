@@ -12,7 +12,7 @@ export type CommandPlatformSupport = {
 // that the full WhatsApp registry is already multiplatform.
 export const DISCORD_COMMAND_ALIAS_ENTRIES = [
   ['start', 'help'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
-  ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
+  ['ping', 'ping'], ['info', 'info'], ['version', 'version'], ['botinfo', 'info'],
   ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
   ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
   ['apkmirror', 'apkmirror'], ['apkm', 'apkmirror'], ['amirror', 'apkmirror'],
@@ -25,7 +25,7 @@ export const DISCORD_COMMAND_ALIAS_ENTRIES = [
 
 export const TELEGRAM_COMMAND_ALIAS_ENTRIES = [
   ['start', 'help'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
-  ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
+  ['ping', 'ping'], ['info', 'info'], ['version', 'version'], ['botinfo', 'info'],
   ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
   ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
   ['apkmirror', 'apkmirror'], ['apkm', 'apkmirror'], ['amirror', 'apkmirror'],
