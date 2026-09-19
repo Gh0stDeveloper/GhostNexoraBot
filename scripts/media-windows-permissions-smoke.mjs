@@ -16,6 +16,8 @@ const installerBytes = readFileSync('scripts/install-windows.ps1')
 const manager = read('scripts/windows/ghostnexora.ps1')
 const managerBytes = readFileSync('scripts/windows/ghostnexora.ps1')
 const cmdInstaller = read('scripts/install-windows.cmd')
+const waifuExtractor = read('scripts/extract-waifus.mjs')
+const rootPackage = JSON.parse(read('package.json'))
 
 assert.ok(index.includes("import { spotifyCommands } from './spotify.js'"), 'Spotify functional commands must be registered')
 assert.match(spotify, /export async function spotifySearch/, 'Spotify search handler must be reusable by the legacy command slot')
@@ -62,5 +64,13 @@ assert.match(cmdInstaller, /Set-Content -LiteralPath \$p -Value \$text -Encoding
 assert.match(cmdInstaller, /Language\.Parser\]::ParseFile/, 'CMD bootstrap must syntax-check the downloaded script before execution')
 assert.doesNotMatch(cmdInstaller, /\^\|/, 'CMD bootstrap parser preflight must not depend on escaped pipe semantics inside -Command')
 assert.doesNotMatch(cmdInstaller, /^start\s/mi, 'CMD wrapper must not detach into a disposable window')
+
+assert.equal(rootPackage.allowScripts?.['baileys@7.0.0-rc14'], true, 'Baileys install script must be explicitly approved')
+assert.equal(rootPackage.allowScripts?.['esbuild@0.28.2'], true, 'esbuild install script must be explicitly approved')
+assert.equal(rootPackage.allowScripts?.['protobufjs@7.6.6'], true, 'protobufjs install script must be explicitly approved')
+assert.match(installer, /npm\.cmd rebuild baileys esbuild protobufjs/, 'Windows installer must repair dependencies whose install scripts were previously blocked')
+assert.match(waifuExtractor, /process\.platform === 'win32'/, 'Waifu extractor must have a native Windows path')
+assert.match(waifuExtractor, /System\.IO\.Compression\.ZipFile/, 'Windows waifu extraction must use built-in .NET ZIP support')
+assert.doesNotMatch(waifuExtractor, /Se requiere el comando unzip para preparar los assets locales de waifus\.'/, 'Windows build must not require external unzip')
 
 console.log('Spotify, anime, adult permissions and Windows installer smoke passed')
