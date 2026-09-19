@@ -3,31 +3,27 @@ import {
   type CapabilityName,
   type NormalizedMessage,
   type PlatformAdapter,
-  type PlatformId,
 } from '@ghostnexora/platform-contracts'
 import type {
   BotCommand,
   CommandContext,
   LegacyCompatibleCommandContext,
   NeutralBotCommand,
+  RequestContext,
 } from '../types.js'
 import type { SettingsStore } from './settings.js'
-import type { LocaleCode, TranslationValues } from '../i18n/types.js'
+import type { TranslationValues } from '../i18n/types.js'
+import { assertRequestContextBinding } from './request-context.js'
 
 export type SharedCommandContextInput = {
-  platform: PlatformId
+  request: RequestContext
   adapter: PlatformAdapter
   normalizedMessage: NormalizedMessage
   commandName: string
   args: string[]
   prefix: string
   settings: SettingsStore
-  locale: LocaleCode
   t: (key: string, values?: TranslationValues) => string
-  isOwner: boolean
-  isBotStaff: boolean
-  isSubbotOwner?: boolean
-  instanceId?: number
   instanceOwnerJid?: string
 }
 
@@ -45,22 +41,36 @@ export type SharedCommandExecutionResult =
 
 export function createNeutralCommandContext(input: SharedCommandContextInput): CommandContext {
   const {
-    platform,
+    request,
     adapter,
     normalizedMessage,
     commandName,
     args,
     prefix,
     settings,
-    locale,
     t,
-    isOwner,
-    isBotStaff,
-    isSubbotOwner = false,
-    instanceId,
     instanceOwnerJid,
   } = input
-  const chatId = normalizedMessage.chatId
+  assertRequestContextBinding(request, {
+    platform: adapter.id,
+    botInstanceId: adapter.botInstanceId,
+    chatId: normalizedMessage.chatId,
+    userId: normalizedMessage.senderId,
+    messageId: normalizedMessage.messageId,
+  })
+  const {
+    platform,
+    locale,
+    instanceId,
+    permissions,
+  } = request
+  const {
+    isOwner,
+    isStaff: isBotStaff,
+    isGroup,
+    isInstanceOwner: isSubbotOwner,
+  } = permissions
+  const chatId = request.chatId
   const currentReplyTo = normalizedMessage.messageId || undefined
   const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
     ...options,
@@ -99,12 +109,13 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   }
 
   return {
+    request,
     platform,
     adapter,
     normalizedMessage,
     chatId,
-    sender: normalizedMessage.senderId,
-    pushName: normalizedMessage.pushName ?? normalizedMessage.senderId,
+    sender: request.userId,
+    pushName: normalizedMessage.pushName ?? request.userId,
     commandName,
     args,
     argText: args.join(' '),
@@ -114,7 +125,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
     t,
     isOwner,
     isBotStaff,
-    isGroup: normalizedMessage.isGroup,
+    isGroup,
     isSubbotOwner,
     instanceId,
     instanceOwnerJid,
