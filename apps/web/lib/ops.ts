@@ -58,6 +58,7 @@ export type OpsProviderHealth = {
   providerId: string
   label: string
   status: 'online' | 'degraded' | 'offline' | 'unknown'
+  circuitState: 'closed' | 'open' | 'half-open'
   requests: number
   successes: number
   failures: number
@@ -193,6 +194,16 @@ function providerStatus(input: {
   if (input.consecutiveFailures >= 3 || (!input.successes && input.consecutiveFailures > 0)) return 'offline'
   if (input.consecutiveFailures > 0) return 'degraded'
   return input.successes > 0 ? 'online' : 'unknown'
+}
+
+function providerCircuitState(input: {
+  consecutiveFailures: number
+  lastSuccessAt: number
+  lastFailureAt: number
+}): OpsProviderHealth['circuitState'] {
+  if (input.consecutiveFailures < 3 || !input.lastFailureAt || input.lastSuccessAt > input.lastFailureAt) return 'closed'
+  if (Date.now() - input.lastFailureAt < 5 * MINUTE) return 'open'
+  return 'half-open'
 }
 
 function emptyAnalytics(): OpsUsageAnalytics {
@@ -578,6 +589,8 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
           const failures = Number(row.failures ?? 0)
           const consecutiveFailures = Number(row.consecutiveFailures ?? 0)
           const updatedAt = Number(row.updatedAt ?? 0)
+          const lastSuccessAt = Number(row.lastSuccessAt ?? 0)
+          const lastFailureAt = Number(row.lastFailureAt ?? 0)
           return {
             providerId: String(row.providerId),
             label: String(row.label),
@@ -588,11 +601,12 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
             errorRate: requests ? failures / requests * 100 : 0,
             averageLatencyMs: requests ? Number(row.totalLatencyMs ?? 0) / requests : 0,
             lastLatencyMs: Number(row.lastLatencyMs ?? 0),
-            lastSuccessAt: Number(row.lastSuccessAt ?? 0),
-            lastFailureAt: Number(row.lastFailureAt ?? 0),
+            lastSuccessAt,
+            lastFailureAt,
             lastError: row.lastError ? String(row.lastError) : null,
             updatedAt,
             status: providerStatus({ requests, successes, consecutiveFailures, updatedAt }),
+            circuitState: providerCircuitState({ consecutiveFailures, lastSuccessAt, lastFailureAt }),
           }
         }) as OpsProviderHealth[]
     }
