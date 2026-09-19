@@ -21,6 +21,9 @@ export function auditTarget(action: string, payload: Record<string, unknown>) {
   ].includes(action)) {
     return limited(payload.groupJid, 160) || null
   }
+  if (['cancel_job', 'retry_job'].includes(action)) {
+    return limited(payload.jobId, 120) || null
+  }
   if (['reset_subbot', 'reset_own_subbot'].includes(action)) {
     const id = limited(payload.id, 32)
     return id ? `subbot:${id}` : null
