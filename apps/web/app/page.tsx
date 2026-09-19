@@ -145,25 +145,41 @@ export default async function Home() {
       </div>
     </section>
 
-    <section id="comandos" className="mx-auto w-full max-w-[1480px] scroll-mt-24 px-5 py-12 md:px-8">
+    <section id="comandos" className="mx-auto w-full max-w-[1480px] scroll-mt-24 px-5 py-8 md:px-8 md:py-10">
       <div className="ops-panel overflow-hidden">
-        <div className="grid gap-6 border-b border-white/[.08] p-6 md:p-8 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div><p className="font-mono text-xs font-bold uppercase tracking-[.18em] text-blue-400">{pt('rankingEyebrow')}</p><h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-4xl">{pt('rankingTitle')}</h2><p className="mt-3 max-w-3xl text-sm leading-7 text-zinc-300">{pt('rankingIntro')}</p></div>
-          <span className={topCommands.length ? 'ops-badge-good' : 'ops-badge-warn'}><Activity className="mr-1.5 size-3"/>{pt('rankingLive')}</span>
+        <div className="flex flex-col gap-4 border-b border-white/[.08] p-5 sm:flex-row sm:items-end sm:justify-between md:p-6">
+          <div className="min-w-0"><p className="font-mono text-[10px] font-bold uppercase tracking-[.18em] text-blue-400">{pt('rankingEyebrow')}</p><h2 className="mt-2 text-2xl font-black tracking-tight text-white md:text-3xl">{pt('rankingTitle')}</h2><p className="mt-2 max-w-3xl text-xs leading-5 text-zinc-400 md:text-sm">{pt('rankingIntro')}</p></div>
+          <span className={topCommands.length ? 'ops-badge-good shrink-0' : 'ops-badge-warn shrink-0'}><Activity className="mr-1.5 size-3"/>{pt('rankingLive')}</span>
         </div>
-        {topCommands.length ? <div className="grid gap-3 p-4 md:grid-cols-2 md:p-6 xl:grid-cols-5">
+        {topCommands.length ? <div className="grid gap-px bg-white/[.06] md:grid-cols-2">
           {topCommands.map((command, index) => {
             const topThree = index < 3
             const width = Math.max(8, Math.round(command.invocations / topCommandMax * 100))
-            const Icon = topThree ? Trophy : BarChart3
-            return <article key={command.commandName} className={`relative overflow-hidden rounded-2xl border p-5 ${topThree ? 'border-blue-500/25 bg-[linear-gradient(145deg,rgba(37,99,235,.14),#101012_62%)]' : 'border-white/[.08] bg-[#0d0d0f]'}`}>
-              <span className="pointer-events-none absolute -right-1 top-0 font-mono text-6xl font-black text-white/[.025]">{String(index + 1).padStart(2, '0')}</span>
-              <div className="relative flex items-center justify-between gap-3"><span className={`grid size-9 place-items-center rounded-xl border ${topThree ? 'border-blue-500/25 bg-blue-500/[.1]' : 'border-white/[.08] bg-white/[.03]'}`}><Icon className={`size-4 ${topThree ? 'text-blue-300' : 'text-zinc-400'}`}/></span><span className="font-mono text-xs font-black text-blue-300">#{String(index + 1).padStart(2, '0')}</span></div>
-              <div className="relative mt-5"><div className="flex items-center gap-2"><h3 className="font-mono text-lg font-black text-white">.{command.commandName}</h3><span className="rounded-md border border-white/[.08] bg-white/[.03] px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-zinc-400">{command.category}</span></div><p className="mt-3 line-clamp-3 min-h-[3.75rem] text-xs leading-5 text-zinc-300">{command.description}</p></div>
-              <div className="relative mt-5"><div className="mb-2 flex items-center justify-between text-[10px] font-semibold text-zinc-400"><span>{command.invocations.toLocaleString(numberLocale)} {pt('rankingExecutions')}</span><span>{Math.round(command.successRate)}% {pt('rankingSuccess')}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-blue-500" style={{ width: `${width}%` }}/></div></div>
+            return <article key={command.commandName} className="relative min-w-0 bg-[#0d0d0f] px-4 py-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className={topThree ? 'grid size-8 shrink-0 place-items-center rounded-lg border border-blue-500/25 bg-blue-500/[.1] font-mono text-[11px] font-black text-blue-300' : 'grid size-8 shrink-0 place-items-center rounded-lg border border-white/[.08] bg-white/[.03] font-mono text-[11px] font-black text-zinc-500'}>
+                  {topThree ? <Trophy className="size-3.5"/> : String(index + 1).padStart(2, '0')}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h3 className="truncate font-mono text-sm font-black text-white">.{command.commandName}</h3>
+                    <span className="hidden shrink-0 rounded border border-white/[.07] bg-white/[.025] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-zinc-500 sm:inline">{command.category}</span>
+                  </div>
+                  <p className="mt-1 truncate text-[10px] text-zinc-500">{command.description}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-mono text-sm font-black text-zinc-100">{command.invocations.toLocaleString(numberLocale)}</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wide text-zinc-600">{pt('rankingExecutions')}</p>
+                </div>
+                <div className="hidden w-12 shrink-0 text-right sm:block">
+                  <p className="font-mono text-xs font-bold text-emerald-300">{Math.round(command.successRate)}%</p>
+                  <p className="text-[8px] font-semibold uppercase text-zinc-600">{pt('rankingSuccess')}</p>
+                </div>
+              </div>
+              <div className="mt-2.5 h-0.5 overflow-hidden rounded-full bg-white/[.05]"><div className={topThree ? 'h-full rounded-full bg-blue-400' : 'h-full rounded-full bg-blue-500/70'} style={{ width: `${width}%` }}/></div>
             </article>
           })}
-        </div> : <div className="p-8 text-center md:p-12"><span className="mx-auto grid size-12 place-items-center rounded-2xl border border-blue-500/20 bg-blue-500/[.08]"><BarChart3 className="size-5 text-blue-400"/></span><h3 className="mt-5 text-lg font-black text-white">{pt('rankingEmptyTitle')}</h3><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-300">{pt('rankingEmptyText')}</p></div>}
+        </div> : <div className="p-7 text-center md:p-9"><span className="mx-auto grid size-10 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><BarChart3 className="size-4 text-blue-400"/></span><h3 className="mt-4 text-base font-black text-white">{pt('rankingEmptyTitle')}</h3><p className="mx-auto mt-2 max-w-xl text-xs leading-5 text-zinc-400">{pt('rankingEmptyText')}</p></div>}
       </div>
     </section>
 
