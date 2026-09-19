@@ -1119,7 +1119,7 @@ Cierre:
 
 ## E12. Actualizaciones desde Dashboard
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Mostrar:
 
@@ -1135,6 +1135,24 @@ Progreso:
 Fetch → Dependencies → Build → Migration → Restart → Healthcheck.
 
 Nunca ocultar el error real al owner.
+
+Implementación E12 en validación:
+
+- sección Owner-only `Actualizaciones` forzada a MainBot;
+- versión instalada desde `package.json`, commit actual y rama desde Git local;
+- detección del HEAD remoto mediante `git ls-remote` sin modificar el checkout;
+- versión remota y changelog reciente mediante GitHub, con fallback cuando el remoto no está disponible;
+- estado persistente en `update-status.json` y sincronización con el job E11 de tipo `update`;
+- pipeline visible Fetch → Dependencies → Build → Migration → Restart → Healthcheck;
+- `update.sh` reporta progreso por etapa y healthcheck HTTP real después del restart;
+- fallos conservan contexto real del comando/log y se sanitizan antes de persistir;
+- el Owner ve el error diagnóstico completo sanitizado;
+- botón `Actualizar ahora` protegido por permiso, CSRF, MFA y reautenticación reciente;
+- Next.js nunca ejecuta shell: sólo crea un job y el archivo fijo `update-request`;
+- `ghost-nexora-update.path`/runner root continúa siendo la única frontera que ejecuta `update.sh`;
+- protección contra solicitudes duplicadas;
+- `.actualizar` y Control API enlazan su request con el job de actualización;
+- smoke ejecutable E12 integrado al CI.
 
 ## E13. Backups mejorados
 
