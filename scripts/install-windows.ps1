@@ -85,7 +85,8 @@ function Read-YesNo([string]$Prompt, [bool]$DefaultNo = $true) {
 }
 
 function Resolve-FullInstallPath([string]$Value) {
-  $raw = [Environment]::ExpandEnvironmentVariables(($Value ?? '').Trim().Trim('"'))
+  $safeValue = if ($null -eq $Value) { '' } else { $Value }
+  $raw = [Environment]::ExpandEnvironmentVariables($safeValue.Trim().Trim('"'))
   if (-not $raw) { throw 'La ruta no puede estar vacía.' }
   if (-not [IO.Path]::IsPathRooted($raw)) { $raw = Join-Path (Get-Location).Path $raw }
   try {
