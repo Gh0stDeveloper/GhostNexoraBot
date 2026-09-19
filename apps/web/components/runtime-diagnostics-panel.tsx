@@ -2,8 +2,6 @@ import { Activity, Cpu, Gauge, MemoryStick, ServerCog, Timer } from 'lucide-reac
 import { type WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
 import { readRuntimeDiagnostics } from '../lib/runtime-diagnostics'
-import { GroupActivityPanel } from './group-activity-panel'
-import { OpsAlertCenter } from './ops-alert-center'
 import { RuntimeLogTable } from './runtime-log-table'
 
 function bytes(value: number) {
@@ -24,7 +22,7 @@ function duration(totalSeconds: number) {
   return `${minutes}m`
 }
 
-export function RuntimeDiagnosticsPanel({ instanceKey, locale, csrfToken, canManageGroups = false }: { instanceKey: string; locale: WebLocale; csrfToken: string; canManageGroups?: boolean }) {
+export function RuntimeDiagnosticsPanel({ instanceKey, locale }: { instanceKey: string; locale: WebLocale }) {
   const data = readRuntimeDiagnostics(instanceKey)
   const t = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
 
@@ -44,8 +42,6 @@ export function RuntimeDiagnosticsPanel({ instanceKey, locale, csrfToken, canMan
       </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{t('diagnostics.empty')}</div>}
     </section>
 
-    <OpsAlertCenter instanceKey={instanceKey} runtimeFresh={Boolean(data?.fresh)} locale={locale}/>
-    <GroupActivityPanel instanceKey={instanceKey} locale={locale} csrfToken={csrfToken} canManageGroups={canManageGroups}/>
     <RuntimeLogTable instanceKey={instanceKey} locale={locale}/>
   </div>
 }
