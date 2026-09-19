@@ -104,7 +104,7 @@ export function JobsDashboard({
           <option value="update">Update</option>
           <option value="other">Other</option>
         </select>
-        <button className="ops-button-primary"><RefreshCcw className="size-4"/>{locale === 'es' ? 'Aplicar' : 'Apply'}</button>
+        <button className="ops-button-primary"><RefreshCcw className="size-4"/>{x('jobs.apply')}</button>
       </form>
     </section>
 
@@ -161,7 +161,7 @@ export function JobsDashboard({
                     <input type="hidden" name="section" value="jobs"/>
                     <input type="hidden" name="action" value="cancel_job"/>
                     <input type="hidden" name="jobId" value={row.id}/>
-                    <ConfirmSubmitButton className="ops-button-danger" confirmText={locale === 'es' ? '¿Cancelar este job?' : 'Cancel this job?'}>
+                    <ConfirmSubmitButton className="ops-button-danger" confirmText={x('jobs.cancelConfirm')}>
                       <Square className="size-3.5"/>{x('jobs.cancel')}
                     </ConfirmSubmitButton>
                   </form> : null}
