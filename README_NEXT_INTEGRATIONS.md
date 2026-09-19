@@ -762,7 +762,7 @@ Cierre:
 
 ## E5. Centro de comandos
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Tabla:
 
@@ -777,6 +777,31 @@ Tabla:
 - Estado.
 
 Permite detectar inmediatamente qué comandos aún no tienen paridad multiplataforma.
+
+Implementación E5:
+
+- nueva sección Comandos dedicada en Admin/Support y portal Subbot;
+- aislamiento por `instance_key`: cada portal usa únicamente el catálogo y métricas de la instancia seleccionada;
+- catálogo de paridad centralizado a partir de los tokens que aceptan realmente los routers nativos de Discord y Telegram;
+- WhatsApp conserva el catálogo efectivo principal y sirve como referencia actual para detectar brechas de paridad;
+- disponibilidad WhatsApp/Discord/Telegram persistida en `ops_command_catalog`;
+- migración compatible con bases SQLite anteriores a E5 mediante detección de columnas y `ALTER TABLE`;
+- Web tolera un runtime antiguo durante una actualización y aplica valores conservadores si las nuevas columnas todavía no existen;
+- invocaciones, éxitos, fallos y latencia agregan también ejecuciones nativas de Discord y Telegram;
+- las métricas nativas no sobrescriben descripción, categoría ni metadata de paridad del catálogo;
+- búsqueda por nombre, categoría, descripción o estado;
+- filtros por categoría, paridad completa, paridad pendiente y disponibilidad en Discord/Telegram;
+- resumen con total de comandos, comandos con paridad completa y cobertura por plataforma;
+- comandos sin paridad completa quedan identificados visualmente;
+- la tabla operativa muestra invocaciones, tasa de éxito, latencia media y estado;
+- Developer/Diagnostics conserva el profiler técnico profundo con latencias mínima/máxima, heap y métricas internas, evitando duplicarlo en E5;
+- no se exponen handlers, código fuente, tokens, credenciales ni configuración sensible.
+
+Cierre:
+
+- Typecheck, Build y smoke E5 son obligatorios en CI;
+- E5 mantiene aislamiento entre MainBot y cada subbot;
+- el catálogo de paridad representa la implementación real actual y podrá alimentarse desde metadata central cuando se complete B3/C1.
 
 ## E6. Editor de configuración de comandos
 
