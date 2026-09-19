@@ -1,7 +1,9 @@
-import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, Settings, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
+import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, Settings, ShieldCheck, UserPlus, UsersRound, Wrench } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { BackupPanel } from '../../components/backup-panel'
+import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
+import { OperationsOverview } from '../../components/operations-overview'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
@@ -27,7 +29,7 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
@@ -35,6 +37,7 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
     ['platforms', t('nav.platforms'), Activity],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
+    ['diagnostics', t('nav.diagnostics'), Wrench],
   ]
   if (role === 'owner') {
     base.push(['management', t('nav.management'), Settings], ['subbots', t('nav.subbots'), Bot])
@@ -45,8 +48,8 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'platforms', 'groups', 'audit', 'management', 'subbots', 'security']
-    : ['overview', 'platforms', 'groups', 'audit', 'security']
+    ? ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security']
+    : ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
 
@@ -88,7 +91,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     ? await readMainPlatformStatuses(snapshot.runtime)
     : subbotPlatformStatuses(snapshot.runtime)
   const hrefFor = (target: AdminSection) => `/admin?instance=${encodeURIComponent(selectedInstance)}&section=${target}`
-  const refreshHref = hrefFor(section)
   const runtimeStatus = snapshot.runtime.connected ? t('admin.connected') : snapshot.runtime.registered ? t('admin.linkedNoHeartbeat') : t('admin.notLinked')
 
   const canSyncGroups = hasPermission(role, 'groups:sync')
@@ -137,21 +139,22 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {params.error && <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/[.07] px-4 py-3 text-sm text-red-300">{t('admin.error', { error: params.error })}</div>}
 
       {section === 'overview' && <>
-        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {[
             [Bot, t('admin.stat.subbots'), subbotCount],
             [MessageSquare, t('admin.stat.online'), role === 'owner' ? subbots.filter((s) => s.status === 'online').length : 0],
             [MessageSquare, t('admin.stat.messages'), totalMessages],
             [ShieldCheck, t('admin.stat.users'), users],
             [UsersRound, t('admin.stat.groups'), snapshot.platformGroups.length || snapshot.groups.length],
+            [Activity, t('admin.stat.platforms'), platformStatuses.filter((item) => item.connected).length],
           ].map(([Icon, label, value]) => {
             const I = Icon as typeof Bot
             return <article key={String(label)} className="ops-stat"><I className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{String(label)}</p><p className="mt-2 text-2xl font-black text-white">{Number(value).toLocaleString(intl)}</p></article>
           })}
         </section>
         {role === 'owner' ? <p className="mt-3 text-xs text-zinc-600"><Download className="mr-2 inline size-3.5"/>{t('admin.traffic', { size: (totalBytes / 1024 / 1024 / 1024).toFixed(2), heartbeat: snapshot.runtime.updatedAt ? new Date(snapshot.runtime.updatedAt).toLocaleString(intl) : t('common.noData') })}</p> : null}
+        <div className="mt-6"><OperationsOverview snapshot={snapshot} platformStatuses={platformStatuses} locale={locale}/></div>
         <div className="mt-6"><OpsUsageDashboard analytics={snapshot.analytics} instanceLabel={instanceLabel} locale={locale}/></div>
-        <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="overview" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>
       </>}
 
       {section === 'platforms' && <div className="mt-6">
@@ -172,9 +175,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {section === 'groups' && <div className="mt-6 space-y-6">
         <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses}/>
-        <OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/>
+        <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups}/>
       </div>}
-      {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>}
+      {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
+
+      {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit={canResetAudit}/></div>}
 
       {role === 'owner' && section === 'management' ? <div className="mt-6 space-y-6">
         <section className="ops-panel overflow-hidden">

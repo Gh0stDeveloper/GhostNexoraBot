@@ -1,6 +1,8 @@
-import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound } from 'lucide-react'
+import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound, Wrench } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
+import { OperationsOverview } from '../../components/operations-overview'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
@@ -15,8 +17,8 @@ import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
-type SubbotSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'platforms', 'groups', 'audit', 'account']
+type SubbotSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'diagnostics' | 'account'
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
@@ -35,6 +37,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     ['platforms', t('nav.platforms'), Activity],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
+    ['diagnostics', t('nav.diagnostics'), Wrench],
     ['account', t('nav.account'), Settings],
   ]
   const params = await searchParams
@@ -51,7 +54,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const labels: Record<string,string> = {
     pending: t('subbot.pending'), pairing: t('subbot.pairing'), online: t('common.online'), offline: t('subbot.offline'), logged_out: t('subbot.loggedOut'), revoked: t('subbot.revoked'),
   }
-  const cards = [[Smartphone,t('subbot.number'),subbot.phone??t('common.unlinked')],[Bot,t('subbot.runtime'),snapshot.runtime.connected?t('admin.connected'):labels[subbot.status]??subbot.status],[Clock3,t('subbot.subscription'),new Date(Number(subbot.expiresAt)).toLocaleString(intl)],[UsersRound,t('subbot.groups'),(snapshot.platformGroups.length || snapshot.groups.length).toLocaleString(intl)],[Download,t('subbot.downloads'),`${(Number(subbot.downloadBytes)/1024/1024).toFixed(1)} MB`]] as const
+  const cards = [[Smartphone,t('subbot.number'),subbot.phone??t('common.unlinked')],[Bot,t('subbot.runtime'),snapshot.runtime.connected?t('admin.connected'):labels[subbot.status]??subbot.status],[Clock3,t('subbot.subscription'),new Date(Number(subbot.expiresAt)).toLocaleString(intl)],[UsersRound,t('subbot.groups'),(snapshot.platformGroups.length || snapshot.groups.length).toLocaleString(intl)],[Activity,t('admin.stat.platforms'),platformStatuses.filter((item) => item.connected).length.toLocaleString(intl)],[Download,t('subbot.downloads'),`${(Number(subbot.downloadBytes)/1024/1024).toFixed(1)} MB`]] as const
   const hrefFor = (target: SubbotSection) => `/subbot?section=${target}`
   const instanceLabel = `Subbot #${subbot.id}`
 
@@ -70,9 +73,9 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
       {params.error && <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/[.07] px-4 py-3 text-sm text-red-300">{t('subbot.error', { error: params.error })}</div>}
 
       {section === 'overview' && <>
-        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{cards.map(([Icon,label,value])=><article key={label} className="ops-stat"><Icon className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{label}</p><p className="mt-2 break-all font-bold text-zinc-100">{value}</p></article>)}</section>
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">{cards.map(([Icon,label,value])=><article key={label} className="ops-stat"><Icon className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{label}</p><p className="mt-2 break-all font-bold text-zinc-100">{value}</p></article>)}</section>
+        <div className="mt-6"><OperationsOverview snapshot={snapshot} platformStatuses={platformStatuses} locale={locale}/></div>
         <div className="mt-6"><OpsUsageDashboard analytics={snapshot.analytics} instanceLabel={instanceLabel} locale={locale}/></div>
-        <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('overview')} instanceLabel={instanceLabel} view="overview" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>
       </>}
 
       {section === 'platforms' && <div className="mt-6">
@@ -93,9 +96,11 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
 
       {section === 'groups' && <div className="mt-6 space-y-6">
         <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses}/>
-        <OpsConsole snapshot={snapshot} refreshHref={hrefFor('groups')} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups canResetAudit/>
+        <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups/>
       </div>}
-      {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('audit')} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>}
+      {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
+
+      {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit/></div>}
 
       {section === 'account' && <div className="mt-6 space-y-6"><section className="ops-panel p-5"><div className="flex items-center gap-2 font-bold"><RefreshCcw className="size-4 text-blue-400"/>{t('subbot.resetTitle')}</div><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">{t('subbot.resetText')}</p><form action="/api/control" method="post" className="mt-4"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="section" value="account"/><input type="hidden" name="action" value="reset_own_subbot"/><button className="ops-button-danger"><RefreshCcw className="size-4"/>{t('subbot.resetButton')}</button></form><p className="mt-5 text-xs text-zinc-700">{t('subbot.webSession', { date: new Date(Number(session.exp)).toLocaleString(intl) })}</p></section><SecurityCenter locale={locale}/></div>}
     </div>

@@ -1,26 +1,12 @@
-import { Activity, Gauge, GitBranch, RefreshCcw, RotateCcw, ServerCog, ShieldAlert, Signal, UsersRound } from 'lucide-react'
-import type { OpsProviderHealth, OpsSnapshot } from '../lib/ops'
+import { UsersRound } from 'lucide-react'
+import type { OpsSnapshot } from '../lib/ops'
 import { webIntlLocale, webT, type WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
 import { AdminAuditTable } from './admin-audit-table'
-import { CommandAuditTable } from './command-audit-table'
 import { ConfirmSubmitButton, OpsAutoRefresh } from './ops-client-controls'
-import { RuntimeDiagnosticsPanel } from './runtime-diagnostics-panel'
+import { GroupActivityPanel } from './group-activity-panel'
 
-export type OpsConsoleView = 'overview' | 'groups' | 'audit'
-
-function latency(us: number, intl: string) {
-  if (!us) return '0 µs'
-  if (us >= 1_000_000) return `${(us / 1_000_000).toFixed(2)} s`
-  if (us >= 1_000) return `${(us / 1_000).toFixed(2)} ms`
-  return `${Math.round(us).toLocaleString(intl)} µs`
-}
-
-function latencyMs(ms: number, intl: string) {
-  if (!ms) return '0 ms'
-  if (ms >= 1000) return `${(ms / 1000).toFixed(2)} s`
-  return `${Math.round(ms).toLocaleString(intl)} ms`
-}
+export type OpsConsoleView = 'groups' | 'audit'
 
 function relativeTime(timestamp: number, locale: WebLocale) {
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
@@ -39,37 +25,29 @@ function dateTime(timestamp: number, locale: WebLocale) {
   }).format(new Date(timestamp))
 }
 
-function providerBadge(provider: OpsProviderHealth, locale: WebLocale) {
-  const className = provider.status === 'online'
-    ? 'ops-badge-good'
-    : provider.status === 'degraded' || provider.status === 'unknown'
-      ? 'ops-badge-warn'
-      : 'ops-badge-bad'
-  const key = `provider.status.${provider.status}` as const
-  return <span className={className}>{opsExtraT(locale, key)}</span>
-}
-
-export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overview', locale, csrfToken, canSyncGroups = false, canManageGroups = false, canLeaveGroups = false, canResetAudit = false }: {
+export function OpsConsole({ snapshot, instanceLabel, view, locale, csrfToken, canSyncGroups = false, canManageGroups = false, canLeaveGroups = false }: {
   snapshot: OpsSnapshot
-  refreshHref: string
   instanceLabel: string
-  view?: OpsConsoleView
+  view: OpsConsoleView
   locale: WebLocale
   csrfToken: string
   canSyncGroups?: boolean
   canManageGroups?: boolean
   canLeaveGroups?: boolean
-  canResetAudit?: boolean
 }) {
   const intl = webIntlLocale(locale)
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
   const x = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
 
-  if (view === 'groups') {
-    return <section className="ops-panel overflow-hidden">
+  if (view === 'audit') {
+    return <AdminAuditTable rows={snapshot.adminAudit} locale={locale}/>
+  }
+
+  return <div className="space-y-6">
+    <section className="ops-panel overflow-hidden">
       <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3"><UsersRound className="size-5 text-blue-400"/><div><h2 className="font-bold text-white">{t('ops.groupsTitle')}</h2><p className="mt-1 text-xs text-zinc-500">{t('ops.groupsText', { count: snapshot.groups.length, instance: instanceLabel })}</p></div></div>
-        <div className="flex flex-wrap gap-2"><OpsAutoRefresh seconds={10}/>{canSyncGroups ? <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="sync_groups"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><button className="ops-button-muted"><RefreshCcw className="size-4"/>{t('ops.syncGroups')}</button></form> : null}</div>
+        <div className="flex flex-wrap gap-2"><OpsAutoRefresh seconds={10}/>{canSyncGroups ? <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="sync_groups"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="groups"/><button className="ops-button-muted">{t('ops.syncGroups')}</button></form> : null}</div>
       </div>
       <div className="overflow-x-auto">
         <table className="ops-table min-w-[1020px]">
@@ -113,75 +91,7 @@ export function OpsConsole({ snapshot, refreshHref, instanceLabel, view = 'overv
       </div>
       {snapshot.requests.length > 0 && <div className="border-t border-white/[.08] px-5 py-4 text-xs text-zinc-600">{t('ops.lastOperation', { action: snapshot.requests[0].action, status: snapshot.requests[0].status, error: snapshot.requests[0].error ? ` · ${snapshot.requests[0].error}` : '' })}</div>}
     </section>
-  }
 
-  if (view === 'audit') {
-    return <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><p className="text-xs text-zinc-500">{t('ops.auditText', { instance: instanceLabel })}</p></div>
-        <div className="flex gap-2"><OpsAutoRefresh seconds={10}/>{canResetAudit ? <form action="/api/control" method="post"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="action" value="reset_audit"/><input type="hidden" name="instance" value={snapshot.instanceKey}/><input type="hidden" name="section" value="audit"/><button className="ops-button-muted"><RotateCcw className="size-4"/>{t('ops.resetAudit')}</button></form> : null}</div>
-      </div>
-      <CommandAuditTable commands={snapshot.commands} locale={locale} />
-      <AdminAuditTable rows={snapshot.adminAudit} locale={locale}/>
-    </div>
-  }
-
-  const stats = [
-    { icon: Signal, label: 'WhatsApp', value: snapshot.runtime.connected ? t('ops.connected') : snapshot.runtime.registered ? t('ops.noHeartbeat') : t('ops.notLinked'), note: snapshot.runtime.fresh ? t('ops.heartbeat', { value: relativeTime(snapshot.runtime.updatedAt, locale) }) : t('ops.noRecentHeartbeat'), danger: !snapshot.runtime.connected },
-    { icon: Activity, label: 'Throughput', value: `${snapshot.summary.throughputMps.toFixed(2)} MPS`, note: t('ops.messagesPerSecond') },
-    { icon: Gauge, label: 'E2E', value: latency(snapshot.summary.averageE2eUs, intl), note: t('ops.instrumented', { value: snapshot.summary.averageE2eUs.toLocaleString(intl) }) },
-    { icon: GitBranch, label: 'Pipeline', value: `${snapshot.summary.processingNodes} / 7`, note: t('ops.stagesInstrumented') },
-    { icon: ServerCog, label: t('admin.table.messages'), value: snapshot.summary.auditedCommands.toLocaleString(intl), note: t('ops.pluginsRegistered') },
-    { icon: ShieldAlert, label: t('ops.bottlenecks'), value: snapshot.summary.bottlenecks.toLocaleString(intl), note: t('ops.slowCritical'), danger: snapshot.summary.bottlenecks > 0 },
-  ]
-
-  return <div className="space-y-6">
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      {stats.map(({ icon: Icon, label, value, note, danger }) => <article key={label} className="ops-stat">
-        <div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-zinc-500">{label}</p><Icon className={`size-4 ${label === 'WhatsApp' && snapshot.runtime.connected ? 'text-emerald-500' : 'text-zinc-700'}`} /></div>
-        <p className={`mt-3 text-xl font-black tracking-tight ${danger ? 'text-red-400' : 'text-white'}`}>{value}</p>
-        <p className="mt-1 text-xs text-zinc-600">{note}</p>
-      </article>)}
-    </section>
-
-    <RuntimeDiagnosticsPanel instanceKey={snapshot.instanceKey} locale={locale} csrfToken={csrfToken} canManageGroups={canManageGroups}/>
-
-    <section className="ops-panel overflow-hidden">
-      <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-4"><GitBranch className="size-5 shrink-0 text-blue-400"/><div><h2 className="font-bold text-white">{t('ops.pipelineTitle')}</h2><p className="mt-1 text-xs text-zinc-500">{t('ops.pipelineSubtitle', { instance: instanceLabel, count: snapshot.runtime.groupCount, time: relativeTime(snapshot.runtime.lastGroupSyncAt, locale) })}</p></div></div>
-        <div className="flex flex-wrap gap-2"><OpsAutoRefresh seconds={10}/><a href={refreshHref} className="ops-button-muted"><RefreshCcw className="size-4"/>{t('common.refresh')}</a></div>
-      </div>
-      <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-4">
-        {snapshot.stages.map((stage) => <article key={stage.id} className="ops-node">
-          <div className="flex items-center justify-between gap-3"><span className="font-mono text-xs font-bold tracking-wider text-blue-500">{t('ops.stage', { id: stage.id })}</span><span className={stage.status === 'optimal' ? 'ops-badge-good' : 'ops-badge-bad'}>{stage.status === 'optimal' ? t('ops.optimal') : t('ops.bottleneck')}</span></div>
-          <h3 className="mt-4 font-bold text-zinc-100">{stage.name}</h3>
-          <p className="mt-3 font-mono text-2xl font-black text-white">{stage.avgUs.toLocaleString(intl)} <span className="text-sm font-normal text-zinc-600">µs ({(stage.avgUs / 1000).toFixed(3)} ms)</span></p>
-          <div className="mt-4 flex items-center justify-between gap-3 text-xs text-zinc-600"><span>{t('ops.last', { value: stage.lastUs.toLocaleString(intl) })}</span><span>{t('ops.executions', { count: stage.invocations.toLocaleString(intl) })}</span></div>
-        </article>)}
-      </div>
-    </section>
-
-    <section className="ops-panel overflow-hidden">
-      <div className="flex flex-col gap-4 border-b border-white/[.08] px-5 py-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-4"><Activity className="size-5 shrink-0 text-blue-400"/><div><h2 className="font-bold text-white">{x('provider.title')}</h2><p className="mt-1 text-xs text-zinc-500">{x('provider.subtitle')}</p></div></div>
-        <div className="flex items-center gap-2"><span className="font-mono text-xs text-zinc-600">{snapshot.providers.length.toLocaleString(intl)}</span><OpsAutoRefresh seconds={10}/></div>
-      </div>
-      {snapshot.providers.length ? <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-        {snapshot.providers.map((provider) => <article key={provider.providerId} className="ops-node">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0"><p className="truncate font-bold text-zinc-100">{provider.label}</p><p className="mt-1 font-mono text-[10px] text-zinc-700">{provider.providerId}</p></div>
-            {providerBadge(provider, locale)}
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.avg')}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.averageLatencyMs, intl)}</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.last')}</span><strong className="mt-1 block font-mono text-zinc-200">{latencyMs(provider.lastLatencyMs, intl)}</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.errors')}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.errorRate.toFixed(1)}%</strong></div>
-            <div className="rounded-lg border border-white/[.06] bg-black/20 p-3"><span className="block text-zinc-600">{x('provider.requests')}</span><strong className="mt-1 block font-mono text-zinc-200">{provider.requests.toLocaleString(intl)}</strong></div>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-zinc-600"><span>{x('provider.lastFailure')}</span><span className="text-right">{provider.lastFailureAt ? relativeTime(provider.lastFailureAt, locale) : x('provider.noFailure')}</span></div>
-          {provider.lastError && <p className="mt-2 truncate rounded-md border border-red-500/10 bg-red-500/[.04] px-2 py-1.5 font-mono text-[10px] text-red-400/70" title={provider.lastError}>{provider.lastError}</p>}
-        </article>)}
-      </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{x('provider.empty')}</div>}
-    </section>
+    <GroupActivityPanel instanceKey={snapshot.instanceKey} locale={locale} csrfToken={csrfToken} canManageGroups={canManageGroups}/>
   </div>
 }

@@ -584,7 +584,7 @@ En móvil usar drawer o hamburger.
 
 ## E2. Separar información operativa de diagnóstico
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 La vista principal debe priorizar:
 
@@ -604,6 +604,20 @@ Mover elementos como:
 - instrumentation;
 
 a una sección Developer o Diagnostics.
+
+Implementación E2 en curso:
+
+- Resumen prioriza plataformas activas, comunidades, tráfico, sincronización e incidencias;
+- Centro de alertas movido al Resumen operativo;
+- analítica de uso/uptime se mantiene en Resumen porque es información operativa;
+- nueva sección Diagnóstico para Owner, Admin, Support y Subbot Owner sobre su propia instancia;
+- CPU, RAM, heap, Node.js, Ollama y logs técnicos quedan exclusivamente en Diagnóstico;
+- Pipeline DAG y tiempos internos en µs quedan exclusivamente en Diagnóstico;
+- profiler de comandos, incluyendo heap delta, se mueve de Auditoría a Diagnóstico;
+- telemetría detallada de providers se conserva en Diagnóstico mientras E4 prepara su pantalla de producto;
+- Auditoría queda enfocada en historial de acciones administrativas;
+- actividad detallada de grupos se mueve a Grupos;
+- aislamiento de MainBot/subbots se mantiene.
 
 ## E3. Pantalla Plataformas
 
