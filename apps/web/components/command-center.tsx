@@ -246,7 +246,7 @@ export function CommandCenter({
             <option value="staff">{t('commands.permissionStaff')}</option>
             <option value="owner">{t('commands.permissionOwner')}</option>
           </select>
-          <span className="mt-1 block text-[10px] font-normal text-zinc-700">{selected.category === 'adult' ? (locale === 'es' ? 'Los comandos 18+ de usuario usan acceso normal; adultmode y el consentimiento controlan su uso.' : 'User-facing 18+ commands use normal access; adultmode and consent control their use.') : t('commands.permissionHelp')}</span>
+          <span className="mt-1 block text-[10px] font-normal text-zinc-700">{selected.category === 'adult' ? t('commands.permissionAdultHelp') : t('commands.permissionHelp')}</span>
         </label>
 
         <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-4">
