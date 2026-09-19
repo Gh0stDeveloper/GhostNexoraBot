@@ -1,4 +1,4 @@
-import { openBotDb } from './runtime'
+import { openBotDb, runtime } from './runtime'
 
 export type WebOpsAlert = {
   key: string
@@ -44,7 +44,21 @@ function columnsFor(db: NonNullable<ReturnType<typeof openBotDb>>, table: string
 }
 
 function safeLogText(value: unknown) {
-  return String(value ?? '')
+  let text = String(value ?? '')
+  for (const secret of [
+    runtime.adminToken,
+    process.env.TELEGRAM_BOT_TOKEN,
+    process.env.DISCORD_BOT_TOKEN,
+    process.env.LEMPI_API_KEY,
+    process.env.OPENROUTER_API_KEY,
+    process.env.X_BEARER_TOKEN,
+    process.env.VK_ACCESS_TOKEN,
+    process.env.GITHUB_TOKEN,
+    process.env.SPOTIFY_CLIENT_SECRET,
+  ]) {
+    if (secret && secret.length >= 6) text = text.split(secret).join('[REDACTED]')
+  }
+  return text
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9+/_=.-]{8,}\b/gi, '$1 [REDACTED]')
     .replace(/([?&](?:key|token|apikey|api_key|access_token|auth|authorization|secret|password|session|sid|cookie)=)[^&\s]+/gi, '$1[REDACTED]')
     .replace(/\b(authorization|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|passwd|cookie|set-cookie|session[-_ ]?id|session|sid)\b\s*[:=]\s*["']?[^\s,;"'}]+/gi, '$1=[REDACTED]')
