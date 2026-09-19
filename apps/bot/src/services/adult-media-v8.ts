@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { execa } from 'execa'
 import { config } from '../config.js'
 import { economy } from './economy.js'
 
@@ -30,6 +31,27 @@ function cleanCommand(value: string) {
   return value.trim().toLowerCase().replace(/^\./, '')
 }
 
+const commandAliases: Record<string, string[]> = {
+  fuck: ['fuck', 'room'],
+  'preñar': ['preñar', 'prenar'],
+  cum: ['cum', 'finishrp'],
+  dick: ['dick', 'pene', 'cock'],
+}
+
+export function canonicalAdultMediaCommand(value: string) {
+  const clean = cleanCommand(value)
+  for (const [canonical, aliases] of Object.entries(commandAliases)) {
+    if (aliases.includes(clean)) return canonical
+  }
+  return clean
+}
+
+export function equivalentAdultMediaCommands(value: string) {
+  const clean = cleanCommand(value)
+  const canonical = canonicalAdultMediaCommand(clean)
+  return commandAliases[canonical] ? [...commandAliases[canonical]!] : [clean]
+}
+
 export function adultMediaCommandAllowed(value: string) {
   return allowedCommands.has(cleanCommand(value))
 }
@@ -45,8 +67,9 @@ export async function addAdultReactionMedia(
   createdBy: string,
   label?: string,
 ) {
-  const target = cleanCommand(command)
-  if (!adultMediaCommandAllowed(target)) {
+  const requested = cleanCommand(command)
+  const target = canonicalAdultMediaCommand(requested)
+  if (!adultMediaCommandAllowed(requested)) {
     throw new Error('Comando no permitido para medios de reacción. Usa uno de: ' + [...allowedCommands].join(', '))
   }
   if (data.length > MAX_IMPORT_BYTES) {
@@ -79,8 +102,9 @@ export async function importAdultReactionMediaFromUrl(
   url: string,
   createdBy: string,
 ) {
-  const target = cleanCommand(command)
-  if (!adultMediaCommandAllowed(target)) {
+  const requested = cleanCommand(command)
+  const target = canonicalAdultMediaCommand(requested)
+  if (!adultMediaCommandAllowed(requested)) {
     throw new Error('Comando no permitido. Usa uno de: ' + [...allowedCommands].join(', '))
   }
   if (prohibitedMedia.test(url)) {
@@ -129,11 +153,13 @@ export async function importAdultReactionMediaFromUrl(
 
 export function listAdultReactionMedia(command?: string) {
   if (command) {
+    const pools = equivalentAdultMediaCommands(command)
+    const placeholders = pools.map(() => '?').join(',')
     return db
       .prepare(
-        'SELECT id,command_name as command,label,mime_type as mimeType,created_by as createdBy FROM adult_reaction_media WHERE command_name = ? ORDER BY id',
+        `SELECT id,command_name as command,label,mime_type as mimeType,created_by as createdBy FROM adult_reaction_media WHERE command_name IN (${placeholders}) ORDER BY command_name,id`,
       )
-      .all(cleanCommand(command))
+      .all(...pools)
   }
   return db
     .prepare(
@@ -152,21 +178,42 @@ export async function removeAdultReactionMedia(id: number) {
 }
 
 export function clearAdultReactionMedia(command: string) {
-  const target = cleanCommand(command)
+  const pools = equivalentAdultMediaCommands(command)
+  const placeholders = pools.map(() => '?').join(',')
   const rows = db
-    .prepare('SELECT id,file_path as filePath FROM adult_reaction_media WHERE command_name = ?')
-    .all(target) as Array<{ id: number; filePath: string }>
-  db.prepare('DELETE FROM adult_reaction_media WHERE command_name = ?').run(target)
+    .prepare(`SELECT id,file_path as filePath FROM adult_reaction_media WHERE command_name IN (${placeholders})`)
+    .all(...pools) as Array<{ id: number; filePath: string }>
+  db.prepare(`DELETE FROM adult_reaction_media WHERE command_name IN (${placeholders})`).run(...pools)
   return Promise.all(rows.map((row) => rm(row.filePath, { force: true }).catch(() => undefined)))
 }
 
-/** Prefer command-specific pool, then global/hentai shared pool. */
+export async function normalizeAdultReactionMediaForWhatsapp(data: Buffer, mimeType: string) {
+  if (!/^(image\/gif|video\/(gif|webm))$/i.test(mimeType)) {
+    return { data, mimeType }
+  }
+
+  const { stdout } = await execa('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error',
+    '-i', 'pipe:0',
+    '-vf', "scale='min(480,iw)':-2:flags=lanczos,fps=15",
+    '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    '-movflags', 'frag_keyframe+empty_moov',
+    '-f', 'mp4', 'pipe:1',
+  ], {
+    input: data,
+    encoding: 'buffer',
+    timeout: 45_000,
+    maxBuffer: 25 * 1024 * 1024,
+  })
+
+  return { data: Buffer.from(stdout), mimeType: 'video/mp4' }
+}
+
+/** Prefer every equivalent command pool, then global/hentai shared pools. */
 export async function pickAdultReactionMedia(command: string) {
   const target = cleanCommand(command)
-  // aliases de dick → pool dick
-  const canonical =
-    target === 'pene' || target === 'cock' ? 'dick' : target
-  const pools = [canonical, target]
+  const canonical = canonicalAdultMediaCommand(target)
+  const pools = equivalentAdultMediaCommands(canonical)
   if (canonical !== 'global' && canonical !== 'hentai') pools.push('global', 'hentai')
 
   const seen = new Set<string>()
