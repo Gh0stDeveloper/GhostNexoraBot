@@ -61,6 +61,7 @@ export function GroupDetailView({
     created: 'Creado',
     updated: 'Actualizado',
     today: 'Mensajes hoy',
+    last24h: 'Mensajes 24 h',
     seven: 'Mensajes 7 días',
     thirty: 'Mensajes 30 días',
     active: 'Activos hoy',
@@ -93,6 +94,9 @@ export function GroupDetailView({
     goodbyeText: 'Mensaje de despedida',
     save: 'Guardar configuración',
     commandPolicy: 'Perfil de comandos',
+    commandCategories: 'Categorías de comandos',
+    allowed: 'PERMITIDA',
+    blocked: 'BLOQUEADA',
     adultCategory: 'Categoría adult',
     membersTitle: 'Miembros y administradores',
     membersText: 'Snapshot del último metadata recibido por WhatsApp. Los identificadores se muestran parcialmente ocultos.',
@@ -119,6 +123,7 @@ export function GroupDetailView({
     created: 'Created',
     updated: 'Updated',
     today: 'Messages today',
+    last24h: 'Messages 24 h',
     seven: 'Messages 7 days',
     thirty: 'Messages 30 days',
     active: 'Active today',
@@ -151,6 +156,9 @@ export function GroupDetailView({
     goodbyeText: 'Goodbye message',
     save: 'Save configuration',
     commandPolicy: 'Command profile',
+    commandCategories: 'Command categories',
+    allowed: 'ALLOWED',
+    blocked: 'BLOCKED',
     adultCategory: 'Adult category',
     membersTitle: 'Members and administrators',
     membersText: 'Snapshot from the latest WhatsApp metadata. Identifiers are partially masked.',
@@ -209,6 +217,7 @@ export function GroupDetailView({
         [UsersRound, labels.members, detail.participantCount],
         [ShieldCheck, labels.admins, detail.adminCount],
         [MessageSquare, labels.today, detail.messagesToday],
+        [MessageSquare, labels.last24h, detail.messages24h],
         [Radio, labels.active, detail.activeToday],
         [MessageSquare, labels.seven, detail.messages7d],
         [MessageSquare, labels.thirty, detail.messages30d],
@@ -265,6 +274,15 @@ export function GroupDetailView({
             <span className="ops-badge">{labels.commandPolicy}: {detail.settings.policyProfile.toUpperCase()}</span>
             <span className={detail.settings.adultCategoryAllowed ? 'ops-badge-good' : 'ops-badge'}>{labels.adultCategory}: {detail.settings.adultCategoryAllowed ? 'ON' : 'OFF'}</span>
           </div>
+          {Object.keys(detail.settings.commandCategories).length ? <div className="mt-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">{labels.commandCategories}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {Object.entries(detail.settings.commandCategories).map(([category, allowed]) =>
+                <span key={category} className={allowed ? 'ops-badge-good' : 'ops-badge'}>
+                  {category.toUpperCase()} · {allowed ? labels.allowed : labels.blocked}
+                </span>)}
+            </div>
+          </div> : null}
           {canManage ? <button className="ops-button-primary mt-5"><Save className="size-4"/>{labels.save}</button> : null}
         </form>
       </section>
