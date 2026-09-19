@@ -3,9 +3,9 @@ import { generalCommands } from './general.js'
 import { creditsCommands } from './credits.js'
 import { systemCommands } from './system.js'
 
-// B2 starts with commands whose current canonical behavior is transport-neutral.
-// Menu/help stays native until B3 central metadata can hide unsupported commands
-// instead of advertising the full WhatsApp catalog on Discord/Telegram.
+// B2 starts with commands whose canonical behavior is transport-neutral.
+// Menu/help keeps a platform-native presentation shell for now, while B3 central
+// metadata generates its contents and prevents unsupported commands being advertised.
 const generalShared = generalCommands.filter((command) => command.name !== 'menu')
 const systemShared = systemCommands.filter((command) => command.name === 'system' || command.name === 'speedtest')
 
