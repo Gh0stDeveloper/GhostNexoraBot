@@ -302,7 +302,7 @@ Cierre B1:
 
 ## B2. Un solo Command Engine
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 El comando debe implementarse una sola vez y responder mediante una API neutral con operaciones equivalentes a:
 
