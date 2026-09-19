@@ -805,7 +805,7 @@ Cierre:
 
 ## E6. Editor de configuración de comandos
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Configurar desde Web:
 
@@ -818,6 +818,23 @@ Configurar desde Web:
 - permisos.
 
 Debe respetar aislamiento entre MainBot y subbots.
+
+Implementación E6 en validación:
+
+- configuración persistente por `instance_key` y comando;
+- activación global del comando y activación independiente por WhatsApp, Discord y Telegram;
+- cooldown adicional por usuario, comando, plataforma e instancia;
+- control de uso en grupos y chats privados;
+- categorías completas habilitables o deshabilitables por instancia;
+- permisos adicionales `inherit`, `staff` y `owner`, sin reducir nunca los permisos definidos por el comando;
+- enforcement en los routers de WhatsApp, Discord y Telegram;
+- alias resueltos al comando canónico para que la configuración y la telemetría no se fragmenten;
+- menú y buscador de WhatsApp ocultan comandos no disponibles por E6, pero no por un cooldown transitorio;
+- editor Web integrado en Admin/Support y portal Subbot;
+- Support conserva acceso de solo lectura; Admin puede editar salvo comandos/categoría Owner; Owner tiene control completo;
+- el portal Subbot queda forzado a su propia instancia;
+- las plataformas no soportadas por el catálogo real no pueden habilitarse desde Web;
+- eliminación permanente de un subbot limpia también configuración, aliases y cooldowns E6.
 
 ## E7. Vista detallada de grupo
 
