@@ -166,7 +166,7 @@ async function controlFetch(pathname: string, init: RequestInit = {}) {
       ...(init.headers ?? {}),
     },
     cache: 'no-store',
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(3500),
   }).catch(() => null)
 }
 
