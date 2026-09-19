@@ -351,9 +351,14 @@ if [[ "${LLM_ENABLED}" -eq 1 ]]; then LLM_STATE="$(systemctl is-active "${LLM_SE
 
 if [[ "${BOT_STATE}" != 'active' ]]; then sleep 4; BOT_STATE="$(systemctl is-active ghost-nexora-bot.service || true)"; fi
 if [[ "${BOT_STATE}" != 'active' ]]; then
+  LAST_ERROR_LOG="/tmp/ghost-nexora-health-error.log"
+  {
+    echo "ghost-nexora-bot no quedó active."
+    systemctl --no-pager --full status ghost-nexora-bot.service || true
+    journalctl -u ghost-nexora-bot.service -n 80 --no-pager -o short-precise || true
+  } >"${LAST_ERROR_LOG}" 2>&1
+  cat "${LAST_ERROR_LOG}" >&2 || true
   fail 'ghost-nexora-bot no quedó active.'
-  systemctl --no-pager --full status ghost-nexora-bot.service || true
-  journalctl -u ghost-nexora-bot.service -n 80 --no-pager -o short-precise || true
   false
 fi
 
@@ -361,8 +366,15 @@ if [[ "${WEB_ENABLED}" -eq 1 && "${WEB_STATE}" != 'active' ]]; then
   sleep 4
   WEB_STATE="$(systemctl is-active ghost-nexora-web.service || true)"
   if [[ "${WEB_STATE}" != 'active' ]]; then
-    warn 'ghost-nexora-web no quedó active pese a estar habilitado.'
-    systemctl --no-pager --full status ghost-nexora-web.service || true
+    LAST_ERROR_LOG="/tmp/ghost-nexora-web-health-error.log"
+    {
+      echo "ghost-nexora-web no quedó active pese a estar habilitado."
+      systemctl --no-pager --full status ghost-nexora-web.service || true
+      journalctl -u ghost-nexora-web.service -n 80 --no-pager -o short-precise || true
+    } >"${LAST_ERROR_LOG}" 2>&1
+    cat "${LAST_ERROR_LOG}" >&2 || true
+    fail 'ghost-nexora-web no quedó active pese a estar habilitado.'
+    false
   fi
 fi
 
@@ -370,9 +382,14 @@ if [[ "${LLM_ENABLED}" -eq 1 && "${LLM_BUSY}" -eq 0 && "${LLM_STATE}" != 'active
   sleep 4
   LLM_STATE="$(systemctl is-active "${LLM_SERVICE}" || true)"
   if [[ "${LLM_STATE}" != 'active' ]]; then
+    LAST_ERROR_LOG="/tmp/ghost-nexora-llm-health-error.log"
+    {
+      echo "ghost-nexora-llm no quedó active pese a estar habilitado."
+      systemctl --no-pager --full status "${LLM_SERVICE}" || true
+      journalctl -u "${LLM_SERVICE}" -n 80 --no-pager || true
+    } >"${LAST_ERROR_LOG}" 2>&1
+    cat "${LAST_ERROR_LOG}" >&2 || true
     fail 'ghost-nexora-llm no quedó active pese a estar habilitado.'
-    systemctl --no-pager --full status "${LLM_SERVICE}" || true
-    journalctl -u "${LLM_SERVICE}" -n 80 --no-pager || true
     false
   fi
 fi
