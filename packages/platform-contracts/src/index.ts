@@ -16,7 +16,7 @@ export interface CapabilityResolution {
   missing: CapabilityName[]
 }
 
-export const CAPABILITY_FALLBACKS = Object.freeze({
+export const CAPABILITY_FALLBACKS: Readonly<Partial<Record<CapabilityName, CapabilityFallbackKind>>> = Object.freeze({
   editMessage: 'text',
   reactions: 'noop',
   typing: 'noop',
@@ -24,7 +24,7 @@ export const CAPABILITY_FALLBACKS = Object.freeze({
   carousel: 'text',
   embeds: 'text',
   files: 'operation',
-} satisfies Partial<Record<CapabilityName, CapabilityFallbackKind>>)
+})
 
 export type NormalizedMediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker'
 
