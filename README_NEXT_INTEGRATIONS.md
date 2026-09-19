@@ -1059,7 +1059,7 @@ Cierre:
 
 ## E11. Jobs activos
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Mostrar trabajos como:
 
@@ -1084,7 +1084,7 @@ Acciones:
 - reintentar;
 - ver error.
 
-Implementación E11 en validación:
+Implementación E11:
 
 - registro persistente `ops_jobs` aislado por `instance_key`;
 - requests de control `ops_job_requests` para cancelar/reintentar desde Web sin ejecutar acciones en el proceso de Next.js;
@@ -1102,6 +1102,20 @@ Implementación E11 en validación:
 - limpieza de jobs al eliminar permanentemente un subbot;
 - auditoría administrativa por `jobId`;
 - smoke ejecutable E11 integrado al CI.
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E11 ejecutable en verde para creación, progreso, cancelación, reintento y sanitización;
+- yt-dlp, FFmpeg, Ollama, downloads, broadcasts y solicitudes de update instrumentados;
+- E1/E2 siguen en verde con navegación aislada de Jobs;
+- acceso adulto regular corregido: `dick`, `fuck`, `cum`, `preñar` y comandos equivalentes ya no heredan una restricción Owner/Staff accidental;
+- `adultmode` queda como autoridad del grupo y `adult18 accept` mantiene la confirmación de mayoría de edad;
+- smoke de acceso adulto para usuario normal en verde, preservando restricciones Owner-only de categorías no adultas;
+- auditoría ES/EN e i18n boundary en verde;
+- Atomic wallet multi-process, Global wallet migration, Banking V10, V4 persistence y V5 compatibility en verde;
+- Windows installer y suite completa de regresiones en verde;
+- CI principal #2866: success sobre `aa4c4b6dedb4c1f20d63119816874372ef2fdd8a`.
 
 ## E12. Actualizaciones desde Dashboard
 
@@ -1337,22 +1351,23 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E8 | Dashboard de usuarios por instancia y permisos | TERMINADO | d8ae811b618f6c32537bcff4cfbb9d3db36d7e36 |
 | 2026-09-19 | Fase E9 | Ledger económico auditable y ranking público compacto | TERMINADO | 373f552ff59a8731ba53b6df25d1684747bb3f70 |
 | 2026-09-19 | Fase E10 | Logs en tiempo real sanitizados y aislados por instancia | TERMINADO | 098d691deb9e42be5a4604adceb9a6d395524201 |
+| 2026-09-19 | Fase E11 | Jobs activos, cancelación/reintento y acceso adulto regular corregido | TERMINADO | aa4c4b6dedb4c1f20d63119816874372ef2fdd8a |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E11 · Jobs activos**.
+La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E12 · Actualizaciones desde Dashboard**.
 
 Prioridad inmediata:
 
-1. crear un registro unificado de trabajos activos por instancia;
-2. cubrir yt-dlp, FFmpeg, downloads, broadcasts, IA y actualizaciones;
-3. modelar estados waiting, running, completed, failed y cancelled;
-4. exponer progreso, timestamps, origen y error sanitizado;
-5. permitir cancelar y reintentar sólo cuando el tipo de job lo soporte y el rol tenga permiso;
-6. mantener aislamiento estricto MainBot/subbots e integrar smoke dedicado en CI.
+1. mostrar versión instalada, commit actual y rama;
+2. detectar y mostrar una nueva versión disponible y su changelog;
+3. reflejar el estado real del update dentro del Dashboard;
+4. modelar el progreso Fetch → Dependencies → Build → Migration → Restart → Healthcheck;
+5. enlazar el progreso con los jobs de actualización creados en E11;
+6. mostrar al Owner el error real sanitizado cuando una etapa falle, sin sustituirlo por mensajes genéricos.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
