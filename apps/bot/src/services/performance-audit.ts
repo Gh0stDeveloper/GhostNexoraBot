@@ -1,4 +1,5 @@
 import type { BotCommand } from '../types.js'
+import { commandPlatformSupport } from './command-platform-support.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 const now = () => Date.now()
@@ -35,6 +36,9 @@ opsDb.exec(`
     command_name TEXT NOT NULL,
     category TEXT NOT NULL,
     description TEXT NOT NULL,
+    whatsapp INTEGER NOT NULL DEFAULT 1,
+    discord INTEGER NOT NULL DEFAULT 0,
+    telegram INTEGER NOT NULL DEFAULT 0,
     registered_at INTEGER NOT NULL,
     PRIMARY KEY(instance_key, command_name)
   );
@@ -90,7 +94,15 @@ opsDb.exec(`
     ON ops_usage_minutes(instance_key, user_jid, bucket_minute);
 `)
 
-type CommandAuditInput = Pick<BotCommand, 'name' | 'category' | 'description'>
+const commandCatalogColumns = new Set(
+  (opsDb.prepare('PRAGMA table_info(ops_command_catalog)').all() as Array<{ name?: string }>)
+    .map((column) => String(column.name ?? '')),
+)
+if (!commandCatalogColumns.has('whatsapp')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN whatsapp INTEGER NOT NULL DEFAULT 1')
+if (!commandCatalogColumns.has('discord')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN discord INTEGER NOT NULL DEFAULT 0')
+if (!commandCatalogColumns.has('telegram')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN telegram INTEGER NOT NULL DEFAULT 0')
+
+type CommandAuditInput = Pick<BotCommand, 'name' | 'aliases' | 'category' | 'description'>
 export type CommandAuditIdentity = { userJid: string; displayName?: string | null }
 
 function micros(durationMs: number) {
@@ -158,16 +170,30 @@ function recordUsage(input: {
 export const performanceAudit = {
   registerCommands(commands: CommandAuditInput[], instanceKey = opsInstanceKey()) {
     const stamp = now()
-    const statement = opsDb.prepare(`INSERT INTO ops_command_catalog(instance_key, command_name, category, description, registered_at)
-      VALUES(?, ?, ?, ?, ?)
+    const statement = opsDb.prepare(`INSERT INTO ops_command_catalog(
+        instance_key, command_name, category, description, whatsapp, discord, telegram, registered_at
+      ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(instance_key, command_name) DO UPDATE SET
         category = excluded.category,
         description = excluded.description,
+        whatsapp = excluded.whatsapp,
+        discord = excluded.discord,
+        telegram = excluded.telegram,
         registered_at = excluded.registered_at`)
     opsDb.exec('BEGIN IMMEDIATE')
     try {
       for (const command of commands) {
-        statement.run(instanceKey, command.name.toLowerCase(), command.category, command.description, stamp)
+        const support = commandPlatformSupport(command)
+        statement.run(
+          instanceKey,
+          command.name.toLowerCase(),
+          command.category,
+          command.description,
+          support.whatsapp ? 1 : 0,
+          support.discord ? 1 : 0,
+          support.telegram ? 1 : 0,
+          stamp,
+        )
       }
       opsDb.exec('COMMIT')
     } catch (error) {
@@ -201,10 +227,26 @@ export const performanceAudit = {
     const value = micros(durationMs)
     const stamp = now()
     const heap = Number.isFinite(heapDeltaBytes) ? Math.trunc(heapDeltaBytes) : 0
-    opsDb.prepare(`INSERT INTO ops_command_catalog(instance_key, command_name, category, description, registered_at)
-      VALUES(?, ?, ?, ?, ?)
-      ON CONFLICT(instance_key, command_name) DO UPDATE SET category = excluded.category, description = excluded.description`)
-      .run(instanceKey, name, command.category, command.description, stamp)
+    const support = commandPlatformSupport(command)
+    opsDb.prepare(`INSERT INTO ops_command_catalog(
+        instance_key, command_name, category, description, whatsapp, discord, telegram, registered_at
+      ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(instance_key, command_name) DO UPDATE SET
+        category = excluded.category,
+        description = excluded.description,
+        whatsapp = excluded.whatsapp,
+        discord = excluded.discord,
+        telegram = excluded.telegram`)
+      .run(
+        instanceKey,
+        name,
+        command.category,
+        command.description,
+        support.whatsapp ? 1 : 0,
+        support.discord ? 1 : 0,
+        support.telegram ? 1 : 0,
+        stamp,
+      )
     opsDb.prepare(`INSERT INTO ops_command_metrics(
         instance_key, command_name, invocations, successes, failures, total_us, min_us, max_us, last_us,
         heap_delta_total, first_at, last_at, last_error_at
@@ -251,6 +293,7 @@ export const performanceAudit = {
     })
 
     const rows = opsDb.prepare(`SELECT c.command_name AS commandName, c.category, c.description,
+      c.whatsapp, c.discord, c.telegram,
       COALESCE(m.invocations, 0) AS invocations, COALESCE(m.successes, 0) AS successes,
       COALESCE(m.failures, 0) AS failures, COALESCE(m.total_us, 0) AS totalUs,
       COALESCE(m.min_us, 0) AS minUs, COALESCE(m.max_us, 0) AS maxUs,
@@ -272,6 +315,9 @@ export const performanceAudit = {
         commandName: String(row.commandName),
         category: String(row.category),
         description: String(row.description),
+        whatsapp: Boolean(row.whatsapp),
+        discord: Boolean(row.discord),
+        telegram: Boolean(row.telegram),
         invocations,
         successes,
         failures: Number(row.failures ?? 0),
