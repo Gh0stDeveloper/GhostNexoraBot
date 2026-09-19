@@ -14,7 +14,7 @@ const controlRoute = read('apps/web/app/api/control/route.ts')
 const webI18n = read('apps/web/lib/i18n.ts')
 const extraI18n = read('apps/web/lib/ops-extra-i18n.ts')
 
-assert.match(roadmap, /## E2\. Separar información operativa de diagnóstico[\s\S]*Estado: EN PROGRESO/, 'E2 roadmap must be in progress while PR is open')
+assert.match(roadmap, /## E2\. Separar información operativa de diagnóstico[\s\S]*Estado: TERMINADO/, 'E2 roadmap must remain completed')
 
 assert.match(adminPage, /'diagnostics', t\('nav\.diagnostics'\), Wrench/, 'Admin diagnostics navigation missing')
 assert.match(adminPage, /<OperationsOverview/, 'Admin overview must render operational summary')
