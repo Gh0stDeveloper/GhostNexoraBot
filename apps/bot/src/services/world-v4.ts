@@ -154,8 +154,10 @@ db.exec(`
 `)
 
 function ledger(userJid: string, kind: string, amount: number, note?: string, counterparty?: string) {
+  const value = Math.floor(amount)
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, counterparty_jid, note, created_at) VALUES(?, ?, ?, ?, ?, ?)')
-    .run(userJid, kind, Math.floor(amount), counterparty ?? null, note ?? null, now())
+    .run(userJid, kind, value, counterparty ?? null, note ?? null, now())
+  economy.recordGlobalLedger(userJid, kind, value, counterparty, note)
 }
 
 function ensureUser(userJid: string) {
