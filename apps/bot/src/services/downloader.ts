@@ -12,6 +12,7 @@ import { withTimeout } from '../utils/timeout.js'
 import { resolveCobaltYouTube } from './youtube-cobalt.js'
 import { resolveExternalYouTubeMp3 } from './youtube-mp3-external.js'
 import { resolveExternalYouTubeAudio } from './youtube-mp4-external.js'
+import { createOpsJob } from './ops-jobs.js'
 import { youtubeSearchMobile, yt1sResolve } from './youtube-unofficial.js'
 
 export type DownloadPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'twitter'
@@ -48,6 +49,42 @@ const hosts: Record<DownloadPlatform, string[]> = {
 const soundCloudHosts = ['soundcloud.com', 'www.soundcloud.com', 'm.soundcloud.com', 'on.soundcloud.com']
 const ytDlpRuntimeArgs = ['--js-runtimes', 'node'] as const
 const rubyCoreBase = 'https://ruby-core.vercel.app/api/download/youtube'
+
+async function runTrackedTool(
+  type: 'yt-dlp' | 'ffmpeg',
+  label: string,
+  command: 'yt-dlp' | 'ffmpeg',
+  args: string[],
+  options: { timeout: number; maxBuffer?: number },
+) {
+  const job = createOpsJob({
+    type,
+    label,
+    source: 'downloader',
+    cancellable: true,
+    retryable: false,
+  })
+  job.start('process_started')
+  let cancelled = false
+  const child = execa(command, args, {
+    timeout: options.timeout,
+    ...(options.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
+  })
+  job.setCancelHandler(() => {
+    cancelled = true
+    child.kill('SIGTERM')
+    return true
+  })
+  try {
+    const result = await child
+    job.complete('process_completed')
+    return result
+  } catch (error) {
+    if (cancelled) job.cancelled()
+    else job.fail(error)
+    throw error
+  }
+}
 
 function validateUrl(value: string, platform: DownloadPlatform) {
   let url: URL
@@ -154,7 +191,7 @@ async function runDownload(source: string, args: string[]): Promise<DownloadResu
   const dir = await prepareTempDir()
   const output = path.join(dir, '%(title).80s-%(id)s.%(ext)s')
   try {
-    const { stdout } = await execa('yt-dlp', [
+    const { stdout } = await runTrackedTool('yt-dlp', 'yt-dlp media download', 'yt-dlp', [
       ...ytDlpRuntimeArgs, '--no-playlist', '--no-warnings', '--restrict-filenames', '--no-progress', '--print-json',
       '-o', output, ...args, source,
     ], { timeout: 20 * 60_000, maxBuffer: 20 * 1024 * 1024 })
@@ -269,7 +306,7 @@ async function downloadPipedAudioAsMp3(
     await pipeline(response.body, limiter, createWriteStream(sourcePath))
     if (sourceSize <= 0) throw new Error('Piped devolvió un stream de audio vacío.')
 
-    await execa('ffmpeg', [
+    await runTrackedTool('ffmpeg', 'FFmpeg audio conversion', 'ffmpeg', [
       '-y', '-v', 'error', '-i', sourcePath,
       '-vn', '-map_metadata', '-1',
       '-c:a', 'libmp3lame', '-b:a', '192k',
@@ -422,7 +459,7 @@ async function downloadYouTubeViaProviders(input: string, kind: 'mp3' | 'mp4', q
 export async function getMediaInfo(input: string, platform: DownloadPlatform): Promise<MediaInfo> {
   if (platform === 'youtube') return getYouTubeInfoByUrl(input)
   const url = validateUrl(input, platform)
-  const { stdout } = await execa('yt-dlp', [...ytDlpRuntimeArgs, '--dump-single-json', '--no-playlist', '--no-warnings', url], { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 })
+  const { stdout } = await runTrackedTool('yt-dlp', 'yt-dlp metadata probe', 'yt-dlp', [...ytDlpRuntimeArgs, '--dump-single-json', '--no-playlist', '--no-warnings', url], { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 })
   return infoFrom(JSON.parse(stdout) as Record<string, unknown>)
 }
 
