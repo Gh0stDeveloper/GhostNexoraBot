@@ -49,9 +49,9 @@ function slashDescription(value: string) {
 }
 
 export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = discordSlashCommandTokens()
-  .map((token) => {
+  .flatMap((token): DiscordApplicationCommandDefinition[] => {
     const metadata = commandMetadataForPlatformToken('discord', token)
-    if (!metadata) return null
+    if (!metadata) return []
     const options = metadata.arguments.map((argument) => ({
       type: 3 as const,
       name: argument.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32),
@@ -59,13 +59,12 @@ export const discordApplicationCommands: DiscordApplicationCommandDefinition[] =
       required: argument.required === true,
       ...(argument.maxLength ? { max_length: argument.maxLength } : {}),
     }))
-    return {
+    return [{
       name: token,
       description: slashDescription(metadata.description),
       ...(options.length ? { options } : {}),
-    } satisfies DiscordApplicationCommandDefinition
+    }]
   })
-  .filter((value): value is DiscordApplicationCommandDefinition => Boolean(value))
 
 type Invocation = {
   command: string
