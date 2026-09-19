@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useWebI18n } from './i18n-provider'
 
 export type UnifiedNavIcon =
   | 'home'
@@ -124,6 +125,7 @@ export function UnifiedNavigation({
   ariaLabel: string
   closeLabel: string
 }) {
+  const { t } = useWebI18n()
   const [open, setOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -198,7 +200,7 @@ export function UnifiedNavigation({
       <div className="px-3 pb-2">
         <button type="button" className="ops-command-trigger w-full" onClick={() => setPaletteOpen(true)}>
           <Search className="size-3.5"/>
-          <span className="min-w-0 flex-1 truncate text-left">{brandSubtitle}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{t('nav.search')}</span>
           <kbd>⌘K</kbd>
         </button>
       </div>
@@ -221,7 +223,7 @@ export function UnifiedNavigation({
         </span>
       </a>
       <div className="flex items-center gap-2">
-        <button type="button" className="ops-mobile-menu-button" aria-label={brandSubtitle} onClick={() => setPaletteOpen(true)}>
+        <button type="button" className="ops-mobile-menu-button" aria-label={t('nav.search')} onClick={() => setPaletteOpen(true)}>
           <Search className="size-4"/>
         </button>
         <button
@@ -246,8 +248,8 @@ export function UnifiedNavigation({
             ref={searchRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={brandSubtitle}
-            aria-label={brandSubtitle}
+            placeholder={t('nav.search')}
+            aria-label={t('nav.search')}
           />
           <kbd>ESC</kbd>
         </div>
@@ -257,11 +259,11 @@ export function UnifiedNavigation({
             return <a key={item.id} href={item.href} className="ops-command-result" onClick={() => setPaletteOpen(false)}>
               <span className="ops-command-result-icon"><Icon className="size-4"/></span>
               <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {item.active ? <span className="ops-badge-good">ACTIVO</span> : null}
+              {item.active ? <span className="ops-badge-good">{t('nav.current')}</span> : null}
             </a>
           }) : <div className="ops-empty-state compact">
             <Search className="size-5"/>
-            <p>No results</p>
+            <p>{t('nav.noResults')}</p>
           </div>}
         </div>
       </div>
