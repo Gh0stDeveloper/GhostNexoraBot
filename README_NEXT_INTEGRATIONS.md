@@ -1168,7 +1168,7 @@ Cierre:
 
 ## E13. Backups mejorados
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Añadir:
 
@@ -1190,7 +1190,7 @@ Backups por tipo:
 - grupos;
 - completo.
 
-Implementación E13 en validación:
+Implementación E13:
 
 - formato de archivo v2 compatible con backups v1 existentes;
 - tipos reales `economy`, `configuration`, `subbots`, `sessions`, `groups` y `full`;
@@ -1208,6 +1208,17 @@ Implementación E13 en validación:
 - descargas y mutaciones protegidas por permisos Owner, CSRF y reautenticación para operaciones críticas;
 - auditoría registra tipo/ID del backup sin guardar credenciales;
 - smoke ejecutable E13 integrado al CI.
+
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E13 de backups tipados en verde;
+- compatibilidad de restore legacy y restore selectivo validada;
+- SQLite quick_check, hashes SHA-256, dry-run y rollback validados;
+- auditoría i18n boundary en verde;
+- Windows installer y suite completa del workflow en verde;
+- CI principal #2921: success sobre `ea5d6940c7246c0746570b8568b9170254c11ede`.
 
 ## E14. Diseño visual
 
@@ -1402,22 +1413,23 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E10 | Logs en tiempo real sanitizados y aislados por instancia | TERMINADO | 098d691deb9e42be5a4604adceb9a6d395524201 |
 | 2026-09-19 | Fase E11 | Jobs activos, cancelación/reintento y acceso adulto regular corregido | TERMINADO | aa4c4b6dedb4c1f20d63119816874372ef2fdd8a |
 | 2026-09-19 | Fase E12 | Actualizaciones seguras desde Dashboard con progreso y healthcheck | TERMINADO | 9bec819c28a04be010aa0f2e00d7e86ecf29b255 |
+| 2026-09-19 | Fase E13 | Backups tipados, verificación, dry-run y restore seguro | TERMINADO | ea5d6940c7246c0746570b8568b9170254c11ede |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E13 · Backups mejorados**.
+La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E14 · Diseño visual**.
 
 Prioridad inmediata:
 
-1. ampliar backups automáticos con política de retención explícita;
-2. mostrar tamaño y hash verificable de cada copia;
-3. permitir descarga y restauración controladas desde Dashboard;
-4. verificar integridad y compatibilidad antes de restaurar;
-5. añadir un restore de prueba que valide la copia sin reemplazar datos activos;
-6. separar backups por tipo: economía, configuración, subbots, sesiones, grupos y completo.
+1. unificar jerarquía visual, spacing y densidad de todas las secciones del Dashboard;
+2. mejorar responsive móvil sin aumentar espacio innecesario;
+3. normalizar tablas, cards, estados, filtros y acciones;
+4. revisar contraste, accesibilidad y consistencia ES/EN;
+5. mantener la navegación E1 y el estilo compacto del Operations Center;
+6. cerrar visualmente la Fase E sin alterar lógica funcional ya validada.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
