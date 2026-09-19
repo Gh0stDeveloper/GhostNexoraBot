@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$InstallDir = (Join-Path $HOME 'GhostNexoraBot'),
   [string]$StateDir = (Join-Path $env:LOCALAPPDATA 'GhostNexoraBot'),
   [string]$Branch = 'main',
@@ -15,6 +15,12 @@ param(
   [switch]$NoStart,
   [switch]$SkipWeb
 )
+
+# Keep Windows PowerShell 5.1 console I/O on UTF-8. The file itself is stored with a UTF-8 BOM below.
+try {
+  [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {}
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -232,7 +238,10 @@ function Install-Manager {
   New-Item -ItemType Directory -Force -Path $binDir | Out-Null
   $managerSource = Join-Path $InstallDir 'scripts\windows\ghostnexora.ps1'
   $managerTarget = Join-Path $binDir 'ghostnexora.ps1'
-  Copy-Item $managerSource $managerTarget -Force
+  # Read the repository copy explicitly as UTF-8 and write it with the Windows PowerShell UTF-8 BOM.
+  # This prevents Windows PowerShell 5.1 from decoding Spanish accents as ANSI on later executions.
+  $managerContent = Get-Content -LiteralPath $managerSource -Raw -Encoding UTF8
+  Set-Content -LiteralPath $managerTarget -Value $managerContent -Encoding UTF8
   $cmdPath = Join-Path $binDir 'ghostnexora.cmd'
   $cmd = '@echo off' + [Environment]::NewLine + 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $managerTarget + '" %*'
   Set-Content -Path $cmdPath -Value $cmd -Encoding ascii
