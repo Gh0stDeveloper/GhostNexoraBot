@@ -560,7 +560,7 @@ Objetivo inmediato:
 
 ## E1. Navegación lateral
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Reemplazar o complementar tabs horizontales con sidebar.
 
@@ -581,6 +581,21 @@ Estructura propuesta:
 - Ajustes.
 
 En móvil usar drawer o hamburger.
+
+Implementación E1 en curso:
+
+- componente de navegación compartido entre página pública, Admin/Support y portal Subbot;
+- sidebar fijo en escritorio;
+- hamburger + drawer + overlay en móvil;
+- cierre por botón, overlay, enlace y tecla Escape;
+- bloqueo de scroll del body mientras el drawer está abierto;
+- estado activo por sección en Admin/Subbot y por hash en la página pública;
+- misma marca, jerarquía visual, espaciado e iconografía en las tres superficies;
+- Admin/Support conserva únicamente las secciones permitidas por rol;
+- Subbot conserva aislamiento y solo muestra sus propias secciones;
+- página pública usa el mismo shell sin exponer controles privados;
+- acceso /login queda como acción del sidebar público;
+- navegación accesible mediante aria-current, aria-expanded, aria-controls y focus-visible.
 
 ## E2. Separar información operativa de diagnóstico
 
