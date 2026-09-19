@@ -4,11 +4,13 @@ import { redirect } from 'next/navigation'
 import { BackupPanel } from '../../components/backup-panel'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
+import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { SecurityCenter } from '../../components/security-center'
 import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { readMainPlatformStatuses, subbotPlatformStatuses } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 import { hasPermission, roleLabel, type PrivilegedWebRole } from '../../lib/web-security'
 
@@ -80,6 +82,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const selectedSubbot = selectedInstance === 'main' ? null : subbots.find((item) => item.id === Number(selectedInstance.split(':')[1])) ?? null
   const instanceLabel = selectedSubbot ? `Subbot #${selectedSubbot.id}${selectedSubbot.phone ? ` · ${selectedSubbot.phone}` : ''}` : 'MainBot'
   const snapshot = readOpsSnapshot(selectedInstance)
+  const platformStatuses = selectedInstance === 'main'
+    ? await readMainPlatformStatuses(snapshot.runtime)
+    : subbotPlatformStatuses(snapshot.runtime)
   const hrefFor = (target: AdminSection) => `/admin?instance=${encodeURIComponent(selectedInstance)}&section=${target}`
   const refreshHref = hrefFor(section)
   const runtimeStatus = snapshot.runtime.connected ? t('admin.connected') : snapshot.runtime.registered ? t('admin.linkedNoHeartbeat') : t('admin.notLinked')
@@ -130,7 +135,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             [MessageSquare, t('admin.stat.online'), role === 'owner' ? subbots.filter((s) => s.status === 'online').length : 0],
             [MessageSquare, t('admin.stat.messages'), totalMessages],
             [ShieldCheck, t('admin.stat.users'), users],
-            [UsersRound, t('admin.stat.groups'), snapshot.groups.length],
+            [UsersRound, t('admin.stat.groups'), snapshot.platformGroups.length || snapshot.groups.length],
           ].map(([Icon, label, value]) => {
             const I = Icon as typeof Bot
             return <article key={String(label)} className="ops-stat"><I className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{String(label)}</p><p className="mt-2 text-2xl font-black text-white">{Number(value).toLocaleString(intl)}</p></article>
@@ -141,7 +146,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="overview" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>
       </>}
 
-      {section === 'groups' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>}
+      {section === 'groups' && <div className="mt-6 space-y-6">
+        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses}/>
+        <OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/>
+      </div>}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>}
 
       {role === 'owner' && section === 'management' ? <div className="mt-6 space-y-6">

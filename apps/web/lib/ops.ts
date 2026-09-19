@@ -41,6 +41,19 @@ export type OpsGroup = {
   updatedAt: number
 }
 
+export type OpsPlatformGroup = {
+  platform: 'whatsapp' | 'discord' | 'telegram'
+  externalId: string
+  name: string
+  kind: string
+  memberCount: number | null
+  adminCount: number | null
+  botAdmin: boolean | null
+  authoritative: boolean
+  source: string
+  updatedAt: number
+}
+
 export type OpsProviderHealth = {
   providerId: string
   label: string
@@ -85,6 +98,8 @@ export type OpsRuntimeStatus = {
   connectedAt: number
   lastEventAt: number
   lastGroupSyncAt: number
+  lastGroupSyncAttemptAt: number
+  lastGroupSyncError: string | null
   updatedAt: number
   fresh: boolean
 }
@@ -139,6 +154,7 @@ export type OpsSnapshot = {
   stages: OpsStage[]
   commands: OpsCommand[]
   groups: OpsGroup[]
+  platformGroups: OpsPlatformGroup[]
   providers: OpsProviderHealth[]
   adminAudit: OpsAdminAudit[]
   requests: OpsRequest[]
@@ -200,11 +216,22 @@ function emptyAnalytics(): OpsUsageAnalytics {
 function empty(instanceKey: string): OpsSnapshot {
   return {
     instanceKey,
-    runtime: { connected: false, registered: false, groupCount: 0, connectedAt: 0, lastEventAt: 0, lastGroupSyncAt: 0, updatedAt: 0, fresh: false },
+    runtime: {
+      connected: false,
+      registered: false,
+      groupCount: 0,
+      connectedAt: 0,
+      lastEventAt: 0,
+      lastGroupSyncAt: 0,
+      lastGroupSyncAttemptAt: 0,
+      lastGroupSyncError: null,
+      updatedAt: 0,
+      fresh: false,
+    },
     summary: { throughputMps: 0, averageE2eUs: 0, processingNodes: 7, auditedCommands: 0, bottlenecks: 0 },
     analytics: emptyAnalytics(),
     stages: STAGES.map(([id, name]) => ({ id, name, invocations: 0, minUs: 0, avgUs: 0, maxUs: 0, lastUs: 0, firstAt: 0, lastAt: 0, status: 'optimal' })),
-    commands: [], groups: [], providers: [], adminAudit: [], requests: [],
+    commands: [], groups: [], platformGroups: [], providers: [], adminAudit: [], requests: [],
   }
 }
 
@@ -365,10 +392,16 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
     const snapshot = empty(instanceKey)
 
     if (tableExists(db, 'ops_instance_status')) {
+      const statusColumns = new Set((db.prepare('PRAGMA table_info(ops_instance_status)').all() as Array<{ name?: string }>).map((item) => String(item.name ?? '')))
+      const attemptColumn = statusColumns.has('last_group_sync_attempt_at') ? 'last_group_sync_attempt_at' : '0'
+      const errorColumn = statusColumns.has('last_group_sync_error') ? 'last_group_sync_error' : 'NULL'
       const row = db.prepare(`SELECT connected, registered, group_count AS groupCount,
         connected_at AS connectedAt, last_event_at AS lastEventAt,
-        last_group_sync_at AS lastGroupSyncAt, updated_at AS updatedAt
-        FROM ops_instance_status WHERE instance_key = ?`).get(instanceKey) as Record<string, number> | undefined
+        last_group_sync_at AS lastGroupSyncAt,
+        ${attemptColumn} AS lastGroupSyncAttemptAt,
+        ${errorColumn} AS lastGroupSyncError,
+        updated_at AS updatedAt
+        FROM ops_instance_status WHERE instance_key = ?`).get(instanceKey) as Record<string, number | string | null> | undefined
       if (row) {
         const updatedAt = Number(row.updatedAt ?? 0)
         const fresh = updatedAt > 0 && Date.now() - updatedAt < 180_000
@@ -379,6 +412,8 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
           connectedAt: Number(row.connectedAt ?? 0),
           lastEventAt: Number(row.lastEventAt ?? 0),
           lastGroupSyncAt: Number(row.lastGroupSyncAt ?? 0),
+          lastGroupSyncAttemptAt: Number(row.lastGroupSyncAttemptAt ?? 0),
+          lastGroupSyncError: row.lastGroupSyncError ? String(row.lastGroupSyncError) : null,
           updatedAt,
           fresh,
         }
@@ -452,6 +487,43 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
           mutedUntil: Number(row.mutedUntil ?? 0), updatedAt: Number(row.updatedAt),
         })) as OpsGroup[]
       snapshot.runtime.groupCount = snapshot.groups.length
+    }
+
+    if (tableExists(db, 'ops_platform_groups')) {
+      snapshot.platformGroups = db.prepare(`SELECT platform, external_id AS externalId, name, kind,
+          member_count AS memberCount, admin_count AS adminCount, bot_admin AS botAdmin,
+          authoritative, source, updated_at AS updatedAt
+        FROM ops_platform_groups
+        WHERE instance_key = ?
+        ORDER BY platform ASC, name COLLATE NOCASE ASC`)
+        .all(instanceKey).map((row: any) => ({
+          platform: String(row.platform) as OpsPlatformGroup['platform'],
+          externalId: String(row.externalId),
+          name: String(row.name),
+          kind: String(row.kind || 'group'),
+          memberCount: row.memberCount === null || row.memberCount === undefined ? null : Number(row.memberCount),
+          adminCount: row.adminCount === null || row.adminCount === undefined ? null : Number(row.adminCount),
+          botAdmin: row.botAdmin === null || row.botAdmin === undefined ? null : Boolean(row.botAdmin),
+          authoritative: Boolean(row.authoritative),
+          source: String(row.source || 'runtime'),
+          updatedAt: Number(row.updatedAt ?? 0),
+        })).filter((row: OpsPlatformGroup) => ['whatsapp', 'discord', 'telegram'].includes(row.platform))
+    }
+
+    const hasWhatsAppInventory = snapshot.platformGroups.some((row) => row.platform === 'whatsapp')
+    if (!hasWhatsAppInventory && snapshot.groups.length) {
+      snapshot.platformGroups.push(...snapshot.groups.map((group) => ({
+        platform: 'whatsapp' as const,
+        externalId: group.groupJid,
+        name: group.name,
+        kind: 'group',
+        memberCount: group.participantCount,
+        adminCount: group.adminCount,
+        botAdmin: null,
+        authoritative: snapshot.runtime.lastGroupSyncAt > 0,
+        source: 'legacy-ops-groups',
+        updatedAt: group.updatedAt,
+      })))
     }
 
     if (tableExists(db, 'ops_provider_health')) {

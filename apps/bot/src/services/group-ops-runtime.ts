@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js'
 import { setOpsAlert } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 import { recordOpsRuntimeLog } from './ops-runtime-log.js'
+import { removePlatformGroup, replacePlatformGroups, upsertPlatformGroup } from './platform-group-registry.js'
 
 const instanceKey = opsInstanceKey()
 let currentSocket: WASocket | null = null
@@ -13,6 +14,8 @@ let lastSyncAttemptAt = 0
 let syncing = false
 let processing = false
 let connectionOpen = false
+let emptyFullSyncStreak = 0
+const EMPTY_SYNC_CONFIRMATIONS = 3
 const groupRefreshAt = new Map<string, number>()
 const PICTURE_REFRESH_MS = 6 * 60 * 60_000
 
@@ -94,6 +97,8 @@ ensureColumn('ops_groups', 'description', 'TEXT')
 ensureColumn('ops_groups', 'created_at', 'INTEGER NOT NULL DEFAULT 0')
 ensureColumn('ops_groups', 'picture_url', 'TEXT')
 ensureColumn('ops_groups', 'picture_updated_at', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('ops_instance_status', 'last_group_sync_attempt_at', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('ops_instance_status', 'last_group_sync_error', 'TEXT')
 
 type ParticipatingGroup = {
   id?: string
@@ -115,6 +120,8 @@ function touchRuntime(input: {
   jid?: string | null
   connectedAt?: number | null
   lastGroupSyncAt?: number
+  lastGroupSyncAttemptAt?: number
+  lastGroupSyncError?: string | null
   groupCount?: number
 } = {}) {
   const now = Date.now()
@@ -122,8 +129,15 @@ function touchRuntime(input: {
   const registered = input.registered ?? Boolean(socket?.authState.creds.registered)
   const jid = input.jid === undefined ? (socket?.user?.id ?? null) : input.jid
   const existing = opsDb.prepare(`SELECT connected, connected_at AS connectedAt, group_count AS groupCount,
-    last_group_sync_at AS lastGroupSyncAt FROM ops_instance_status WHERE instance_key = ?`).get(instanceKey) as {
-      connected?: number; connectedAt?: number | null; groupCount?: number; lastGroupSyncAt?: number
+    last_group_sync_at AS lastGroupSyncAt, last_group_sync_attempt_at AS lastGroupSyncAttemptAt,
+    last_group_sync_error AS lastGroupSyncError
+    FROM ops_instance_status WHERE instance_key = ?`).get(instanceKey) as {
+      connected?: number
+      connectedAt?: number | null
+      groupCount?: number
+      lastGroupSyncAt?: number
+      lastGroupSyncAttemptAt?: number
+      lastGroupSyncError?: string | null
     } | undefined
   const connected = input.connected === undefined ? Boolean(existing?.connected) : input.connected
   const connectedAt = input.connectedAt === undefined
@@ -131,10 +145,13 @@ function touchRuntime(input: {
     : input.connectedAt
   const groupCount = input.groupCount ?? existing?.groupCount ?? currentGroupCount()
   const lastGroupSyncAt = input.lastGroupSyncAt ?? existing?.lastGroupSyncAt ?? 0
+  const lastGroupSyncAttemptAt = input.lastGroupSyncAttemptAt ?? existing?.lastGroupSyncAttemptAt ?? 0
+  const lastGroupSyncError = input.lastGroupSyncError === undefined ? (existing?.lastGroupSyncError ?? null) : input.lastGroupSyncError
 
   opsDb.prepare(`INSERT INTO ops_instance_status(
-      instance_key, connected, registered, jid, group_count, connected_at, last_event_at, last_group_sync_at, updated_at
-    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+      instance_key, connected, registered, jid, group_count, connected_at, last_event_at,
+      last_group_sync_at, last_group_sync_attempt_at, last_group_sync_error, updated_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_key) DO UPDATE SET
       connected = excluded.connected,
       registered = excluded.registered,
@@ -143,8 +160,22 @@ function touchRuntime(input: {
       connected_at = COALESCE(excluded.connected_at, ops_instance_status.connected_at),
       last_event_at = excluded.last_event_at,
       last_group_sync_at = excluded.last_group_sync_at,
+      last_group_sync_attempt_at = excluded.last_group_sync_attempt_at,
+      last_group_sync_error = excluded.last_group_sync_error,
       updated_at = excluded.updated_at`)
-    .run(instanceKey, connected ? 1 : 0, registered ? 1 : 0, jid, groupCount, connectedAt, now, lastGroupSyncAt, now)
+    .run(
+      instanceKey,
+      connected ? 1 : 0,
+      registered ? 1 : 0,
+      jid,
+      groupCount,
+      connectedAt,
+      now,
+      lastGroupSyncAt,
+      lastGroupSyncAttemptAt,
+      lastGroupSyncError,
+      now,
+    )
 }
 
 function markSocketLive(socket: WASocket) {
@@ -188,6 +219,21 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
       createdAt,
       stamp,
     )
+
+  upsertPlatformGroup('whatsapp', {
+    externalId: jid,
+    name: String(group.subject ?? jid),
+    kind: 'group',
+    memberCount: participants.length,
+    adminCount: participants.filter((participant) => Boolean(participant.admin)).length,
+    authoritative: false,
+    source: 'baileys-metadata',
+    metadata: {
+      announce: Boolean(group.announce),
+      restrictMode: Boolean(group.restrict),
+      createdAt,
+    },
+  }, instanceKey, stamp)
   return true
 }
 
@@ -212,6 +258,21 @@ function dayBucket(timestamp = Date.now()) {
 
 function senderHash(value: string) {
   return createHash('sha256').update(`${instanceKey}\u0000${value}`).digest('hex').slice(0, 32)
+}
+
+function observeGroupJid(groupJid: string, stamp = Date.now()) {
+  if (!groupJid.endsWith('@g.us')) return
+  opsDb.prepare(`INSERT INTO ops_groups(
+      instance_key, group_jid, name, participant_count, admin_count, announce, restrict_mode, updated_at
+    ) VALUES(?, ?, ?, 0, 0, 0, 0, ?)
+    ON CONFLICT(instance_key, group_jid) DO UPDATE SET updated_at = MAX(ops_groups.updated_at, excluded.updated_at)`)
+    .run(instanceKey, groupJid, groupJid, stamp)
+  upsertPlatformGroup('whatsapp', {
+    externalId: groupJid,
+    name: groupJid,
+    kind: 'group',
+    source: 'message-observed',
+  }, instanceKey, stamp)
 }
 
 function recordGroupMessage(message: any) {
@@ -271,15 +332,48 @@ async function syncGroups(connectionProbe = false) {
   if (!socket || syncing || !socket.authState.creds.registered || (!connectionOpen && !connectionProbe)) return
   syncing = true
   lastSyncAttemptAt = Date.now()
+  touchRuntime({ lastGroupSyncAttemptAt: lastSyncAttemptAt })
+
   try {
     const raw = await socket.groupFetchAllParticipating()
     if (!connectionOpen) connectionOpen = true
+
     const groups = Object.values(raw) as ParticipatingGroup[]
+    const participatingGroups = groups.filter((group) => String(group.id ?? '').endsWith('@g.us'))
+    const count = participatingGroups.length
     const stamp = Date.now()
+    const previousCount = currentGroupCount()
+
+    if (count === 0) emptyFullSyncStreak += 1
+    else emptyFullSyncStreak = 0
+
+    const preserveEmptySnapshot = count === 0 && emptyFullSyncStreak < EMPTY_SYNC_CONFIRMATIONS
+    if (preserveEmptySnapshot) {
+      const detail = `empty_group_snapshot_retry_${emptyFullSyncStreak}_of_${EMPTY_SYNC_CONFIRMATIONS}`
+      touchRuntime({
+        connected: true,
+        registered: true,
+        jid: socket.user?.id ?? null,
+        lastGroupSyncAttemptAt: stamp,
+        lastGroupSyncError: detail,
+        groupCount: previousCount,
+      })
+      recordOpsRuntimeLog(
+        'warn',
+        'groups',
+        `Empty WhatsApp group snapshot preserved; retry ${emptyFullSyncStreak}/${EMPTY_SYNC_CONFIRMATIONS}`,
+        instanceKey,
+      )
+      const retry = setTimeout(() => {
+        if (currentSocket === socket && socket.authState.creds.registered) void syncGroups(true)
+      }, emptyFullSyncStreak === 1 ? 5000 : 10_000)
+      retry.unref?.()
+      return
+    }
 
     opsDb.exec('BEGIN IMMEDIATE')
     try {
-      for (const group of groups) upsertGroup(group, stamp)
+      for (const group of participatingGroups) upsertGroup(group, stamp)
       opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND updated_at < ?').run(instanceKey, stamp)
       opsDb.prepare(`DELETE FROM ops_group_chat_preferences
         WHERE instance_key = ? AND group_jid NOT IN (SELECT group_jid FROM ops_groups WHERE instance_key = ?)`)
@@ -289,18 +383,49 @@ async function syncGroups(connectionProbe = false) {
       opsDb.exec('ROLLBACK')
       throw error
     }
+
+    replacePlatformGroups('whatsapp', participatingGroups.map((group) => {
+      const participants = group.participants ?? []
+      return {
+        externalId: String(group.id ?? ''),
+        name: String(group.subject ?? group.id ?? ''),
+        kind: 'group',
+        memberCount: participants.length,
+        adminCount: participants.filter((participant) => Boolean(participant.admin)).length,
+        source: 'baileys-full-sync',
+        metadata: {
+          announce: Boolean(group.announce),
+          restrictMode: Boolean(group.restrict),
+          createdAt: Number(group.creation ?? 0) > 0 ? Number(group.creation) * 1000 : 0,
+        },
+      }
+    }), instanceKey, stamp)
+
     lastSyncAt = stamp
-    const count = groups.filter((group) => String(group.id ?? '').endsWith('@g.us')).length
-    touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, lastGroupSyncAt: stamp, groupCount: count })
+    touchRuntime({
+      connected: true,
+      registered: true,
+      jid: socket.user?.id ?? null,
+      lastGroupSyncAt: stamp,
+      lastGroupSyncAttemptAt: stamp,
+      lastGroupSyncError: null,
+      groupCount: count,
+    })
     void refreshGroupPictures()
     recordOpsRuntimeLog('info', 'groups', `Group registry synchronized: ${count} groups`, instanceKey)
     setOpsAlert({ key: 'whatsapp:group-sync', severity: 'warning', title: 'WhatsApp group sync failed', active: false, instanceKey })
   } catch (error) {
+    const detail = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500)
+    touchRuntime({ lastGroupSyncAttemptAt: lastSyncAttemptAt, lastGroupSyncError: detail })
     logger.debug({ error, instanceKey, connectionProbe }, 'ops group registry sync skipped')
     if (!connectionProbe) {
       setOpsAlert({
-        key: 'whatsapp:group-sync', severity: 'warning', title: 'WhatsApp group sync failed',
-        detail: error instanceof Error ? error.message.slice(0, 240) : 'group_sync_failed', active: true, instanceKey,
+        key: 'whatsapp:group-sync',
+        severity: 'warning',
+        title: 'WhatsApp group sync failed',
+        detail: detail.slice(0, 240),
+        active: true,
+        instanceKey,
       })
     }
   } finally {
@@ -330,6 +455,7 @@ async function processOneRequest() {
       await currentSocket.groupLeave(groupJid)
       opsDb.prepare('DELETE FROM ops_groups WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
       opsDb.prepare('DELETE FROM ops_group_chat_preferences WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
+      removePlatformGroup('whatsapp', groupJid, instanceKey)
       touchRuntime({ connected: true, groupCount: currentGroupCount() })
     } else if (request.action === 'unmute') {
       const groupJid = String(request.groupJid ?? '')
@@ -404,6 +530,7 @@ export function registerOpsSocket(socket: WASocket) {
   connectionOpen = false
   lastSyncAt = 0
   lastSyncAttemptAt = 0
+  emptyFullSyncStreak = 0
   touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
   startLoop()
 
@@ -412,6 +539,7 @@ export function registerOpsSocket(socket: WASocket) {
     for (const message of messages) {
       const jid = String(message.key.remoteJid ?? '')
       if (jid.endsWith('@g.us')) {
+        observeGroupJid(jid)
         recordGroupMessage(message)
         void syncOneGroup(jid)
       }
@@ -423,6 +551,23 @@ export function registerOpsSocket(socket: WASocket) {
     void syncOneGroup(String(id ?? ''), true)
   })
 
+  socket.ev.on('groups.upsert', (groups) => {
+    if (!markSocketLive(socket)) return
+    for (const group of groups as ParticipatingGroup[]) {
+      if (upsertGroup(group)) touchRuntime({ connected: true, groupCount: currentGroupCount() })
+    }
+  })
+
+  socket.ev.on('groups.update', (groups) => {
+    if (!markSocketLive(socket)) return
+    for (const group of groups as ParticipatingGroup[]) {
+      const jid = String(group.id ?? '')
+      if (!jid.endsWith('@g.us')) continue
+      observeGroupJid(jid)
+      void syncOneGroup(jid, true)
+    }
+  })
+
   socket.ev.on('connection.update', ({ connection }) => {
     if (currentSocket !== socket) return
     if (connection === 'open') {
@@ -430,10 +575,15 @@ export function registerOpsSocket(socket: WASocket) {
       currentSocket = socket
       lastSyncAt = 0
       lastSyncAttemptAt = 0
+      emptyFullSyncStreak = 0
       touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, connectedAt: Date.now() })
       recordOpsRuntimeLog('info', 'whatsapp', 'WhatsApp transport connected', instanceKey)
       setOpsAlert({ key: 'whatsapp:connection', severity: 'critical', title: 'WhatsApp transport disconnected', active: false, instanceKey })
       void syncGroups()
+      const retry = setTimeout(() => {
+        if (currentSocket === socket && connectionOpen && lastSyncAt === 0) void syncGroups()
+      }, 5000)
+      retry.unref?.()
     } else if (connection === 'close') {
       connectionOpen = false
       touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })

@@ -19,6 +19,7 @@ Este archivo conserva el plan acordado para continuar mejorando Ghost Nexora Bot
 | PENDIENTE | Todavía no se ha iniciado |
 | EN PROGRESO | Hay trabajo activo en una rama/PR |
 | BLOQUEADO | Depende de otra tarea, decisión o integración |
+| POSPUESTO | Se conserva pendiente pero se ejecutará después de las fases actualmente priorizadas |
 | TERMINADO | Implementado, probado y fusionado a main |
 
 ### Regla de cierre
@@ -39,13 +40,13 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase | Área | Estado |
 |---|---|---|
 | Fase A | Login y seguridad Web | TERMINADO |
-| Fase B | Núcleo multiplataforma compartido | PENDIENTE |
-| Fase C | Paridad Discord y Telegram | PENDIENTE |
-| Fase D | Runtime y entrega WhatsApp | PENDIENTE |
-| Fase E | Dashboard Web V2 | PENDIENTE |
+| Fase E | Dashboard Web V2 | EN PROGRESO |
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
+| Fase B | Núcleo multiplataforma compartido | POSPUESTO |
+| Fase C | Paridad Discord y Telegram | POSPUESTO |
+| Fase D | Runtime y entrega WhatsApp | POSPUESTO |
 
-El orden debe respetarse salvo que aparezca una corrección crítica de producción.
+Orden actualizado por decisión de proyecto: después de Fase A se prioriza Fase E. Las fases B, C y D quedan pospuestas hasta terminar las fases de Dashboard/operación prioritarias.
 
 ---
 
@@ -535,11 +536,27 @@ Crear una capa compartida para:
 
 # FASE E — Dashboard Web V2
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 ## Objetivo
 
 Convertir Operations Center en un dashboard de producto más ordenado y menos dependiente de vistas técnicas.
+
+## E0. Inventario de comunidades por plataforma
+
+Estado: EN PROGRESO
+
+Objetivo inmediato:
+
+- recuperar y mostrar correctamente los grupos en los que está MainBot y cada subbot de WhatsApp;
+- no depender únicamente de una sincronización completa: usar también eventos y tráfico real como recuperación;
+- mostrar último intento, última sincronización correcta y último error de WhatsApp;
+- separar el inventario visualmente por WhatsApp, Discord y Telegram;
+- persistir guilds de Discord y enriquecerlos con metadata REST;
+- persistir grupos y supergrupos observados en Telegram mediante mensajes y cambios `my_chat_member`;
+- indicar de forma explícita que Telegram Bot API no ofrece una enumeración histórica completa;
+- mostrar estado ACTIVO/OFFLINE/DESACTIVADO/SIN DATOS por plataforma;
+- mantener aislamiento de instancias: un Subbot Owner solo ve la información de su subbot.
 
 ## E1. Navegación lateral
 
@@ -590,7 +607,7 @@ a una sección Developer o Diagnostics.
 
 ## E3. Pantalla Plataformas
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Mostrar por plataforma.
 
@@ -1048,14 +1065,26 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | — | Fase B | Núcleo multiplataforma | PENDIENTE | — |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
-| — | Fase E | Dashboard Web V2 | PENDIENTE | — |
+| 2026-09-18 | Fase E | Dashboard Web V2 · inventario de grupos por plataforma | EN PROGRESO | feat/phase-e-platform-groups-dashboard |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial es **FASE B — Núcleo multiplataforma compartido**.
+La siguiente tarea oficial es **FASE E — Dashboard Web V2**, comenzando por inventario y sincronización de grupos por plataforma.
+
+Prioridad inmediata:
+
+1. corregir la sincronización de grupos de WhatsApp;
+2. mostrar diagnóstico de sincronización y última actualización;
+3. separar grupos/servidores por plataforma: WhatsApp, Discord y Telegram;
+4. mantener acciones administrativas de WhatsApp sobre grupos reales de la instancia;
+5. registrar de forma persistente guilds de Discord;
+6. registrar grupos/supergrupos observados por Telegram, indicando la limitación de Bot API para enumerar chats históricos;
+7. continuar después con el resto de Dashboard Web V2.
+
+Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 

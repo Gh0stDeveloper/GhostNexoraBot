@@ -56,6 +56,14 @@ export type TelegramCallbackQuery = {
   data?: string
 }
 
+export type TelegramChatMemberUpdated = {
+  chat: TelegramChat
+  from: TelegramUser
+  date?: number
+  old_chat_member: TelegramChatMember
+  new_chat_member: TelegramChatMember
+}
+
 export type TelegramUpdate = {
   update_id: number
   message?: TelegramMessage
@@ -63,6 +71,7 @@ export type TelegramUpdate = {
   channel_post?: TelegramMessage
   edited_channel_post?: TelegramMessage
   callback_query?: TelegramCallbackQuery
+  my_chat_member?: TelegramChatMemberUpdated
 }
 
 export type TelegramApiResponse<T> = {

@@ -3,6 +3,7 @@ import type { DiscordRestClient } from './rest.js'
 import type {
   DiscordGatewayPayload,
   DiscordGatewaySession,
+  DiscordGuildSummary,
   DiscordInteraction,
   DiscordMessage,
   DiscordReady,
@@ -15,6 +16,8 @@ export interface DiscordGatewayHandlers {
   onResumed?: () => void | Promise<void>
   onMessage?: (message: DiscordMessage) => void | Promise<void>
   onInteraction?: (interaction: DiscordInteraction) => void | Promise<void>
+  onGuildCreate?: (guild: DiscordGuildSummary) => void | Promise<void>
+  onGuildDelete?: (guild: DiscordGuildSummary) => void | Promise<void>
   onSession?: (session: DiscordGatewaySession | null) => void | Promise<void>
   onState?: (state: DiscordGatewayState, error?: string) => void | Promise<void>
 }
@@ -214,6 +217,16 @@ export class DiscordGateway {
       this.reconnectAttempts = 0
       await this.setState('ready')
       await this.handlers.onResumed?.()
+      return
+    }
+
+    if (payload.t === 'GUILD_CREATE') {
+      await this.handlers.onGuildCreate?.(payload.d as DiscordGuildSummary)
+      return
+    }
+
+    if (payload.t === 'GUILD_DELETE') {
+      await this.handlers.onGuildDelete?.(payload.d as DiscordGuildSummary)
       return
     }
 

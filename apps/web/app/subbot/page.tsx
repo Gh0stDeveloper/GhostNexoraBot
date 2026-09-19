@@ -3,11 +3,13 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
+import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { SecurityCenter } from '../../components/security-center'
 import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { subbotPlatformStatuses } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
@@ -43,10 +45,11 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
 
   const instanceKey = `subbot:${subbot.id}`
   const snapshot = readOpsSnapshot(instanceKey)
+  const platformStatuses = subbotPlatformStatuses(snapshot.runtime)
   const labels: Record<string,string> = {
     pending: t('subbot.pending'), pairing: t('subbot.pairing'), online: t('common.online'), offline: t('subbot.offline'), logged_out: t('subbot.loggedOut'), revoked: t('subbot.revoked'),
   }
-  const cards = [[Smartphone,t('subbot.number'),subbot.phone??t('common.unlinked')],[Bot,t('subbot.runtime'),snapshot.runtime.connected?t('admin.connected'):labels[subbot.status]??subbot.status],[Clock3,t('subbot.subscription'),new Date(Number(subbot.expiresAt)).toLocaleString(intl)],[UsersRound,t('subbot.groups'),snapshot.groups.length.toLocaleString(intl)],[Download,t('subbot.downloads'),`${(Number(subbot.downloadBytes)/1024/1024).toFixed(1)} MB`]] as const
+  const cards = [[Smartphone,t('subbot.number'),subbot.phone??t('common.unlinked')],[Bot,t('subbot.runtime'),snapshot.runtime.connected?t('admin.connected'):labels[subbot.status]??subbot.status],[Clock3,t('subbot.subscription'),new Date(Number(subbot.expiresAt)).toLocaleString(intl)],[UsersRound,t('subbot.groups'),(snapshot.platformGroups.length || snapshot.groups.length).toLocaleString(intl)],[Download,t('subbot.downloads'),`${(Number(subbot.downloadBytes)/1024/1024).toFixed(1)} MB`]] as const
   const hrefFor = (target: SubbotSection) => `/subbot?section=${target}`
   const instanceLabel = `Subbot #${subbot.id}`
 
@@ -70,7 +73,10 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
         <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('overview')} instanceLabel={instanceLabel} view="overview" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>
       </>}
 
-      {section === 'groups' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('groups')} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>}
+      {section === 'groups' && <div className="mt-6 space-y-6">
+        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses}/>
+        <OpsConsole snapshot={snapshot} refreshHref={hrefFor('groups')} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups canResetAudit/>
+      </div>}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('audit')} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>}
 
       {section === 'account' && <div className="mt-6 space-y-6"><section className="ops-panel p-5"><div className="flex items-center gap-2 font-bold"><RefreshCcw className="size-4 text-blue-400"/>{t('subbot.resetTitle')}</div><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">{t('subbot.resetText')}</p><form action="/api/control" method="post" className="mt-4"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="section" value="account"/><input type="hidden" name="action" value="reset_own_subbot"/><button className="ops-button-danger"><RefreshCcw className="size-4"/>{t('subbot.resetButton')}</button></form><p className="mt-5 text-xs text-zinc-700">{t('subbot.webSession', { date: new Date(Number(session.exp)).toLocaleString(intl) })}</p></section><SecurityCenter locale={locale}/></div>}

@@ -36,6 +36,9 @@ jobs:
       - name: Phase A web authentication and security smoke
         run: node scripts/phase-a-web-security-smoke.mjs
 
+      - name: Phase E platform groups dashboard smoke
+        run: node scripts/phase-e-platform-groups-smoke.mjs
+
       - name: Spotify, anime, adult permissions and Windows installer smoke
         run: node scripts/media-windows-permissions-smoke.mjs
 
