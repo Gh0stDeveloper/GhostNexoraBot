@@ -1,4 +1,5 @@
 import type {
+  CapabilityName,
   NormalizedMessage,
   NormalizedUi,
   OutgoingMedia,
@@ -79,12 +80,28 @@ export interface CommandContext {
  */
 export type LegacyCompatibleCommandContext = CommandContext & LegacyWhatsAppCommandContext
 
+export type CommandArgumentMetadata = {
+  name: string
+  description?: string
+  required?: boolean
+  variadic?: boolean
+  maxLength?: number
+}
+
 export interface BotCommand {
   name: string
   aliases?: string[]
   category: CommandCategory
   description: string
   usage?: string
+  /** B3 central metadata: explicit platform availability overrides auto-detection. */
+  platforms?: PlatformId[]
+  /** Structured arguments used by help, documentation and slash command generation. */
+  arguments?: CommandArgumentMetadata[]
+  /** Capabilities that must exist before the command can execute natively. */
+  requiresCapabilities?: CapabilityName[]
+  /** Hide implementation/detail commands from generated help while keeping them routable. */
+  discoverable?: boolean
   ownerOnly?: boolean
   staffOnly?: boolean
   subbotOwnerAllowed?: boolean

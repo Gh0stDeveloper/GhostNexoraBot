@@ -143,7 +143,8 @@ try {
   assert.match(router, /createWhatsAppAdapter/)
   assert.match(router, /platform: 'whatsapp'/)
   assert.match(router, /adapter,\s*\n\s*normalizedMessage/)
-  assert.match(router, /adapter\.sendText\(chatId, replyText/)
+  assert.match(router, /const sendText:[\s\S]*adapter\.sendText\(chatId, value/)
+  assert.match(router, /const reply = async \(replyText: string\)[\s\S]*sendText\(replyText\)/)
   assert.match(types, /adapter: PlatformAdapter/)
   assert.match(types, /normalizedMessage: NormalizedMessage/)
 

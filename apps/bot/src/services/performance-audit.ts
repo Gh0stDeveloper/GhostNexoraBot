@@ -1,5 +1,5 @@
 import type { BotCommand } from '../types.js'
-import { commandPlatformSupport } from './command-platform-support.js'
+import { buildCommandMetadata } from './command-metadata.js'
 import { registerCommandTokens, resolveConfiguredCommandName } from './command-runtime-config.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 import { recordOpsRuntimeLog, type OpsLogCategory } from './ops-runtime-log.js'
@@ -103,8 +103,13 @@ const commandCatalogColumns = new Set(
 if (!commandCatalogColumns.has('whatsapp')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN whatsapp INTEGER NOT NULL DEFAULT 1')
 if (!commandCatalogColumns.has('discord')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN discord INTEGER NOT NULL DEFAULT 0')
 if (!commandCatalogColumns.has('telegram')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN telegram INTEGER NOT NULL DEFAULT 0')
+if (!commandCatalogColumns.has('aliases_json')) opsDb.exec("ALTER TABLE ops_command_catalog ADD COLUMN aliases_json TEXT NOT NULL DEFAULT '[]'")
+if (!commandCatalogColumns.has('usage')) opsDb.exec('ALTER TABLE ops_command_catalog ADD COLUMN usage TEXT')
+if (!commandCatalogColumns.has('arguments_json')) opsDb.exec("ALTER TABLE ops_command_catalog ADD COLUMN arguments_json TEXT NOT NULL DEFAULT '[]'")
+if (!commandCatalogColumns.has('permissions_json')) opsDb.exec("ALTER TABLE ops_command_catalog ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'")
+if (!commandCatalogColumns.has('capabilities_json')) opsDb.exec("ALTER TABLE ops_command_catalog ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '[]'")
 
-type CommandAuditInput = Pick<BotCommand, 'name' | 'aliases' | 'category' | 'description'>
+type CommandAuditInput = BotCommand
 export type CommandAuditIdentity = { userJid: string; displayName?: string | null }
 
 function micros(durationMs: number) {
@@ -208,10 +213,18 @@ export const performanceAudit = {
         discord = excluded.discord,
         telegram = excluded.telegram,
         registered_at = excluded.registered_at`)
+    const metadataStatement = opsDb.prepare(`UPDATE ops_command_catalog SET
+      aliases_json = ?, usage = ?, arguments_json = ?, permissions_json = ?, capabilities_json = ?
+      WHERE instance_key = ? AND command_name = ?`)
     opsDb.exec('BEGIN IMMEDIATE')
     try {
       for (const command of commands) {
-        const support = commandPlatformSupport(command)
+        const metadata = buildCommandMetadata(command)
+        const support = {
+          whatsapp: metadata.platforms.includes('whatsapp'),
+          discord: metadata.platforms.includes('discord'),
+          telegram: metadata.platforms.includes('telegram'),
+        }
         statement.run(
           instanceKey,
           command.name.toLowerCase(),
@@ -221,6 +234,15 @@ export const performanceAudit = {
           support.discord ? 1 : 0,
           support.telegram ? 1 : 0,
           stamp,
+        )
+        metadataStatement.run(
+          JSON.stringify(metadata.aliases),
+          metadata.usage ?? null,
+          JSON.stringify(metadata.arguments),
+          JSON.stringify(metadata.permissions),
+          JSON.stringify(metadata.requiredCapabilities),
+          instanceKey,
+          metadata.name,
         )
         registerCommandTokens(command, instanceKey)
       }
@@ -256,7 +278,12 @@ export const performanceAudit = {
     const value = micros(durationMs)
     const stamp = now()
     const heap = Number.isFinite(heapDeltaBytes) ? Math.trunc(heapDeltaBytes) : 0
-    const support = commandPlatformSupport(command)
+    const metadata = buildCommandMetadata(command)
+    const support = {
+      whatsapp: metadata.platforms.includes('whatsapp'),
+      discord: metadata.platforms.includes('discord'),
+      telegram: metadata.platforms.includes('telegram'),
+    }
     opsDb.prepare(`INSERT INTO ops_command_catalog(
         instance_key, command_name, category, description, whatsapp, discord, telegram, registered_at
       ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
@@ -275,6 +302,18 @@ export const performanceAudit = {
         support.discord ? 1 : 0,
         support.telegram ? 1 : 0,
         stamp,
+      )
+    opsDb.prepare(`UPDATE ops_command_catalog SET
+      aliases_json = ?, usage = ?, arguments_json = ?, permissions_json = ?, capabilities_json = ?
+      WHERE instance_key = ? AND command_name = ?`)
+      .run(
+        JSON.stringify(metadata.aliases),
+        metadata.usage ?? null,
+        JSON.stringify(metadata.arguments),
+        JSON.stringify(metadata.permissions),
+        JSON.stringify(metadata.requiredCapabilities),
+        instanceKey,
+        metadata.name,
       )
     opsDb.prepare(`INSERT INTO ops_command_metrics(
         instance_key, command_name, invocations, successes, failures, total_us, min_us, max_us, last_us,

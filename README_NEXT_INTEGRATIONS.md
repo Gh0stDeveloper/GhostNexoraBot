@@ -342,7 +342,7 @@ Cierre B2:
 
 ## B3. Metadata central de comandos
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Extender el registro de comandos para incluir:
 
@@ -363,6 +363,18 @@ La metadata central debe alimentar:
 - slash commands;
 - documentación;
 - dashboard de comandos.
+
+Implementación B3 en validación:
+
+- nuevo registro central `services/command-metadata.ts`;
+- `BotCommand` declara plataformas, argumentos estructurados, capacidades requeridas y visibilidad documental;
+- aliases nativos y disponibilidad Discord/Telegram salen del mismo registro central;
+- `commandPlatformSupport` deja de mantener su propio inventario y pasa a ser una proyección del registro B3;
+- menú dinámico de WhatsApp y buscador de comandos consumen metadata normalizada;
+- ayuda de Discord y Telegram se genera desde `platformCommandMetadata` y respeta permisos;
+- definiciones slash de Discord toman descripción y argumentos del registro B3, conservando temporalmente la política de qué slash registrar hasta C1;
+- Operations Center persiste y muestra aliases, uso, argumentos, permisos, capacidades y plataformas;
+- gate dedicado `scripts/phase-b3-command-metadata-smoke.mjs` integrado al CI.
 
 ## B4. Capability-aware command execution
 

@@ -1,11 +1,12 @@
 import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
-import { effectiveCommands } from '../services/menu-registry.js'
+import type { CommandMetadata } from '../services/command-metadata.js'
+import { effectiveCommandMetadata } from '../services/menu-registry.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
 import { commandRuntimeDecision } from '../services/command-runtime-config.js'
 import { isGroupAdministrator } from '../utils/target.js'
 
 type SearchHit = {
-  command: BotCommand
+  command: CommandMetadata
   tokens: string[]
   score: number
 }
@@ -18,18 +19,18 @@ function normalize(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function permissions(command: BotCommand) {
+function permissions(command: CommandMetadata) {
   const rows: string[] = []
-  if (command.ownerOnly) rows.push('owner')
-  if (command.staffOnly) rows.push('staff')
-  if (command.groupOnly) rows.push('solo grupos')
-  if (command.adminOnly) rows.push('admin')
-  if (command.botAdminOnly) rows.push('bot admin')
-  if (command.subbotOwnerAllowed) rows.push('owner de subbot')
+  if (command.permissions.ownerOnly) rows.push('owner')
+  if (command.permissions.staffOnly) rows.push('staff')
+  if (command.permissions.groupOnly) rows.push('solo grupos')
+  if (command.permissions.adminOnly) rows.push('admin')
+  if (command.permissions.botAdminOnly) rows.push('bot admin')
+  if (command.permissions.subbotOwnerAllowed) rows.push('owner de subbot')
   return rows.length ? rows.join(', ') : 'todos'
 }
 
-function scoreCommand(command: BotCommand, tokens: string[], query: string) {
+function scoreCommand(command: CommandMetadata, tokens: string[], query: string) {
   const name = normalize(command.name)
   const aliases = (command.aliases ?? []).map(normalize)
   const category = normalize(command.category)
@@ -52,9 +53,9 @@ function scoreCommand(command: BotCommand, tokens: string[], query: string) {
   return 0
 }
 
-function visibleTo(ctx: LegacyCompatibleCommandContext, command: BotCommand, groupAdmin: boolean) {
-  if (command.ownerOnly && !ctx.isOwner) return false
-  if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
+function visibleTo(ctx: LegacyCompatibleCommandContext, command: CommandMetadata, groupAdmin: boolean) {
+  if (command.permissions.ownerOnly && !ctx.isOwner) return false
+  if (command.permissions.staffOnly && !ctx.isBotStaff && !(command.permissions.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
   const runtime = commandRuntimeDecision({
     commandName: command.name,
     category: command.category,
@@ -74,8 +75,8 @@ function visibleTo(ctx: LegacyCompatibleCommandContext, command: BotCommand, gro
 }
 
 function searchCommands(query: string): SearchHit[] {
-  return effectiveCommands()
-    .map(({ command, tokens }) => ({ command, tokens, score: scoreCommand(command, tokens, query) }))
+  return effectiveCommandMetadata()
+    .map(({ metadata, tokens }) => ({ command: metadata, tokens, score: scoreCommand(metadata, tokens, query) }))
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score || a.command.name.localeCompare(b.command.name))
 }
