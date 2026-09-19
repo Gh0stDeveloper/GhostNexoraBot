@@ -22,7 +22,7 @@ legacy.exec(`
     created_at INTEGER NOT NULL
   );
   INSERT INTO ops_runtime_logs(instance_key, level, source, message, created_at)
-  VALUES('main', 'info', 'legacy', 'legacy event', 1);
+  VALUES('main', 'info', 'discord', 'Discord legacy event', 1);
 `)
 legacy.close()
 
@@ -49,6 +49,8 @@ try {
 
   const columns = opsDb.prepare('PRAGMA table_info(ops_runtime_logs)').all().map((row) => String(row.name))
   assert.ok(columns.includes('category'), 'E10 must migrate legacy ops_runtime_logs with category')
+  const migratedLegacy = opsDb.prepare('SELECT category FROM ops_runtime_logs WHERE created_at = 1 LIMIT 1').get()
+  assert.equal(migratedLegacy?.category, 'discord', 'E10 must backfill categories for legacy platform logs')
 
   const raw = [
     'Bearer abcdefghijklmnopqrstuvwxyz123456',
