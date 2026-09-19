@@ -26,6 +26,8 @@ export type WebPermission =
   | 'logs:view'
   | 'jobs:view'
   | 'jobs:manage'
+  | 'updates:view'
+  | 'updates:manage'
   | 'audit:view'
   | 'audit:reset'
   | 'management:economy'
@@ -40,7 +42,7 @@ const permissions: Record<WebRole, ReadonlySet<WebPermission>> = {
   owner: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage', 'groups:leave',
     'platforms:view', 'platforms:operate', 'platforms:disable', 'commands:view', 'commands:manage',
-    'users:view', 'users:financial', 'users:moderation', 'users:subbots', 'economy:ledger', 'logs:view', 'jobs:view', 'jobs:manage', 'audit:view', 'audit:reset', 'management:economy', 'management:subbots',
+    'users:view', 'users:financial', 'users:moderation', 'users:subbots', 'economy:ledger', 'logs:view', 'jobs:view', 'jobs:manage', 'updates:view', 'updates:manage', 'audit:view', 'audit:reset', 'management:economy', 'management:subbots',
     'management:broadcast', 'backups:read', 'backups:write', 'security:manage',
     'sessions:manage',
   ]),
