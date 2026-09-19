@@ -53,11 +53,11 @@ function normalizeSection(value: unknown, session: WebSession) {
   const owner = session.role === 'owner'
   const privileged = session.role === 'owner' || session.role === 'admin' || session.role === 'support'
   const allowed = session.role === 'subbot'
-    ? new Set(['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'account'])
+    ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'account'])
     : owner
-      ? new Set(['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
+      ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
       : privileged
-        ? new Set(['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'security'])
+        ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'security'])
         : new Set(['overview'])
   const raw = String(value ?? 'overview').trim().toLowerCase()
   return allowed.has(raw) ? raw : 'overview'
@@ -105,7 +105,7 @@ function auditResult(input: {
   })
 }
 
-function localOpsAction(action: string, instance: string, payload: Record<string, unknown>, requestedBy: string) {
+function localOpsAction(action: string, instance: string, payload: Record<string, unknown>, requestedBy: string, role: WebSession['role']) {
   const db = openBotDbWritable()
   if (!db) return { ok: false, error: 'bot_database_unavailable' }
   try {
@@ -116,6 +116,131 @@ function localOpsAction(action: string, instance: string, payload: Record<string
       if (table('ops_pipeline_metrics')) db.prepare('DELETE FROM ops_pipeline_metrics WHERE instance_key = ?').run(instance)
       if (table('ops_command_metrics')) db.prepare('DELETE FROM ops_command_metrics WHERE instance_key = ?').run(instance)
       return { ok: true, action, instance }
+    }
+
+    if (['save_command_config', 'reset_command_config', 'set_command_category'].includes(action)) {
+      if (!table('ops_command_catalog')) return { ok: false, error: 'command_catalog_not_ready' }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ops_command_settings (
+          instance_key TEXT NOT NULL,
+          command_name TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          whatsapp INTEGER NOT NULL DEFAULT 1,
+          discord INTEGER NOT NULL DEFAULT 1,
+          telegram INTEGER NOT NULL DEFAULT 1,
+          cooldown_ms INTEGER NOT NULL DEFAULT 0,
+          allow_groups INTEGER NOT NULL DEFAULT 1,
+          allow_private INTEGER NOT NULL DEFAULT 1,
+          permission_mode TEXT NOT NULL DEFAULT 'inherit',
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY(instance_key, command_name)
+        );
+        CREATE TABLE IF NOT EXISTS ops_command_category_settings (
+          instance_key TEXT NOT NULL,
+          category TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY(instance_key, category)
+        );
+        CREATE TABLE IF NOT EXISTS ops_command_cooldowns (
+          instance_key TEXT NOT NULL,
+          platform TEXT NOT NULL,
+          command_name TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          last_used_at INTEGER NOT NULL,
+          PRIMARY KEY(instance_key, platform, command_name, user_id)
+        );
+      `)
+
+      const bool = (value: unknown, fallback = false) => {
+        if (typeof value === 'boolean') return value
+        if (typeof value === 'number') return value !== 0
+        const normalized = String(value ?? '').trim().toLowerCase()
+        if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+        if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+        return fallback
+      }
+
+      if (action === 'set_command_category') {
+        const category = String(payload.category ?? '').trim().toLowerCase()
+        if (!category || !db.prepare('SELECT 1 FROM ops_command_catalog WHERE instance_key = ? AND category = ? LIMIT 1').get(instance, category)) {
+          return { ok: false, error: 'invalid_command_category' }
+        }
+        if (role === 'admin' && category === 'owner') return { ok: false, error: 'forbidden' }
+        const enabled = bool(payload.enabled, true)
+        db.prepare(`INSERT INTO ops_command_category_settings(instance_key, category, enabled, updated_at)
+          VALUES(?, ?, ?, ?)
+          ON CONFLICT(instance_key, category) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`)
+          .run(instance, category, enabled ? 1 : 0, Date.now())
+        return { ok: true, action, instance, category, enabled }
+      }
+
+      const commandName = String(payload.commandName ?? '').trim().toLowerCase().replace(/^\.+/, '')
+      if (!commandName) return { ok: false, error: 'invalid_command' }
+      const catalogColumns = new Set((db.prepare('PRAGMA table_info(ops_command_catalog)').all() as Array<{ name?: string }>).map((column) => String(column.name ?? '')))
+      const whatsappColumn = catalogColumns.has('whatsapp') ? 'whatsapp' : '1 AS whatsapp'
+      const discordColumn = catalogColumns.has('discord') ? 'discord' : '0 AS discord'
+      const telegramColumn = catalogColumns.has('telegram') ? 'telegram' : '0 AS telegram'
+      const command = db.prepare(`SELECT category, ${whatsappColumn}, ${discordColumn}, ${telegramColumn}
+        FROM ops_command_catalog WHERE instance_key = ? AND command_name = ?`).get(instance, commandName) as {
+          category?: string
+          whatsapp?: number
+          discord?: number
+          telegram?: number
+        } | undefined
+      if (!command) return { ok: false, error: 'command_not_registered_for_instance' }
+      if (role === 'admin' && String(command.category) === 'owner') return { ok: false, error: 'forbidden' }
+
+      if (action === 'reset_command_config') {
+        db.prepare('DELETE FROM ops_command_settings WHERE instance_key = ? AND command_name = ?').run(instance, commandName)
+        db.prepare('DELETE FROM ops_command_cooldowns WHERE instance_key = ? AND command_name = ?').run(instance, commandName)
+        return { ok: true, action, instance, commandName }
+      }
+
+      const enabled = bool(payload.enabled, true)
+      const whatsapp = Boolean(command.whatsapp) && bool(payload.whatsapp, true)
+      const discord = Boolean(command.discord) && bool(payload.discord, true)
+      const telegram = Boolean(command.telegram) && bool(payload.telegram, true)
+      const allowGroups = bool(payload.allowGroups, true)
+      const allowPrivate = bool(payload.allowPrivate, true)
+      const cooldownMs = Math.min(86_400_000, Math.max(0, Math.trunc(Number(payload.cooldownMs ?? 0) || 0)))
+      const permissionModeRaw = String(payload.permissionMode ?? 'inherit').trim().toLowerCase()
+      const permissionMode = ['inherit', 'staff', 'owner'].includes(permissionModeRaw) ? permissionModeRaw : 'inherit'
+
+      db.prepare(`INSERT INTO ops_command_settings(
+          instance_key, command_name, enabled, whatsapp, discord, telegram, cooldown_ms,
+          allow_groups, allow_private, permission_mode, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(instance_key, command_name) DO UPDATE SET
+          enabled = excluded.enabled,
+          whatsapp = excluded.whatsapp,
+          discord = excluded.discord,
+          telegram = excluded.telegram,
+          cooldown_ms = excluded.cooldown_ms,
+          allow_groups = excluded.allow_groups,
+          allow_private = excluded.allow_private,
+          permission_mode = excluded.permission_mode,
+          updated_at = excluded.updated_at`)
+        .run(
+          instance,
+          commandName,
+          enabled ? 1 : 0,
+          whatsapp ? 1 : 0,
+          discord ? 1 : 0,
+          telegram ? 1 : 0,
+          cooldownMs,
+          allowGroups ? 1 : 0,
+          allowPrivate ? 1 : 0,
+          permissionMode,
+          Date.now(),
+        )
+      return {
+        ok: true,
+        action,
+        instance,
+        commandName,
+        config: { enabled, whatsapp, discord, telegram, cooldownMs, allowGroups, allowPrivate, permissionMode },
+      }
     }
 
     if (action === 'sync_groups') {
@@ -179,6 +304,7 @@ function permissionForAction(action: string): WebPermission | null {
   if (action === 'sync_groups') return 'groups:sync'
   if (['mute_group_8h', 'mute_group_7d', 'unmute_group', 'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off'].includes(action)) return 'groups:manage'
   if (action === 'leave_group') return 'groups:leave'
+  if (['save_command_config', 'reset_command_config', 'set_command_category'].includes(action)) return 'commands:manage'
   if (action === 'reset_audit') return 'audit:reset'
   if (action === 'add_nxc') return 'management:economy'
   if (['grant_subbot', 'reset_subbot'].includes(action)) return 'management:subbots'
@@ -288,13 +414,13 @@ async function handlePost(request: NextRequest) {
       : `web-${session.role}:${session.accountId}`
 
   const localActions = new Set([
-    'leave_group', 'sync_groups', 'reset_audit', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
+    'leave_group', 'sync_groups', 'reset_audit', 'save_command_config', 'reset_command_config', 'set_command_category', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
     'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
   ])
 
   if (localActions.has(action)) {
     const requestedBy = session.role === 'subbot' ? session.userJid : actor
-    const result = localOpsAction(action, instance, payload, requestedBy)
+    const result = localOpsAction(action, instance, payload, requestedBy, session.role)
     auditResult({ instance, actor, action, payload, result })
     return responseFor(request, result, session, instance, section)
   }
