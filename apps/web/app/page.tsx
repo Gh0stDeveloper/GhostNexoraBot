@@ -1,10 +1,11 @@
-import { Activity, BarChart3, Bot, BrainCircuit, CheckCircle2, Coins, Download, FileCheck2, Gamepad2, GitBranch, LayoutDashboard, LockKeyhole, LogIn, MessageSquareMore, ServerCog, ShieldCheck, Trophy, UsersRound } from 'lucide-react'
+import { Activity, BarChart3, Bot, BrainCircuit, CheckCircle2, Coins, Download, FileCheck2, Gamepad2, GitBranch, LayoutDashboard, LockKeyhole, MessageSquareMore, ServerCog, ShieldCheck, Trophy, UsersRound } from 'lucide-react'
 import { getWebLocale } from '../lib/i18n-server'
 import { webT } from '../lib/i18n'
 import { downloadT } from '../lib/downloads-i18n'
 import { getOfficialReleaseCatalog, type ReleaseKind } from '../lib/releases'
 import { readOpsSnapshot, type OpsCommand } from '../lib/ops'
 import { publicExperienceT } from '../lib/public-experience-i18n'
+import { UnifiedNavigation, type UnifiedNavItem } from '../components/unified-navigation'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,14 +107,27 @@ export default async function Home() {
     [PLATFORM_BRANDS.linux, dt('platform.appimage'), 'AppImage · x64', has('appimage')],
   ] as const
 
-  return <main className="ops-page">
-    <header className="sticky top-0 z-30 border-b border-white/[.07] bg-[#080809]/90 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4 px-5 py-4 md:px-8">
-        <a href="#inicio" className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><Bot className="size-5 text-blue-400"/></span><span><span className="block text-sm font-black tracking-wide">GHOST NEXORA BOT</span><span className="block text-[10px] uppercase tracking-[.18em] text-zinc-400">{t('home.brandSubtitle')}</span></span></a>
-        <nav className="hidden gap-6 text-xs font-semibold text-zinc-300 lg:flex"><a href="#descargas" className="hover:text-white">{dt('nav')}</a><a href="#comandos" className="hover:text-white">{pt('rankingNav')}</a><a href="#funcionamiento" className="hover:text-white">{t('home.nav.operation')}</a><a href="#arquitectura" className="hover:text-white">{t('home.nav.architecture')}</a><a href="#modulos" className="hover:text-white">{t('home.nav.modules')}</a><a href="#seguridad" className="hover:text-white">{t('home.nav.security')}</a></nav>
-        <a href="/login" className="ops-button-primary"><LogIn className="size-4"/>{t('common.access')}</a>
-      </div>
-    </header>
+  const publicNavigation: UnifiedNavItem[] = [
+    { id: 'home', label: t('home.nav.home'), href: '#inicio', icon: 'home', active: true },
+    { id: 'downloads', label: dt('nav'), href: '#descargas', icon: 'download' },
+    { id: 'commands', label: t('home.nav.commands'), href: '#comandos', icon: 'activity' },
+    { id: 'operation', label: t('home.nav.operation'), href: '#funcionamiento', icon: 'flow' },
+    { id: 'architecture', label: t('home.nav.architecture'), href: '#arquitectura', icon: 'activity' },
+    { id: 'modules', label: t('home.nav.modules'), href: '#modulos', icon: 'modules' },
+    { id: 'security', label: t('home.nav.security'), href: '#seguridad', icon: 'security' },
+  ]
+
+  return <main className="ops-shell">
+    <UnifiedNavigation
+      items={publicNavigation}
+      brandSubtitle={t('home.brandSubtitle')}
+      brandHref="#inicio"
+      actionHref="/login"
+      actionLabel={t('common.access')}
+      ariaLabel={t('home.navAria')}
+      closeLabel={t('nav.close')}
+    />
+    <div className="ops-shell-content">
 
     <section id="inicio" className="relative mx-auto grid min-h-[72vh] w-full max-w-[1480px] items-center gap-12 overflow-hidden px-5 py-16 md:px-8 lg:grid-cols-[1.05fr_.95fr] lg:py-24">
       <div className="pointer-events-none absolute left-[20%] top-12 size-96 rounded-full bg-blue-600/[.05] blur-[120px]"/>
@@ -174,5 +188,6 @@ export default async function Home() {
     <section id="seguridad" className="mx-auto w-full max-w-[1480px] scroll-mt-24 px-5 py-16 md:px-8"><div className="grid gap-4 lg:grid-cols-2"><article className="ops-panel p-6"><LockKeyhole className="size-5 text-blue-400"/><h2 className="mt-5 text-xl font-black">{t('home.security.privateTitle')}</h2><p className="mt-3 text-sm leading-6 text-zinc-300">{t('home.security.privateText')}</p></article><article className="ops-panel p-6"><LayoutDashboard className="size-5 text-blue-400"/><h2 className="mt-5 text-xl font-black">{t('home.security.opsTitle')}</h2><p className="mt-3 text-sm leading-6 text-zinc-300">{t('home.security.opsText')}</p></article></div></section>
 
     <footer className="mt-12 border-t border-white/[.07]"><div className="mx-auto flex w-full max-w-[1480px] flex-col gap-3 px-5 py-8 text-xs text-zinc-400 md:flex-row md:items-center md:justify-between md:px-8"><span>Ghost Nexora Bot · Ghost Developer / Nexora</span><span>{t('home.footer')}</span></div></footer>
+    </div>
   </main>
 }
