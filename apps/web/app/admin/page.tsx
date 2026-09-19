@@ -108,6 +108,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const canManageGroups = hasPermission(role, 'groups:manage')
   const canLeaveGroups = hasPermission(role, 'groups:leave')
   const canResetAudit = hasPermission(role, 'audit:reset')
+  const canManageCommands = hasPermission(role, 'commands:manage')
   const navIcon: Record<AdminSection, UnifiedNavIcon> = {
     overview: 'dashboard',
     platforms: 'platforms',
@@ -207,7 +208,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </div>}
 
       {section === 'commands' && <div className="mt-6">
-        <CommandCenter commands={snapshot.commands} locale={locale} instanceLabel={instanceLabel}/>
+        <CommandCenter
+          commands={snapshot.commands}
+          categories={snapshot.commandCategories}
+          locale={locale}
+          instanceLabel={instanceLabel}
+          instanceKey={selectedInstance}
+          csrfToken={csrfToken}
+          canManage={canManageCommands}
+          canManageOwnerCommands={role === 'owner'}
+        />
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
