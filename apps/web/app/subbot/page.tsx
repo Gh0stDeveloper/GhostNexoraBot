@@ -1,4 +1,4 @@
-import { Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound } from 'lucide-react'
+import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { OpsConsole } from '../../components/ops-console'
@@ -16,7 +16,7 @@ import { openBotDb } from '../../lib/runtime'
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
 type SubbotSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'groups', 'audit', 'account']
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'groups', 'audit', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
