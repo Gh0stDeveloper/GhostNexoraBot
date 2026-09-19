@@ -183,7 +183,7 @@ export function CommandCenter({
         <button type="button" className="ops-button-muted text-xs" onClick={() => setSelectedName(null)}>{t('common.close')}</button>
       </div>
 
-      <form method="post" action="/api/control" className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
+      <form key={selected.commandName} method="post" action="/api/control" className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
         <input type="hidden" name="_csrf" value={csrfToken}/>
         <input type="hidden" name="section" value="commands"/>
         <input type="hidden" name="instance" value={instanceKey}/>
