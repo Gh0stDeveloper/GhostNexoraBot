@@ -93,3 +93,11 @@ export interface BotCommand {
   botAdminOnly?: boolean
   handler: (ctx: LegacyCompatibleCommandContext) => Promise<unknown>
 }
+
+/**
+ * Command definition for modules that completed the B1 transport migration.
+ * Its handler cannot access the Baileys compatibility surface at compile time.
+ */
+export interface NeutralBotCommand extends Omit<BotCommand, 'handler'> {
+  handler: (ctx: CommandContext) => Promise<unknown>
+}
