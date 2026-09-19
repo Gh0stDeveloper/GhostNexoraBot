@@ -19,6 +19,11 @@ export type SharedCommandContextInput = {
   request: RequestContext
   adapter: PlatformAdapter
   normalizedMessage: NormalizedMessage
+  /**
+   * Optional transport reply target. null explicitly disables quoting/replying
+   * when the request is an interaction/event rather than a chat message.
+   */
+  replyToMessageId?: string | null
   commandName: string
   args: string[]
   prefix: string
@@ -44,6 +49,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
     request,
     adapter,
     normalizedMessage,
+    replyToMessageId,
     commandName,
     args,
     prefix,
@@ -71,7 +77,9 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
     isInstanceOwner: isSubbotOwner,
   } = permissions
   const chatId = request.chatId
-  const currentReplyTo = normalizedMessage.messageId || undefined
+  const currentReplyTo = replyToMessageId === null
+    ? undefined
+    : (replyToMessageId ?? normalizedMessage.messageId || undefined)
   const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
     ...options,
     replyTo: options?.replyTo ?? currentReplyTo,
