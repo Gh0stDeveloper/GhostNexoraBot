@@ -4,6 +4,7 @@ import type { BotCommand, CommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
+import { economy } from '../services/economy.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
 import { commandRuntimeDecision, markCommandCooldown } from '../services/command-runtime-config.js'
 import { performanceAudit } from '../services/performance-audit.js'
@@ -53,6 +54,7 @@ function canonicalUserJid(candidates: string[], fallback: string) {
 }
 
 const disabledGroupBootstrapCommands = new Set(['menu', 'bot', 'language'])
+const adultConsentBootstrapCommands = new Set(['adult18'])
 const youtubeDownloadCommands = new Set(['play', 'playvideo', 'ytformats', 'ytmp3', 'ytmp4'])
 const youtubeSafeClientErrors = [
   /^Debes indicar\b/i,
@@ -283,17 +285,22 @@ export class CommandRouter {
         return true
       }
 
-      if (isGroup && !isOwner && !isBotStaff && !isSubbotOwner && !isGroupCommandCategoryAllowed(chatId, command.category)) {
-        if (!senderIsGroupAdmin) {
-          const metadata = await socket.groupMetadata(chatId).catch(() => null)
-          const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
-          senderIsGroupAdmin = Boolean(senderParticipant?.admin)
-        }
-        if (!senderIsGroupAdmin) {
-          finishFilters()
-          await reply(t('router.categoryDisabled', { category: command.category }))
-          await react('🚫').catch(() => undefined)
-          return true
+      if (isGroup && !isOwner && !isBotStaff && !isSubbotOwner) {
+        const categoryAllowed = command.category === 'adult'
+          ? economy.getGroupPolicy(chatId).adultAllowed || adultConsentBootstrapCommands.has(command.name)
+          : isGroupCommandCategoryAllowed(chatId, command.category)
+        if (!categoryAllowed) {
+          if (!senderIsGroupAdmin) {
+            const metadata = await socket.groupMetadata(chatId).catch(() => null)
+            const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
+            senderIsGroupAdmin = Boolean(senderParticipant?.admin)
+          }
+          if (!senderIsGroupAdmin) {
+            finishFilters()
+            await reply(t('router.categoryDisabled', { category: command.category }))
+            await react('🚫').catch(() => undefined)
+            return true
+          }
         }
       }
       finishFilters()
