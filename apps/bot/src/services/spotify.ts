@@ -1,4 +1,5 @@
 import { config } from '../config.js'
+import { trackedProviderCall } from './provider-health.js'
 
 export type SpotifyTrack = {
   id: string
@@ -26,20 +27,22 @@ async function spotifyToken() {
 
   const body = new URLSearchParams({ grant_type: 'client_credentials' })
   const auth = Buffer.from(`${config.spotifyClientId}:${config.spotifyClientSecret}`).toString('base64')
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      authorization: `Basic ${auth}`,
-      'content-type': 'application/x-www-form-urlencoded',
-      accept: 'application/json',
-    },
-    body,
-    signal: AbortSignal.timeout(15_000),
-  })
-  if (!response.ok) {
-    throw new Error(`Spotify rechazó las credenciales (HTTP ${response.status}). Revisa Client ID y Client Secret.`)
-  }
-  const payload = await response.json() as { access_token?: unknown; expires_in?: unknown }
+  const payload = await trackedProviderCall('spotify', async () => {
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        authorization: `Basic ${auth}`,
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body,
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) {
+      throw new Error(`spotify_token_http_${response.status}`)
+    }
+    return await response.json() as { access_token?: unknown; expires_in?: unknown }
+  }, { label: 'Spotify' })
   const value = typeof payload.access_token === 'string' ? payload.access_token.trim() : ''
   if (!value) throw new Error('Spotify no devolvió un access token válido.')
   const expiresIn = Number(payload.expires_in ?? 3600)
@@ -52,22 +55,24 @@ async function spotifyToken() {
 
 async function spotifyRequest<T>(path: string): Promise<T> {
   const token = await spotifyToken()
-  const response = await fetch(`https://api.spotify.com${path}`, {
-    headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-    signal: AbortSignal.timeout(15_000),
-  })
-  if (response.status === 401) {
-    tokenCache = null
-    const retryToken = await spotifyToken()
-    const retry = await fetch(`https://api.spotify.com${path}`, {
-      headers: { authorization: `Bearer ${retryToken}`, accept: 'application/json' },
+  return trackedProviderCall('spotify', async () => {
+    const response = await fetch(`https://api.spotify.com${path}`, {
+      headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
       signal: AbortSignal.timeout(15_000),
     })
-    if (!retry.ok) throw new Error(`Spotify API respondió HTTP ${retry.status}.`)
-    return await retry.json() as T
-  }
-  if (!response.ok) throw new Error(`Spotify API respondió HTTP ${response.status}.`)
-  return await response.json() as T
+    if (response.status === 401) {
+      tokenCache = null
+      const retryToken = await spotifyToken()
+      const retry = await fetch(`https://api.spotify.com${path}`, {
+        headers: { authorization: `Bearer ${retryToken}`, accept: 'application/json' },
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!retry.ok) throw new Error(`spotify_api_http_${retry.status}`)
+      return await retry.json() as T
+    }
+    if (!response.ok) throw new Error(`spotify_api_http_${response.status}`)
+    return await response.json() as T
+  }, { label: 'Spotify' })
 }
 
 function normalizeTrack(value: unknown): SpotifyTrack | null {
