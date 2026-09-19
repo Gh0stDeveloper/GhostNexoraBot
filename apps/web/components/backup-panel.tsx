@@ -71,7 +71,7 @@ export async function BackupPanel({ locale, csrfToken }: { locale: WebLocale; cs
           <td className="whitespace-nowrap text-zinc-500">{new Date(backup.createdAt).toLocaleString(intl)}</td>
           <td className="font-mono text-zinc-400">{formatBytes(backup.size)}</td>
           <td className="font-mono text-[10px] text-zinc-500" title={backup.sha256}>{backup.sha256.slice(0, 12)}…</td>
-          <td className="font-mono text-xs text-zinc-500">{backup.files} files · {backup.tables} tables{backup.sessionIncluded ? ' · sessions' : ''}</td>
+          <td className="font-mono text-xs text-zinc-500">{backup.files} {t('backup.files')} · {backup.tables} {t('backup.tables')}{backup.sessionIncluded ? ` · ${t('backup.sessionsIncluded')}` : ''}</td>
           <td>
             <div className="flex justify-end gap-2">
               <a className="ops-button-muted" href={`/api/backups/download?id=${encodeURIComponent(backup.id)}`}><Download className="size-4"/>{t('backup.download')}</a>
