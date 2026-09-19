@@ -9,19 +9,21 @@ import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { ProvidersDashboard } from '../../components/providers-dashboard'
+import { RealtimeLogsDashboard } from '../../components/realtime-logs-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
 import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
+import { readOpsRuntimeLogCounts, readOpsRuntimeLogs } from '../../lib/ops-observability'
 import { subbotPlatformStatuses } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
-type SubbotSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'audit' | 'diagnostics' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'account']
+type SubbotSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'logs' | 'audit' | 'diagnostics' | 'account'
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'audit', 'diagnostics', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
@@ -41,6 +43,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     ['providers', t('nav.providers'), ServerCog],
     ['commands', t('nav.commands'), SquareTerminal],
     ['groups', t('nav.groups'), UsersRound],
+    ['logs', t('nav.logs'), SquareTerminal],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
     ['account', t('nav.account'), Settings],
@@ -56,6 +59,10 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const instanceKey = `subbot:${subbot.id}`
   const snapshot = readOpsSnapshot(instanceKey)
   const platformStatuses = subbotPlatformStatuses(snapshot.runtime)
+  const realtimeLogRows = section === 'logs' ? readOpsRuntimeLogs(instanceKey, 200) : []
+  const realtimeLogCounts = section === 'logs'
+    ? readOpsRuntimeLogCounts(instanceKey)
+    : { total: 0, errors: 0, warnings: 0, commands: 0, api: 0, downloads: 0 }
   const labels: Record<string,string> = {
     pending: t('subbot.pending'), pairing: t('subbot.pairing'), online: t('common.online'), offline: t('subbot.offline'), logged_out: t('subbot.loggedOut'), revoked: t('subbot.revoked'),
   }
@@ -68,6 +75,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     providers: 'providers',
     commands: 'commands',
     groups: 'groups',
+    logs: 'logs',
     audit: 'audit',
     diagnostics: 'diagnostics',
     account: 'account',
@@ -143,6 +151,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
         <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses} detailBasePath="/subbot/groups"/>
         <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups/>
       </div>}
+      {section === 'logs' ? <div className="mt-6"><RealtimeLogsDashboard initialRows={realtimeLogRows} initialCounts={realtimeLogCounts} instanceKey={instanceKey} instanceLabel={instanceLabel} locale={locale}/></div> : null}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
 
       {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit/></div>}
