@@ -143,6 +143,7 @@ a { text-underline-offset: 4px; }
   box-shadow:inset 3px 0 0 #3b82f6;
 }
 .ops-mobile-nav {
+  display:flex;
   position:sticky;
   top:0;
   z-index:45;
