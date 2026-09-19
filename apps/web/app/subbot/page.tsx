@@ -1,6 +1,7 @@
-import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, ServerCog, Settings, Smartphone, UsersRound, Wrench } from 'lucide-react'
+import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, ServerCog, Settings, Smartphone, SquareTerminal, UsersRound, Wrench } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { CommandCenter } from '../../components/command-center'
 import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
 import { OperationsOverview } from '../../components/operations-overview'
 import { OpsConsole } from '../../components/ops-console'
@@ -19,8 +20,8 @@ import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
-type SubbotSection = 'overview' | 'platforms' | 'providers' | 'groups' | 'audit' | 'diagnostics' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'account']
+type SubbotSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'audit' | 'diagnostics' | 'account'
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
@@ -38,6 +39,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     ['overview', t('nav.overview'), LayoutDashboard],
     ['platforms', t('nav.platforms'), Activity],
     ['providers', t('nav.providers'), ServerCog],
+    ['commands', t('nav.commands'), SquareTerminal],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
@@ -64,6 +66,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
     overview: 'dashboard',
     platforms: 'platforms',
     providers: 'providers',
+    commands: 'commands',
     groups: 'groups',
     audit: 'audit',
     diagnostics: 'diagnostics',
@@ -121,6 +124,10 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
 
       {section === 'providers' && <div className="mt-6">
         <ProvidersDashboard providers={snapshot.providers} instanceLabel={instanceLabel} locale={locale}/>
+      </div>}
+
+      {section === 'commands' && <div className="mt-6">
+        <CommandCenter commands={snapshot.commands} locale={locale} instanceLabel={instanceLabel}/>
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
