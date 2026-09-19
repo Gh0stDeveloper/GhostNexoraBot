@@ -17,6 +17,18 @@ export type OpsCommand = {
   commandName: string
   category: string
   description: string
+  aliases: string[]
+  usage: string | null
+  arguments: Array<{ name: string; description?: string; required?: boolean; variadic?: boolean; maxLength?: number }>
+  permissions: {
+    ownerOnly: boolean
+    staffOnly: boolean
+    subbotOwnerAllowed: boolean
+    groupOnly: boolean
+    adminOnly: boolean
+    botAdminOnly: boolean
+  }
+  capabilities: string[]
   whatsapp: boolean
   discord: boolean
   telegram: boolean
@@ -193,6 +205,11 @@ const STAGES = [
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
+
+function parseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string' || !value.trim()) return fallback
+  try { return JSON.parse(value) as T } catch { return fallback }
+}
 
 function commandStatus(avgUs: number, maxUs: number, successRate: number): OpsCommand['status'] {
   if (successRate < 90 || avgUs >= 2_000_000 || maxUs >= 5_000_000) return 'critical'
@@ -479,6 +496,11 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
       const whatsappColumn = commandCatalogColumns.has('whatsapp') ? 'c.whatsapp' : '1'
       const discordColumn = commandCatalogColumns.has('discord') ? 'c.discord' : '0'
       const telegramColumn = commandCatalogColumns.has('telegram') ? 'c.telegram' : '0'
+      const aliasesColumn = commandCatalogColumns.has('aliases_json') ? "c.aliases_json" : "'[]'"
+      const usageColumn = commandCatalogColumns.has('usage') ? 'c.usage' : 'NULL'
+      const argumentsColumn = commandCatalogColumns.has('arguments_json') ? "c.arguments_json" : "'[]'"
+      const permissionsColumn = commandCatalogColumns.has('permissions_json') ? "c.permissions_json" : "'{}'"
+      const capabilitiesColumn = commandCatalogColumns.has('capabilities_json') ? "c.capabilities_json" : "'[]'"
       const hasCommandSettings = tableExists(db, 'ops_command_settings')
       const hasCategorySettings = tableExists(db, 'ops_command_category_settings')
       const commandSettingsColumns = hasCommandSettings
@@ -486,6 +508,8 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
         : new Set<string>()
       const settingColumn = (name: string, fallback: string) => commandSettingsColumns.has(name) ? `COALESCE(s.${name}, ${fallback})` : fallback
       const rows = db.prepare(`SELECT c.command_name AS commandName, c.category, c.description,
+        ${aliasesColumn} AS aliasesJson, ${usageColumn} AS usage, ${argumentsColumn} AS argumentsJson,
+        ${permissionsColumn} AS permissionsJson, ${capabilitiesColumn} AS capabilitiesJson,
         ${whatsappColumn} AS whatsapp, ${discordColumn} AS discord, ${telegramColumn} AS telegram,
         ${settingColumn('enabled', '1')} AS configEnabled,
         ${settingColumn('whatsapp', '1')} AS whatsappEnabled,
@@ -516,6 +540,19 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
         const successRate = invocations ? successes / invocations * 100 : 100
         return {
           commandName: String(row.commandName), category: String(row.category), description: String(row.description),
+          aliases: parseJson<string[]>(row.aliasesJson, []),
+          usage: row.usage ? String(row.usage) : null,
+          arguments: parseJson<OpsCommand['arguments']>(row.argumentsJson, []),
+          permissions: {
+            ownerOnly: false,
+            staffOnly: false,
+            subbotOwnerAllowed: false,
+            groupOnly: false,
+            adminOnly: false,
+            botAdminOnly: false,
+            ...parseJson<Partial<OpsCommand['permissions']>>(row.permissionsJson, {}),
+          },
+          capabilities: parseJson<string[]>(row.capabilitiesJson, []),
           whatsapp: Boolean(row.whatsapp), discord: Boolean(row.discord), telegram: Boolean(row.telegram),
           enabled: Boolean(row.configEnabled),
           whatsappEnabled: Boolean(row.whatsapp) && Boolean(row.whatsappEnabled),

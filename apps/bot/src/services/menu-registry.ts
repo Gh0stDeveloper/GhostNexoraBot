@@ -1,4 +1,5 @@
 import type { BotCommand } from '../types.js'
+import { buildCommandMetadata } from './command-metadata.js'
 
 let provider: () => readonly BotCommand[] = () => []
 
@@ -24,4 +25,12 @@ export function effectiveCommands() {
     rows.set(command, current)
   }
   return [...rows.entries()].map(([command, tokens]) => ({ command, tokens }))
+}
+
+export function effectiveCommandMetadata() {
+  return effectiveCommands().map(({ command, tokens }) => ({
+    command,
+    tokens,
+    metadata: buildCommandMetadata(command),
+  }))
 }

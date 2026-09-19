@@ -10,6 +10,7 @@ const whatsapp = read('apps/bot/src/core/router.ts')
 const discord = read('apps/bot/src/platform/discord/router.ts')
 const telegram = read('apps/bot/src/platform/telegram/router.ts')
 const support = read('apps/bot/src/services/command-platform-support.ts')
+const metadata = read('apps/bot/src/services/command-metadata.ts')
 const roadmap = read('README_NEXT_INTEGRATIONS.md')
 
 assert.match(engine, /export class SharedCommandEngine/, 'B2 shared command engine missing')
@@ -39,7 +40,8 @@ assert.match(telegram, /createNeutralCommandContext\(/, 'Telegram must build the
 assert.match(telegram, /sharedCommandEngine\.execute\(sharedCommand, context, \{ enforceMetadata: true \}\)/, 'Telegram neutral commands must execute through B2 engine')
 assert.match(telegram, /aliases\.get\(rawName\.toLowerCase\(\)\) \?\? sharedCommandEngine\.resolve\(rawName\)\?\.name/, 'Telegram parser must accept shared command aliases')
 
-assert.match(support, /sharedNeutralTokens/, 'command parity dashboard must include B2 shared commands')
+assert.match(support, /command-metadata\.js/, 'command parity support must project the central metadata registry')
+assert.match(metadata, /sharedNeutralCommands/, 'B3 metadata must preserve B2 shared command parity')
 assert.match(roadmap, /## B2\. Un solo Command Engine[\s\S]*Estado: (?:EN PROGRESO|TERMINADO)/, 'B2 roadmap status missing')
 
 console.log('Phase B2 shared Command Engine smoke passed')

@@ -18,6 +18,10 @@ import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
 import { telegramCommandAliases } from '../../services/command-platform-support.js'
+import {
+  commandMetadataVisibleTo,
+  platformCommandMetadata,
+} from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
@@ -87,21 +91,28 @@ export class TelegramCommandRouter {
     })
   }
 
-  private async help(chatId: string, locale: LocaleCode, replyTo?: string) {
+  private async help(message: TelegramMessage, locale: LocaleCode) {
+    const userId = message.from?.id
+    const visibility = {
+      isOwner: telegramOwner(userId),
+      isStaff: telegramStaff(userId),
+      isGroup: message.chat.type !== 'private',
+    }
+    const items = platformCommandMetadata('telegram')
+      .filter((metadata) => commandMetadataVisibleTo(metadata, visibility))
+      .map((metadata) => ({
+        id: metadata.name,
+        title: `/${metadata.usage || metadata.name}`,
+        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+        action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
+      }))
     const ui: NormalizedUi = {
       kind: 'list',
       title: `${config.botName} · Telegram`,
       body: t(locale, 'telegram.help.body'),
-      items: [
-        { id: 'ping', title: '/ping', description: t(locale, 'telegram.help.ping'), action: { kind: 'command', label: 'Ping', value: 'ping' } },
-        { id: 'info', title: '/info', description: t(locale, 'telegram.help.info'), action: { kind: 'command', label: t(locale, 'menu.button.profile'), value: 'info' } },
-        { id: 'language', title: '/language', description: t(locale, 'telegram.help.language'), action: { kind: 'command', label: localeName(locale, locale), value: 'language' } },
-        { id: 'vk', title: '/vk <url>', description: t(locale, 'telegram.help.vk') },
-        { id: 'am', title: '/apkmirror <app>', description: t(locale, 'telegram.help.apkmirror') },
-        { id: 'ap', title: '/apkpure <package>', description: t(locale, 'telegram.help.apkpure') },
-      ],
+      items,
     }
-    await this.adapter.sendUi(chatId, ui, replyTo ? { replyTo } : undefined)
+    await this.adapter.sendUi(String(message.chat.id), ui, { replyTo: String(message.message_id) })
   }
 
   private async language(message: TelegramMessage, argText: string, locale: LocaleCode) {
@@ -288,7 +299,7 @@ export class TelegramCommandRouter {
         })
         const result = await sharedCommandEngine.execute(sharedCommand, context, { enforceMetadata: true })
         if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Telegram', command: `/${parsed.command}`, help: '/help' }))
-      } else if (parsed.command === 'start' || parsed.command === 'help') await this.help(normalized.chatId, locale, normalized.messageId)
+      } else if (parsed.command === 'start' || parsed.command === 'help') await this.help(message, locale)
       else if (parsed.command === 'language') await this.language(message, parsed.argText, locale)
       else if (parsed.command === 'vk') await this.vk(normalized.chatId, normalized.messageId, parsed.argText, locale)
       else if (parsed.command === 'apkmirror') await this.store(normalized.chatId, normalized.messageId, 'apkmirror', parsed.argText, locale)

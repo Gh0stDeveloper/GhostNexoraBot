@@ -148,7 +148,7 @@ try {
   assert.ok(backupServiceSource.includes('const RETENTION: Record<BackupType, number>'), 'backup service must enforce bounded per-type retention')
   assert.ok(backupServiceSource.includes('economy: 30') && backupServiceSource.includes('full: 14'), 'E13 retention must bound high-frequency and full backups independently')
   assert.ok(lempiClientSource.includes('recordProviderAttempt'), 'LemPi requests must feed provider health telemetry')
-  assert.ok(commandSearchSource.includes('effectiveCommands()'), 'command search must use the live effective command registry')
+  assert.ok(commandSearchSource.includes('effectiveCommandMetadata()'), 'command search must use the live effective command metadata registry')
   assert.ok(commandSearchSource.includes("name: 'buscarcomando'"), 'command search must expose .buscarcomando')
   assert.ok(commandSearchSource.includes('command.aliases'), 'command search must index aliases')
   assert.ok(commandSearchSource.includes('command.description'), 'command search must index descriptions')
