@@ -44,7 +44,7 @@ if errorlevel 1 (
   goto :cleanup_failed
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:GN_INSTALLER,[ref]$tokens,[ref]$errors) ^| Out-Null; if($errors.Count -gt 0){ $errors ^| ForEach-Object { Write-Error $_.Message }; exit 1 }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseFile($env:GN_INSTALLER,[ref]$tokens,[ref]$errors); if($errors.Count -gt 0){ foreach($parseError in $errors){ Write-Error $parseError.Message }; exit 1 }"
 if errorlevel 1 (
   color 0C
   echo.
