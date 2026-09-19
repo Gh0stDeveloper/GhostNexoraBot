@@ -53,6 +53,10 @@ export interface CommandContext {
   isOwner: boolean
   isBotStaff: boolean
   isGroup: boolean
+  /** Whether the invoking user can administer the current group/chat. */
+  isGroupAdmin?: boolean
+  /** Whether the bot itself has native group administration privileges. */
+  isBotGroupAdmin?: boolean
   isSubbotOwner: boolean
   instanceId?: number
   instanceOwnerJid?: string
