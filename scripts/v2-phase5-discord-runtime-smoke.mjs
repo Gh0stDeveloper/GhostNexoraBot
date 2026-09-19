@@ -77,6 +77,14 @@ class FakeWebSocket {
 globalThis.WebSocket = FakeWebSocket
 
 const settle = (ms = 25) => new Promise((resolve) => setTimeout(resolve, ms))
+async function waitFor(predicate, timeoutMs = 2000, intervalMs = 20) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) return true
+    await settle(intervalMs)
+  }
+  return Boolean(predicate())
+}
 const { DiscordRuntime } = await import('../apps/bot/dist/platform/discord/runtime.js')
 
 try {
@@ -125,7 +133,13 @@ try {
     token: 'slash-token', version: 1,
   }
   socket.emit('message', { data: JSON.stringify({ op: 0, t: 'INTERACTION_CREATE', s: 6, d: interaction }) })
-  await settle(80)
+  const completedSlashFlow = await waitFor(() => {
+    const ackIndex = requests.findIndex((request) => request.url.includes('/interactions/700/slash-token/callback'))
+    const sendIndex = requests.findIndex((request) => request.url.endsWith('/channels/10/messages') && request.method === 'POST')
+    const deleteIndex = requests.findIndex((request) => request.url.includes('/webhooks/901/slash-token/messages/@original') && request.method === 'DELETE')
+    return ackIndex >= 0 && sendIndex > ackIndex && deleteIndex > sendIndex
+  })
+  assert.equal(completedSlashFlow, true, 'slash interaction flow must complete within timeout')
 
   const ackIndex = requests.findIndex((request) => request.url.includes('/interactions/700/slash-token/callback'))
   const sendIndex = requests.findIndex((request) => request.url.endsWith('/channels/10/messages') && request.method === 'POST')
