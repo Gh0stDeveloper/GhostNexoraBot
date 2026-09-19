@@ -445,7 +445,7 @@ function permissionForAction(action: string): WebPermission | null {
   if (action === 'add_nxc') return 'management:economy'
   if (['grant_subbot', 'reset_subbot'].includes(action)) return 'management:subbots'
   if (action === 'broadcast') return 'management:broadcast'
-  if (['create_backup', 'restore_backup'].includes(action)) return 'backups:write'
+  if (['create_backup', 'verify_backup', 'test_restore', 'restore_backup'].includes(action)) return 'backups:write'
   return null
 }
 
