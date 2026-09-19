@@ -1,6 +1,7 @@
 import type { BotCommand, CommandContext } from '../types.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
+import { commandRuntimeDecision } from '../services/command-runtime-config.js'
 import { isGroupAdministrator } from '../utils/target.js'
 
 type SearchHit = {
@@ -54,6 +55,18 @@ function scoreCommand(command: BotCommand, tokens: string[], query: string) {
 function visibleTo(ctx: CommandContext, command: BotCommand, groupAdmin: boolean) {
   if (command.ownerOnly && !ctx.isOwner) return false
   if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
+  const runtime = commandRuntimeDecision({
+    commandName: command.name,
+    category: command.category,
+    platform: 'whatsapp',
+    isGroup: ctx.isGroup,
+    userId: ctx.sender,
+    isOwner: ctx.isOwner,
+    isStaff: ctx.isBotStaff,
+    isSubbotOwner: ctx.isSubbotOwner,
+    checkCooldown: false,
+  })
+  if (!runtime.allowed) return false
   if (ctx.isGroup && !ctx.isOwner && !ctx.isBotStaff && !ctx.isSubbotOwner && !groupAdmin) {
     if (!isGroupCommandCategoryAllowed(ctx.chatId, command.category)) return false
   }
