@@ -16,6 +16,7 @@ db.exec(`
 function ledger(userJid: string, kind: string, amount: number, note?: string) {
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
     .run(userJid, kind, amount, note ?? null, now())
+  economy.recordGlobalLedger(userJid, kind, amount, undefined, note)
 }
 
 function debitBet(userJid: string, amount: number, note: string) {
