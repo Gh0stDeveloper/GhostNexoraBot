@@ -846,7 +846,7 @@ Cierre:
 
 ## E7. Vista detallada de grupo
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Rutas implementadas:
 
@@ -877,7 +877,7 @@ Acciones seguras:
 - enviar un broadcast únicamente al grupo seleccionado;
 - salir del grupo con reautenticación crítica.
 
-Implementación E7 en validación:
+Implementación E7:
 
 - inventario WhatsApp enlazado a una vista individual;
 - rutas protegidas por sesión y permiso `groups:view`;
@@ -890,6 +890,15 @@ Implementación E7 en validación:
 - configuración y broadcasts se ejecutan dentro del runtime MainBot/subbot correspondiente;
 - eliminación permanente de un subbot limpia los snapshots y políticas de grupo E7;
 - smoke dedicado `scripts/phase-e7-group-detail-smoke.mjs` integrado al CI.
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E7 en verde;
+- auditoría ES/EN e i18n boundary en verde;
+- Windows installer y suite completa de regresiones en verde;
+- CI principal #2766: success sobre `690415c9a418681173345d0e1ebe2013b3ae3237`;
+- payloads temporales de configuración/broadcast se eliminan al terminar o fallar la acción para no retener contenido innecesario.
 
 ## E8. Dashboard de usuarios
 
@@ -1221,6 +1230,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-18 | Fase E | Dashboard Web V2 · inventario de grupos por plataforma | EN PROGRESO | feat/phase-e-platform-groups-dashboard |
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
+| 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
