@@ -17,6 +17,7 @@ import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
 import { discordCommandAliases } from '../../services/command-platform-support.js'
+import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import type { DiscordAdapter } from './adapter.js'
 import { discordConfig, discordOwner, discordStaff } from './config.js'
@@ -378,6 +379,7 @@ export class DiscordCommandRouter {
   }
 
   private async execute(invocation: Invocation) {
+    const auditStarted = performance.now()
     const locale = this.locale(invocation)
     await this.adapter.setTyping?.(invocation.channelId, true).catch(() => undefined)
     try {
@@ -411,8 +413,20 @@ export class DiscordCommandRouter {
         const status = this.statusProvider()
         await this.adapter.sendText(invocation.channelId, [t(locale, 'discord.runtime.title'), ...Object.entries(status).map(([key, value]) => t(locale, 'discord.status.line', { key, value: String(value) }))].join('\n'))
       }
+      try {
+        performanceAudit.recordRuntimeCommand(invocation.command, performance.now() - auditStarted, true, undefined, {
+          userJid: invocation.user.id,
+          displayName: invocation.user.global_name ?? invocation.user.username,
+        })
+      } catch {}
       return true
     } catch (error) {
+      try {
+        performanceAudit.recordRuntimeCommand(invocation.command, performance.now() - auditStarted, false, undefined, {
+          userJid: invocation.user.id,
+          displayName: invocation.user.global_name ?? invocation.user.username,
+        })
+      } catch {}
       logger.warn({ error, chatId: invocation.channelId, command: invocation.command }, 'Discord command failed')
       const publicError = localizeLegacyText(error instanceof Error ? error.message : t(locale, 'common.internalError'), locale)
       await this.adapter.sendText(invocation.channelId, t(locale, 'discord.error.public', { error: publicError }), invocation.messageId ? { replyTo: invocation.messageId } : undefined).catch(() => undefined)
