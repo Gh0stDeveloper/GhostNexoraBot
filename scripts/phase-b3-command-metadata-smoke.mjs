@@ -17,7 +17,7 @@ const webOps = read('apps/web/lib/ops.ts')
 const webCenter = read('apps/web/components/command-center.tsx')
 const roadmap = read('README_NEXT_INTEGRATIONS.md')
 
-for (const field of ['platforms?: PlatformId[]', 'arguments?: CommandArgumentMetadata[]', 'requiresCapabilities?: CapabilityName[]']) {
+for (const field of ['platforms?: PlatformId[]', 'arguments?: CommandArgumentMetadata[]', 'requiresCapabilities?: CapabilityName[]', 'descriptionKey?: string']) {
   assert.ok(types.includes(field), `B3 BotCommand field missing: ${field}`)
 }
 
@@ -33,7 +33,7 @@ for (const symbol of [
 ]) {
   assert.ok(metadata.includes(symbol), `B3 central metadata symbol missing: ${symbol}`)
 }
-for (const field of ['aliases:', 'category:', 'description:', 'arguments:', 'permissions:', 'platforms:', 'requiredCapabilities:']) {
+for (const field of ['aliases:', 'category:', 'description:', 'descriptionKey?: string', 'arguments:', 'permissions:', 'platforms:', 'requiredCapabilities:']) {
   assert.ok(metadata.includes(field), `B3 metadata field missing: ${field}`)
 }
 
@@ -45,7 +45,11 @@ assert.match(search, /effectiveCommandMetadata\(\)/, 'Command search/help must c
 assert.match(discord, /discordSlashCommandTokens\(\)/, 'Discord slash definitions must be sourced from B3 metadata')
 assert.match(discord, /commandMetadataForPlatformToken\('discord'/, 'Discord slash metadata lookup missing')
 assert.match(discord, /platformCommandMetadata\('discord'\)/, 'Discord help must be generated from B3 metadata')
+assert.match(discord, /description_localizations/, 'Discord slash descriptions must preserve localized metadata')
+assert.match(discord, /'en-US'/, 'Discord slash descriptions must expose English localization')
+assert.match(discord, /metadata\.descriptionKey \? translate\(locale, metadata\.descriptionKey\)/, 'Discord help must localize B3 descriptions')
 assert.match(telegram, /platformCommandMetadata\('telegram'\)/, 'Telegram help must be generated from B3 metadata')
+assert.match(telegram, /metadata\.descriptionKey \? translate\(locale, metadata\.descriptionKey\)/, 'Telegram help must localize B3 descriptions')
 
 for (const column of ['aliases_json', 'usage', 'arguments_json', 'permissions_json', 'capabilities_json']) {
   assert.ok(audit.includes(column), `Operations command catalog does not persist B3 field: ${column}`)

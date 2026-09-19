@@ -103,7 +103,7 @@ export class TelegramCommandRouter {
       .map((metadata) => ({
         id: metadata.name,
         title: `/${metadata.usage || metadata.name}`,
-        description: metadata.description,
+        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
         action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
       }))
     const ui: NormalizedUi = {

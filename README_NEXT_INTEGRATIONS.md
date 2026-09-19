@@ -373,6 +373,7 @@ Implementación B3:
 - menú dinámico de WhatsApp y buscador de comandos consumen metadata normalizada;
 - ayuda de Discord y Telegram se genera desde `platformCommandMetadata` y respeta permisos;
 - definiciones slash de Discord toman descripción y argumentos del registro B3, conservando temporalmente la política de qué slash registrar hasta C1;
+- las superficies generadas conservan localización ES/EN mediante claves i18n almacenadas en la metadata central;
 - Operations Center persiste y muestra aliases, uso, argumentos, permisos, capacidades y plataformas;
 - gate dedicado `scripts/phase-b3-command-metadata-smoke.mjs` integrado al CI.
 
@@ -384,7 +385,6 @@ Cierre B3:
 - E5 Command Center continúa en verde usando la nueva proyección de metadata;
 - gates legacy de Operations y WhatsApp actualizados para validar `effectiveCommandMetadata` y el helper neutral B1 sin exigir la arquitectura anterior;
 - PR de cierre: #83 `feat: complete Phase B3 central command metadata`;
-- commit funcional previo al cierre documental: `ab795c348019ad1bcebfdddeaeec3dac1102f7ae`.
 
 ## B4. Capability-aware command execution
 
@@ -1521,7 +1521,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase B | Núcleo multiplataforma · B1–B3 completadas | EN PROGRESO | PR #83 |
 | 2026-09-19 | Fase B1 | CommandContext neutral y frontera legacy WhatsApp | TERMINADO | 0f4d48dc1cf4120fd1a1b7169a8bdedb16f35c52 |
 | 2026-09-19 | Fase B2 | Shared Command Engine para WhatsApp/Discord/Telegram | TERMINADO | 95bac21414c2b4f5f6256763b196dc7031037e54 |
-| 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 · ab795c348019ad1bcebfdddeaeec3dac1102f7ae |
+| 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |

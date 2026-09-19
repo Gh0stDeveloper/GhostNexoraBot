@@ -48,6 +48,20 @@ function slashDescription(value: string) {
   return (normalized || 'Ghost Nexora Bot command').slice(0, 100)
 }
 
+function localizedSlashDescription(value: string, key?: string) {
+  const es = slashDescription(key ? translate('es', key) : value)
+  const en = slashDescription(key ? translate('en', key) : value)
+  return {
+    description: es,
+    description_localizations: {
+      'en-US': en,
+      'en-GB': en,
+      'es-ES': es,
+      'es-419': es,
+    },
+  }
+}
+
 export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = discordSlashCommandTokens()
   .flatMap((token): DiscordApplicationCommandDefinition[] => {
     const metadata = commandMetadataForPlatformToken('discord', token)
@@ -55,13 +69,13 @@ export const discordApplicationCommands: DiscordApplicationCommandDefinition[] =
     const options = metadata.arguments.map((argument) => ({
       type: 3 as const,
       name: argument.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32),
-      description: slashDescription(argument.description || argument.name),
+      ...localizedSlashDescription(argument.description || argument.name, argument.descriptionKey),
       required: argument.required === true,
       ...(argument.maxLength ? { max_length: argument.maxLength } : {}),
     }))
     return [{
       name: token,
-      description: slashDescription(metadata.description),
+      ...localizedSlashDescription(metadata.description, metadata.descriptionKey),
       ...(options.length ? { options } : {}),
     }]
   })
@@ -190,7 +204,7 @@ export class DiscordCommandRouter {
       .map((metadata) => ({
         id: metadata.name,
         title: `/${metadata.usage || metadata.name}`,
-        description: metadata.description,
+        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
         action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
       }))
     const ui: NormalizedUi = {

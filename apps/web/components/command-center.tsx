@@ -18,14 +18,14 @@ function fullParity(command: OpsCommand) {
   return command.whatsapp && command.discord && command.telegram
 }
 
-function permissionLabels(command: OpsCommand) {
+function permissionLabels(command: OpsCommand, t: (key: Parameters<typeof webT>[1]) => string) {
   const labels: string[] = []
-  if (command.permissions.ownerOnly) labels.push('Owner')
-  if (command.permissions.staffOnly) labels.push('Staff')
-  if (command.permissions.subbotOwnerAllowed) labels.push('Subbot Owner')
-  if (command.permissions.groupOnly) labels.push('Grupo')
-  if (command.permissions.adminOnly) labels.push('Admin de grupo')
-  if (command.permissions.botAdminOnly) labels.push('Bot admin')
+  if (command.permissions.ownerOnly) labels.push(t('commands.metadataPermissionOwner'))
+  if (command.permissions.staffOnly) labels.push(t('commands.metadataPermissionStaff'))
+  if (command.permissions.subbotOwnerAllowed) labels.push(t('commands.metadataPermissionSubbotOwner'))
+  if (command.permissions.groupOnly) labels.push(t('commands.metadataPermissionGroup'))
+  if (command.permissions.adminOnly) labels.push(t('commands.metadataPermissionGroupAdmin'))
+  if (command.permissions.botAdminOnly) labels.push(t('commands.metadataPermissionBotAdmin'))
   return labels
 }
 
@@ -191,13 +191,13 @@ export function CommandCenter({
           <h3 className="mt-1 font-mono text-lg font-black text-white">.{selected.commandName}</h3>
           <p className="mt-1 max-w-3xl text-xs text-zinc-500">{selected.description}</p>
           <div className="mt-3 flex max-w-4xl flex-wrap gap-1.5 text-[10px] font-semibold text-zinc-500">
-            {selected.usage && <span className="ops-pill">Uso: {selected.usage}</span>}
-            {selected.aliases.map((alias) => <span key={`alias:${alias}`} className="ops-pill">Alias: {alias}</span>)}
+            {selected.usage && <span className="ops-pill">{t('commands.metadataUsage')}: {selected.usage}</span>}
+            {selected.aliases.map((alias) => <span key={`alias:${alias}`} className="ops-pill">{t('commands.metadataAlias')}: {alias}</span>)}
             {selected.arguments.map((argument) => <span key={`arg:${argument.name}`} className="ops-pill">
               {argument.required ? '<' : '['}{argument.name}{argument.variadic ? '...' : ''}{argument.required ? '>' : ']'}
             </span>)}
-            {permissionLabels(selected).map((permission) => <span key={`permission:${permission}`} className="ops-pill">{permission}</span>)}
-            {selected.capabilities.map((capability) => <span key={`capability:${capability}`} className="ops-pill">Cap: {capability}</span>)}
+            {permissionLabels(selected, t).map((permission) => <span key={`permission:${permission}`} className="ops-pill">{permission}</span>)}
+            {selected.capabilities.map((capability) => <span key={`capability:${capability}`} className="ops-pill">{t('commands.metadataCapability')}: {capability}</span>)}
           </div>
         </div>
         <button type="button" className="ops-button-muted text-xs" onClick={() => setSelectedName(null)}>{t('common.close')}</button>
