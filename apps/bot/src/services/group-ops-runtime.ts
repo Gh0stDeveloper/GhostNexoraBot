@@ -168,30 +168,23 @@ function normalizedParticipantJid(participant: NonNullable<ParticipatingGroup['p
 function syncGroupMembers(groupJid: string, participants: NonNullable<ParticipatingGroup['participants']>, stamp = Date.now()) {
   const socket = currentSocket
   const own = socket ? ownParticipantIds(socket) : new Set<string>()
-  opsDb.exec('BEGIN IMMEDIATE')
-  try {
-    opsDb.prepare('DELETE FROM ops_group_members WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
-    const insert = opsDb.prepare(`INSERT INTO ops_group_members(
-        instance_key, group_jid, member_jid, is_admin, is_super_admin, is_bot, updated_at
-      ) VALUES(?, ?, ?, ?, ?, ?, ?)`)
-    for (const participant of participants) {
-      const memberJid = normalizedParticipantJid(participant)
-      if (!memberJid) continue
-      const isBot = own.has(memberJid)
-      insert.run(
-        instanceKey,
-        groupJid,
-        memberJid,
-        participant.admin ? 1 : 0,
-        participant.admin === 'superadmin' ? 1 : 0,
-        isBot ? 1 : 0,
-        stamp,
-      )
-    }
-    opsDb.exec('COMMIT')
-  } catch (error) {
-    opsDb.exec('ROLLBACK')
-    throw error
+  opsDb.prepare('DELETE FROM ops_group_members WHERE instance_key = ? AND group_jid = ?').run(instanceKey, groupJid)
+  const insert = opsDb.prepare(`INSERT INTO ops_group_members(
+      instance_key, group_jid, member_jid, is_admin, is_super_admin, is_bot, updated_at
+    ) VALUES(?, ?, ?, ?, ?, ?, ?)`)
+  for (const participant of participants) {
+    const memberJid = normalizedParticipantJid(participant)
+    if (!memberJid) continue
+    const isBot = own.has(memberJid)
+    insert.run(
+      instanceKey,
+      groupJid,
+      memberJid,
+      participant.admin ? 1 : 0,
+      participant.admin === 'superadmin' ? 1 : 0,
+      isBot ? 1 : 0,
+      stamp,
+    )
   }
 }
 
