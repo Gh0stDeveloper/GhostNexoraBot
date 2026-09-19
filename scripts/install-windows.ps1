@@ -494,10 +494,15 @@ try {
   } finally {
     Pop-Location
   }
-  Write-Info 'Reparando scripts de instalación aprobados (Baileys, esbuild y protobufjs)...'
-  & npm.cmd rebuild baileys esbuild protobufjs
-  if ($LASTEXITCODE -ne 0) { throw "npm rebuild de dependencias nativas falló. Código: $LASTEXITCODE." }
-  Write-Ok 'Scripts de instalación requeridos verificados.'
+  Push-Location $InstallDir
+  try {
+    Write-Info 'Reparando scripts de instalación aprobados (Baileys, esbuild y protobufjs)...'
+    & npm.cmd rebuild baileys esbuild protobufjs
+    if ($LASTEXITCODE -ne 0) { throw "npm rebuild de dependencias nativas falló. Código: $LASTEXITCODE." }
+    Write-Ok 'Scripts de instalación requeridos verificados.'
+  } finally {
+    Pop-Location
+  }
 
   Write-Ok ('Dependencias instaladas: ' + $(if ($webEnabled) { 'Bot + Web' } else { 'solo Bot' }))
 
