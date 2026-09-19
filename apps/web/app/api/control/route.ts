@@ -53,11 +53,11 @@ function normalizeSection(value: unknown, session: WebSession) {
   const owner = session.role === 'owner'
   const privileged = session.role === 'owner' || session.role === 'admin' || session.role === 'support'
   const allowed = session.role === 'subbot'
-    ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'account'])
+    ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'account'])
     : owner
-      ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
+      ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
       : privileged
-        ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'security'])
+        ? new Set(['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'security'])
         : new Set(['overview'])
   const raw = String(value ?? 'overview').trim().toLowerCase()
   return allowed.has(raw) ? raw : 'overview'
@@ -110,6 +110,35 @@ function localOpsAction(action: string, instance: string, payload: Record<string
   if (!db) return { ok: false, error: 'bot_database_unavailable' }
   try {
     const table = (name: string) => Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name))
+
+    if (action === 'cancel_job' || action === 'retry_job') {
+      if (!table('ops_jobs') || !table('ops_job_requests')) return { ok: false, error: 'jobs_runtime_not_ready' }
+      const jobId = String(payload.jobId ?? '').trim()
+      if (!/^job_[A-Za-z0-9_-]{8,}$/.test(jobId)) return { ok: false, error: 'invalid_job' }
+      const job = db.prepare(`SELECT status, cancellable, retryable FROM ops_jobs
+        WHERE instance_key = ? AND id = ? LIMIT 1`).get(instance, jobId) as {
+          status?: string
+          cancellable?: number
+          retryable?: number
+        } | undefined
+      if (!job) return { ok: false, error: 'job_not_found_for_instance' }
+      const requestAction = action === 'cancel_job' ? 'cancel' : 'retry'
+      if (requestAction === 'cancel' && (!job.cancellable || !['waiting', 'running'].includes(String(job.status)))) {
+        return { ok: false, error: 'job_not_cancellable' }
+      }
+      if (requestAction === 'retry' && (!job.retryable || !['failed', 'cancelled'].includes(String(job.status)))) {
+        return { ok: false, error: 'job_not_retryable' }
+      }
+      const duplicate = db.prepare(`SELECT id FROM ops_job_requests
+        WHERE instance_key = ? AND job_id = ? AND action = ? AND status IN ('pending','processing') LIMIT 1`)
+        .get(instance, jobId, requestAction)
+      if (!duplicate) {
+        db.prepare(`INSERT INTO ops_job_requests(instance_key, job_id, action, requested_by, status, requested_at)
+          VALUES(?, ?, ?, ?, 'pending', ?)`).run(instance, jobId, requestAction, requestedBy, Date.now())
+      }
+      return { ok: true, action, instance, jobId, queued: true }
+    }
+
     if (!table('ops_group_control_requests') || !table('ops_groups')) return { ok: false, error: 'ops_runtime_not_ready' }
 
     if (action === 'reset_audit') {
@@ -351,6 +380,7 @@ function permissionForAction(action: string): WebPermission | null {
   if (action === 'leave_group') return 'groups:leave'
   if (['save_command_config', 'reset_command_config', 'set_command_category'].includes(action)) return 'commands:manage'
   if (action === 'reset_audit') return 'audit:reset'
+  if (['cancel_job', 'retry_job'].includes(action)) return 'jobs:manage'
   if (action === 'add_nxc') return 'management:economy'
   if (['grant_subbot', 'reset_subbot'].includes(action)) return 'management:subbots'
   if (action === 'broadcast') return 'management:broadcast'
@@ -461,7 +491,7 @@ async function handlePost(request: NextRequest) {
   const localActions = new Set([
     'leave_group', 'sync_groups', 'reset_audit', 'save_command_config', 'reset_command_config', 'set_command_category', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
     'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
-    'group_config_update', 'group_broadcast',
+    'group_config_update', 'group_broadcast', 'cancel_job', 'retry_job',
   ])
 
   if (localActions.has(action)) {
