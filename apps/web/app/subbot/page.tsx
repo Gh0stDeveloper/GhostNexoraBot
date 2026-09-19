@@ -1,4 +1,4 @@
-import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound, Wrench } from 'lucide-react'
+import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, ServerCog, Settings, Smartphone, UsersRound, Wrench } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
@@ -7,6 +7,7 @@ import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { PlatformsDashboard } from '../../components/platforms-dashboard'
+import { ProvidersDashboard } from '../../components/providers-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
 import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
@@ -18,8 +19,8 @@ import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
-type SubbotSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'diagnostics' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'account']
+type SubbotSection = 'overview' | 'platforms' | 'providers' | 'groups' | 'audit' | 'diagnostics' | 'account'
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
@@ -36,6 +37,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const sections: Array<[SubbotSection, string, typeof Bot]> = [
     ['overview', t('nav.overview'), LayoutDashboard],
     ['platforms', t('nav.platforms'), Activity],
+    ['providers', t('nav.providers'), ServerCog],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
@@ -61,6 +63,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const navIcon: Record<SubbotSection, UnifiedNavIcon> = {
     overview: 'dashboard',
     platforms: 'platforms',
+    providers: 'providers',
     groups: 'groups',
     audit: 'audit',
     diagnostics: 'diagnostics',
@@ -114,6 +117,10 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
           focus={null}
           logs={null}
         />
+      </div>}
+
+      {section === 'providers' && <div className="mt-6">
+        <ProvidersDashboard providers={snapshot.providers} instanceLabel={instanceLabel} locale={locale}/>
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
