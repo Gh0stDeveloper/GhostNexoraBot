@@ -74,6 +74,16 @@ function validSessionTarget(target: string) {
   return parts.length >= 3 && /^\d+$/.test(parts[0] ?? '') && parts[1] === 'session'
 }
 
+function validSubbotDataTarget(target: string) {
+  const subbotsRoot = path.join(config.dataDir, 'subbots')
+  if (!inside(target, subbotsRoot)) return false
+  const relative = path.relative(subbotsRoot, path.resolve(target))
+  const parts = relative.split(path.sep)
+  return parts.length === 2
+    && /^\d+$/.test(parts[0] ?? '')
+    && (parts[1] === 'ghostnexora.sqlite' || parts[1] === 'settings.json')
+}
+
 function expectedSimpleTarget(name: string) {
   if (name === 'ghostnexora.sqlite') return mainDatabasePath()
   if (name === 'nexora-economy.sqlite') return walletDatabasePath()
@@ -99,6 +109,8 @@ function assertPlan(plan: RestorePlan) {
       if (path.resolve(file.target) !== path.resolve(simple)) throw new Error(`invalid_restore_target:${file.name}`)
     } else if (file.name.startsWith('sessions/')) {
       if (!validSessionTarget(file.target)) throw new Error(`invalid_session_restore_target:${file.name}`)
+    } else if (/^subbots\/\d+\/(ghostnexora\.sqlite|settings\.json)$/.test(file.name)) {
+      if (!validSubbotDataTarget(file.target)) throw new Error(`invalid_subbot_restore_target:${file.name}`)
     } else {
       throw new Error(`invalid_restore_file:${file.name}`)
     }
