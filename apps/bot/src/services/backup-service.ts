@@ -694,7 +694,7 @@ export async function prepareOperationalRestore(fileName: string) {
       files: files.map((file) => file.name),
       tables: validated.tables.map((table) => table.name),
       restartScheduled,
-      sessionRestored: validated.type === 'sessions' || validated.type === 'full',
+      sessionRestored: [...validated.decoded.keys()].some((name) => name.startsWith('sessions/')),
     }
   } catch (error) {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined)
