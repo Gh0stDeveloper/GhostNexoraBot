@@ -160,6 +160,7 @@ const es = {
   'login.subbotHelp': 'Genera tu token con .subbot portal. La sesión queda vinculada exclusivamente al ID de tu instancia.',
 
   'nav.overview': 'Resumen',
+  'nav.platforms': 'Plataformas',
   'nav.groups': 'Grupos',
   'nav.audit': 'Auditoría',
   'nav.management': 'Gestión',
@@ -523,6 +524,7 @@ const en: Record<WebMessageKey, string> = {
   'login.subbotHelp': 'Generate your token with .subbot portal. The session is bound exclusively to your instance ID.',
 
   'nav.overview': 'Overview',
+  'nav.platforms': 'Platforms',
   'nav.groups': 'Groups',
   'nav.audit': 'Audit',
   'nav.management': 'Management',
