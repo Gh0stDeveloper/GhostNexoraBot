@@ -20,6 +20,7 @@ export type CommandMetadata = {
   aliases: string[]
   category: CommandCategory
   description: string
+  descriptionKey?: string
   usage?: string
   arguments: CommandArgumentMetadata[]
   permissions: CommandPermissionMetadata
@@ -33,6 +34,7 @@ type NativePlatformCommand = {
   aliases?: readonly string[]
   category: CommandCategory
   description: string
+  descriptionKey?: string
   usage?: string
   arguments?: readonly CommandArgumentMetadata[]
   permissions?: Partial<CommandPermissionMetadata>
@@ -56,12 +58,14 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['start', 'menu', 'ayuda'],
     category: 'general',
     description: 'Muestra los comandos disponibles en Discord.',
+    descriptionKey: 'discord.command.help',
     slashTokens: ['start', 'help', 'menu'],
   },
   {
     name: 'ping',
     category: 'general',
     description: 'Comprueba latencia y disponibilidad.',
+    descriptionKey: 'discord.command.ping',
     slashTokens: ['ping'],
   },
   {
@@ -69,6 +73,7 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['version', 'botinfo'],
     category: 'general',
     description: 'Información del bot y del runtime de Discord.',
+    descriptionKey: 'discord.command.info',
     slashTokens: ['info', 'version'],
   },
   {
@@ -76,8 +81,9 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['lang', 'idioma'],
     category: 'general',
     description: 'Consulta o cambia el idioma efectivo.',
+    descriptionKey: 'discord.command.language',
     usage: 'language [value]',
-    arguments: [{ name: 'value', description: 'Idioma, alcance o estado.', required: false, maxLength: 100 }],
+    arguments: [{ name: 'value', description: 'Idioma, alcance o estado.', descriptionKey: 'discord.command.language.value', required: false, maxLength: 100 }],
     slashTokens: ['language'],
   },
   {
@@ -85,8 +91,9 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['vkvideo', 'vkd'],
     category: 'downloads',
     description: 'Descarga un video de VK.',
+    descriptionKey: 'discord.command.vk',
     usage: 'vk <url>',
-    arguments: [{ name: 'url', description: 'URL pública de VK.', required: true, maxLength: 1900 }],
+    arguments: [{ name: 'url', description: 'URL pública de VK.', descriptionKey: 'discord.command.vk.url', required: true, maxLength: 1900 }],
     requiredCapabilities: ['files'],
     slashTokens: ['vk'],
   },
@@ -95,8 +102,9 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['apkm', 'amirror'],
     category: 'downloads',
     description: 'Busca aplicaciones en APKMirror.',
+    descriptionKey: 'discord.command.apkmirror',
     usage: 'apkmirror <query>',
-    arguments: [{ name: 'query', description: 'Aplicación a buscar.', required: true, maxLength: 200 }],
+    arguments: [{ name: 'query', description: 'Aplicación a buscar.', descriptionKey: 'discord.command.query', required: true, maxLength: 200 }],
     slashTokens: ['apkmirror'],
   },
   {
@@ -114,8 +122,9 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['apkp', 'pureapk'],
     category: 'downloads',
     description: 'Busca aplicaciones en APKPure.',
+    descriptionKey: 'discord.command.apkpure',
     usage: 'apkpure <query>',
-    arguments: [{ name: 'query', description: 'Aplicación o paquete a buscar.', required: true, maxLength: 200 }],
+    arguments: [{ name: 'query', description: 'Aplicación o paquete a buscar.', descriptionKey: 'discord.command.query', required: true, maxLength: 200 }],
     slashTokens: ['apkpure'],
   },
   {
@@ -133,6 +142,7 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['dlhealth'],
     category: 'owner',
     description: 'Muestra el estado de los providers de descarga.',
+    descriptionKey: 'discord.command.providerhealth',
     permissions: { staffOnly: true },
     slashTokens: ['providerhealth'],
   },
@@ -141,6 +151,7 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['dcstatus'],
     category: 'owner',
     description: 'Muestra el estado operativo del runtime Discord.',
+    descriptionKey: 'discord.command.status',
     permissions: { ownerOnly: true },
     slashTokens: ['discordstatus'],
   },
@@ -152,23 +163,27 @@ const telegramNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['start', 'menu', 'ayuda'],
     category: 'general',
     description: 'Muestra los comandos disponibles en Telegram.',
+    descriptionKey: 'telegram.command.help',
   },
   {
     name: 'ping',
     category: 'general',
     description: 'Comprueba latencia y disponibilidad.',
+    descriptionKey: 'telegram.command.ping',
   },
   {
     name: 'info',
     aliases: ['version', 'botinfo'],
     category: 'general',
     description: 'Información del bot y del runtime de Telegram.',
+    descriptionKey: 'telegram.command.info',
   },
   {
     name: 'language',
     aliases: ['lang', 'idioma'],
     category: 'general',
     description: 'Consulta o cambia el idioma efectivo.',
+    descriptionKey: 'telegram.command.language',
     usage: 'language [value]',
     arguments: [{ name: 'value', description: 'Idioma, alcance o estado.', required: false, maxLength: 100 }],
   },
@@ -177,6 +192,7 @@ const telegramNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['vkvideo', 'vkd'],
     category: 'downloads',
     description: 'Descarga un video de VK.',
+    descriptionKey: 'telegram.command.vk',
     usage: 'vk <url>',
     arguments: [{ name: 'url', description: 'URL pública de VK.', required: true, maxLength: 1900 }],
     requiredCapabilities: ['files'],
@@ -186,6 +202,7 @@ const telegramNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['apkm', 'amirror'],
     category: 'downloads',
     description: 'Busca aplicaciones en APKMirror.',
+    descriptionKey: 'telegram.command.apkmirror',
     usage: 'apkmirror <query>',
     arguments: [{ name: 'query', description: 'Aplicación a buscar.', required: true, maxLength: 200 }],
   },
@@ -204,6 +221,7 @@ const telegramNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['apkp', 'pureapk'],
     category: 'downloads',
     description: 'Busca aplicaciones en APKPure.',
+    descriptionKey: 'telegram.command.apkpure',
     usage: 'apkpure <query>',
     arguments: [{ name: 'query', description: 'Aplicación o paquete a buscar.', required: true, maxLength: 200 }],
   },
@@ -222,6 +240,7 @@ const telegramNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['dlhealth'],
     category: 'owner',
     description: 'Muestra el estado de los providers de descarga.',
+    descriptionKey: 'telegram.command.providerhealth',
     permissions: { staffOnly: true },
   },
   {
@@ -229,6 +248,7 @@ const telegramNativeCommands: readonly NativePlatformCommand[] = [
     aliases: ['telegramstatus'],
     category: 'owner',
     description: 'Muestra el estado operativo del runtime Telegram.',
+    descriptionKey: 'telegram.command.status',
     permissions: { ownerOnly: true },
   },
 ]
@@ -285,6 +305,7 @@ function nativeMetadata(platform: PlatformId, command: NativePlatformCommand): C
     aliases: uniqueTokens(command.aliases ?? []),
     category: command.category,
     description: command.description.trim(),
+    ...(command.descriptionKey ? { descriptionKey: command.descriptionKey } : {}),
     ...(command.usage ? { usage: command.usage.trim() } : {}),
     arguments: (command.arguments ?? inferArguments(command.usage, command.name)).map((argument) => ({ ...argument })),
     permissions: { ...emptyPermissions(), ...(command.permissions ?? {}) },
@@ -299,6 +320,7 @@ function mergeMetadata(base: CommandMetadata, extension: CommandMetadata): Comma
     ...base,
     aliases: uniqueTokens([...base.aliases, ...extension.aliases]),
     description: base.description || extension.description,
+    descriptionKey: base.descriptionKey ?? extension.descriptionKey,
     usage: base.usage ?? extension.usage,
     arguments: base.arguments.length ? base.arguments : extension.arguments,
     permissions: {
@@ -399,6 +421,7 @@ export function buildCommandMetadata(command: BotCommand): CommandMetadata {
     aliases: uniqueTokens(command.aliases ?? []),
     category: command.category,
     description: command.description.trim(),
+    ...(command.descriptionKey ? { descriptionKey: command.descriptionKey } : {}),
     ...(command.usage?.trim() ? { usage: command.usage.trim() } : {}),
     arguments: (command.arguments ?? inferArguments(command.usage, command.name)).map((argument) => ({ ...argument })),
     permissions: permissionsFromCommand(command),
