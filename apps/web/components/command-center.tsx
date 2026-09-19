@@ -150,7 +150,7 @@ export function CommandCenter({ commands, locale, instanceLabel }: {
                 <div className="font-mono font-bold text-blue-400">.{command.commandName}</div>
                 <div className="mt-1 max-w-sm truncate text-[11px] text-zinc-600" title={command.description}>{command.description}</div>
               </td>
-              <td><span className="ops-badge-neutral">{command.category}</span></td>
+              <td><span className="inline-flex rounded-md border border-white/[.08] bg-white/[.03] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">{command.category}</span></td>
               <td><PlatformState enabled={command.whatsapp} label="WhatsApp" yes={t('commands.yes')} no={t('commands.no')}/></td>
               <td><PlatformState enabled={command.discord} label="Discord" yes={t('commands.yes')} no={t('commands.no')}/></td>
               <td><PlatformState enabled={command.telegram} label="Telegram" yes={t('commands.yes')} no={t('commands.no')}/></td>
