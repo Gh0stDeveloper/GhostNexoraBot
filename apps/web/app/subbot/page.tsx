@@ -140,7 +140,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
-        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses}/>
+        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses} detailBasePath="/subbot/groups"/>
         <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups canLeaveGroups/>
       </div>}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
