@@ -21,12 +21,15 @@ import { telegramCommandAliases } from '../../services/command-platform-support.
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
+import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
+import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import { telegramOwner, telegramStaff } from './config.js'
 import type { TelegramAdapter } from './adapter.js'
 import { normalizeTelegramMessage } from './normalize.js'
 import type { TelegramMessage } from './types.js'
 
 const aliases = telegramCommandAliases
+const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
 
 function humanBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
@@ -58,7 +61,7 @@ function parseCommand(text: string, botUsername?: string) {
   const head = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).slice(prefix.length)
   const [rawName, mention] = head.split('@', 2)
   if (mention && botUsername && mention.toLowerCase() !== botUsername.toLowerCase()) return undefined
-  const command = aliases.get(rawName.toLowerCase())
+  const command = aliases.get(rawName.toLowerCase()) ?? sharedCommandEngine.resolve(rawName)?.name
   if (!command) return { command: rawName.toLowerCase(), argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(), known: false }
   return { command, argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(), known: true }
 }
@@ -226,7 +229,8 @@ export class TelegramCommandRouter {
     const userId = String(message.from?.id ?? '')
     const isOwner = telegramOwner(message.from?.id)
     const isStaff = telegramStaff(message.from?.id)
-    const category = resolveConfiguredCommandCategory(parsed.command)
+    const sharedCommand = sharedCommandEngine.resolve(parsed.command)
+    const category = sharedCommand?.category ?? resolveConfiguredCommandCategory(parsed.command)
     const runtimeDecision = commandRuntimeDecision({
       commandName: parsed.command,
       category,
@@ -267,7 +271,24 @@ export class TelegramCommandRouter {
         }
       : undefined
     try {
-      if (parsed.command === 'start' || parsed.command === 'help') await this.help(normalized.chatId, locale, normalized.messageId)
+      if (sharedCommand) {
+        const args = parsed.argText.trim() ? parsed.argText.trim().split(/\\s+/) : []
+        const context = createNeutralCommandContext({
+          platform: 'telegram',
+          adapter: this.adapter,
+          normalizedMessage: normalized,
+          commandName: sharedCommand.name,
+          args,
+          prefix: '/',
+          settings,
+          locale,
+          t: (key, values = {}) => translate(locale, key, values),
+          isOwner,
+          isBotStaff: isStaff,
+        })
+        const result = await sharedCommandEngine.execute(sharedCommand, context, { enforceMetadata: true })
+        if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Telegram', command: `/${parsed.command}`, help: '/help' }))
+      } else if (parsed.command === 'start' || parsed.command === 'help') await this.help(normalized.chatId, locale, normalized.messageId)
       else if (parsed.command === 'language') await this.language(message, parsed.argText, locale)
       else if (parsed.command === 'ping') {
         const started = Date.now()
