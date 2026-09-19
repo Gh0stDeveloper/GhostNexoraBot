@@ -846,37 +846,50 @@ Cierre:
 
 ## E7. Vista detallada de grupo
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
-Ruta conceptual: /admin/groups/<id>.
+Rutas implementadas:
+
+- `/admin/groups/<jid>?instance=<instance_key>`;
+- `/subbot/groups/<jid>`.
 
 Mostrar:
 
-- nombre;
-- JID;
-- foto;
-- miembros;
-- admins;
-- bot admin;
-- actividad;
-- mensajes 24h;
-- comandos;
+- nombre, JID, descripción, foto y fechas;
+- miembros y admins desde el último metadata de WhatsApp;
+- estado de admin del propio bot cuando el snapshot permite identificarlo;
+- actividad agregada: mensajes hoy, 7 días, 30 días y miembros activos;
 - idioma;
-- adult mode;
-- bienvenida y despedida;
-- anti-link;
-- anti-spam;
+- adult mode y sincronización con la categoría `adult`;
+- bienvenida y despedida, incluidos mensajes personalizados;
+- anti-link y anti-spam;
 - restricted mode;
 - mute;
-- configuración.
+- perfil efectivo de comandos;
+- configuración persistente por instancia.
 
 Acciones seguras:
 
-- abrir o cerrar;
-- silenciar;
-- configurar;
-- broadcast;
-- salir.
+- abrir o cerrar el grupo para escritura;
+- bloquear o permitir edición de información;
+- silenciar 8 horas o 7 días y reactivar notificaciones;
+- configurar protecciones y comportamiento del grupo;
+- enviar un broadcast únicamente al grupo seleccionado;
+- salir del grupo con reautenticación crítica.
+
+Implementación E7 en validación:
+
+- inventario WhatsApp enlazado a una vista individual;
+- rutas protegidas por sesión y permiso `groups:view`;
+- Owner puede revisar MainBot o un subbot; Admin/Support permanecen limitados a MainBot;
+- Subbot Owner queda forzado a su propio `instance_key`;
+- miembros/admins y configuración se reflejan en tablas operativas separadas por instancia;
+- los JID de participantes se muestran parcialmente ocultos en la interfaz;
+- escrituras Web exigen CSRF/Origin y `groups:manage`;
+- todas las acciones validan que el grupo pertenezca a la instancia antes de encolarse;
+- configuración y broadcasts se ejecutan dentro del runtime MainBot/subbot correspondiente;
+- eliminación permanente de un subbot limpia los snapshots y políticas de grupo E7;
+- smoke dedicado `scripts/phase-e7-group-detail-smoke.mjs` integrado al CI.
 
 ## E8. Dashboard de usuarios
 
