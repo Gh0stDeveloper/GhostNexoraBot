@@ -35,6 +35,7 @@ const POST_BASELINE_COMMANDS = new Map([
   ['buscarcomando', ['buscarcmd', 'findcmd', 'comandobuscar']],
   ['happymodmore', ['hmmore']],
   ['spotifydl', ['spdl']],
+  ['syncgroups', ['sincronizargrupos', 'refreshgroups', 'actualizargrupos']],
 ])
 
 const APPROVED_COMMANDS = new Map([
