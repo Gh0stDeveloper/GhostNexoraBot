@@ -1,4 +1,4 @@
-import { MessageCircleMore, RefreshCcw, Send, Server, ShieldCheck, UsersRound } from 'lucide-react'
+import { ExternalLink, MessageCircleMore, RefreshCcw, Send, Server, ShieldCheck, UsersRound } from 'lucide-react'
 import type { OpsPlatformGroup, OpsSnapshot } from '../lib/ops'
 import type { WebLocale } from '../lib/i18n'
 import { opsExtraT } from '../lib/ops-extra-i18n'
@@ -43,11 +43,13 @@ function emptyText(platform: Platform, locale: WebLocale) {
   return opsExtraT(locale, 'platformGroups.telegramEmpty')
 }
 
-function PlatformSection({ platform, rows, locale, status }: {
+function PlatformSection({ platform, rows, locale, status, detailBasePath, instanceKey }: {
   platform: Platform
   rows: OpsPlatformGroup[]
   locale: WebLocale
   status?: WebPlatformStatus
+  detailBasePath?: '/admin/groups' | '/subbot/groups'
+  instanceKey: string
 }) {
   const x = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
   const { label, Icon } = platformMeta(platform, locale)
@@ -105,18 +107,28 @@ function PlatformSection({ platform, rows, locale, status }: {
           </span> : null}
           <span>{x('platformGroups.updated')}: {formatTime(row.updatedAt, locale)}</span>
         </div>
+        {platform === 'whatsapp' && detailBasePath ? <div className="mt-3">
+          <a
+            className="ops-button-muted inline-flex text-xs"
+            href={`${detailBasePath}/${encodeURIComponent(row.externalId)}${detailBasePath.startsWith('/admin') ? `?instance=${encodeURIComponent(instanceKey)}` : ''}`}
+          >
+            <ExternalLink className="size-3.5"/>
+            {locale === 'es' ? 'Ver detalle' : 'View details'}
+          </a>
+        </div> : null}
       </article>)}
     </div> : <div className="px-5 py-8 text-sm leading-6 text-zinc-600">{emptyText(platform, locale)}</div>}
   </section>
 }
 
-export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken, canSyncWhatsApp, platformStatuses }: {
+export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken, canSyncWhatsApp, platformStatuses, detailBasePath }: {
   snapshot: OpsSnapshot
   instanceLabel: string
   locale: WebLocale
   csrfToken: string
   canSyncWhatsApp: boolean
   platformStatuses: WebPlatformStatus[]
+  detailBasePath?: '/admin/groups' | '/subbot/groups'
 }) {
   const x = (key: Parameters<typeof opsExtraT>[1]) => opsExtraT(locale, key)
   const byPlatform = {
@@ -166,9 +178,9 @@ export function PlatformGroupsPanel({ snapshot, instanceLabel, locale, csrfToken
     </section>
 
     <div className="grid gap-5 xl:grid-cols-3">
-      <PlatformSection platform="whatsapp" rows={byPlatform.whatsapp} locale={locale} status={statusByPlatform.get('whatsapp')}/>
-      <PlatformSection platform="discord" rows={byPlatform.discord} locale={locale} status={statusByPlatform.get('discord')}/>
-      <PlatformSection platform="telegram" rows={byPlatform.telegram} locale={locale} status={statusByPlatform.get('telegram')}/>
+      <PlatformSection platform="whatsapp" rows={byPlatform.whatsapp} locale={locale} status={statusByPlatform.get('whatsapp')} detailBasePath={detailBasePath} instanceKey={snapshot.instanceKey}/>
+      <PlatformSection platform="discord" rows={byPlatform.discord} locale={locale} status={statusByPlatform.get('discord')} instanceKey={snapshot.instanceKey}/>
+      <PlatformSection platform="telegram" rows={byPlatform.telegram} locale={locale} status={statusByPlatform.get('telegram')} instanceKey={snapshot.instanceKey}/>
     </div>
 
     <p className="px-1 text-xs leading-5 text-zinc-600">{x('platformGroups.telegramNote')}</p>
