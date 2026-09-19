@@ -43,14 +43,15 @@ async function queuedRoleplaySend(chatId: string, task: () => Promise<void>) {
   const previous = roleplaySendQueue.get(chatId) ?? Promise.resolve()
   let release!: () => void
   const current = new Promise<void>((resolve) => { release = resolve })
-  roleplaySendQueue.set(chatId, previous.catch(() => undefined).then(() => current))
+  const chain = previous.catch(() => undefined).then(() => current)
+  roleplaySendQueue.set(chatId, chain)
 
   await previous.catch(() => undefined)
   try {
     await task()
   } finally {
     release()
-    if (roleplaySendQueue.get(chatId) === current) roleplaySendQueue.delete(chatId)
+    if (roleplaySendQueue.get(chatId) === chain) roleplaySendQueue.delete(chatId)
   }
 }
 
