@@ -221,7 +221,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
-        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses}/>
+        <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses} detailBasePath="/admin/groups"/>
         <OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="groups" locale={locale} csrfToken={csrfToken} canSyncGroups={false} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups}/>
       </div>}
       {section === 'audit' && <div className="mt-6"><OpsConsole snapshot={snapshot} instanceLabel={instanceLabel} view="audit" locale={locale} csrfToken={csrfToken}/></div>}
