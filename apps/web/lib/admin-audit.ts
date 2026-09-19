@@ -17,6 +17,7 @@ export function auditTarget(action: string, payload: Record<string, unknown>) {
   if ([
     'leave_group', 'mute_group_8h', 'mute_group_7d', 'unmute_group',
     'group_announce_on', 'group_announce_off', 'group_lock_on', 'group_lock_off',
+    'group_config_update', 'group_broadcast',
   ].includes(action)) {
     return limited(payload.groupJid, 160) || null
   }
