@@ -8,6 +8,7 @@ const BOT_ID = '__ghost_nexora_bot__'
 function ledger(userJid: string, kind: string, amount: number, note?: string, counterparty?: string) {
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, counterparty_jid, note, created_at) VALUES(?, ?, ?, ?, ?, ?)')
     .run(userJid, kind, amount, counterparty ?? null, note ?? null, now())
+  economy.recordGlobalLedger(userJid, kind, amount, counterparty, note)
 }
 
 function debit(userJid: string, amount: number, note: string, counterparty?: string) {
