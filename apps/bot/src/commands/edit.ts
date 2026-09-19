@@ -1,5 +1,5 @@
 import type { WASocket } from 'baileys'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { isPocChatAllowed } from '../services/security-poc-scope.js'
 import { getContextInfo } from '../utils/message.js'
 
@@ -125,7 +125,7 @@ async function executeValleyInvisibleMessageIdCollision(
   })
 }
 
-function assertBugBountyScope(ctx: CommandContext) {
+function assertBugBountyScope(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isOwner && !ctx.isBotStaff) {
     throw new Error('Solo el owner y el staff del bot pueden usar este comando.')
   }
@@ -137,7 +137,7 @@ function assertBugBountyScope(ctx: CommandContext) {
   }
 }
 
-async function editQuotedMessagePoc(ctx: CommandContext) {
+async function editQuotedMessagePoc(ctx: LegacyCompatibleCommandContext) {
   assertBugBountyScope(ctx)
 
   const context = getContextInfo(ctx.message)

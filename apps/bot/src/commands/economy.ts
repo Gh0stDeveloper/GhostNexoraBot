@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { COIN_NAME, COIN_SYMBOL, economy, PROFESSIONS } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
@@ -21,7 +21,7 @@ function amountArg(value?: string) {
   return Math.floor(amount)
 }
 
-function targetFromContext(ctx: CommandContext) {
+function targetFromContext(ctx: LegacyCompatibleCommandContext) {
   const mentioned = getContextInfo(ctx.message)?.mentionedJid?.[0]
   if (mentioned) return mentioned
   const raw = ctx.args[0]?.replace(/\D/g, '')
@@ -29,7 +29,7 @@ function targetFromContext(ctx: CommandContext) {
   throw new Error('Menciona al usuario o indica su número.')
 }
 
-async function botAvatar(ctx: CommandContext) {
+async function botAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)

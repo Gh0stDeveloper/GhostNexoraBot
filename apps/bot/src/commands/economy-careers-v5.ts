@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { COIN_SYMBOL } from '../services/economy.js'
 import { careerLicenses, resolveCareerId } from '../services/career-licenses.js'
 import { MINER_HOURLY_YIELD, MINER_MAX_COUNT, MINER_SUBSCRIPTION_PLANS, mining, type MinerSubscriptionPlanId } from '../services/mining.js'
@@ -24,7 +24,7 @@ function parsePlan(value?: string): MinerSubscriptionPlanId | null {
   return clean in MINER_SUBSCRIPTION_PLANS ? clean as MinerSubscriptionPlanId : null
 }
 
-async function jobMenu(ctx: CommandContext, requestedPage = 1) {
+async function jobMenu(ctx: LegacyCompatibleCommandContext, requestedPage = 1) {
   const rows = careerLicenses.all(ctx.sender)
   const pageSize = 10
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
@@ -61,7 +61,7 @@ async function jobMenu(ctx: CommandContext, requestedPage = 1) {
   })
 }
 
-async function jobCommand(ctx: CommandContext) {
+async function jobCommand(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim()
   if (!input || ['list', 'lista', 'menu'].includes(input.toLowerCase())) {
     await jobMenu(ctx, 1)
@@ -83,7 +83,7 @@ async function jobCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function jobRequirementsCommand(ctx: CommandContext) {
+async function jobRequirementsCommand(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim()
   if (!input) {
     const m = careerLicenses.metrics(ctx.sender)
@@ -103,7 +103,7 @@ async function jobRequirementsCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function jobLicenseCommand(ctx: CommandContext) {
+async function jobLicenseCommand(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}joblicense <profesión>`)
   const result = careerLicenses.buy(ctx.sender, input)
@@ -122,7 +122,7 @@ async function jobLicenseCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function workCommand(ctx: CommandContext) {
+async function workCommand(ctx: LegacyCompatibleCommandContext) {
   careerLicenses.ensureCurrent(ctx.sender)
   const requested = ctx.argText.trim()
   if (requested) careerLicenses.choose(ctx.sender, requested)
@@ -131,7 +131,7 @@ async function workCommand(ctx: CommandContext) {
   await ctx.reply(`╭─〔 💼 *TRABAJO COMPLETADO* 〕\n│ Profesión » ${result.profession.emoji} *${result.profession.label}*\n│ Ganancia » *${fmt(result.reward)}*\n│ Cartera » *${fmt(result.balance.wallet)}*\n│ Próximo trabajo » *1 minuto*\n╰──────────────`)
 }
 
-async function minerShopCommand(ctx: CommandContext) {
+async function minerShopCommand(ctx: LegacyCompatibleCommandContext) {
   const summary = mining.summary(ctx.sender)
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '⛏️ NEXORA · TIENDA DE MINEROS',
@@ -158,7 +158,7 @@ async function minerShopCommand(ctx: CommandContext) {
   })
 }
 
-async function minerBuyCommand(ctx: CommandContext, shifted = false) {
+async function minerBuyCommand(ctx: LegacyCompatibleCommandContext, shifted = false) {
   const plan = parsePlan(ctx.args[shifted ? 1 : 0])
   if (!plan) throw new Error(`Plan inválido. Usa ${ctx.prefix}minershop para ver 1d, 7d, 15d y 1m.`)
   const quantityRaw = ctx.args[shifted ? 2 : 1] ?? '1'
@@ -179,7 +179,7 @@ async function minerBuyCommand(ctx: CommandContext, shifted = false) {
   ].filter(Boolean).join('\n'))
 }
 
-async function minerCommand(ctx: CommandContext) {
+async function minerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (['shop', 'tienda', 'store'].includes(action)) {
     await minerShopCommand(ctx)

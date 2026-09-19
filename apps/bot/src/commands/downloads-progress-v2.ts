@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { downloadSocialVideo, downloadSoundCloud } from '../services/downloader.js'
 import { downloadMediaFire } from '../services/mediafire.js'
@@ -11,7 +11,7 @@ import { downloadProvidersV3Commands } from './download-providers-v3.js'
 function isUrl(value: string) { try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false } }
 const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 
-async function socialDownload(ctx: CommandContext, name: string, platform: 'tiktok' | 'instagram' | 'twitter', url: string) {
+async function socialDownload(ctx: LegacyCompatibleCommandContext, name: string, platform: 'tiktok' | 'instagram' | 'twitter', url: string) {
   if (!isUrl(url)) throw new Error(`Uso: ${ctx.prefix}${name.toLowerCase()} <url>`)
   const progress = await createDownloadProgress(ctx, `${name} · video`)
   await progress.update('downloading', 'Obteniendo y validando el archivo')
@@ -52,7 +52,7 @@ async function socialDownload(ctx: CommandContext, name: string, platform: 'tikt
   } finally { await result.cleanup() }
 }
 
-async function tiktok(ctx: CommandContext) {
+async function tiktok(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}tiktok <url|búsqueda>`)
   if (isUrl(input)) { await socialDownload(ctx, 'TikTok', 'tiktok', input); return }
@@ -61,7 +61,7 @@ async function tiktok(ctx: CommandContext) {
   await ctx.reply(`🎵 *TIKTOK · RESULTADOS*\n━━━━━━━━━━━━━━\n${rows.map((item, i) => `${i + 1}. *${item.title || `@${item.username ?? 'TikTok'}`}*\n⬇️ ${ctx.prefix}tiktok ${item.url}`).join('\n\n')}`)
 }
 
-async function soundcloud(ctx: CommandContext) {
+async function soundcloud(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim(); if (!input) throw new Error(`Uso: ${ctx.prefix}soundcloud <url|búsqueda>`)
   const progress = await createDownloadProgress(ctx, 'SoundCloud · audio')
   await progress.update('downloading', isUrl(input) ? 'Descargando pista pública' : 'Buscando y descargando el primer resultado')
@@ -73,7 +73,7 @@ async function soundcloud(ctx: CommandContext) {
   } finally { await result.cleanup() }
 }
 
-async function mediafire(ctx: CommandContext) {
+async function mediafire(ctx: LegacyCompatibleCommandContext) {
   const url = ctx.args[0] ?? ''; if (!isUrl(url)) throw new Error(`Uso: ${ctx.prefix}mediafire <url>`)
   const progress = await createDownloadProgress(ctx, 'MediaFire · archivo'); await progress.update('downloading')
   const result = await downloadMediaFire(url)
@@ -84,7 +84,7 @@ async function mediafire(ctx: CommandContext) {
   } finally { await result.cleanup() }
 }
 
-async function apkdl(ctx: CommandContext) {
+async function apkdl(ctx: LegacyCompatibleCommandContext) {
   const target = ctx.argText.trim(); if (!target) throw new Error(`Uso: ${ctx.prefix}apkdl <id|package>`)
   const progress = await createDownloadProgress(ctx, 'Android · APK'); await progress.update('downloading', 'Fuente: Aptoide')
   const result = await downloadAptoideApk(target)

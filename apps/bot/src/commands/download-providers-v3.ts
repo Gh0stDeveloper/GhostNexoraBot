@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
@@ -28,7 +28,7 @@ function storeLabel(store: Phase3ApkStore) {
   return store === 'apkmirror' ? 'APKMirror' : 'APKPure'
 }
 
-async function showStore(ctx: CommandContext, store: Phase3ApkStore) {
+async function showStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkStore) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}${store} <aplicación|package>`)
   const results = store === 'apkmirror' ? await searchApkMirror(query) : await searchApkPure(query)
@@ -52,7 +52,7 @@ async function showStore(ctx: CommandContext, store: Phase3ApkStore) {
   })
 }
 
-async function downloadStore(ctx: CommandContext, store: Phase3ApkStore) {
+async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkStore) {
   const token = ctx.args[0]?.trim()
   if (!token) throw new Error(`Selecciona primero una aplicación con ${ctx.prefix}${store} <búsqueda>.`)
   const progress = await createDownloadProgress(ctx, `${storeLabel(store)} · paquete Android`)
@@ -93,7 +93,7 @@ async function downloadStore(ctx: CommandContext, store: Phase3ApkStore) {
   }
 }
 
-async function vk(ctx: CommandContext) {
+async function vk(ctx: LegacyCompatibleCommandContext) {
   const url = ctx.argText.trim()
   if (!isUrl(url)) throw new Error(`Uso: ${ctx.prefix}vk <url de vk.com|vkvideo.ru|live.vkvideo.ru>`)
   const progress = await createDownloadProgress(ctx, 'VK Video · video')
@@ -113,7 +113,7 @@ async function vk(ctx: CommandContext) {
   }
 }
 
-async function providerHealth(ctx: CommandContext) {
+async function providerHealth(ctx: LegacyCompatibleCommandContext) {
   const rows = providerHealthSnapshot()
   if (!rows.length) {
     await ctx.reply('Aún no hay intentos de providers registrados desde el último inicio del proceso.')

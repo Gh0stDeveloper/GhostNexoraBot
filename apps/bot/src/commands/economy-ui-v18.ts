@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { COIN_SYMBOL, economy } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
 import { bankingV10 } from '../services/banking-v10.js'
@@ -34,7 +34,7 @@ function formatDuration(ms: number) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', !days && minutes ? `${minutes}m` : ''].filter(Boolean).join(' ') || '<1m'
 }
 
-async function balanceCommand(ctx: CommandContext) {
+async function balanceCommand(ctx: LegacyCompatibleCommandContext) {
   const balance = economy.balance(ctx.sender)
   const assets = advancedEconomy.summary(ctx.sender)
   const debts = advancedEconomy.debts(ctx.sender)
@@ -82,7 +82,7 @@ async function balanceCommand(ctx: CommandContext) {
 
 const effectiveMiner = minershopStyleV13Commands.find((command) => command.name === 'miner')
 
-async function minerCommand(ctx: CommandContext) {
+async function minerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (!['status', 'estado', 'info'].includes(action)) {
     if (!effectiveMiner) throw new Error('El centro de minería no está disponible temporalmente.')

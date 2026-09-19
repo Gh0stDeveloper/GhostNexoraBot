@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { economy, COIN_SYMBOL } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
 import { economyV2 } from '../services/economy-v2.js'
@@ -22,11 +22,11 @@ function duration(ms: number) {
   return minutes ? `${minutes}m${rest ? ` ${rest}s` : ''}` : `${seconds}s`
 }
 
-function numericArgs(ctx: CommandContext) {
+function numericArgs(ctx: LegacyCompatibleCommandContext) {
   return ctx.args.filter((arg) => /^\d[\d,_]*(?:\.\d+)?%?$/.test(arg))
 }
 
-function likelyDirectPhone(ctx: CommandContext, token: string, index: number) {
+function likelyDirectPhone(ctx: LegacyCompatibleCommandContext, token: string, index: number) {
   if (index !== 0) return false
   const context = getContextInfo(ctx.message)
   if (context?.mentionedJid?.length || context?.participant) return false
@@ -34,12 +34,12 @@ function likelyDirectPhone(ctx: CommandContext, token: string, index: number) {
   return digits.length >= 8 && digits.length <= 15
 }
 
-function moneyTokens(ctx: CommandContext) {
+function moneyTokens(ctx: LegacyCompatibleCommandContext) {
   const values = numericArgs(ctx)
   return values.filter((token, index) => !likelyDirectPhone(ctx, token, index))
 }
 
-async function transfer(ctx: CommandContext) {
+async function transfer(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona, responde o indica el número del usuario que recibirá los NXC.' })
   const values = moneyTokens(ctx)
   const value = parsePositive(values.at(-1)?.replace('%', ''))
@@ -51,7 +51,7 @@ async function transfer(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function addNxc(ctx: CommandContext) {
+async function addNxc(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona, responde o indica el número del usuario que recibirá NXC.' })
   const values = moneyTokens(ctx)
   const value = parsePositive(values.at(-1)?.replace('%', ''))
@@ -62,7 +62,7 @@ async function addNxc(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function lend(ctx: CommandContext) {
+async function lend(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona, responde o indica el número del usuario que recibirá el préstamo.' })
   const values = moneyTokens(ctx)
   const value = parsePositive(values[0]?.replace('%', ''))
@@ -76,7 +76,7 @@ async function lend(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function give(ctx: CommandContext) {
+async function give(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona, responde o indica el número del usuario que recibirá el personaje.' })
   const candidates = moneyTokens(ctx).map((token) => token.replace(/\D/g, '')).filter((token) => token.length > 0 && token.length <= 8)
   const id = Number(candidates.at(-1))
@@ -85,7 +85,7 @@ async function give(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `🎁 *${claim.name}* fue transferida a @${target!.split('@')[0]}.`, mentions: [target!] }, { quoted: ctx.message })
 }
 
-async function rob(ctx: CommandContext) {
+async function rob(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde a la persona que intentas robar.' })
   const result = economyJustice.rob(ctx.sender, target!)
 
@@ -132,7 +132,7 @@ async function rob(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function crime(ctx: CommandContext) {
+async function crime(ctx: LegacyCompatibleCommandContext) {
   const result = economyJustice.crime(ctx.sender)
   if (!result.ok) {
     if (result.reason === 'fine_due') throw new Error(`Tienes una multa pendiente de ${fmt(result.fineDue)}. Págala con ${ctx.prefix}multa pagar antes de cometer otro crimen.`)
@@ -166,7 +166,7 @@ async function crime(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function fine(ctx: CommandContext) {
+async function fine(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (['pagar', 'pay', 'pago'].includes(action)) {
     const raw = (ctx.args[1] ?? 'all').toLowerCase()
@@ -210,7 +210,7 @@ async function fine(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function criminalRecord(ctx: CommandContext) {
+async function criminalRecord(ctx: LegacyCompatibleCommandContext) {
   const summary = economyJustice.fineSummary(ctx.sender)
   const record = summary.record
   await ctx.reply([

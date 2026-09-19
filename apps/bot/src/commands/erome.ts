@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -17,7 +17,7 @@ import { sendCarousel, sendInteractiveCard, type InteractiveButton } from '../se
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { withTimeout } from '../utils/timeout.js'
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ${ctx.prefix}adultmode on.`)
   } else {
@@ -47,7 +47,7 @@ function albumId(input: string) {
   throw new Error('Indica un ID o enlace de álbum Erome válido.')
 }
 
-async function listingUi(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query: string | undefined, albums: Awaited<ReturnType<typeof exploreErome>>['albums']) {
+async function listingUi(ctx: LegacyCompatibleCommandContext, mode: 'hot' | 'new' | 'search', page: number, query: string | undefined, albums: Awaited<ReturnType<typeof exploreErome>>['albums']) {
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: `🔞 EROME · ${mode === 'search' ? 'BÚSQUEDA' : mode.toUpperCase()}`,
     body: mode === 'search' ? `Resultados para: ${query}\nPágina: ${page}` : `Explorar ${mode === 'hot' ? 'HOT' : 'NEW'} · página ${page}`,
@@ -87,7 +87,7 @@ async function listingUi(ctx: CommandContext, mode: 'hot' | 'new' | 'search', pa
   })
 }
 
-async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query?: string) {
+async function showListing(ctx: LegacyCompatibleCommandContext, mode: 'hot' | 'new' | 'search', page: number, query?: string) {
   const result = mode === 'search'
     ? await searchErome(query ?? '', page, 10)
     : await exploreErome(mode, page, 10)
@@ -96,7 +96,7 @@ async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', 
   await listingUi(ctx, mode, page, query, albums)
 }
 
-async function profileSearchUi(ctx: CommandContext, page: number, query: string, profiles: Awaited<ReturnType<typeof searchEromeProfiles>>['profiles']) {
+async function profileSearchUi(ctx: LegacyCompatibleCommandContext, page: number, query: string, profiles: Awaited<ReturnType<typeof searchEromeProfiles>>['profiles']) {
   if (!profiles.length) return
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '🔞 EROME · PERFILES',
@@ -124,13 +124,13 @@ async function profileSearchUi(ctx: CommandContext, page: number, query: string,
   })
 }
 
-async function showProfileSearch(ctx: CommandContext, query: string, page: number) {
+async function showProfileSearch(ctx: LegacyCompatibleCommandContext, query: string, page: number) {
   const result = await searchEromeProfiles(query, page, 5)
   if (!result.profiles.length) throw new Error('No encontré perfiles de Erome para esa búsqueda.')
   await profileSearchUi(ctx, page, result.query, result.profiles)
 }
 
-async function profileUi(ctx: CommandContext, profile: Awaited<ReturnType<typeof getEromeProfile>>) {
+async function profileUi(ctx: LegacyCompatibleCommandContext, profile: Awaited<ReturnType<typeof getEromeProfile>>) {
   if (profile.albums.length) {
     await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
       title: `🔞 ${profile.username}`,
@@ -161,12 +161,12 @@ async function profileUi(ctx: CommandContext, profile: Awaited<ReturnType<typeof
   })
 }
 
-async function showProfile(ctx: CommandContext, input: string, batch: number) {
+async function showProfile(ctx: LegacyCompatibleCommandContext, input: string, batch: number) {
   const profile = await getEromeProfile(input, batch, 10)
   await profileUi(ctx, profile)
 }
 
-async function albumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof getEromeAlbum>>, page: number, totalPages: number, items: Awaited<ReturnType<typeof getEromeAlbum>>['videos']) {
+async function albumUi(ctx: LegacyCompatibleCommandContext, album: Awaited<ReturnType<typeof getEromeAlbum>>, page: number, totalPages: number, items: Awaited<ReturnType<typeof getEromeAlbum>>['videos']) {
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: `🔞 ${album.title}`,
     body: `Videos: ${album.videos.length} · página ${page}/${totalPages}`,
@@ -195,7 +195,7 @@ async function albumUi(ctx: CommandContext, album: Awaited<ReturnType<typeof get
   }
 }
 
-async function showAlbum(ctx: CommandContext, input: string, page: number) {
+async function showAlbum(ctx: LegacyCompatibleCommandContext, input: string, page: number) {
   const album = await getEromeAlbum(input)
   if (!album.videos.length) throw new Error('Ese álbum no contiene videos descargables.')
   const pageSize = 10

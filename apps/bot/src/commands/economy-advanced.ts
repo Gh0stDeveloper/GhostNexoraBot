@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { economy, COIN_SYMBOL } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
 import { getContextInfo } from '../utils/message.js'
@@ -19,7 +19,7 @@ function amount(value?: string) {
   return Math.floor(parsed)
 }
 
-async function targetJid(ctx: CommandContext) {
+async function targetJid(ctx: LegacyCompatibleCommandContext) {
   const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
   if (!mention) throw new Error('Menciona al usuario que recibirá el préstamo.')
   if (!ctx.isGroup) return mention

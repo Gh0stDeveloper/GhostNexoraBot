@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -11,7 +11,7 @@ const baseErome = eromeCommands.find((command) => command.name === 'erome') ?? (
   throw new Error('No se encontró el comando base de Erome.')
 })()
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ${ctx.prefix}adultmode on.`)
   } else if (!settings.adultEnabled || !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
@@ -29,7 +29,7 @@ function albumId(input: string) {
   throw new Error('Indica un ID o enlace de álbum Erome válido.')
 }
 
-async function handler(ctx: CommandContext) {
+async function handler(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? '').toLowerCase()
   if (!['dl', 'download'].includes(action)) return baseErome.handler(ctx)
   assertAdultAccess(ctx)

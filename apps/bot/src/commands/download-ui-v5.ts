@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { downloadLempi } from '../services/lempi.js'
 import { downloadSocialVideo, getMediaInfo } from '../services/downloader.js'
 import { createDownloadProgress } from '../services/progress.js'
@@ -17,7 +17,7 @@ function url(input: string) {
   } catch { throw new Error('Indica una URL válida.') }
 }
 
-async function facebook(ctx: CommandContext) {
+async function facebook(ctx: LegacyCompatibleCommandContext) {
   const source = url(ctx.args[0] ?? '')
   const progress = await createDownloadProgress(ctx, 'Facebook · video')
   const info = await getMediaInfo(source, 'facebook').catch(() => undefined)

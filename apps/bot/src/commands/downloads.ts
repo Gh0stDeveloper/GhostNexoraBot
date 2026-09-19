@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import {
   downloadSocialVideo,
   downloadSoundCloud,
@@ -29,7 +29,7 @@ function formatDuration(seconds?: number) {
 }
 const compact = (value?: number) => value === undefined ? 'N/D' : new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
 
-async function announceDownload(ctx: CommandContext, icon: string, label: string, detail?: string) {
+async function announceDownload(ctx: LegacyCompatibleCommandContext, icon: string, label: string, detail?: string) {
   await ctx.reply([
     `${icon} *DESCARGA INICIADA*`,
     `━━━━━━━━━━━━━━`,
@@ -53,7 +53,7 @@ function infoText(info: MediaInfo | undefined, size?: number) {
   ].filter(Boolean).join('\n')
 }
 
-async function sendDownloadInfo(ctx: CommandContext, info: MediaInfo | undefined, size?: number) {
+async function sendDownloadInfo(ctx: LegacyCompatibleCommandContext, info: MediaInfo | undefined, size?: number) {
   if (!info) return
   const caption = infoText(info, size)
   if (info.thumbnail) {
@@ -64,7 +64,7 @@ async function sendDownloadInfo(ctx: CommandContext, info: MediaInfo | undefined
 }
 
 async function downloadSocialUrl(
-  ctx: CommandContext,
+  ctx: LegacyCompatibleCommandContext,
   name: string,
   platform: Exclude<DownloadPlatform, 'youtube'>,
   icon: string,
@@ -102,7 +102,7 @@ const socialCommand = (name: string, aliases: string[], platform: Exclude<Downlo
   },
 })
 
-async function showTikTokVideos(ctx: CommandContext, query: string) {
+async function showTikTokVideos(ctx: LegacyCompatibleCommandContext, query: string) {
   const results = await searchTikTokVideos(query, 10)
   if (!results.length) throw new Error('TikTok no devolvió videos públicos para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -127,7 +127,7 @@ async function showTikTokVideos(ctx: CommandContext, query: string) {
   })
 }
 
-async function showTikTokProfiles(ctx: CommandContext, query: string) {
+async function showTikTokProfiles(ctx: LegacyCompatibleCommandContext, query: string) {
   const profiles = await searchTikTokProfiles(query, 8)
   if (!profiles.length) throw new Error('TikTok no devolvió perfiles públicos para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -153,7 +153,7 @@ async function showTikTokProfiles(ctx: CommandContext, query: string) {
   })
 }
 
-async function showTikTokProfile(ctx: CommandContext, input: string) {
+async function showTikTokProfile(ctx: LegacyCompatibleCommandContext, input: string) {
   const profile = await getTikTokProfile(input)
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '🎵 TIKTOK · PERFIL',
@@ -195,7 +195,7 @@ function apkBody(app: AptoideApp) {
   ].filter(Boolean).join('\n')
 }
 
-async function showApkSearch(ctx: CommandContext, query: string) {
+async function showApkSearch(ctx: LegacyCompatibleCommandContext, query: string) {
   const results = await searchAptoideApps(query, 10)
   if (!results.length) throw new Error('Aptoide no encontró aplicaciones para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
