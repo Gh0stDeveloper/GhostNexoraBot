@@ -147,8 +147,13 @@ const beforePing = rest.calls.length
 assert.equal(await router.handleMessage(incoming), true)
 const pingCalls = rest.calls.slice(beforePing)
 assert.ok(pingCalls.some((call) => call[0] === 'triggerTyping'))
-assert.ok(pingCalls.some((call) => call[0] === 'createMessage' && call[2].content === 'Pong · comprobando…'))
-assert.ok(pingCalls.some((call) => call[0] === 'editMessage' && String(call[3].content).startsWith('Pong · Discord ')))
+assert.ok(pingCalls.some((call) =>
+  call[0] === 'createMessage'
+  && typeof call[2]?.content === 'string'
+  && call[2].content.includes('PONG')
+  && call[2].content.includes('Latencia')
+  && call[2].content.includes('Estado')
+), 'Discord ping must execute the canonical B2 shared ping handler')
 
 const ignored = { ...incoming, id: '666', content: 'ping' }
 assert.equal(await router.handleMessage(ignored), false, 'plain guild text without prefix/mention must be ignored')
