@@ -949,19 +949,22 @@ Cierre:
 
 ## E9. Ledger de economía
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Añadir un libro contable de movimientos.
 
-Modelo conceptual:
+Modelo implementado:
 
 - transaction_id;
 - user;
-- type;
+- type/kind;
 - amount;
-- balance_before;
-- balance_after;
+- wallet_delta y bank_delta;
+- wallet/bank/balance_before;
+- wallet/bank/balance_after;
 - source;
+- counterparty;
+- instancia MainBot/subbot;
 - timestamp.
 
 Ejemplos:
@@ -972,6 +975,22 @@ Ejemplos:
 - -10 NXC por game.
 
 Objetivo: poder auditar siempre de dónde salió o a dónde fue cada cambio de saldo.
+
+Implementación E9 en validación:
+
+- tabla global `economy_transactions` en la base de economía compartida;
+- IDs de transacción independientes `nxc_<random>`;
+- trigger automático sobre `global_economy_users` para que ningún cambio de wallet/banco quede sin registro;
+- saldo anterior/posterior y delta exacto de wallet/banco calculados por SQLite sobre el cambio real;
+- apertura/importación y cierre/merge de cuentas también auditados;
+- `economy_global_ledger` enriquece automáticamente la transacción con tipo, origen, contraparte, nota e instancia;
+- módulos legacy de juegos, RPG, minería, profesiones, waifus y economía avanzada publican metadata al ledger global;
+- los movimientos sin metadata quedan marcados como `automatic_guard`, nunca invisibles;
+- nueva sección Owner-only `Economía` en Operations Center;
+- filtros por usuario, tipo, origen y periodo;
+- resumen de créditos, débitos, neto, total y movimientos sin atribuir;
+- tabla con saldo antes/después, deltas, instancia y transaction_id;
+- smoke ejecutable E9 integrado al CI.
 
 ## E10. Logs en tiempo real
 
