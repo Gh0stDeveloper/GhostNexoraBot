@@ -15,6 +15,8 @@ import { groupControlsV9 } from '../services/group-controls-v9.js'
 import { createLocalizedSocket } from '../services/localized-socket.js'
 import { createWhatsAppAdapter, whatsappBotInstanceId } from '../platform/whatsapp/adapter.js'
 import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
+import { SharedCommandEngine } from './shared-command-engine.js'
+import { sharedNeutralCommands } from '../commands/shared-neutral.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -84,13 +86,10 @@ function publicCommandError(commandName: string, error: unknown, locale: LocaleC
 export type RouterOptions = { instanceId?: number; instanceOwnerJid?: string }
 
 export class CommandRouter {
-  private readonly byName = new Map<string, BotCommand>()
+  private readonly engine: SharedCommandEngine
 
   constructor(commands: BotCommand[], private readonly options: RouterOptions = {}) {
-    for (const command of commands) {
-      this.byName.set(command.name.toLowerCase(), command)
-      for (const alias of command.aliases ?? []) this.byName.set(alias.toLowerCase(), command)
-    }
+    this.engine = new SharedCommandEngine(commands, sharedNeutralCommands)
     try {
       performanceAudit.registerCommands(commands)
     } catch (error) {
@@ -210,7 +209,7 @@ export class CommandRouter {
       return false
     }
     const [typedName = '', ...args] = raw.split(/\s+/)
-    const command = this.byName.get(typedName.toLowerCase())
+    const command = this.engine.resolve(typedName)
     performanceAudit.recordStage('05', performance.now() - matcherStarted)
     if (!command) return false
 
@@ -360,7 +359,7 @@ export class CommandRouter {
         markCommandCooldown('whatsapp', command.name, sender)
       }
       try {
-        await command.handler(context)
+        await this.engine.execute(command, context, { allowLegacy: true, enforceMetadata: false })
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
         performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
