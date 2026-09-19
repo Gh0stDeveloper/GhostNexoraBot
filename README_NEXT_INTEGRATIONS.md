@@ -243,23 +243,42 @@ Adapters objetivo:
 
 ## B1. Eliminar dependencia progresiva de Baileys en CommandContext
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
-Actualmente CommandContext conserva:
+Objetivo:
 
-- socket;
-- message.
+- sacar Baileys del contrato neutral de comandos;
+- conservar compatibilidad V1 sin romper el catálogo actual;
+- migrar comandos por lotes a `adapter`, `normalizedMessage` y helpers neutrales.
 
-Están marcados como compatibilidad V1.
+Implementación B1 en validación:
 
-Migrar comandos gradualmente para que usen:
+- `CommandContext` ya no importa ni expone tipos de Baileys;
+- `socket` y `message` se aislaron en `core/legacy-whatsapp-command-context.ts`;
+- `LegacyCompatibleCommandContext` mantiene compatibilidad temporal para comandos V1;
+- se añadieron helpers neutrales ligados al chat actual:
+  - `sendText`;
+  - `sendMedia`;
+  - `sendUi`;
+  - `setTyping`;
+  - `editMessage`;
+- reply y reactions usan `normalizedMessage.messageId`;
+- se añadió `NeutralBotCommand` para módulos que ya no pueden acceder a Baileys en compile-time;
+- primer lote certificado:
+  - `general.ts`;
+  - `credits.ts`;
+  - `system.ts`;
+- `menu` usa `sendUi`;
+- `ping` usa `setTyping`;
+- `info` usa `sendMedia`;
+- smoke dedicado B1 impide que el lote migrado vuelva a usar `ctx.socket`, `ctx.message` o imports directos de Baileys;
+- los comandos WhatsApp específicos restantes conservan compatibilidad V1 para migraciones posteriores por lotes.
 
-- adapter;
-- normalizedMessage;
-- servicios compartidos;
-- helpers neutrales.
+Criterio de B1:
 
-No eliminar los campos V1 de golpe. Hacer migraciones por lotes con smoke tests.
+- no eliminar de golpe la compatibilidad V1;
+- sí eliminar Baileys del contrato `CommandContext`;
+- dejar una frontera explícita y verificable entre comandos neutrales y comandos legacy.
 
 ## B2. Un solo Command Engine
 
