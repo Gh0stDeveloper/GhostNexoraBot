@@ -75,6 +75,9 @@ jobs:
       - name: Phase E12 dashboard updater smoke
         run: node scripts/phase-e12-dashboard-update-smoke.mjs
 
+      - name: Phase E13 typed backups smoke
+        run: node scripts/phase-e13-backups-smoke.mjs
+
       - name: Adult regular-user access smoke
         run: node scripts/adult-regular-user-access-smoke.mjs
 
