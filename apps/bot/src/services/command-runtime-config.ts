@@ -125,6 +125,13 @@ export function resolveConfiguredCommandName(commandToken: string, instanceKey =
   return normalizeCommandName(row?.commandName || token)
 }
 
+export function resolveConfiguredCommandCategory(commandToken: string, fallback: CommandCategory | string = 'general', instanceKey = opsInstanceKey()) {
+  const commandName = resolveConfiguredCommandName(commandToken, instanceKey)
+  const row = opsDb.prepare(`SELECT category FROM ops_command_catalog
+    WHERE instance_key = ? AND command_name = ?`).get(instanceKey, commandName) as { category?: string } | undefined
+  return String(row?.category || fallback)
+}
+
 export function getCommandRuntimeConfig(commandName: string, category: CommandCategory | string, instanceKey = opsInstanceKey()): CommandRuntimeConfig {
   const canonical = resolveConfiguredCommandName(commandName, instanceKey)
   const row = opsDb.prepare(`SELECT enabled, whatsapp, discord, telegram, cooldown_ms AS cooldownMs,
