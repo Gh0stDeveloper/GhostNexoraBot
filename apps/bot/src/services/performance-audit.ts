@@ -2,6 +2,7 @@ import type { BotCommand } from '../types.js'
 import { commandPlatformSupport } from './command-platform-support.js'
 import { registerCommandTokens, resolveConfiguredCommandName } from './command-runtime-config.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
+import { recordOpsRuntimeLog, type OpsLogCategory } from './ops-runtime-log.js'
 
 const now = () => Date.now()
 const MINUTE = 60_000
@@ -121,6 +122,32 @@ function commandStatus(avgUs: number, maxUs: number, successRate: number) {
 function cleanDisplayName(value?: string | null) {
   const clean = String(value ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
   return clean ? clean.slice(0, 80) : null
+}
+
+function commandLogCategory(commandName: string, category?: string | null): OpsLogCategory {
+  const value = `${category ?? ''} ${commandName}`.toLowerCase()
+  return /(download|downloader|media|youtube|spotify|tiktok|instagram|facebook|twitter|\bx\b|terabox|likee|happymod)/.test(value)
+    ? 'download'
+    : 'command'
+}
+
+function recordCommandLog(input: {
+  commandName: string
+  category?: string | null
+  durationMs: number
+  success: boolean
+  instanceKey: string
+  platform?: string
+}) {
+  const durationMs = Math.max(0, Math.round(input.durationMs))
+  const platform = input.platform ? ` · platform=${input.platform}` : ''
+  recordOpsRuntimeLog(
+    input.success ? 'debug' : 'error',
+    `command.${input.commandName}`,
+    `${input.success ? 'command_ok' : 'command_failed'} · duration=${durationMs}ms${platform}`,
+    input.instanceKey,
+    commandLogCategory(input.commandName, input.category),
+  )
 }
 
 function recordUsage(input: {
@@ -268,6 +295,14 @@ export const performanceAudit = {
       .run(instanceKey, name, success ? 1 : 0, success ? 0 : 1, value, value, value, value, heap, stamp, stamp, success ? 0 : stamp)
 
     recordUsage({ instanceKey, commandName: name, durationUs: value, success, stamp, identity })
+    recordCommandLog({
+      commandName: name,
+      category: command.category,
+      durationMs,
+      success,
+      instanceKey,
+      platform: 'whatsapp',
+    })
   },
 
   recordRuntimeCommand(
@@ -299,6 +334,15 @@ export const performanceAudit = {
       .run(instanceKey, name, success ? 1 : 0, success ? 0 : 1, value, value, value, value, stamp, stamp, success ? 0 : stamp)
 
     recordUsage({ instanceKey, commandName: name, durationUs: value, success, stamp, identity })
+    const catalog = opsDb.prepare('SELECT category FROM ops_command_catalog WHERE instance_key = ? AND command_name = ? LIMIT 1')
+      .get(instanceKey, name) as { category?: string } | undefined
+    recordCommandLog({
+      commandName: name,
+      category: catalog?.category,
+      durationMs,
+      success,
+      instanceKey,
+    })
   },
 
   snapshot(instanceKey = opsInstanceKey()) {
