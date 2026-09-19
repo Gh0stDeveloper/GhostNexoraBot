@@ -74,6 +74,17 @@ type BackupArchiveV1 = {
   files: BackupFile[]
 }
 
+type BackupArchiveCandidate = {
+  schemaVersion?: number
+  product?: string
+  createdAt?: number
+  reason?: BackupReason
+  backupType?: BackupType
+  source?: { instance?: string; sessionIncluded?: boolean }
+  files?: BackupFile[]
+  tables?: BackupTable[]
+}
+
 type ValidatedArchive = {
   archive: BackupArchiveV2 | BackupArchiveV1
   type: BackupType
@@ -251,7 +262,7 @@ async function sessionFiles() {
   return files
 }
 
-function archiveType(archive: Partial<BackupArchiveV2 & BackupArchiveV1>): BackupType {
+function archiveType(archive: BackupArchiveCandidate): BackupType {
   if (archive.schemaVersion === 1) return 'full'
   if (archive.schemaVersion === 2 && validType(archive.backupType)) return archive.backupType
   throw new Error('Formato o tipo de backup no compatible.')
@@ -262,7 +273,7 @@ async function archiveMetadata(filePath: string, fileName: string): Promise<Back
   const info = await stat(filePath)
   try {
     const decompressed = await gunzipAsync(compressed)
-    const archive = JSON.parse(decompressed.toString('utf8')) as Partial<BackupArchiveV2 & BackupArchiveV1>
+    const archive = JSON.parse(decompressed.toString('utf8')) as BackupArchiveCandidate
     const type = archiveType(archive)
     return {
       id: fileName,
@@ -430,7 +441,7 @@ async function readAndValidateArchive(fileName: string): Promise<ValidatedArchiv
   const info = await stat(filePath)
   if (!info.isFile() || info.size <= 0 || info.size > MAX_COMPRESSED_BACKUP_BYTES) throw new Error('El archivo de backup supera el límite permitido.')
   const decompressed = await gunzipAsync(await readFile(filePath))
-  const archive = JSON.parse(decompressed.toString('utf8')) as Partial<BackupArchiveV2 & BackupArchiveV1>
+  const archive = JSON.parse(decompressed.toString('utf8')) as BackupArchiveCandidate
   const type = archiveType(archive)
   if (archive.product !== 'Ghost Nexora Bot') throw new Error('Producto de backup no compatible.')
   if (archive.source?.instance !== 'main') throw new Error('El backup no pertenece a MainBot.')
