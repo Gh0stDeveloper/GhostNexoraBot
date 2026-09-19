@@ -64,6 +64,15 @@ const youtubeSafeClientErrors = [
 
 function publicCommandError(commandName: string, error: unknown, locale: LocaleCode) {
   const message = error instanceof Error ? error.message : translate(locale, 'router.unexpectedError')
+  const normalized = message.toLowerCase()
+  if (
+    normalized.includes('rate-overlimit')
+    || normalized.includes('rate overlimit')
+    || normalized.includes('rate limit')
+    || normalized.includes('too many requests')
+  ) {
+    return translate(locale, 'router.rateLimited')
+  }
   if (!youtubeDownloadCommands.has(commandName)) return message
   if (youtubeSafeClientErrors.some((pattern) => pattern.test(message))) return message
   return translate(locale, 'router.internalUnavailable')
