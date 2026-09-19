@@ -21,7 +21,7 @@ const extraI18n = read('apps/web/lib/ops-extra-i18n.ts')
 assert.match(roadmap, /## E4\. Dashboard de Providers y APIs[\s\S]*Estado: TERMINADO/, 'E4 roadmap must be completed')
 
 for (const provider of ['lempi', 'spotify', 'jikan', 'anime1v', 'openrouter']) {
-  assert.match(health, new RegExp(`${provider.replace('-', '\\-')}:\s*'`, 'i'), `Provider label missing: ${provider}`)
+  assert.ok(health.includes(`${provider}: '`), `Provider label missing: ${provider}`)
 }
 assert.match(health, /export async function trackedProviderCall/, 'Shared provider telemetry wrapper missing')
 assert.match(health, /providerCircuitAllows/, 'Provider circuit breaker gate missing')
