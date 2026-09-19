@@ -25,7 +25,18 @@ jobs:
         run: npm install
 
       - name: Production dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "npm audit unavailable or failed; retrying in 15s (attempt $attempt/3)..."
+              sleep 15
+            fi
+          done
+          exit 1
 
       - name: Typecheck
         run: npm run typecheck
