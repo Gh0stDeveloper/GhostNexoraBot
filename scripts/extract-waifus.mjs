@@ -11,7 +11,6 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 const workspaceRoot = process.cwd().endsWith(`${path.sep}apps${path.sep}bot`)
@@ -167,7 +166,7 @@ if (existsSync(markerPath) && existsSync(manifestPath)) {
   }
 }
 
-const workDir = path.join(os.tmpdir(), `ghostnexora-waifus-${process.pid}-${Date.now()}`)
+const workDir = path.join(path.dirname(targetDir), `.ghostnexora-waifus-${process.pid}-${Date.now()}`)
 const preparedRoot = path.join(workDir, 'prepared')
 const preparedWaifus = path.join(preparedRoot, 'waifus')
 mkdirSync(preparedWaifus, { recursive: true })
