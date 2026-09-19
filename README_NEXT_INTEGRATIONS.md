@@ -40,13 +40,13 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase | Área | Estado |
 |---|---|---|
 | Fase A | Login y seguridad Web | TERMINADO |
-| Fase E | Dashboard Web V2 | EN PROGRESO |
+| Fase E | Dashboard Web V2 | TERMINADO |
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
-| Fase B | Núcleo multiplataforma compartido | POSPUESTO |
+| Fase B | Núcleo multiplataforma compartido | EN PROGRESO |
 | Fase C | Paridad Discord y Telegram | POSPUESTO |
 | Fase D | Runtime y entrega WhatsApp | POSPUESTO |
 
-Orden actualizado por decisión de proyecto: después de Fase A se prioriza Fase E. Las fases B, C y D quedan pospuestas hasta terminar las fases de Dashboard/operación prioritarias.
+Orden actualizado por decisión de proyecto: Fase E quedó terminada y se reanudó Fase B empezando por B1. Fase F permanece pendiente; las fases C y D continúan pospuestas hasta que corresponda retomarlas.
 
 ---
 
@@ -225,7 +225,7 @@ Solicitar confirmación adicional para acciones como:
 
 # FASE B — Núcleo multiplataforma compartido
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -251,7 +251,7 @@ Objetivo:
 - conservar compatibilidad V1 sin romper el catálogo actual;
 - migrar comandos por lotes a `adapter`, `normalizedMessage` y helpers neutrales.
 
-Implementación B1 en validación:
+Implementación B1 terminada:
 
 - `CommandContext` ya no importa ni expone tipos de Baileys;
 - `socket` y `message` se aislaron en `core/legacy-whatsapp-command-context.ts`;
@@ -289,6 +289,16 @@ Criterio de B1:
 - no eliminar de golpe la compatibilidad V1;
 - sí eliminar Baileys del contrato `CommandContext`;
 - dejar una frontera explícita y verificable entre comandos neutrales y comandos legacy.
+
+
+Cierre B1:
+
+- el contrato neutral `CommandContext` queda libre de Baileys;
+- los comandos que aún necesitan superficie WhatsApp quedan confinados a `LegacyCompatibleCommandContext`;
+- `progress.ts` dejó de depender de `ctx.socket` y `ctx.message`, usando `sendText` y `editMessage`;
+- el smoke B1 recorre el catálogo para detectar regresiones directas de la frontera neutral/legacy;
+- commit final de implementación: `0f4d48dc1cf4120fd1a1b7169a8bdedb16f35c52`;
+- CI #2959: success, incluyendo Typecheck, Build, smoke B1 y regresiones del proyecto.
 
 ## B2. Un solo Command Engine
 
