@@ -289,6 +289,37 @@ export class TelegramCommandRouter {
     const userId = String(message.from?.id ?? '')
     const isOwner = telegramOwner(message.from?.id)
     const isStaff = telegramStaff(message.from?.id)
+    const sharedCommand = this.engine.resolve(parsed.command)
+    if (sharedCommand) {
+      await this.adapter.setTyping?.(normalized.chatId, true).catch(() => undefined)
+      try {
+        const ctx = this.commandContext(
+          message,
+          normalized,
+          sharedCommand.name,
+          parsed.argText,
+          locale,
+          isOwner,
+          isStaff,
+        )
+        await this.engine.execute(sharedCommand, ctx, {
+          auditIdentity: {
+            userJid: ctx.sender,
+            displayName: normalized.pushName,
+          },
+        })
+        return true
+      } catch (error) {
+        logger.warn({ error, chatId: normalized.chatId, command: sharedCommand.name }, 'Telegram shared command failed')
+        const publicError = localizeLegacyText(error instanceof Error ? error.message : t(locale, 'common.internalError'), locale)
+        await this.adapter.sendText(
+          normalized.chatId,
+          t(locale, 'telegram.error.public', { error: publicError }),
+          { replyTo: normalized.messageId },
+        ).catch(() => undefined)
+        return true
+      }
+    }
     const category = resolveConfiguredCommandCategory(parsed.command)
     const runtimeDecision = commandRuntimeDecision({
       commandName: parsed.command,
