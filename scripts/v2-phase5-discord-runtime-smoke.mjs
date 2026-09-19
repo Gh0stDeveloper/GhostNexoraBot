@@ -129,11 +129,13 @@ try {
 
   const ackIndex = requests.findIndex((request) => request.url.includes('/interactions/700/slash-token/callback'))
   const sendIndex = requests.findIndex((request) => request.url.endsWith('/channels/10/messages') && request.method === 'POST')
-  const editIndex = requests.findIndex((request) => request.url.includes('/channels/10/messages/') && request.method === 'PATCH')
   const deleteIndex = requests.findIndex((request) => request.url.includes('/webhooks/901/slash-token/messages/@original') && request.method === 'DELETE')
   assert.ok(ackIndex >= 0 && sendIndex > ackIndex, 'slash interaction must be acknowledged before normal response')
-  assert.ok(editIndex > sendIndex, 'ping response must be edited after send')
-  assert.ok(deleteIndex > editIndex, 'deferred placeholder must be removed after adapter response')
+  assert.ok(
+    String(requests[sendIndex].body?.content || '').includes('PONG'),
+    'slash ping must execute the shared neutral ping handler',
+  )
+  assert.ok(deleteIndex > sendIndex, 'deferred placeholder must be removed after shared adapter response')
   assert.equal(requests[ackIndex].body.type, 5)
   assert.equal(runtime.status().eventsProcessed, 1)
   assert.equal(runtime.status().sequence, 6)
