@@ -162,7 +162,7 @@ function remainingCooldown(instanceKey: string, platform: PlatformId, commandNam
   return Math.max(0, Number(row?.lastUsedAt ?? 0) + cooldownMs - Date.now())
 }
 
-export function markCommandCooldown(instanceKey: string, platform: PlatformId, commandName: string, userId: string) {
+export function markCommandCooldown(platform: PlatformId, commandName: string, userId: string, instanceKey = opsInstanceKey()) {
   const canonical = resolveConfiguredCommandName(commandName, instanceKey)
   if (!canonical || !userId) return
   const stamp = Date.now()
