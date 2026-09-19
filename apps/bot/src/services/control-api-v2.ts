@@ -17,6 +17,7 @@ import { telegramRuntimeStatus, startTelegramPlatform, stopTelegramPlatform } fr
 import { discordRuntimeStatus, startDiscordPlatform, stopDiscordPlatform } from '../platform/discord/runtime.js'
 import { logger } from '../utils/logger.js'
 import { recordOpsRuntimeLog } from './ops-runtime-log.js'
+import { createOpsJob } from './ops-jobs.js'
 import { countPlatformGroups } from './platform-group-registry.js'
 
 const startedAt = new Date().toISOString()
@@ -227,11 +228,27 @@ async function platformAction(id: string, action: 'connect' | 'disconnect' | 're
   return platforms(deps).find((item) => item.id === platform)
 }
 
-async function runtimeUpdate() {
-  await mkdir(config.dataDir, { recursive: true })
-  const requestFile = path.join(config.dataDir, 'update-request')
-  await writeFile(requestFile, `${JSON.stringify({ source: 'control-api-v2', requestedAt: now() })}\n`, { mode: 0o600 })
-  recordControlLog('info', 'Safe updater request created')
+async function runtimeUpdate(retryOf?: string) {
+  const job = createOpsJob({
+    type: 'update',
+    label: 'Safe runtime update request',
+    source: 'control-api-v2',
+    retryable: true,
+    retryOf: retryOf ?? null,
+  })
+  job.setRetryHandler(() => runtimeUpdate(job.id))
+  job.start('creating_update_request')
+  try {
+    await mkdir(config.dataDir, { recursive: true })
+    const requestFile = path.join(config.dataDir, 'update-request')
+    await writeFile(requestFile, `${JSON.stringify({ source: 'control-api-v2', requestedAt: now(), jobId: job.id })}\n`, { mode: 0o600 })
+    job.complete('safe_update_request_queued')
+    recordControlLog('info', `Safe updater request created · job=${job.id}`)
+    return job.id
+  } catch (error) {
+    job.fail(error)
+    throw error
+  }
 }
 
 function parseUrl(req: http.IncomingMessage) {
