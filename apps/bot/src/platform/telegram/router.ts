@@ -18,6 +18,7 @@ import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
 import { telegramCommandAliases } from '../../services/command-platform-support.js'
+import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { telegramOwner, telegramStaff } from './config.js'
@@ -220,6 +221,41 @@ export class TelegramCommandRouter {
     if (!parsed.known) {
       await this.adapter.sendText(normalized.chatId, t(locale, 'common.commandUnavailable', { platform: 'Telegram', command: `/${parsed.command}`, help: '/help' }), { replyTo: normalized.messageId })
       return true
+    }
+
+    const userId = String(message.from?.id ?? '')
+    const isOwner = telegramOwner(message.from?.id)
+    const isStaff = telegramStaff(message.from?.id)
+    const category = resolveConfiguredCommandCategory(parsed.command)
+    const runtimeDecision = commandRuntimeDecision({
+      commandName: parsed.command,
+      category,
+      platform: 'telegram',
+      isGroup: message.chat.type !== 'private',
+      userId,
+      isOwner,
+      isStaff,
+    })
+    if (!runtimeDecision.allowed) {
+      const policyMessage = runtimeDecision.reason === 'disabled'
+        ? t(locale, 'router.commandDisabled')
+        : runtimeDecision.reason === 'category_disabled'
+          ? t(locale, 'router.commandCategoryDisabled', { category })
+          : runtimeDecision.reason === 'platform_disabled'
+            ? t(locale, 'router.commandPlatformDisabled', { platform: 'Telegram' })
+            : runtimeDecision.reason === 'groups_disabled'
+              ? t(locale, 'router.commandGroupsDisabled')
+              : runtimeDecision.reason === 'private_disabled'
+                ? t(locale, 'router.commandPrivateDisabled')
+                : runtimeDecision.reason === 'permission'
+                  ? t(locale, 'router.commandPermission')
+                  : t(locale, 'router.commandCooldown', { seconds: Math.max(1, Math.ceil(Number(runtimeDecision.remainingMs ?? 0) / 1000)) })
+      await this.adapter.sendText(normalized.chatId, policyMessage, { replyTo: normalized.messageId })
+      return true
+    }
+
+    if (!isStaff && runtimeDecision.config.cooldownMs > 0) {
+      markCommandCooldown('telegram', runtimeDecision.commandName, userId)
     }
 
     await this.adapter.setTyping?.(normalized.chatId, true).catch(() => undefined)
