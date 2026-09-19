@@ -17,6 +17,12 @@ import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
 import { discordCommandAliases } from '../../services/command-platform-support.js'
+import {
+  commandMetadataForPlatformToken,
+  commandMetadataVisibleTo,
+  discordSlashCommandTokens,
+  platformCommandMetadata,
+} from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
@@ -37,96 +43,42 @@ import type {
 const aliases = discordCommandAliases
 const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
 
-function localizedDescription(key: string) {
+function slashDescription(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  return (normalized || 'Ghost Nexora Bot command').slice(0, 100)
+}
+
+function localizedSlashDescription(value: string, key?: string) {
+  const es = slashDescription(key ? translate('es', key) : value)
+  const en = slashDescription(key ? translate('en', key) : value)
   return {
-    description: translate('es', key),
+    description: es,
     description_localizations: {
-      'en-US': translate('en', key),
-      'en-GB': translate('en', key),
-      'es-ES': translate('es', key),
-      'es-419': translate('es', key),
+      'en-US': en,
+      'en-GB': en,
+      'es-ES': es,
+      'es-419': es,
     },
   }
 }
 
-export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = [
-  { name: 'start', ...localizedDescription('discord.command.start') },
-  { name: 'help', ...localizedDescription('discord.command.help') },
-  { name: 'menu', ...localizedDescription('discord.command.menu') },
-  { name: 'ping', ...localizedDescription('discord.command.ping') },
-  { name: 'info', ...localizedDescription('discord.command.info') },
-  { name: 'version', ...localizedDescription('discord.command.version') },
-  {
-    name: 'language',
-    ...localizedDescription('discord.command.language'),
-    options: [{
-      type: 3,
-      name: 'value',
-      description: translate('es', 'discord.command.language.value'),
-      description_localizations: {
-        'en-US': translate('en', 'discord.command.language.value'),
-        'en-GB': translate('en', 'discord.command.language.value'),
-        'es-ES': translate('es', 'discord.command.language.value'),
-        'es-419': translate('es', 'discord.command.language.value'),
-      },
-      required: false,
-      max_length: 100,
-    }],
-  },
-  {
-    name: 'vk',
-    ...localizedDescription('discord.command.vk'),
-    options: [{
-      type: 3,
-      name: 'url',
-      description: translate('es', 'discord.command.vk.url'),
-      description_localizations: {
-        'en-US': translate('en', 'discord.command.vk.url'),
-        'en-GB': translate('en', 'discord.command.vk.url'),
-        'es-ES': translate('es', 'discord.command.vk.url'),
-        'es-419': translate('es', 'discord.command.vk.url'),
-      },
-      required: true,
-      max_length: 1900,
-    }],
-  },
-  {
-    name: 'apkmirror',
-    ...localizedDescription('discord.command.apkmirror'),
-    options: [{
-      type: 3,
-      name: 'query',
-      description: translate('es', 'discord.command.query'),
-      description_localizations: {
-        'en-US': translate('en', 'discord.command.query'),
-        'en-GB': translate('en', 'discord.command.query'),
-        'es-ES': translate('es', 'discord.command.query'),
-        'es-419': translate('es', 'discord.command.query'),
-      },
-      required: true,
-      max_length: 200,
-    }],
-  },
-  {
-    name: 'apkpure',
-    ...localizedDescription('discord.command.apkpure'),
-    options: [{
-      type: 3,
-      name: 'query',
-      description: translate('es', 'discord.command.query'),
-      description_localizations: {
-        'en-US': translate('en', 'discord.command.query'),
-        'en-GB': translate('en', 'discord.command.query'),
-        'es-ES': translate('es', 'discord.command.query'),
-        'es-419': translate('es', 'discord.command.query'),
-      },
-      required: true,
-      max_length: 200,
-    }],
-  },
-  { name: 'providerhealth', ...localizedDescription('discord.command.providerhealth') },
-  { name: 'discordstatus', ...localizedDescription('discord.command.status') },
-]
+export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = discordSlashCommandTokens()
+  .flatMap((token): DiscordApplicationCommandDefinition[] => {
+    const metadata = commandMetadataForPlatformToken('discord', token)
+    if (!metadata) return []
+    const options = metadata.arguments.map((argument) => ({
+      type: 3 as const,
+      name: argument.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32),
+      ...localizedSlashDescription(argument.description || argument.name, argument.descriptionKey),
+      required: argument.required === true,
+      ...(argument.maxLength ? { max_length: argument.maxLength } : {}),
+    }))
+    return [{
+      name: token,
+      ...localizedSlashDescription(metadata.description, metadata.descriptionKey),
+      ...(options.length ? { options } : {}),
+    }]
+  })
 
 type Invocation = {
   command: string
@@ -242,18 +194,24 @@ export class DiscordCommandRouter {
   }
 
   private async help(invocation: Invocation, locale: LocaleCode) {
+    const visibility = {
+      isOwner: discordOwner(invocation.user.id),
+      isStaff: discordStaff(invocation.user.id),
+      isGroup: Boolean(invocation.guildId),
+    }
+    const items = platformCommandMetadata('discord')
+      .filter((metadata) => commandMetadataVisibleTo(metadata, visibility))
+      .map((metadata) => ({
+        id: metadata.name,
+        title: `/${metadata.usage || metadata.name}`,
+        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+        action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
+      }))
     const ui: NormalizedUi = {
       kind: 'list',
       title: `${config.botName} · Discord`,
       body: t(locale, 'discord.help.body'),
-      items: [
-        { id: 'ping', title: '/ping', description: t(locale, 'discord.help.ping'), action: { kind: 'command', label: 'Ping', value: 'ping' } },
-        { id: 'info', title: '/info', description: t(locale, 'discord.help.info'), action: { kind: 'command', label: t(locale, 'common.information'), value: 'info' } },
-        { id: 'language', title: '/language', description: t(locale, 'discord.help.language'), action: { kind: 'command', label: localeName(locale, locale), value: 'language' } },
-        { id: 'vk', title: '/vk', description: t(locale, 'discord.help.vk') },
-        { id: 'am', title: '/apkmirror', description: t(locale, 'discord.help.apkmirror') },
-        { id: 'ap', title: '/apkpure', description: t(locale, 'discord.help.apkpure') },
-      ],
+      items,
     }
     await this.adapter.sendUi(invocation.channelId, ui, invocation.messageId ? { replyTo: invocation.messageId } : undefined)
   }

@@ -4,13 +4,14 @@ import { config } from '../config.js'
 import { COIN_NAME, COIN_SYMBOL } from '../services/economy.js'
 import { professionsV2 } from '../services/professions-v2.js'
 import { isPrivateChatApproved } from '../services/private-chat-policy.js'
-import { effectiveCommands } from '../services/menu-registry.js'
+import { effectiveCommandMetadata } from '../services/menu-registry.js'
 import { sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
 import { commandRuntimeDecision } from '../services/command-runtime-config.js'
 import { localeName } from '../i18n/index.js'
+import type { CommandMetadata } from '../services/command-metadata.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 import { valleyCompatV21Commands } from './valley-compat-v21.js'
 import { editCommands } from './edit.js'
@@ -48,7 +49,7 @@ const interactiveGameCatalog = [
   { command: 'snake', icon: '🐍', label: 'Snake', descriptionKey: 'games.catalog.snake' },
 ] as const
 
-function sectionFor(command: BotCommand): SectionId {
+function sectionFor(command: Pick<CommandMetadata, 'name' | 'category'>): SectionId {
   const name = command.name.toLowerCase()
   if (name === 'mc' || name.startsWith('mc')) return 'minecraft'
   if (sets.knowledge.has(name)) return 'knowledge'
@@ -73,22 +74,22 @@ function sectionFor(command: BotCommand): SectionId {
   return 'other'
 }
 
-function visible(ctx: LegacyCompatibleCommandContext, command: BotCommand) {
-  if (command.ownerOnly && !ctx.isOwner) return false
-  if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
+function visible(ctx: LegacyCompatibleCommandContext, command: CommandMetadata) {
+  if (command.permissions.ownerOnly && !ctx.isOwner) return false
+  if (command.permissions.staffOnly && !ctx.isBotStaff && !(command.permissions.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
   return true
 }
 
-function restrictionLabel(ctx: LegacyCompatibleCommandContext, command: BotCommand) {
+function restrictionLabel(ctx: LegacyCompatibleCommandContext, command: CommandMetadata) {
   return [
-    command.groupOnly ? ctx.t('menu.restriction.group') : '',
-    command.adminOnly ? ctx.t('menu.restriction.admin') : '',
-    command.staffOnly ? ctx.t('menu.restriction.staff') : '',
-    command.ownerOnly ? ctx.t('menu.restriction.owner') : '',
+    command.permissions.groupOnly ? ctx.t('menu.restriction.group') : '',
+    command.permissions.adminOnly ? ctx.t('menu.restriction.admin') : '',
+    command.permissions.staffOnly ? ctx.t('menu.restriction.staff') : '',
+    command.permissions.ownerOnly ? ctx.t('menu.restriction.owner') : '',
   ].filter(Boolean).join('/')
 }
 
-function renderTokens(ctx: LegacyCompatibleCommandContext, command: BotCommand, tokens: string[]) {
+function renderTokens(ctx: LegacyCompatibleCommandContext, command: CommandMetadata, tokens: string[]) {
   const usage = command.usage?.trim()
   const primary = usage ? `${ctx.prefix}${usage}` : `${ctx.prefix}${command.name}`
   const aliases = tokens
@@ -208,11 +209,11 @@ async function menu(ctx: LegacyCompatibleCommandContext) {
   const visual = await currentVisualIdentity(ctx)
   const groupAdmin = ctx.isGroup ? await isGroupAdministrator(ctx).catch(() => false) : false
   const groupPolicyBypass = ctx.isOwner || ctx.isBotStaff || ctx.isSubbotOwner || groupAdmin
-  const menuRows = effectiveCommands().filter((row) => {
-    if (!visible(ctx, row.command)) return false
+  const menuRows = effectiveCommandMetadata().filter((row) => {
+    if (!visible(ctx, row.metadata)) return false
     const runtime = commandRuntimeDecision({
-      commandName: row.command.name,
-      category: row.command.category,
+      commandName: row.metadata.name,
+      category: row.metadata.category,
       platform: 'whatsapp',
       isGroup: ctx.isGroup,
       userId: ctx.sender,
@@ -223,11 +224,11 @@ async function menu(ctx: LegacyCompatibleCommandContext) {
     })
     if (!runtime.allowed) return false
     if (!ctx.isGroup || groupPolicyBypass) return true
-    return isGroupCommandCategoryAllowed(ctx.chatId, row.command.category)
+    return isGroupCommandCategoryAllowed(ctx.chatId, row.metadata.category)
   })
   const grouped = new Map<SectionId, string[]>()
   for (const id of sectionOrder) grouped.set(id, [])
-  for (const row of menuRows) grouped.get(sectionFor(row.command))!.push(renderTokens(ctx, row.command, row.tokens))
+  for (const row of menuRows) grouped.get(sectionFor(row.metadata))!.push(renderTokens(ctx, row.metadata, row.tokens))
 
   const sections = sectionOrder.flatMap((id) => {
     const rows = grouped.get(id) ?? []

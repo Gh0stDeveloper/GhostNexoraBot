@@ -68,6 +68,16 @@ export const messages: TranslationCatalog = {
   'telegram.status.channel': 'Canal configurado: {value}',
   'telegram.error.public': 'Error: {error}',
 
+  'telegram.command.help': 'Muestra los comandos disponibles en Telegram.',
+  'telegram.command.ping': 'Comprueba latencia y estado del runtime Telegram.',
+  'telegram.command.info': 'Muestra información de Ghost Nexora Bot.',
+  'telegram.command.language': 'Configura idioma personal, del chat o de la plataforma.',
+  'telegram.command.vk': 'Descarga un video público de VK/VK Video.',
+  'telegram.command.apkmirror': 'Busca una aplicación en APKMirror.',
+  'telegram.command.apkpure': 'Busca una aplicación en APKPure.',
+  'telegram.command.providerhealth': 'Estado de providers V2. Requiere staff.',
+  'telegram.command.status': 'Estado técnico del runtime Telegram. Requiere owner.',
+
   'discord.help.body': 'Plataforma Discord nativa V2. Usa slash commands o menciona al bot; el prefijo también funciona cuando MESSAGE_CONTENT está habilitado.',
   'discord.help.ping': 'Comprueba Gateway + REST.',
   'discord.help.info': 'Información del runtime Discord.',

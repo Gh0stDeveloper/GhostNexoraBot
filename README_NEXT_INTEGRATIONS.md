@@ -342,7 +342,7 @@ Cierre B2:
 
 ## B3. Metadata central de comandos
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Extender el registro de comandos para incluir:
 
@@ -363,6 +363,28 @@ La metadata central debe alimentar:
 - slash commands;
 - documentación;
 - dashboard de comandos.
+
+Implementación B3:
+
+- nuevo registro central `services/command-metadata.ts`;
+- `BotCommand` declara plataformas, argumentos estructurados, capacidades requeridas y visibilidad documental;
+- aliases nativos y disponibilidad Discord/Telegram salen del mismo registro central;
+- `commandPlatformSupport` deja de mantener su propio inventario y pasa a ser una proyección del registro B3;
+- menú dinámico de WhatsApp y buscador de comandos consumen metadata normalizada;
+- ayuda de Discord y Telegram se genera desde `platformCommandMetadata` y respeta permisos;
+- definiciones slash de Discord toman descripción y argumentos del registro B3, conservando temporalmente la política de qué slash registrar hasta C1;
+- las superficies generadas conservan localización ES/EN mediante claves i18n almacenadas en la metadata central;
+- Operations Center persiste y muestra aliases, uso, argumentos, permisos, capacidades y plataformas;
+- gate dedicado `scripts/phase-b3-command-metadata-smoke.mjs` integrado al CI.
+
+Cierre B3:
+
+- Typecheck y Build completos validados después de centralizar la metadata;
+- smoke B1 y B2 continúan en verde, preservando la frontera neutral/legacy;
+- smoke B3 valida contrato, consumidores, slash/help, persistencia y dashboard;
+- E5 Command Center continúa en verde usando la nueva proyección de metadata;
+- gates legacy de Operations y WhatsApp actualizados para validar `effectiveCommandMetadata` y el helper neutral B1 sin exigir la arquitectura anterior;
+- PR de cierre: #83 `feat: complete Phase B3 central command metadata`;
 
 ## B4. Capability-aware command execution
 
@@ -1496,7 +1518,10 @@ Estas tareas están incluidas dentro de las fases anteriores:
 |---|---|---|---|---|
 | 2026-09-18 | Plan general | Se crea este roadmap de próximas integraciones | TERMINADO | — |
 | 2026-09-18 | Fase A | Login, roles, sesiones, Passkeys, TOTP y seguridad Web | TERMINADO | PR #75 · c01c0ee61726fd4325a6fc60bd62108a880684e4 |
-| — | Fase B | Núcleo multiplataforma | PENDIENTE | — |
+| 2026-09-19 | Fase B | Núcleo multiplataforma · B1–B3 completadas | EN PROGRESO | PR #83 |
+| 2026-09-19 | Fase B1 | CommandContext neutral y frontera legacy WhatsApp | TERMINADO | 0f4d48dc1cf4120fd1a1b7169a8bdedb16f35c52 |
+| 2026-09-19 | Fase B2 | Shared Command Engine para WhatsApp/Discord/Telegram | TERMINADO | 95bac21414c2b4f5f6256763b196dc7031037e54 |
+| 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
@@ -1515,13 +1540,15 @@ Estas tareas están incluidas dentro de las fases anteriores:
 
 # Próximo paso
 
-**FASE E — Dashboard Web V2 está TERMINADA (E0–E14).**
+**FASE B está EN PROGRESO con B1, B2 y B3 terminadas.**
 
-La siguiente fase nueva del roadmap es **FASE F — Observabilidad, métricas y operación**, comenzando por **F1 · PlatformRuntimeRegistry**.
+El siguiente trabajo acordado es **B4 · Capability-aware command execution**.
 
-No iniciar Fase F automáticamente sin indicación del usuario.
+B4 debe hacer que cada comando declare las capacidades que necesita y que el motor aplique fallbacks cuando una plataforma no soporte una UI u operación nativa, sin duplicar handlers.
 
-Las fases B, C y D quedan pospuestas hasta nueva indicación.
+No iniciar B4 automáticamente sin indicación del usuario.
+
+Las fases C y D permanecen pospuestas. La Fase F sigue pendiente para cuando corresponda retomarla.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
