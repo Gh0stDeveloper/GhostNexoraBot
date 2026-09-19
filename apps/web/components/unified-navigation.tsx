@@ -15,6 +15,7 @@ import {
   Menu,
   Settings,
   ShieldCheck,
+  ScrollText,
   SquareTerminal,
   UserRound,
   UsersRound,
@@ -38,6 +39,7 @@ export type UnifiedNavIcon =
   | 'groups'
   | 'users'
   | 'economy'
+  | 'logs'
   | 'audit'
   | 'diagnostics'
   | 'settings'
@@ -66,6 +68,7 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   groups: UsersRound,
   users: UserRound,
   economy: Coins,
+  logs: ScrollText,
   audit: Gauge,
   diagnostics: Wrench,
   settings: Settings,
