@@ -42,14 +42,14 @@ jobs:
       - name: Phase E1 unified navigation smoke
         run: node scripts/phase-e1-unified-navigation-smoke.mjs
 
-      - name: Phase E1 unified navigation smoke
-        run: node scripts/phase-e1-unified-navigation-smoke.mjs
-
       - name: Phase E2 operations diagnostics smoke
         run: node scripts/phase-e2-operations-diagnostics-smoke.mjs
 
       - name: Phase E3 platforms dashboard smoke
         run: node scripts/phase-e3-platforms-dashboard-smoke.mjs
+
+      - name: Phase E4 providers dashboard smoke
+        run: node scripts/phase-e4-providers-dashboard-smoke.mjs
 
 
       - name: Spotify, anime, adult permissions and Windows installer smoke
