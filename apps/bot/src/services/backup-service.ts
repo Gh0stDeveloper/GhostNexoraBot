@@ -188,6 +188,7 @@ function selectedTables(type: BackupType) {
   if (type === 'economy') {
     return names.filter((name) =>
       /^economy_/.test(name)
+      || /^global_economy_/.test(name)
       || /^rpg_/.test(name)
       || /^bank/.test(name)
       || /^mining/.test(name)
@@ -403,9 +404,12 @@ export async function createOperationalBackup(
       files.push(...await subbotLocalFiles(tempDir))
       files.push(...await sessionFiles())
     } else if (type === 'economy') {
-      const walletSnapshot = path.join(tempDir, 'nexora-economy.sqlite')
-      snapshotDatabase(walletSnapshot, economy.walletDb)
-      files.push(await encodedFile('nexora-economy.sqlite', walletSnapshot))
+      const sameDatabase = path.resolve(economy.file) === path.resolve(economy.walletFile)
+      if (!sameDatabase) {
+        const walletSnapshot = path.join(tempDir, 'nexora-economy.sqlite')
+        snapshotDatabase(walletSnapshot, economy.walletDb)
+        files.push(await encodedFile('nexora-economy.sqlite', walletSnapshot))
+      }
       tables = snapshotTables(type)
     } else if (type === 'configuration') {
       if (existsSync(settingsFile())) files.push(await encodedFile('settings.json', settingsFile()))
@@ -535,8 +539,8 @@ async function readAndValidateArchive(fileName: string): Promise<ValidatedArchiv
     if (!decoded.has('ghostnexora.sqlite')) throw new Error('El backup legacy no contiene ghostnexora.sqlite.')
   } else if (type === 'full' && !decoded.has('ghostnexora.sqlite')) {
     throw new Error('El backup completo no contiene ghostnexora.sqlite.')
-  } else if (type === 'economy' && !decoded.has('nexora-economy.sqlite')) {
-    throw new Error('El backup de economía no contiene nexora-economy.sqlite.')
+  } else if (type === 'economy' && !decoded.has('nexora-economy.sqlite') && !tables.length) {
+    throw new Error('El backup de economía no contiene datos restaurables.')
   } else if (type === 'configuration' && !decoded.size && !tables.length) {
     throw new Error('El backup de configuración está vacío.')
   } else if ((type === 'groups' || type === 'subbots') && !tables.length) {
