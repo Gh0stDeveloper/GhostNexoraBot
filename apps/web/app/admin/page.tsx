@@ -1,4 +1,4 @@
-import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, Settings, ShieldCheck, UserPlus, UsersRound, Wrench } from 'lucide-react'
+import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, ServerCog, Settings, ShieldCheck, UserPlus, UsersRound, Wrench } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { BackupPanel } from '../../components/backup-panel'
@@ -8,6 +8,7 @@ import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { PlatformsDashboard } from '../../components/platforms-dashboard'
+import { ProvidersDashboard } from '../../components/providers-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
 import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
@@ -30,12 +31,13 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'providers' | 'groups' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
     ['overview', t('nav.overview'), LayoutDashboard],
     ['platforms', t('nav.platforms'), Activity],
+    ['providers', t('nav.providers'), ServerCog],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
@@ -49,8 +51,8 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security']
-    : ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'security']
+    ? ['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security']
+    : ['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
 
@@ -107,6 +109,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const navIcon: Record<AdminSection, UnifiedNavIcon> = {
     overview: 'dashboard',
     platforms: 'platforms',
+    providers: 'providers',
     groups: 'groups',
     audit: 'audit',
     diagnostics: 'diagnostics',
@@ -194,6 +197,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           focus={focusedPlatform}
           logs={logsPlatform}
         />
+      </div>}
+
+      {section === 'providers' && <div className="mt-6">
+        <ProvidersDashboard providers={snapshot.providers} instanceLabel={instanceLabel} locale={locale}/>
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
