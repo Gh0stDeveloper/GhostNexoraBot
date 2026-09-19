@@ -1,6 +1,6 @@
 import { jidNormalizedUser, type GroupParticipant, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
@@ -139,13 +139,31 @@ export class CommandRouter {
     })
     performanceAudit.recordStage('03', performance.now() - stateStarted)
 
+    const currentReplyTo = normalizedMessage.messageId || undefined
+    const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
+      ...options,
+      replyTo: options?.replyTo ?? currentReplyTo,
+    })
+    const sendText: LegacyCompatibleCommandContext['sendText'] = (value, options) =>
+      adapter.sendText(chatId, value, withCurrentReply(options))
+    const sendMedia: LegacyCompatibleCommandContext['sendMedia'] = (media, options) =>
+      adapter.sendMedia(chatId, media, withCurrentReply(options))
+    const sendUi: LegacyCompatibleCommandContext['sendUi'] = (ui, options) =>
+      adapter.sendUi(chatId, ui, withCurrentReply(options))
+    const setTyping: LegacyCompatibleCommandContext['setTyping'] = async (active) => {
+      if (adapter.setTyping) await adapter.setTyping(chatId, active)
+    }
+    const editMessage: LegacyCompatibleCommandContext['editMessage'] = async (messageId, value) => {
+      if (!adapter.editMessage) throw new Error(`La plataforma ${adapter.id} no soporta edición de mensajes.`)
+      await adapter.editMessage(chatId, messageId, value)
+    }
     const reply = async (replyText: string) => {
-      const sent = await adapter.sendText(chatId, replyText, { replyTo: message.key.id ?? undefined })
+      const sent = await sendText(replyText)
       return sent.raw
     }
     const react = async (emoji: string) => {
-      const messageId = message.key.id
-      if (!messageId) return undefined
+      const messageId = normalizedMessage.messageId
+      if (!messageId || !adapter.react) return undefined
       return adapter.react(chatId, messageId, emoji)
     }
 
@@ -305,7 +323,7 @@ export class CommandRouter {
       }
       finishFilters()
 
-      const context: CommandContext = {
+      const context: LegacyCompatibleCommandContext = {
         platform: 'whatsapp',
         adapter,
         normalizedMessage,
@@ -329,6 +347,11 @@ export class CommandRouter {
         instanceOwnerJid: this.options.instanceOwnerJid,
         reply,
         react,
+        sendText,
+        sendMedia,
+        sendUi,
+        setTyping,
+        editMessage,
       }
 
       const executionStarted = performance.now()
