@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { BotCommand } from '../types.js'
+import type { NeutralBotCommand } from '../types.js'
 import { config } from '../config.js'
 import { runSpeedTest, systemSnapshot } from '../services/system.js'
 import { createOpsJob } from '../services/ops-jobs.js'
 
-export const systemCommands: BotCommand[] = [
+export const systemCommands: NeutralBotCommand[] = [
   {
     name: 'system', aliases: ['sys', 'vps'], category: 'owner', staffOnly: true,
     description: 'Muestra información operativa de la VPS sin exponer credenciales ni IP pública.',
