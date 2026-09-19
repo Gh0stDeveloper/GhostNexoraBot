@@ -58,7 +58,9 @@ function parseCommand(text: string, botUsername?: string) {
   const prefix = clean.startsWith('/') ? '/' : clean.startsWith(settings.prefix) ? settings.prefix : ''
   if (!prefix) return undefined
   const firstSpace = clean.search(/\s/)
-  const head = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).slice(prefix.length)
+  const head = (firstSpace < 0 ? clean : clean.slice(0, firstSpace))
+    .slice(prefix.length)
+    .replace(/^\/+/, '')
   const [rawName, mention] = head.split('@', 2)
   if (mention && botUsername && mention.toLowerCase() !== botUsername.toLowerCase()) return undefined
   const command = aliases.get(rawName.toLowerCase())
