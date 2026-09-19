@@ -1,6 +1,6 @@
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
-import { trackedProviderCall } from './provider-health.js'
+import { recordProviderAttempt, trackedProviderCall } from './provider-health.js'
 
 export type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 type OpenRouterResponse = { model?: string; choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>; error?: { message?: string; code?: string | number } }
@@ -22,14 +22,21 @@ export async function getAIStatus() {
   if (!configured) return { ...base, auth: 'missing' as const }
   if (!isOpenRouter()) return { ...base, auth: 'not-checked' as const }
   if (!openRouterKeyShape()) return { ...base, auth: 'invalid-format' as const }
-  const { response, payload } = await trackedProviderCall('openrouter', async () => {
+  const started = performance.now()
+  try {
     const response = await fetch('https://openrouter.ai/api/v1/key', { headers: { authorization: `Bearer ${apiKey()}`, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) })
     const type = response.headers.get('content-type') ?? ''
     const payload = type.includes('json') ? await response.json() as OpenRouterKeyResponse : undefined
-    if (!response.ok) throw new Error(`openrouter_key_http_${response.status}`)
-    return { response, payload }
-  }, { label: 'OpenRouter' })
-  return { ...base, auth: 'valid' as const, freeTier: payload?.data?.is_free_tier, managementKey: payload?.data?.is_management_key, limit: payload?.data?.limit, limitRemaining: payload?.data?.limit_remaining, limitReset: payload?.data?.limit_reset, expiresAt: payload?.data?.expires_at }
+    if (!response.ok) {
+      try { recordProviderAttempt('openrouter', { ok: false, latencyMs: performance.now() - started, label: 'OpenRouter', errorCode: `key_http_${response.status}` }) } catch {}
+      return { ...base, auth: 'rejected' as const, httpStatus: response.status, detail: payload?.error?.message || `HTTP ${response.status}` }
+    }
+    try { recordProviderAttempt('openrouter', { ok: true, latencyMs: performance.now() - started, label: 'OpenRouter' }) } catch {}
+    return { ...base, auth: 'valid' as const, freeTier: payload?.data?.is_free_tier, managementKey: payload?.data?.is_management_key, limit: payload?.data?.limit, limitRemaining: payload?.data?.limit_remaining, limitReset: payload?.data?.limit_reset, expiresAt: payload?.data?.expires_at }
+  } catch (error) {
+    try { recordProviderAttempt('openrouter', { ok: false, latencyMs: performance.now() - started, label: 'OpenRouter', errorCode: error instanceof Error ? error.message : 'status_failed' }) } catch {}
+    return { ...base, auth: 'rejected' as const, detail: 'request_failed' }
+  }
 }
 export async function askAI(messages: AiMessage[], maxTokens = 1600) {
   const key = apiKey(); if (!key) throw new Error('La IA todavía no está configurada por el administrador.')
