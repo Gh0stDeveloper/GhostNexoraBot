@@ -175,7 +175,7 @@ export function createOpsJob(input: {
     },
     update(progress: number, detail?: string) {
       if (terminal) return
-      updateJob(id, { status: 'running', progress, detail: detail ?? undefined, startedAt: Date.now() })
+      updateJob(id, { status: 'running', progress, detail: detail ?? undefined })
     },
     complete(detail?: string) {
       if (terminal) return
