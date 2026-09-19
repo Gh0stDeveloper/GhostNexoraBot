@@ -1,4 +1,4 @@
-import type { BotCommand } from '../types.js'
+import type { NeutralBotCommand } from '../types.js'
 
 const OWNER_URL = 'https://github.com/Gh0stDeveloper'
 const PROJECT_URL = 'https://github.com/Gh0stDeveloper/GhostNexoraBot'
@@ -7,7 +7,7 @@ const OWNER_TELEGRAM = 'https://t.me/Gh0stDeveloper'
 const LORD_OSCAR_URL = 'https://github.com/Lord-oscar'
 const WAKASAURIO_URL = 'https://github.com/Wakasaurio'
 
-export const creditsCommands: BotCommand[] = [
+export const creditsCommands: NeutralBotCommand[] = [
   {
     name: 'credits',
     aliases: ['creditos', 'colaboradores', 'team'],
