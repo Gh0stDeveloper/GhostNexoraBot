@@ -262,6 +262,33 @@ async function sessionFiles() {
   return files
 }
 
+async function subbotLocalFiles(tempDir: string) {
+  const output: BackupFile[] = []
+  const root = path.join(config.dataDir, 'subbots')
+  if (!existsSync(root)) return output
+  const entries = await readdir(root, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue
+    const instanceRoot = path.join(root, entry.name)
+    const localDb = path.join(instanceRoot, 'ghostnexora.sqlite')
+    if (existsSync(localDb)) {
+      const snapshot = path.join(tempDir, `subbot-${entry.name}.sqlite`)
+      const db = new DatabaseSync(localDb)
+      try {
+        db.exec(`VACUUM INTO '${sqlPath(snapshot)}'`)
+      } finally {
+        db.close()
+      }
+      output.push(await encodedFile(`subbots/${entry.name}/ghostnexora.sqlite`, snapshot))
+    }
+    const localSettings = path.join(instanceRoot, 'settings.json')
+    if (existsSync(localSettings)) {
+      output.push(await encodedFile(`subbots/${entry.name}/settings.json`, localSettings))
+    }
+  }
+  return output
+}
+
 function archiveType(archive: BackupArchiveCandidate): BackupType {
   if (archive.schemaVersion === 1) return 'full'
   if (archive.schemaVersion === 2 && validType(archive.backupType)) return archive.backupType
@@ -352,6 +379,7 @@ export async function createOperationalBackup(
         files.push(await encodedFile('nexora-economy.sqlite', walletSnapshot))
       }
       if (existsSync(settingsFile())) files.push(await encodedFile('settings.json', settingsFile()))
+      files.push(...await subbotLocalFiles(tempDir))
       files.push(...await sessionFiles())
     } else if (type === 'economy') {
       const walletSnapshot = path.join(tempDir, 'nexora-economy.sqlite')
@@ -364,6 +392,10 @@ export async function createOperationalBackup(
     } else if (type === 'sessions') {
       files.push(...await sessionFiles())
       if (!files.length) throw new Error('No hay sesiones disponibles para respaldar.')
+    } else if (type === 'subbots') {
+      tables = snapshotTables(type)
+      files.push(...await subbotLocalFiles(tempDir))
+      if (!tables.length && !files.length) throw new Error('No hay datos de subbots disponibles para respaldar.')
     } else {
       tables = snapshotTables(type)
       if (!tables.length) throw new Error(`No hay datos disponibles para el backup de tipo ${type}.`)
@@ -541,9 +573,13 @@ function targetForArchiveFile(name: string) {
     const relative = name.slice('sessions/main/'.length)
     return path.join(config.sessionDir, ...relative.split('/'))
   }
-  const match = /^sessions\/subbots\/(\d+)\/(.+)$/.exec(name)
-  if (match?.[1] && match[2]) {
-    return path.join(config.dataDir, 'subbots', match[1], 'session', ...match[2].split('/'))
+  const sessionMatch = /^sessions\/subbots\/(\d+)\/(.+)$/.exec(name)
+  if (sessionMatch?.[1] && sessionMatch[2]) {
+    return path.join(config.dataDir, 'subbots', sessionMatch[1], 'session', ...sessionMatch[2].split('/'))
+  }
+  const subbotMatch = /^subbots\/(\d+)\/(ghostnexora\.sqlite|settings\.json)$/.exec(name)
+  if (subbotMatch?.[1] && subbotMatch[2]) {
+    return path.join(config.dataDir, 'subbots', subbotMatch[1], subbotMatch[2])
   }
   throw new Error(`Archivo no restaurable: ${name}`)
 }
