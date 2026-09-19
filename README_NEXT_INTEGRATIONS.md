@@ -902,7 +902,7 @@ Cierre:
 
 ## E8. Dashboard de usuarios
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Buscar por:
 
@@ -923,6 +923,20 @@ Mostrar, según permisos:
 - warnings;
 - ban;
 - subbots.
+
+Implementación E8 en validación:
+
+- nueva sección `Usuarios` en Operations Center;
+- búsqueda por número, JID o `display_name` observado por la telemetría;
+- resultados y ficha filtrados por la instancia seleccionada;
+- Owner puede seleccionar MainBot/subbots; Admin y Support permanecen limitados a MainBot;
+- XP, nivel y comandos desde perfiles locales de la instancia;
+- grupos y actividad por usuario desde tablas de actividad locales;
+- warnings por grupo para roles con permiso de moderación;
+- cartera y banco leídos directamente desde la economía global compartida, sólo para Owner;
+- inventario y subbots visibles únicamente con permisos específicos;
+- estado de ban distingue entre activo, sin ban y registro de bans no disponible;
+- smoke dedicado `scripts/phase-e8-user-dashboard-smoke.mjs` integrado al CI.
 
 ## E9. Ledger de economía
 
