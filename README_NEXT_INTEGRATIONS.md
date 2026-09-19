@@ -1006,7 +1006,7 @@ Cierre:
 
 ## E10. Logs en tiempo real
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Filtros:
 
@@ -1026,6 +1026,23 @@ Sanitizar antes de mostrar:
 - cookies;
 - credenciales;
 - session IDs.
+
+Implementación E10 en validación:
+
+- `ops_runtime_logs` ampliado con categoría indexada y migración compatible con instalaciones existentes;
+- sanitización antes de persistir: secrets configurados, Bearer/Basic, query tokens, API keys, passwords, cookies, session IDs y JWT;
+- segunda sanitización defensiva al leer desde Web;
+- retención limitada a 72 horas y máximo 1,000 eventos por instancia;
+- stream incremental por ID mediante `/api/ops/logs`, sin cache y con aislamiento de sesión;
+- polling live cada 3 segundos, con pausa manual y pausa automática cuando la pestaña no está visible;
+- filtros Todos, WhatsApp, Discord, Telegram, Errores, Downloads, API y Comandos;
+- filtro adicional por nivel y búsqueda por fuente/evento;
+- contadores de eventos, errores, warnings, comandos, API y downloads de la última hora;
+- comandos registran únicamente nombre, resultado y duración; no se conserva texto ni argumentos del usuario;
+- providers registran nombre, latencia y código de error sanitizado;
+- sección `Logs` para Owner/Admin/Support y portal de subbot;
+- Owner puede cambiar de instancia; Admin/Support quedan en MainBot; un subbot sólo consulta su propia instancia;
+- smoke dedicado E10 integrado al CI.
 
 ## E11. Jobs activos
 
