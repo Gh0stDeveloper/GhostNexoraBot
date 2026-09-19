@@ -93,6 +93,7 @@ export type OpsRequest = {
 
 export type OpsRuntimeStatus = {
   connected: boolean
+  reportedConnected: boolean
   registered: boolean
   groupCount: number
   connectedAt: number
@@ -218,6 +219,7 @@ function empty(instanceKey: string): OpsSnapshot {
     instanceKey,
     runtime: {
       connected: false,
+      reportedConnected: false,
       registered: false,
       groupCount: 0,
       connectedAt: 0,
@@ -405,8 +407,10 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
       if (row) {
         const updatedAt = Number(row.updatedAt ?? 0)
         const fresh = updatedAt > 0 && Date.now() - updatedAt < 180_000
+        const reportedConnected = Boolean(row.connected)
         snapshot.runtime = {
-          connected: Boolean(row.connected) && fresh,
+          connected: reportedConnected && fresh,
+          reportedConnected,
           registered: Boolean(row.registered),
           groupCount: Number(row.groupCount ?? 0),
           connectedAt: Number(row.connectedAt ?? 0),
