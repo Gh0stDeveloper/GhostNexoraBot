@@ -17,13 +17,14 @@ const files = {
   runtime: await source('apps/bot/src/platform/discord/runtime.ts'),
   sharedCommands: await source('apps/bot/src/commands/shared-neutral.ts'),
   generalCommands: await source('apps/bot/src/commands/general.ts'),
+  commandMetadata: await source('apps/bot/src/services/command-metadata.ts'),
   index: await source('apps/bot/src/index.ts'),
   env: await source('.env.example'),
   contracts: await source('packages/platform-contracts/src/index.ts'),
 }
 
 for (const [name, content] of Object.entries(files)) {
-  if (['index', 'contracts', 'env', 'sharedCommands', 'generalCommands'].includes(name)) continue
+  if (['index', 'contracts', 'env', 'sharedCommands', 'generalCommands', 'commandMetadata'].includes(name)) continue
   assert.equal(/from ['"]baileys['"]/.test(content), false, `Discord ${name} must not depend on Baileys`)
   assert.equal(content.includes('TELEGRAM_BOT_TOKEN'), false, `Discord ${name} must not consume Telegram credentials`)
 }
@@ -66,9 +67,9 @@ assert.ok(files.router.includes('searchApkMirror'))
 assert.ok(files.router.includes('searchApkPure'))
 assert.ok(files.generalCommands.includes("name: 'ping'"), 'ping must remain declared in the shared neutral command catalog')
 assert.ok(files.sharedCommands.includes('generalCommands'), 'Discord must inherit ping/info from the shared neutral command catalog')
-assert.ok(files.router.includes("name: 'vk'"))
-assert.ok(files.router.includes("name: 'apkmirror'"))
-assert.ok(files.router.includes("name: 'apkpure'"))
+assert.ok(files.commandMetadata.includes("name: 'vk'"), 'VK must remain declared in central command metadata')
+assert.ok(files.commandMetadata.includes("name: 'apkmirror'"), 'APKMirror must remain declared in central command metadata')
+assert.ok(files.commandMetadata.includes("name: 'apkpure'"), 'APKPure must remain declared in central command metadata')
 assert.ok(files.router.includes('discordStaff'))
 assert.ok(files.router.includes('discordOwner'))
 
