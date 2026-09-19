@@ -20,6 +20,7 @@ import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../serv
 import { createV2WaifuRoll, jikanCharacter, jikanSearchCharacters } from '../services/jikan-v2.js'
 import { getClaim, giveWaifu, listHarem, rarityEmoji } from '../services/waifu.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
+import { createOpsJob } from '../services/ops-jobs.js'
 
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
 const waitText = (ms: number) => `${Math.max(1, Math.ceil(ms / 1000))} s`
@@ -480,16 +481,44 @@ async function kickStickerCommand(ctx: CommandContext) {
 async function broadcastCommand(ctx: CommandContext) {
   const text = ctx.argText.trim()
   if (!text) throw new Error(`Uso: ${ctx.prefix}broadcast <mensaje>`)
-  const groups = await ctx.socket.groupFetchAllParticipating()
+  const groups = Object.values(await ctx.socket.groupFetchAllParticipating())
+  const job = createOpsJob({
+    type: 'broadcast',
+    label: 'Broadcast a grupos',
+    source: 'command:broadcast',
+    cancellable: true,
+    retryable: false,
+  })
+  let cancelled = false
+  job.setCancelHandler(() => {
+    cancelled = true
+    return true
+  })
+  job.start(`groups=${groups.length}`)
+
   let sent = 0, failed = 0
-  for (const group of Object.values(groups)) {
-    try {
-      await ctx.socket.sendMessage(group.id, { text: `╭━━〔 📢 *NOVEDADES GHOST NEXORA* 〕━━╮\n${text}\n╰━━━━━━━━━━━━━━━━╯\n\n👻 Usa *${ctx.prefix}menu* para ver las funciones disponibles.` })
-      sent += 1
-    } catch { failed += 1 }
-    await new Promise((resolve) => setTimeout(resolve, 250))
+  try {
+    for (const group of groups) {
+      if (cancelled) break
+      try {
+        await ctx.socket.sendMessage(group.id, { text: `╭━━〔 📢 *NOVEDADES GHOST NEXORA* 〕━━╮\n${text}\n╰━━━━━━━━━━━━━━━━╯\n\n👻 Usa *${ctx.prefix}menu* para ver las funciones disponibles.` })
+        sent += 1
+      } catch { failed += 1 }
+      const completed = sent + failed
+      job.update(groups.length ? Math.round((completed / groups.length) * 100) : 100, `sent=${sent} · failed=${failed}`)
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    if (cancelled) {
+      job.cancelled(`sent=${sent} · failed=${failed}`)
+      await ctx.reply(`📢 Broadcast cancelado.\n✅ Grupos enviados: *${sent}*\n⚠️ Sin permiso/error: *${failed}*`)
+      return
+    }
+    job.complete(`sent=${sent} · failed=${failed}`)
+    await ctx.reply(`📢 Broadcast finalizado.\n✅ Grupos enviados: *${sent}*\n⚠️ Sin permiso/error: *${failed}*`)
+  } catch (error) {
+    job.fail(error, `sent=${sent} · failed=${failed}`)
+    throw error
   }
-  await ctx.reply(`📢 Broadcast finalizado.\n✅ Grupos enviados: *${sent}*\n⚠️ Sin permiso/error: *${failed}*`)
 }
 
 async function rulesCommand(ctx: CommandContext) {
