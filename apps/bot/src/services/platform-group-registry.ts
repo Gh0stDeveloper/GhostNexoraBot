@@ -139,3 +139,14 @@ export function removePlatformGroup(
   opsDb.prepare('DELETE FROM ops_platform_groups WHERE instance_key = ? AND platform = ? AND external_id = ?')
     .run(instanceKey, platform, externalId)
 }
+
+
+export function countPlatformGroups(
+  platform: OpsPlatform,
+  instanceKey = opsInstanceKey(),
+) {
+  const row = opsDb.prepare(`SELECT COUNT(*) AS count
+    FROM ops_platform_groups
+    WHERE instance_key = ? AND platform = ?`).get(instanceKey, platform) as { count?: number } | undefined
+  return Number(row?.count ?? 0)
+}
