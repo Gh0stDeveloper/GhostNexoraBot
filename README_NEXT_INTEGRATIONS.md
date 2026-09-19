@@ -1168,7 +1168,7 @@ Cierre:
 
 ## E13. Backups mejorados
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Añadir:
 
@@ -1189,6 +1189,25 @@ Backups por tipo:
 - sesiones;
 - grupos;
 - completo.
+
+Implementación E13 en validación:
+
+- formato de archivo v2 compatible con backups v1 existentes;
+- tipos reales `economy`, `configuration`, `subbots`, `sessions`, `groups` y `full`;
+- backups lógicos selectivos para grupos, configuración, economía local y metadatos de subbots;
+- snapshots SQLite consistentes para economía global, MainBot completo y bases locales de subbots;
+- backups de sesiones MainBot/subbots con rutas confinadas y sin seguir symlinks;
+- SHA-256 del archivo completo y hashes por archivo interno;
+- SQLite `quick_check`, validación de estructura y compatibilidad de columnas antes del restore;
+- dry-run restore que no crea plan pendiente ni reemplaza datos activos;
+- restore selectivo por tipo con rollback del archivo/base afectada;
+- backup completo con bases, configuración, subbots locales y sesiones;
+- automáticos: economía cada 6 h; configuración y completo cada 24 h;
+- retención por tipo entre 14 y 30 copias;
+- panel Web con selector de tipo, tamaño, hash, origen, contenido, descarga, verificación, dry-run y restore;
+- descargas y mutaciones protegidas por permisos Owner, CSRF y reautenticación para operaciones críticas;
+- auditoría registra tipo/ID del backup sin guardar credenciales;
+- smoke ejecutable E13 integrado al CI.
 
 ## E14. Diseño visual
 
