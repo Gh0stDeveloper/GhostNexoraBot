@@ -234,7 +234,9 @@ function localOpsAction(action: string, instance: string, payload: Record<string
       const allowPrivate = bool(payload.allowPrivate, true)
       const cooldownMs = Math.min(86_400_000, Math.max(0, Math.trunc(Number(payload.cooldownMs ?? 0) || 0)))
       const permissionModeRaw = String(payload.permissionMode ?? 'inherit').trim().toLowerCase()
-      const permissionMode = ['inherit', 'staff', 'owner'].includes(permissionModeRaw) ? permissionModeRaw : 'inherit'
+      const permissionMode = String(command.category) === 'adult'
+        ? 'inherit'
+        : ['inherit', 'staff', 'owner'].includes(permissionModeRaw) ? permissionModeRaw : 'inherit'
 
       db.prepare(`INSERT INTO ops_command_settings(
           instance_key, command_name, enabled, whatsapp, discord, telegram, cooldown_ms,
