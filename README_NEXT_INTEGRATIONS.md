@@ -302,7 +302,7 @@ Cierre B1:
 
 ## B2. Un solo Command Engine
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 El comando debe implementarse una sola vez y responder mediante una API neutral con operaciones equivalentes a:
 
@@ -327,6 +327,18 @@ Implementación B2 en validación:
 - `menu/help` permanece nativo hasta B3 para no anunciar comandos que todavía no tengan metadata central de disponibilidad;
 - Operations Center reconoce los comandos del motor compartido como disponibles en Discord y Telegram;
 - smoke B2 dedicado valida que las tres plataformas sigan entrando por el mismo motor.
+
+Cierre B2:
+
+- motor compartido: `apps/bot/src/core/shared-command-engine.ts`;
+- catálogo neutral inicial: `apps/bot/src/commands/shared-neutral.ts`;
+- WhatsApp, Discord y Telegram ejecutan el lote neutral mediante `SharedCommandEngine`;
+- compatibilidad V1 de WhatsApp permanece explícita mediante `allowLegacy`, sin contaminar el contrato neutral;
+- Discord y Telegram conservan fallback temporal únicamente para funciones nativas aún no migradas;
+- el dashboard de compatibilidad reconoce automáticamente los tokens del catálogo neutral compartido;
+- gate permanente: `scripts/phase-b2-shared-command-engine-smoke.mjs`;
+- commit de integración/CI: `b4a6f6d51673765866a33885dca197c293dadd8a`;
+- CI #3009: success, incluyendo Typecheck, Build, smoke B1, smoke B2, Windows, Termux y regresiones completas.
 
 ## B3. Metadata central de comandos
 
