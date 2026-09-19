@@ -1,6 +1,6 @@
 ﻿param(
-  [string]$InstallDir = (Join-Path $HOME 'GhostNexoraBot'),
-  [string]$StateDir = (Join-Path $env:LOCALAPPDATA 'GhostNexoraBot'),
+  [string]$InstallDir = '',
+  [string]$StateDir = '',
   [string]$Branch = 'main',
   [ValidateSet('Ask', 'Yes', 'No')]
   [string]$Web = 'Ask',
@@ -26,10 +26,12 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $RepoUrl = 'https://github.com/Gh0stDeveloper/GhostNexoraBot.git'
 $StartedAt = Get-Date
-$FirstInstall = -not (Test-Path (Join-Path $InstallDir '.git'))
+$DefaultInstallDir = Join-Path $HOME 'GhostNexoraBot'
+$DefaultStateDir = Join-Path $env:LOCALAPPDATA 'GhostNexoraBot'
+$FirstInstall = $false
 $CurrentStage = 'Inicialización'
 $CurrentStep = '0/10'
-$ErrorLog = Join-Path $StateDir 'logs\install-error.log'
+$ErrorLog = Join-Path $env:TEMP 'ghostnexora-install-error.log'
 
 function Write-Line([string]$Character = '═', [ConsoleColor]$Color = [ConsoleColor]::DarkCyan) {
   Write-Host ($Character * 70) -ForegroundColor $Color
@@ -80,6 +82,156 @@ function Read-YesNo([string]$Prompt, [bool]$DefaultNo = $true) {
     if ($value -match '^(n|no)$') { return $false }
     Write-Warn 'Respuesta no válida. Usa S o N.'
   }
+}
+
+function Resolve-FullInstallPath([string]$Value) {
+  $raw = [Environment]::ExpandEnvironmentVariables(($Value ?? '').Trim().Trim('"'))
+  if (-not $raw) { throw 'La ruta no puede estar vacía.' }
+  if (-not [IO.Path]::IsPathRooted($raw)) { $raw = Join-Path (Get-Location).Path $raw }
+  try {
+    return [IO.Path]::GetFullPath($raw).TrimEnd('\')
+  } catch {
+    throw "Ruta inválida: $Value"
+  }
+}
+
+function Current-InstallSuggestion {
+  $cwd = Resolve-FullInstallPath ((Get-Location).Path)
+  if ((Split-Path $cwd -Leaf) -ieq 'GhostNexoraBot') { return $cwd }
+  return Join-Path $cwd 'GhostNexoraBot'
+}
+
+function Suggested-StateDir([string]$CodeDir) {
+  $parent = Split-Path $CodeDir -Parent
+  if (-not $parent) { $parent = [IO.Path]::GetPathRoot($CodeDir) }
+  return Join-Path $parent 'GhostNexoraBotData'
+}
+
+function Read-CustomPath([string]$Prompt, [string]$Example) {
+  while ($true) {
+    Write-Host ("  Ejemplo: " + $Example) -ForegroundColor DarkGray
+    $raw = (Read-Host $Prompt).Trim()
+    if (-not $raw) { Write-Warn 'Debes indicar una ruta.'; continue }
+    try { return Resolve-FullInstallPath $raw }
+    catch { Write-Warn $_.Exception.Message }
+  }
+}
+
+function Existing-InstallCandidates {
+  $values = @(
+    [Environment]::GetEnvironmentVariable('GHOST_NEXORA_HOME', 'User'),
+    $env:GHOST_NEXORA_HOME,
+    $DefaultInstallDir
+  ) | Where-Object { $_ }
+
+  $seen = @{}
+  $result = @()
+  foreach ($value in $values) {
+    try { $full = Resolve-FullInstallPath $value } catch { continue }
+    $key = $full.ToLowerInvariant()
+    if ($seen.ContainsKey($key)) { continue }
+    $seen[$key] = $true
+    if (Test-Path (Join-Path $full '.git')) { $result += $full }
+  }
+  return @($result)
+}
+
+function Resolve-InstallLayout {
+  $explicitCode = -not [string]::IsNullOrWhiteSpace($InstallDir)
+  $explicitState = -not [string]::IsNullOrWhiteSpace($StateDir)
+  $existing = @(Existing-InstallCandidates)
+  $currentSuggestion = Current-InstallSuggestion
+  $selectedCode = ''
+  $usingExisting = $false
+
+  Write-Section 'UBICACIÓN DE INSTALACIÓN'
+
+  if ($explicitCode) {
+    $selectedCode = Resolve-FullInstallPath $InstallDir
+    Write-Ok ("Ruta indicada por parámetro: " + $selectedCode)
+  } elseif ($existing.Count -gt 0) {
+    $existingCode = $existing[0]
+    Write-Host '  Se detectó una instalación existente.' -ForegroundColor White
+    Write-Choice '1' 'Actualizar / reparar la instalación existente' $existingCode
+    Write-Choice '2' 'Usar la carpeta o unidad actual' $currentSuggestion
+    Write-Choice '3' 'Elegir otra ruta manualmente' 'Ejemplo: D:\Bots\GhostNexoraBot'
+    while ($true) {
+      $choice = (Read-Host 'Selecciona 1, 2 o 3 [1]').Trim()
+      if (-not $choice -or $choice -eq '1') { $selectedCode = $existingCode; $usingExisting = $true; break }
+      if ($choice -eq '2') { $selectedCode = $currentSuggestion; break }
+      if ($choice -eq '3') { $selectedCode = Read-CustomPath 'Ruta completa para el código' 'D:\Bots\GhostNexoraBot'; break }
+      Write-Warn 'Opción inválida.'
+    }
+  } else {
+    Write-Host '  Puedes instalar Ghost Nexora Bot en cualquier disco o partición.' -ForegroundColor White
+    Write-Host '  La opción 1 usa la misma ubicación desde la que ejecutaste el instalador.' -ForegroundColor DarkGray
+    Write-Choice '1' 'Usar la carpeta o unidad actual' $currentSuggestion
+    Write-Choice '2' 'Usar la ubicación tradicional del perfil' $DefaultInstallDir
+    Write-Choice '3' 'Elegir otra ruta manualmente' 'Ejemplo: D:\Bots\GhostNexoraBot'
+    while ($true) {
+      $choice = (Read-Host 'Selecciona 1, 2 o 3 [1]').Trim()
+      if (-not $choice -or $choice -eq '1') { $selectedCode = $currentSuggestion; break }
+      if ($choice -eq '2') { $selectedCode = $DefaultInstallDir; break }
+      if ($choice -eq '3') { $selectedCode = Read-CustomPath 'Ruta completa para el código' 'D:\Bots\GhostNexoraBot'; break }
+      Write-Warn 'Opción inválida.'
+    }
+  }
+
+  $selectedCode = Resolve-FullInstallPath $selectedCode
+  $sameDiskState = Suggested-StateDir $selectedCode
+  $savedState = [Environment]::GetEnvironmentVariable('GHOST_NEXORA_STATE', 'User')
+  if (-not $savedState) { $savedState = $env:GHOST_NEXORA_STATE }
+  if (-not $savedState) { $savedState = $DefaultStateDir }
+
+  $selectedState = ''
+  if ($explicitState) {
+    $selectedState = Resolve-FullInstallPath $StateDir
+    Write-Ok ("Datos indicados por parámetro: " + $selectedState)
+  } elseif ($usingExisting) {
+    $selectedState = Resolve-FullInstallPath $savedState
+    Write-Info ("Se conservará la ubicación de datos existente: " + $selectedState)
+  } else {
+    Write-Host ''
+    Write-Host '  ¿Dónde guardar sesión, bases de datos, logs y subbots?' -ForegroundColor White
+    Write-Choice '1' 'En el mismo disco de la instalación' $sameDiskState
+    if (Test-Path $savedState) {
+      Write-Choice '2' 'Usar los datos existentes' $savedState
+    } else {
+      Write-Choice '2' 'Usar AppData del usuario' $DefaultStateDir
+    }
+    Write-Choice '3' 'Elegir otra ruta manualmente' 'Ejemplo: D:\GhostNexoraBotData'
+    while ($true) {
+      $choice = (Read-Host 'Selecciona 1, 2 o 3 [1]').Trim()
+      if (-not $choice -or $choice -eq '1') { $selectedState = $sameDiskState; break }
+      if ($choice -eq '2') { $selectedState = if (Test-Path $savedState) { $savedState } else { $DefaultStateDir }; break }
+      if ($choice -eq '3') { $selectedState = Read-CustomPath 'Ruta completa para datos persistentes' 'D:\GhostNexoraBotData'; break }
+      Write-Warn 'Opción inválida.'
+    }
+  }
+
+  $selectedState = Resolve-FullInstallPath $selectedState
+  if ($selectedState.StartsWith($selectedCode + '\', [StringComparison]::OrdinalIgnoreCase) -or $selectedState -ieq $selectedCode) {
+    throw 'La carpeta de datos persistentes no puede estar dentro del repositorio. Usa una carpeta separada, por ejemplo GhostNexoraBotData.'
+  }
+
+  return [pscustomobject]@{
+    InstallDir = $selectedCode
+    StateDir = $selectedState
+    Existing = (Test-Path (Join-Path $selectedCode '.git'))
+  }
+}
+
+function Show-InstallVolumeInfo([string]$Path, [string]$Label) {
+  try {
+    $root = [IO.Path]::GetPathRoot($Path)
+    if (-not $root) { return }
+    $driveName = $root.TrimEnd('\').TrimEnd(':')
+    $drive = Get-PSDrive -Name $driveName -ErrorAction SilentlyContinue
+    if ($drive) {
+      $freeGb = [math]::Round($drive.Free / 1GB, 1)
+      Write-Info ("$Label en $root · espacio libre aproximado: $freeGb GB")
+    }
+  } catch {}
 }
 
 function Read-Port([string]$Prompt, [int]$DefaultPort) {
@@ -368,6 +520,12 @@ function Write-InstallError([System.Management.Automation.ErrorRecord]$Record) {
 try {
   if ($env:OS -ne 'Windows_NT') { throw 'Este instalador es exclusivo para Windows 10/11.' }
 
+  $layout = Resolve-InstallLayout
+  $InstallDir = $layout.InstallDir
+  $StateDir = $layout.StateDir
+  $FirstInstall = -not $layout.Existing
+  $ErrorLog = Join-Path $StateDir 'logs\install-error.log'
+
   New-Item -ItemType Directory -Force -Path (Join-Path $StateDir 'logs') | Out-Null
   Write-Banner $(if ($FirstInstall) { 'ASISTENTE DE PRIMERA INSTALACIÓN' } else { 'ACTUALIZACIÓN / REPARACIÓN' })
 
@@ -377,6 +535,8 @@ try {
   Write-Host ('  Código      : ' + $InstallDir) -ForegroundColor Gray
   Write-Host ('  Datos       : ' + $StateDir) -ForegroundColor Gray
   Write-Host ('  Modo        : ' + $(if ($FirstInstall) { 'Primera instalación' } else { 'Actualización / reparación' })) -ForegroundColor Gray
+  Show-InstallVolumeInfo $InstallDir 'Código'
+  Show-InstallVolumeInfo $StateDir 'Datos'
 
   Write-Step '1/10' 'Herramientas del sistema'
   Require-WinGet
