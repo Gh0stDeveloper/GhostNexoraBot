@@ -805,7 +805,7 @@ Cierre:
 
 ## E6. Editor de configuración de comandos
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Configurar desde Web:
 
@@ -819,7 +819,7 @@ Configurar desde Web:
 
 Debe respetar aislamiento entre MainBot y subbots.
 
-Implementación E6 en validación:
+Implementación E6:
 
 - configuración persistente por `instance_key` y comando;
 - activación global del comando y activación independiente por WhatsApp, Discord y Telegram;
@@ -835,6 +835,14 @@ Implementación E6 en validación:
 - el portal Subbot queda forzado a su propia instancia;
 - las plataformas no soportadas por el catálogo real no pueden habilitarse desde Web;
 - eliminación permanente de un subbot limpia también configuración, aliases y cooldowns E6.
+
+Cierre:
+
+- implementación completa fusionada en `main`;
+- Typecheck y Build en verde;
+- smoke dedicado `scripts/phase-e6-command-config-smoke.mjs` obligatorio en CI;
+- aislamiento MainBot/subbots, permisos, cooldowns, plataformas, categorías, menú y buscador cubiertos por la validación E6;
+- CI principal validado correctamente sobre `8016ab107ff272bea9c80c4684023a5bcb128760`.
 
 ## E7. Vista detallada de grupo
 
@@ -1199,6 +1207,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-18 | Fase E | Dashboard Web V2 · inventario de grupos por plataforma | EN PROGRESO | feat/phase-e-platform-groups-dashboard |
+| 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
