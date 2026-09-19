@@ -4,6 +4,7 @@ import path from 'node:path'
 import type { BotCommand } from '../types.js'
 import { config } from '../config.js'
 import { runSpeedTest, systemSnapshot } from '../services/system.js'
+import { createOpsJob } from '../services/ops-jobs.js'
 
 export const systemCommands: BotCommand[] = [
   {
@@ -60,6 +61,13 @@ export const systemCommands: BotCommand[] = [
         throw new Error('El trigger seguro de actualización todavía no está instalado. Ejecuta una vez `sudo ghostnexorabot update` en la VPS para habilitarlo.')
       }
 
+      const job = createOpsJob({
+        type: 'update',
+        label: 'Actualización solicitada desde WhatsApp',
+        source: 'command:actualizar',
+        retryable: false,
+        waitingDetail: 'safe_update_request_queued',
+      })
       await mkdir(config.dataDir, { recursive: true })
       const requestFile = path.join(config.dataDir, 'update-request')
 
@@ -70,14 +78,23 @@ export const systemCommands: BotCommand[] = [
         '━━━━━━━━━━━━━━',
         'Ghost Nexora Bot ejecutará el actualizador oficial de la VPS.',
         'Se actualizarán código, dependencias y build, y el MainBot se reiniciará al finalizar.',
+        `Job: *${job.id}*`,
         '',
         'El comando no acepta parámetros ni ejecuta instrucciones arbitrarias.',
       ].join('\n'))
 
-      await writeFile(requestFile, JSON.stringify({
-        requestedAt: new Date().toISOString(),
-        requestedBy: ctx.sender,
-      }), { encoding: 'utf8', mode: 0o600 })
+      try {
+        await writeFile(requestFile, JSON.stringify({
+          source: 'command:actualizar',
+          requestedAt: new Date().toISOString(),
+          requestedBy: ctx.sender,
+          jobId: job.id,
+        }), { encoding: 'utf8', mode: 0o600 })
+        job.update(1, 'safe_update_request_queued')
+      } catch (error) {
+        job.fail(error)
+        throw error
+      }
     },
   },
 ]
