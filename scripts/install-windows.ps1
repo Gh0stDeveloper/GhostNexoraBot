@@ -90,7 +90,10 @@ function Resolve-FullInstallPath([string]$Value) {
   if (-not $raw) { throw 'La ruta no puede estar vacía.' }
   if (-not [IO.Path]::IsPathRooted($raw)) { $raw = Join-Path (Get-Location).Path $raw }
   try {
-    return [IO.Path]::GetFullPath($raw).TrimEnd('\')
+    $full = [IO.Path]::GetFullPath($raw)
+    $root = [IO.Path]::GetPathRoot($full)
+    if ($root -and $full -ieq $root) { return $root }
+    return $full.TrimEnd('\')
   } catch {
     throw "Ruta inválida: $Value"
   }
