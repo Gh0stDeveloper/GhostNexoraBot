@@ -15,10 +15,25 @@ if ! flock -n 9; then
 fi
 
 # El servicio root solo acepta esta señal fija. El contenido del archivo nunca se
-# interpreta como shell ni como argumentos, por lo que WhatsApp no puede inyectar
-# comandos en el host.
+# interpreta como shell ni como argumentos, por lo que WhatsApp/Web no pueden
+# inyectar comandos en el host.
 [[ -f "${REQUEST_FILE}" ]] || exit 0
+
+UPDATE_JOB_ID="$(node -e '
+  const fs = require("fs");
+  try {
+    const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const id = String(data.jobId || "");
+    process.stdout.write(/^job_[A-Za-z0-9_-]{8,}$/.test(id) ? id : "");
+  } catch {}
+' "${REQUEST_FILE}" 2>/dev/null || true)"
 rm -f "${REQUEST_FILE}"
+
+PROGRESS_WRITER="${INSTALL_DIR}/scripts/update-progress.mjs"
+if [[ -f "${PROGRESS_WRITER}" ]]; then
+  env INSTALL_DIR="${INSTALL_DIR}" STATE_DIR="${STATE_DIR}" DATA_DIR="${DATA_DIR}" UPDATE_JOB_ID="${UPDATE_JOB_ID}" \
+    node "${PROGRESS_WRITER}" --job-id "${UPDATE_JOB_ID}" --stage fetch --status running --progress 2 --message 'Solicitud de actualización aceptada por el runner privilegiado.'
+fi
 
 # Limpia únicamente cambios TRACKED del checkout, después de dejar un patch
 # recuperable en STATE_DIR/backups. No toca .env, data/, sesiones ni SQLite.
@@ -30,4 +45,5 @@ fi
 # Evitamos chmod sobre archivos versionados porque eso ensuciaba el checkout y
 # podía bloquear la siguiente actualización.
 cd "${INSTALL_DIR}"
-exec env INSTALL_DIR="${INSTALL_DIR}" STATE_DIR="${STATE_DIR}" bash "${INSTALL_DIR}/scripts/update.sh"
+exec env INSTALL_DIR="${INSTALL_DIR}" STATE_DIR="${STATE_DIR}" DATA_DIR="${DATA_DIR}" UPDATE_JOB_ID="${UPDATE_JOB_ID}" \
+  bash "${INSTALL_DIR}/scripts/update.sh"
