@@ -9,6 +9,7 @@ import { sendInteractiveCard, type InteractiveButton } from '../services/interac
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
+import { commandRuntimeDecision } from '../services/command-runtime-config.js'
 import { localeName } from '../i18n/index.js'
 import { mediaDevV6Commands } from './media-dev-v6.js'
 import { valleyCompatV21Commands } from './valley-compat-v21.js'
@@ -209,6 +210,18 @@ async function menu(ctx: CommandContext) {
   const groupPolicyBypass = ctx.isOwner || ctx.isBotStaff || ctx.isSubbotOwner || groupAdmin
   const menuRows = effectiveCommands().filter((row) => {
     if (!visible(ctx, row.command)) return false
+    const runtime = commandRuntimeDecision({
+      commandName: row.command.name,
+      category: row.command.category,
+      platform: 'whatsapp',
+      isGroup: ctx.isGroup,
+      userId: ctx.sender,
+      isOwner: ctx.isOwner,
+      isStaff: ctx.isBotStaff,
+      isSubbotOwner: ctx.isSubbotOwner,
+      checkCooldown: false,
+    })
+    if (!runtime.allowed) return false
     if (!ctx.isGroup || groupPolicyBypass) return true
     return isGroupCommandCategoryAllowed(ctx.chatId, row.command.category)
   })
