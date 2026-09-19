@@ -230,6 +230,15 @@ jobs:
         with:
           node-version: 24
 
+      - name: Windows native waifu extraction smoke
+        shell: powershell
+        run: |
+          Remove-Item apps\bot\assets\waifus -Recurse -Force -ErrorAction SilentlyContinue
+          node scripts/extract-waifus.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/waifu-assets-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Validate PowerShell syntax
         shell: pwsh
         run: |
