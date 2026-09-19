@@ -34,6 +34,7 @@ export type BackupInfo = {
   verified: boolean
   files: number
   tables: number
+  sessionIncluded: boolean
 }
 
 type EncodedValue = string | number | null | { base64: string }
@@ -129,6 +130,10 @@ function backupDir() {
 
 function restoreDir() {
   return path.join(config.dataDir, 'restore')
+}
+
+function metadataPath(filePath: string) {
+  return `${filePath}.meta.json`
 }
 
 function settingsFile() {
@@ -296,8 +301,20 @@ function archiveType(archive: BackupArchiveCandidate): BackupType {
 }
 
 async function archiveMetadata(filePath: string, fileName: string): Promise<BackupInfo> {
-  const compressed = await readFile(filePath)
   const info = await stat(filePath)
+  const sidecar = metadataPath(filePath)
+  if (existsSync(sidecar)) {
+    try {
+      const parsed = JSON.parse(await readFile(sidecar, 'utf8')) as BackupInfo
+      if (parsed.fileName === fileName && validType(parsed.type) && /^[a-f0-9]{64}$/i.test(parsed.sha256)) {
+        return { ...parsed, size: info.size }
+      }
+    } catch {
+      // Fall through to archive inspection for old/corrupt metadata.
+    }
+  }
+
+  const compressed = await readFile(filePath)
   try {
     const decompressed = await gunzipAsync(compressed)
     const archive = JSON.parse(decompressed.toString('utf8')) as BackupArchiveCandidate
@@ -312,7 +329,8 @@ async function archiveMetadata(filePath: string, fileName: string): Promise<Back
       sha256: sha256(compressed),
       verified: archive.product === 'Ghost Nexora Bot',
       files: Array.isArray(archive.files) ? archive.files.length : 0,
-      tables: Array.isArray((archive as Partial<BackupArchiveV2>).tables) ? (archive as Partial<BackupArchiveV2>).tables!.length : 0,
+      tables: Array.isArray(archive.tables) ? archive.tables.length : 0,
+      sessionIncluded: Boolean(archive.source?.sessionIncluded),
     }
   } catch {
     return {
@@ -326,6 +344,7 @@ async function archiveMetadata(filePath: string, fileName: string): Promise<Back
       verified: false,
       files: 0,
       tables: 0,
+      sessionIncluded: false,
     }
   }
 }
@@ -345,7 +364,9 @@ async function applyRetention() {
   for (const type of Object.keys(RETENTION) as BackupType[]) {
     const typed = backups.filter((backup) => backup.type === type)
     for (const backup of typed.slice(RETENTION[type])) {
-      await rm(path.join(backupDir(), backup.fileName), { force: true })
+      const target = path.join(backupDir(), backup.fileName)
+      await rm(target, { force: true })
+      await rm(metadataPath(target), { force: true })
     }
   }
 }
@@ -420,8 +441,21 @@ export async function createOperationalBackup(
     const fileName = backupFileName(createdAt, type)
     const output = path.join(dir, fileName)
     await writeFile(output, compressed, { mode: 0o600 })
+    const info: BackupInfo = {
+      id: fileName,
+      fileName,
+      size: compressed.length,
+      createdAt,
+      type,
+      reason,
+      sha256: sha256(compressed),
+      verified: true,
+      files: files.length,
+      tables: tables.length,
+      sessionIncluded: archive.source.sessionIncluded,
+    }
+    await writeFile(metadataPath(output), `${JSON.stringify(info, null, 2)}\n`, { mode: 0o600 })
     await applyRetention()
-    const info = await archiveMetadata(output, fileName)
 
     logger.info({
       reason,
