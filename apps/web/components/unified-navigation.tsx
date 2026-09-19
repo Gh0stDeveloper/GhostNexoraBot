@@ -14,6 +14,7 @@ import {
   Menu,
   Settings,
   ShieldCheck,
+  SquareTerminal,
   UserRound,
   UsersRound,
   Wrench,
@@ -32,6 +33,7 @@ export type UnifiedNavIcon =
   | 'security'
   | 'platforms'
   | 'providers'
+  | 'commands'
   | 'groups'
   | 'audit'
   | 'diagnostics'
@@ -57,6 +59,7 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   security: Fingerprint,
   platforms: Activity,
   providers: Boxes,
+  commands: SquareTerminal,
   groups: UsersRound,
   audit: Gauge,
   diagnostics: Wrench,
