@@ -185,9 +185,11 @@ function touchRuntime(input: {
 function markSocketLive(socket: WASocket) {
   if (currentSocket !== socket || !socket.authState.creds.registered) return false
   if (!connectionOpen) {
+    clearPendingDisconnectAlert()
     connectionOpen = true
     lastSyncAt = 0
     lastSyncAttemptAt = 0
+    setOpsAlert({ key: 'whatsapp:connection', severity: 'critical', title: 'WhatsApp transport disconnected', active: false, instanceKey })
   }
   touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null })
   return true
@@ -197,13 +199,18 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
   const jid = String(group.id ?? '')
   if (!jid.endsWith('@g.us')) return false
   const participants = group.participants ?? []
+  const subject = String(group.subject ?? '').trim()
   const createdAt = Number(group.creation ?? 0) > 0 ? Number(group.creation) * 1000 : 0
   opsDb.prepare(`INSERT INTO ops_groups(
       instance_key, group_jid, name, participant_count, admin_count, announce, restrict_mode,
       description, created_at, updated_at
     ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_key, group_jid) DO UPDATE SET
-      name = excluded.name,
+      name = CASE
+        WHEN excluded.name = excluded.group_jid AND ops_groups.name <> ops_groups.group_jid
+          THEN ops_groups.name
+        ELSE excluded.name
+      END,
       participant_count = excluded.participant_count,
       admin_count = excluded.admin_count,
       announce = excluded.announce,
@@ -214,7 +221,7 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
     .run(
       instanceKey,
       jid,
-      String(group.subject ?? jid),
+      subject || jid,
       participants.length,
       participants.filter((participant) => Boolean(participant.admin)).length,
       group.announce ? 1 : 0,
@@ -226,7 +233,7 @@ function upsertGroup(group: ParticipatingGroup, stamp = Date.now()) {
 
   upsertPlatformGroup('whatsapp', {
     externalId: jid,
-    name: String(group.subject ?? jid),
+    name: subject || jid,
     kind: 'group',
     memberCount: participants.length,
     adminCount: participants.filter((participant) => Boolean(participant.admin)).length,
