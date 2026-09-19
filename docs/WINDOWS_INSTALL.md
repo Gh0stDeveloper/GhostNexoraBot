@@ -27,6 +27,48 @@ El wrapper CMD:
 
 ---
 
+## Ubicación de instalación
+
+El instalador **ya no fuerza el código al disco C:**. Antes de comenzar muestra un selector de ubicación.
+
+En una instalación nueva ofrece:
+
+```text
+[1] Usar la carpeta o unidad actual
+    G:\ruta\desde\donde\ejecutaste\GhostNexoraBot
+
+[2] Usar la ubicación tradicional del perfil
+    C:\Users\TU_USUARIO\GhostNexoraBot
+
+[3] Elegir otra ruta manualmente
+    D:\Bots\GhostNexoraBot
+```
+
+Si ya existe una instalación, también permite conservarla o instalar/reubicar el código en otra unidad.
+
+La carpeta de datos persistentes se elige por separado. Por defecto, cuando seleccionas otro disco, el instalador propone una carpeta hermana en ese mismo volumen:
+
+```text
+D:\Bots\GhostNexoraBot
+D:\Bots\GhostNexoraBotData
+```
+
+Así pueden quedar fuera de `C:` tanto el repositorio, `node_modules` y builds como la sesión, SQLite, logs y subbots.
+
+También se pueden pasar rutas sin usar el asistente:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer `
+  -InstallDir "D:\Bots\GhostNexoraBot" `
+  -StateDir "D:\Bots\GhostNexoraBotData"
+```
+
+Las rutas seleccionadas se guardan en `GHOST_NEXORA_HOME` y `GHOST_NEXORA_STATE`, por lo que `ghostnexora start`, `update`, `status` y los demás comandos siguen usando la ubicación elegida después de cerrar la terminal.
+
+> Las herramientas administradas por Windows/WinGet, como Node.js o Git, pueden conservar sus propias rutas de instalación del sistema. La selección anterior controla la ubicación del proyecto Ghost Nexora Bot y sus datos persistentes.
+
+---
+
 ## Aspecto y flujo del asistente
 
 El instalador presenta una terminal organizada por secciones y pasos:
