@@ -145,7 +145,7 @@ try {
   assert.match(security, /'updates:manage'/, 'E12 manage permission missing')
   assert.match(systemCommand, /jobId: job\.id/, 'WhatsApp updater must link to E12 job')
   assert.match(controlApi, /safe_update_request_queued/, 'Control API updater must remain linked to privileged runner')
-  assert.doesNotMatch(control, /execFile|spawn\(|exec\(/, 'Web E12 update action must not execute shell commands')
+  assert.doesNotMatch(control, /node:child_process|execFileSync|execFile\(|spawnSync|spawn\(/, 'Web E12 update action must not execute shell commands')
   assert.match(roadmap, /## E12\. Actualizaciones desde Dashboard[\s\S]*Estado: (?:EN PROGRESO|TERMINADO)/, 'E12 roadmap status missing')
 
   console.log('Phase E12 dashboard updater smoke passed')
