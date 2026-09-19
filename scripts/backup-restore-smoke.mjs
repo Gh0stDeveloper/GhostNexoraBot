@@ -29,7 +29,7 @@ try {
   economy.db.exec('CREATE TABLE IF NOT EXISTS restore_smoke(value TEXT NOT NULL); DELETE FROM restore_smoke; INSERT INTO restore_smoke(value) VALUES(\'backup-state\');')
   economy.walletDb.exec('CREATE TABLE IF NOT EXISTS restore_wallet_smoke(value TEXT NOT NULL); DELETE FROM restore_wallet_smoke; INSERT INTO restore_wallet_smoke(value) VALUES(\'wallet-backup-state\');')
 
-  const created = await backup.createOperationalBackup('manual')
+  const created = await backup.createOperationalBackup('manual', 'full')
   assert.match(created.fileName, /^ghostnexora-backup-.*\.gnb-backup\.gz$/)
 
   economy.db.exec("UPDATE restore_smoke SET value='mutated-state'")
@@ -38,7 +38,7 @@ try {
 
   const prepared = await backup.prepareOperationalRestore(created.id)
   assert.equal(prepared.backupId, created.id)
-  assert.equal(prepared.sessionRestored, false)
+  assert.equal(prepared.sessionRestored, true)
   assert.equal(prepared.restartScheduled, false)
   assert.ok(prepared.files.includes('ghostnexora.sqlite'))
   assert.ok(prepared.files.includes('nexora-economy.sqlite'))
@@ -64,7 +64,7 @@ try {
   assert.match(await readFile(sessionMarker, 'utf8'), /must-survive/)
   const result = JSON.parse(await readFile(path.join(process.env.DATA_DIR, 'restore', 'last-result.json'), 'utf8'))
   assert.equal(result.ok, true)
-  assert.equal(result.sessionRestored, false)
+  assert.equal(result.sessionRestored, true)
   assert.ok(Array.isArray(result.files) && result.files.includes('ghostnexora.sqlite'))
 
   console.log('backup restore smoke: OK')
