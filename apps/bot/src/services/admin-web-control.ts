@@ -1,6 +1,13 @@
 import type { WASocket } from 'baileys'
 import { subbotManager } from '../core/subbots.js'
-import { createOperationalBackup, prepareOperationalRestore, startAutomaticBackups } from './backup-service.js'
+import {
+  createOperationalBackup,
+  prepareOperationalRestore,
+  startAutomaticBackups,
+  testOperationalRestore,
+  verifyOperationalBackup,
+  type BackupType,
+} from './backup-service.js'
 import { economy } from './economy.js'
 
 const PERMANENT_MS = 100 * 365 * 86_400_000
@@ -102,7 +109,20 @@ export async function executeAdminWebControl(body: Record<string, unknown>, main
     return { ok: true, result: { top: economy.top(10) } }
   }
   if (action === 'create_backup') {
-    return { ok: true, result: await createOperationalBackup('manual') }
+    const requestedType = String(body.backupType ?? 'full').trim().toLowerCase()
+    const allowed = new Set<BackupType>(['economy', 'configuration', 'subbots', 'sessions', 'groups', 'full'])
+    if (!allowed.has(requestedType as BackupType)) throw new Error('Tipo de backup inválido.')
+    return { ok: true, result: await createOperationalBackup('manual', requestedType as BackupType) }
+  }
+  if (action === 'verify_backup') {
+    const backupId = String(body.backupId ?? '').trim()
+    if (!backupId) throw new Error('Debes seleccionar un backup para verificar.')
+    return { ok: true, result: await verifyOperationalBackup(backupId) }
+  }
+  if (action === 'test_restore') {
+    const backupId = String(body.backupId ?? '').trim()
+    if (!backupId) throw new Error('Debes seleccionar un backup para probar.')
+    return { ok: true, result: await testOperationalRestore(backupId) }
   }
   if (action === 'restore_backup') {
     const backupId = String(body.backupId ?? '').trim()
