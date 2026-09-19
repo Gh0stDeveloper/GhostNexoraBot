@@ -18,6 +18,10 @@ export type WebPermission =
   | 'platforms:disable'
   | 'commands:view'
   | 'commands:manage'
+  | 'users:view'
+  | 'users:financial'
+  | 'users:moderation'
+  | 'users:subbots'
   | 'audit:view'
   | 'audit:reset'
   | 'management:economy'
@@ -31,16 +35,19 @@ export type WebPermission =
 const permissions: Record<WebRole, ReadonlySet<WebPermission>> = {
   owner: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage', 'groups:leave',
-    'platforms:view', 'platforms:operate', 'platforms:disable', 'commands:view', 'commands:manage', 'audit:view', 'audit:reset', 'management:economy', 'management:subbots',
+    'platforms:view', 'platforms:operate', 'platforms:disable', 'commands:view', 'commands:manage',
+    'users:view', 'users:financial', 'users:moderation', 'users:subbots', 'audit:view', 'audit:reset', 'management:economy', 'management:subbots',
     'management:broadcast', 'backups:read', 'backups:write', 'security:manage',
     'sessions:manage',
   ]),
   admin: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage',
-    'platforms:view', 'platforms:operate', 'commands:view', 'commands:manage', 'audit:view', 'audit:reset', 'sessions:manage',
+    'platforms:view', 'platforms:operate', 'commands:view', 'commands:manage',
+    'users:view', 'users:moderation', 'audit:view', 'audit:reset', 'sessions:manage',
   ]),
   support: new Set<WebPermission>([
-    'dashboard:view', 'groups:view', 'groups:sync', 'platforms:view', 'commands:view', 'audit:view', 'sessions:manage',
+    'dashboard:view', 'groups:view', 'groups:sync', 'platforms:view', 'commands:view',
+    'users:view', 'audit:view', 'sessions:manage',
   ]),
   subbot: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage', 'groups:leave',
