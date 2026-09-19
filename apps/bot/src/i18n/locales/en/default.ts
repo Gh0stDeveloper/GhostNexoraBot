@@ -40,6 +40,7 @@ export const messages: TranslationCatalog = {
   'router.categoryDisabled': '🚫 *CATEGORY DISABLED*\n━━━━━━━━━━━━━━\nCommands in *{category}* are disabled by this group\'s policy. Ask a group administrator to enable that category if you need to use it.',
   'router.commandError': '❌ *I COULD NOT COMPLETE {prefix}{command}*\n━━━━━━━━━━━━━━\n{error}',
   'router.internalUnavailable': 'Internal server error, this method is temporarily unavailable.',
+  'router.rateLimited': 'WhatsApp applied a temporary sending limit. The bot retried automatically; wait a few seconds before repeating the command.',
   'router.unexpectedError': 'An unexpected error occurred.',
   'router.defaultUser': 'User',
 
