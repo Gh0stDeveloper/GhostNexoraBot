@@ -54,6 +54,9 @@ jobs:
       - name: Phase E5 command center smoke
         run: node scripts/phase-e5-command-center-smoke.mjs
 
+      - name: Phase E6 command configuration smoke
+        run: node scripts/phase-e6-command-config-smoke.mjs
+
       - name: Spotify, anime, adult permissions and Windows installer smoke
         run: node scripts/media-windows-permissions-smoke.mjs
 
