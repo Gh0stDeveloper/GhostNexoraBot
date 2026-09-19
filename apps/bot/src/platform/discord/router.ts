@@ -457,6 +457,29 @@ export class DiscordCommandRouter {
     const locale = this.locale(invocation)
     const isOwner = discordOwner(invocation.user.id)
     const isStaff = discordStaff(invocation.user.id)
+    const sharedCommand = this.engine.resolve(invocation.command)
+    if (sharedCommand) {
+      await this.adapter.setTyping?.(invocation.channelId, true).catch(() => undefined)
+      try {
+        const ctx = this.commandContext(invocation, sharedCommand.name, locale, isOwner, isStaff)
+        await this.engine.execute(sharedCommand, ctx, {
+          auditIdentity: {
+            userJid: ctx.sender,
+            displayName: invocation.user.global_name ?? invocation.user.username,
+          },
+        })
+        return true
+      } catch (error) {
+        logger.warn({ error, chatId: invocation.channelId, command: sharedCommand.name }, 'Discord shared command failed')
+        const publicError = localizeLegacyText(error instanceof Error ? error.message : t(locale, 'common.internalError'), locale)
+        await this.adapter.sendText(
+          invocation.channelId,
+          t(locale, 'discord.error.public', { error: publicError }),
+          invocation.messageId ? { replyTo: invocation.messageId } : undefined,
+        ).catch(() => undefined)
+        return true
+      }
+    }
     const category = resolveConfiguredCommandCategory(invocation.command)
     const runtimeDecision = commandRuntimeDecision({
       commandName: invocation.command,
