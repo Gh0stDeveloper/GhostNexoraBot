@@ -524,7 +524,9 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
           cooldownMs: Math.max(0, Number(row.cooldownMs ?? 0)),
           allowGroups: Boolean(row.allowGroups),
           allowPrivate: Boolean(row.allowPrivate),
-          permissionMode: (['staff', 'owner'].includes(String(row.permissionMode)) ? String(row.permissionMode) : 'inherit') as OpsCommand['permissionMode'],
+          permissionMode: String(row.category) === 'adult'
+            ? 'inherit'
+            : (['staff', 'owner'].includes(String(row.permissionMode)) ? String(row.permissionMode) : 'inherit') as OpsCommand['permissionMode'],
           categoryEnabled: Boolean(row.categoryEnabled),
           invocations, successes, failures: Number(row.failures ?? 0), successRate,
           minUs: Number(row.minUs ?? 0), avgUs, maxUs, lastUs: Number(row.lastUs ?? 0),
