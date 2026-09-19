@@ -83,6 +83,7 @@ export type LegacyCompatibleCommandContext = CommandContext & LegacyWhatsAppComm
 export type CommandArgumentMetadata = {
   name: string
   description?: string
+  descriptionKey?: string
   required?: boolean
   variadic?: boolean
   maxLength?: number
@@ -93,6 +94,8 @@ export interface BotCommand {
   aliases?: string[]
   category: CommandCategory
   description: string
+  /** Optional i18n key used by generated help/slash/documentation surfaces. */
+  descriptionKey?: string
   usage?: string
   /** B3 central metadata: explicit platform availability overrides auto-detection. */
   platforms?: PlatformId[]
