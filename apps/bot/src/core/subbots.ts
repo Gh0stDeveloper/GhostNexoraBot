@@ -364,6 +364,10 @@ class SubbotManager {
       deleteInstanceRows('ops_pipeline_metrics')
       deleteInstanceRows('ops_command_metrics')
       deleteInstanceRows('ops_command_catalog')
+      deleteInstanceRows('ops_command_settings')
+      deleteInstanceRows('ops_command_category_settings')
+      deleteInstanceRows('ops_command_aliases')
+      deleteInstanceRows('ops_command_cooldowns')
       // El entitlement representa el slot vigente del owner, no una fila histórica.
       // Si existe otra instancia futura del mismo owner, conservarlo evita que la
       // limpieza de una instancia vieja rompa la nueva.
