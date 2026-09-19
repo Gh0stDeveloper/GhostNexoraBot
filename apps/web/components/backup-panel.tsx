@@ -100,6 +100,6 @@ export async function BackupPanel({ locale, csrfToken }: { locale: WebLocale; cs
           </td>
         </tr>)}</tbody>
       </table>
-    </div> : <div className="px-5 py-10 text-center text-sm text-zinc-600">{t('backup.empty')}</div>}
+    </div> : <div className="ops-empty-state"><Archive className="size-6"/><p>{t('backup.empty')}</p></div>}
   </section>
 }
