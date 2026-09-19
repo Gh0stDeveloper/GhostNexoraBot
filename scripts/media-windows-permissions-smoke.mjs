@@ -14,6 +14,7 @@ const security = read('apps/bot/src/commands/security.ts')
 const installer = read('scripts/install-windows.ps1')
 const installerBytes = readFileSync('scripts/install-windows.ps1')
 const manager = read('scripts/windows/ghostnexora.ps1')
+const managerBytes = readFileSync('scripts/windows/ghostnexora.ps1')
 const cmdInstaller = read('scripts/install-windows.cmd')
 
 assert.ok(index.includes("import { spotifyCommands } from './spotify.js'"), 'Spotify functional commands must be registered')
@@ -51,6 +52,7 @@ assert.match(installer, /Etapa: \$CurrentStage/, 'Windows installer error log mu
 assert.match(installer, /Código: \$\(\$Record\.InvocationInfo\.Line\)/, 'Windows installer error log must include the failing code line')
 assert.match(installer, /Get-Content -LiteralPath \$managerSource -Raw -Encoding UTF8/, 'Windows installer must decode the manager source explicitly as UTF-8')
 assert.match(installer, /Set-Content -LiteralPath \$managerTarget -Value \$managerContent -Encoding UTF8/, 'Windows installer must write the installed manager with a PowerShell 5.1 UTF-8 BOM')
+assert.deepEqual(Array.from(managerBytes.subarray(0, 3)), [0xef, 0xbb, 0xbf], 'Windows manager must keep a UTF-8 BOM for Windows PowerShell 5.1')
 assert.match(manager, /'configure' \{ Configure-Bot \}/, 'Windows manager configure action missing')
 assert.match(manager, /developer\.spotify\.com\/dashboard/, 'Windows configuration menu must explain Spotify credentials')
 assert.match(cmdInstaller, /pause/i, 'CMD wrapper must keep the terminal visible at completion')
@@ -58,6 +60,7 @@ assert.match(cmdInstaller, /GHOST_NEXORA_INSTALLER_WRAPPER=1/, 'CMD wrapper must
 assert.match(cmdInstaller, /Get-Content -LiteralPath \$p -Raw -Encoding UTF8/, 'CMD bootstrap must decode the downloaded script explicitly as UTF-8')
 assert.match(cmdInstaller, /Set-Content -LiteralPath \$p -Value \$text -Encoding UTF8/, 'CMD bootstrap must rewrite the downloaded script with a Windows PowerShell 5.1 BOM')
 assert.match(cmdInstaller, /Language\.Parser\]::ParseFile/, 'CMD bootstrap must syntax-check the downloaded script before execution')
+assert.doesNotMatch(cmdInstaller, /\^\|/, 'CMD bootstrap parser preflight must not depend on escaped pipe semantics inside -Command')
 assert.doesNotMatch(cmdInstaller, /^start\s/mi, 'CMD wrapper must not detach into a disposable window')
 
 console.log('Spotify, anime, adult permissions and Windows installer smoke passed')
