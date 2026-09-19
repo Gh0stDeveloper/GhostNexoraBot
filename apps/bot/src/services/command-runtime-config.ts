@@ -150,7 +150,7 @@ export function getCommandRuntimeConfig(commandName: string, category: CommandCa
     cooldownMs: cooldownValue(row?.cooldownMs),
     allowGroups: booleanValue(row?.allowGroups, true),
     allowPrivate: booleanValue(row?.allowPrivate, true),
-    permissionMode: permissionMode(row?.permissionMode),
+    permissionMode: String(category).toLowerCase() === 'adult' ? 'inherit' : permissionMode(row?.permissionMode),
     categoryEnabled: booleanValue(categoryRow?.enabled, true),
   }
 }
