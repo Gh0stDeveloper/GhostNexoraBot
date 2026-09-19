@@ -1,5 +1,6 @@
 import { setOpsAlert } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
+import { recordOpsRuntimeLog } from './ops-runtime-log.js'
 
 export type ProviderHealthRecord = {
   providerId: string
@@ -150,6 +151,15 @@ export function recordProviderAttempt(providerId: string, input: {
       stamp,
     )
   updateProviderAlert(instanceKey, id, label)
+  recordOpsRuntimeLog(
+    input.ok ? 'debug' : 'error',
+    `api.${id}`,
+    input.ok
+      ? `provider_ok · provider=${label} · latency=${Math.round(latencyMs)}ms`
+      : `provider_failed · provider=${label} · latency=${Math.round(latencyMs)}ms · error=${errorCode}`,
+    instanceKey,
+    'api',
+  )
 }
 
 export function readProviderHealth(instanceKey = opsInstanceKey()): ProviderHealthRecord[] {
