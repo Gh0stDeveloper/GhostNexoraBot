@@ -19,7 +19,7 @@ const webI18n = read('apps/web/lib/i18n.ts')
 const extraI18n = read('apps/web/lib/ops-extra-i18n.ts')
 const groupPanel = read('apps/web/components/platform-groups-panel.tsx')
 
-assert.match(roadmap, /## E3\. Pantalla Plataformas[\s\S]*Estado: EN PROGRESO/, 'E3 roadmap state missing')
+assert.match(roadmap, /## E3\. Pantalla Plataformas[\s\S]*Estado: TERMINADO/, 'E3 roadmap completion state missing')
 assert.match(roadmap, /## E0\. Inventario de comunidades por plataforma/, 'E0 roadmap section missing')
 
 assert.match(contracts, /export interface PlatformMetrics/, 'PlatformMetrics contract missing')
