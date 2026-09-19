@@ -1,10 +1,16 @@
-param(
+﻿param(
   [Parameter(Position = 0)]
   [string]$Action = 'help',
 
   [Parameter(Position = 1)]
   [string]$Value = ''
 )
+
+# Windows PowerShell 5.1 needs an explicit UTF-8 BOM for reliable parsing of Spanish text.
+try {
+  [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {}
 
 $ErrorActionPreference = 'Stop'
 
