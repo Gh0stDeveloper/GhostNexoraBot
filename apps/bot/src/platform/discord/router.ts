@@ -164,7 +164,9 @@ function inheritValue(raw?: string) {
 }
 
 function splitCommand(raw: string) {
-  const clean = raw.trim()
+  let clean = raw.trim()
+  if (clean.startsWith(settings.prefix)) clean = clean.slice(settings.prefix.length).trim()
+  else if (clean.startsWith('/')) clean = clean.slice(1).trim()
   const firstSpace = clean.search(/\s/)
   const name = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).toLowerCase()
   return {
