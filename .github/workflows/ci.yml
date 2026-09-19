@@ -58,6 +58,9 @@ jobs:
       - name: Private chat silent-block policy smoke
         run: node scripts/private-chat-policy-smoke.mjs
 
+      - name: Router category policy smoke
+        run: node scripts/router-category-policy-smoke.mjs
+
       - name: Group inactive member policy smoke
         run: node scripts/group-inactivity-smoke.mjs
 
@@ -129,6 +132,7 @@ jobs:
             scripts/v2-phase6-i18n-smoke.mjs
             scripts/v2-phase6-i18n-boundary-audit.mjs
             scripts/private-chat-policy-smoke.mjs
+            scripts/router-category-policy-smoke.mjs
             scripts/group-inactivity-smoke.mjs
             scripts/v18-runtime-smoke.mjs
             scripts/ops-dashboard-smoke.mjs
