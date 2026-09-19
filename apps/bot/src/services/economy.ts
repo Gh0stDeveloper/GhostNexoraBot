@@ -476,18 +476,26 @@ export class EconomyStore {
   }
 
   recordGlobalLedger(userJid: string, kind: string, amount: number, counterparty?: string, note?: string) {
+    const params = [
+      userJid,
+      kind,
+      Math.trunc(amount),
+      counterparty ?? null,
+      note ?? null,
+      process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main',
+      Number(process.env.NEXORA_SUBBOT_ID || 0) || null,
+      now(),
+    ] as const
+    try {
+      this.db.prepare('INSERT INTO global_wallet.economy_global_ledger(user_jid, kind, amount, counterparty_jid, note, instance_role, instance_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(...params)
+      return
+    } catch {
+      // A few maintenance paths can execute before/without the attached DB.
+    }
     try {
       this.walletDb.prepare('INSERT INTO economy_global_ledger(user_jid, kind, amount, counterparty_jid, note, instance_role, instance_id, created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(
-          userJid,
-          kind,
-          Math.trunc(amount),
-          counterparty ?? null,
-          note ?? null,
-          process.env.NEXORA_INSTANCE_ROLE === 'subbot' ? 'subbot' : 'main',
-          Number(process.env.NEXORA_SUBBOT_ID || 0) || null,
-          now(),
-        )
+        .run(...params)
     } catch {}
   }
 
