@@ -1,5 +1,7 @@
-import type { BotCommand } from '../types.js'
+import type { BotCommand, CommandContext } from '../types.js'
 import { effectiveCommands } from '../services/menu-registry.js'
+import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
+import { isGroupAdministrator } from '../utils/target.js'
 
 type SearchHit = {
   command: BotCommand
@@ -49,6 +51,15 @@ function scoreCommand(command: BotCommand, tokens: string[], query: string) {
   return 0
 }
 
+function visibleTo(ctx: CommandContext, command: BotCommand, groupAdmin: boolean) {
+  if (command.ownerOnly && !ctx.isOwner) return false
+  if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
+  if (ctx.isGroup && !ctx.isOwner && !ctx.isBotStaff && !ctx.isSubbotOwner && !groupAdmin) {
+    if (!isGroupCommandCategoryAllowed(ctx.chatId, command.category)) return false
+  }
+  return true
+}
+
 function searchCommands(query: string): SearchHit[] {
   return effectiveCommands()
     .map(({ command, tokens }) => ({ command, tokens, score: scoreCommand(command, tokens, query) }))
@@ -80,7 +91,8 @@ export const commandSearchCommands: BotCommand[] = [
         return
       }
 
-      const hits = searchCommands(query)
+      const groupAdmin = ctx.isGroup ? await isGroupAdministrator(ctx).catch(() => false) : false
+      const hits = searchCommands(query).filter((hit) => visibleTo(ctx, hit.command, groupAdmin))
       if (!hits.length) {
         await ctx.reply(`No encontré comandos activos relacionados con *${ctx.argText.trim()}*.`)
         return
