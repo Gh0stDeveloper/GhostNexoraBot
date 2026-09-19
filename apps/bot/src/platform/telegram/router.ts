@@ -17,24 +17,14 @@ import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore 
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
+import { telegramCommandAliases } from '../../services/command-platform-support.js'
 import { logger } from '../../utils/logger.js'
 import { telegramOwner, telegramStaff } from './config.js'
 import type { TelegramAdapter } from './adapter.js'
 import { normalizeTelegramMessage } from './normalize.js'
 import type { TelegramMessage } from './types.js'
 
-const aliases = new Map<string, string>([
-  ['start', 'start'], ['help', 'help'], ['menu', 'help'], ['ayuda', 'help'],
-  ['ping', 'ping'], ['info', 'info'], ['version', 'info'], ['botinfo', 'info'],
-  ['language', 'language'], ['lang', 'language'], ['idioma', 'language'],
-  ['vk', 'vk'], ['vkvideo', 'vk'], ['vkd', 'vk'],
-  ['apkmirror', 'apkmirror'], ['apkm', 'apkmirror'], ['amirror', 'apkmirror'],
-  ['apkmirrordl', 'apkmirrordl'], ['amdl', 'apkmirrordl'],
-  ['apkpure', 'apkpure'], ['apkp', 'apkpure'], ['pureapk', 'apkpure'],
-  ['apkpuredl', 'apkpuredl'], ['apdl', 'apkpuredl'],
-  ['providerhealth', 'providerhealth'], ['dlhealth', 'providerhealth'],
-  ['tgstatus', 'tgstatus'], ['telegramstatus', 'tgstatus'],
-])
+const aliases = telegramCommandAliases
 
 function humanBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
