@@ -268,6 +268,37 @@ export const performanceAudit = {
     recordUsage({ instanceKey, commandName: name, durationUs: value, success, stamp, identity })
   },
 
+  recordRuntimeCommand(
+    commandName: string,
+    durationMs: number,
+    success: boolean,
+    instanceKey = opsInstanceKey(),
+    identity?: CommandAuditIdentity,
+  ) {
+    const name = commandName.trim().toLowerCase()
+    if (!name) return
+    const value = micros(durationMs)
+    const stamp = now()
+    opsDb.prepare(`INSERT INTO ops_command_metrics(
+        instance_key, command_name, invocations, successes, failures, total_us, min_us, max_us, last_us,
+        heap_delta_total, first_at, last_at, last_error_at
+      ) VALUES(?, ?, 1, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      ON CONFLICT(instance_key, command_name) DO UPDATE SET
+        invocations = ops_command_metrics.invocations + 1,
+        successes = ops_command_metrics.successes + excluded.successes,
+        failures = ops_command_metrics.failures + excluded.failures,
+        total_us = ops_command_metrics.total_us + excluded.total_us,
+        min_us = CASE WHEN ops_command_metrics.min_us = 0 THEN excluded.min_us ELSE MIN(ops_command_metrics.min_us, excluded.min_us) END,
+        max_us = MAX(ops_command_metrics.max_us, excluded.max_us),
+        last_us = excluded.last_us,
+        first_at = CASE WHEN ops_command_metrics.first_at = 0 THEN excluded.first_at ELSE ops_command_metrics.first_at END,
+        last_at = excluded.last_at,
+        last_error_at = MAX(ops_command_metrics.last_error_at, excluded.last_error_at)`)
+      .run(instanceKey, name, success ? 1 : 0, success ? 0 : 1, value, value, value, value, stamp, stamp, success ? 0 : stamp)
+
+    recordUsage({ instanceKey, commandName: name, durationUs: value, success, stamp, identity })
+  },
+
   snapshot(instanceKey = opsInstanceKey()) {
     const stageRows = opsDb.prepare(`SELECT stage_id AS stageId, stage_name AS stageName, invocations, total_us AS totalUs,
       min_us AS minUs, max_us AS maxUs, last_us AS lastUs, first_at AS firstAt, last_at AS lastAt
