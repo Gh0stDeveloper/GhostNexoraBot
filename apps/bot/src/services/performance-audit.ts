@@ -1,5 +1,6 @@
 import type { BotCommand } from '../types.js'
 import { commandPlatformSupport } from './command-platform-support.js'
+import { registerCommandTokens } from './command-runtime-config.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 const now = () => Date.now()
@@ -194,6 +195,7 @@ export const performanceAudit = {
           support.telegram ? 1 : 0,
           stamp,
         )
+        registerCommandTokens(command, instanceKey)
       }
       opsDb.exec('COMMIT')
     } catch (error) {
