@@ -1,4 +1,7 @@
-import type { NormalizedUi } from '@ghostnexora/platform-contracts'
+import type { NormalizedMessage, NormalizedUi } from '@ghostnexora/platform-contracts'
+import { sharedNeutralCommands } from '../../commands/shared.js'
+import { CommandEngine } from '../../core/command-engine.js'
+import type { CommandContext } from '../../types.js'
 import { config } from '../../config.js'
 import { settings } from '../../core/settings.js'
 import {
@@ -217,6 +220,7 @@ async function progress(adapter: DiscordAdapter, channelId: string, replyTo: str
 
 export class DiscordCommandRouter {
   private botUserId?: string
+  private readonly engine = new CommandEngine<CommandContext>(sharedNeutralCommands)
 
   constructor(
     private readonly adapter: DiscordAdapter,
@@ -376,6 +380,76 @@ export class DiscordCommandRouter {
       await update(t(locale, 'common.videoSent'))
     } finally {
       await result.cleanup()
+    }
+  }
+
+  private commandContext(
+    invocation: Invocation,
+    commandName: string,
+    locale: LocaleCode,
+    isOwner: boolean,
+    isStaff: boolean,
+  ): CommandContext {
+    const replyTo = invocation.messageId
+    const normalizedMessage: NormalizedMessage = {
+      platform: 'discord',
+      botInstanceId: this.adapter.botInstanceId,
+      chatId: invocation.channelId,
+      senderId: `discord:${invocation.user.id}`,
+      messageId: invocation.messageId ?? `discord-${invocation.source}-${Date.now()}`,
+      text: [commandName, invocation.argText].filter(Boolean).join(' '),
+      isGroup: Boolean(invocation.guildId),
+      pushName: invocation.user.global_name ?? invocation.user.username,
+      raw: invocation,
+    }
+    const withReply = <T extends { replyTo?: string }>(options?: T) => ({
+      ...options,
+      replyTo: options?.replyTo ?? replyTo,
+    })
+    const sendText: CommandContext['sendText'] = (value, options) =>
+      this.adapter.sendText(invocation.channelId, value, withReply(options))
+    const sendMedia: CommandContext['sendMedia'] = (media, options) =>
+      this.adapter.sendMedia(invocation.channelId, media, withReply(options))
+    const sendUi: CommandContext['sendUi'] = (ui, options) =>
+      this.adapter.sendUi(invocation.channelId, ui, withReply(options))
+    const reply: CommandContext['reply'] = async (value) => (await sendText(value)).raw
+    const react: CommandContext['react'] = async (emoji) => {
+      if (!replyTo || !this.adapter.react) return undefined
+      return this.adapter.react(invocation.channelId, replyTo, emoji)
+    }
+
+    return {
+      platform: 'discord',
+      adapter: this.adapter,
+      normalizedMessage,
+      chatId: invocation.channelId,
+      sender: `discord:${invocation.user.id}`,
+      pushName: invocation.user.global_name ?? invocation.user.username,
+      commandName,
+      args: invocation.argText.trim().split(/\s+/).filter(Boolean),
+      argText: invocation.argText,
+      prefix: '/',
+      settings,
+      locale,
+      t: (key, values = {}) => translate(locale, key, values),
+      isOwner,
+      isBotStaff: isStaff,
+      isGroup: Boolean(invocation.guildId),
+      isGroupAdmin: isStaff,
+      isBotGroupAdmin: false,
+      isSubbotOwner: false,
+      reply,
+      react,
+      sendText,
+      sendMedia,
+      sendUi,
+      setTyping: async (active) => {
+        if (this.adapter.setTyping) await this.adapter.setTyping(invocation.channelId, active)
+      },
+      editMessage: async (messageId, value) => {
+        if (!this.adapter.editMessage) throw new Error('Discord no soporta edición en este adapter.')
+        await this.adapter.editMessage(invocation.channelId, messageId, value)
+      },
     }
   }
 
