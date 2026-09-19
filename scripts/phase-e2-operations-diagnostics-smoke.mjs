@@ -29,7 +29,7 @@ assert.match(subbotPage, /'diagnostics', t\('nav\.diagnostics'\), Wrench/, 'Subb
 assert.match(subbotPage, /<OperationsOverview/, 'Subbot overview must render operational summary')
 assert.match(subbotPage, /<DeveloperDiagnostics/, 'Subbot must have isolated diagnostics')
 assert.doesNotMatch(subbotPage, /view="overview"/, 'Subbot overview must not render legacy technical diagnostics')
-assert.match(subbotPage, /sectionIds: SubbotSection\[\] = \['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'account'\]/, 'Subbot diagnostics route must be explicitly allowed')
+assert.match(subbotPage, /sectionIds: SubbotSection\[\] = \['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'audit', 'diagnostics', 'account'\]/, 'Subbot diagnostics route must remain explicitly allowed alongside isolated E10 logs')
 
 assert.equal(/CommandAuditTable/.test(opsConsole), false, 'Technical command profiler must leave the Audit/Groups console')
 assert.match(opsConsole, /AdminAuditTable rows=\{snapshot\.adminAudit\}/, 'Audit must retain administrative history')
