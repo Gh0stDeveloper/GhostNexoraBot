@@ -27,6 +27,7 @@ import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCa
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
+import { createRequestContext } from '../../core/request-context.js'
 import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import type { DiscordAdapter } from './adapter.js'
 import { discordOwner, discordStaff } from './config.js'
@@ -85,6 +86,7 @@ type Invocation = {
   argText: string
   channelId: string
   messageId?: string
+  requestMessageId: string
   user: DiscordUser
   guildId?: string
   source: 'message' | 'slash' | 'component'
@@ -344,6 +346,22 @@ export class DiscordCommandRouter {
     const locale = this.locale(invocation)
     const isOwner = discordOwner(invocation.user.id)
     const isStaff = discordStaff(invocation.user.id)
+    const request = createRequestContext({
+      platform: 'discord',
+      botInstanceId: this.adapter.botInstanceId,
+      chatId: invocation.channelId,
+      userId: `discord:${invocation.user.id}`,
+      locale,
+      messageId: invocation.requestMessageId,
+      permissions: {
+        isOwner,
+        isStaff,
+        isGroup: Boolean(invocation.guildId),
+        isGroupAdmin: false,
+        isBotGroupAdmin: false,
+        isInstanceOwner: false,
+      },
+    })
     const sharedCommand = sharedCommandEngine.resolve(invocation.command)
     if (!sharedCommand) {
       const metadata = commandMetadataForPlatformToken('discord', invocation.command)
@@ -411,17 +429,14 @@ export class DiscordCommandRouter {
           pushName: invocation.user.global_name ?? invocation.user.username,
         }
         const context = createNeutralCommandContext({
-          platform: 'discord',
+          request,
           adapter: this.adapter,
           normalizedMessage,
           commandName: sharedCommand.name,
           args,
           prefix: '/',
           settings,
-          locale,
           t: (key, values = {}) => translate(locale, key, values),
-          isOwner,
-          isBotStaff: isStaff,
         })
         const result = await sharedCommandEngine.execute(sharedCommand, context, { enforceMetadata: true })
         if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Discord', command: invocation.command, help: '/help' }))
@@ -457,7 +472,12 @@ export class DiscordCommandRouter {
           displayName: invocation.user.global_name ?? invocation.user.username,
         })
       } catch {}
-      logger.warn({ error, chatId: invocation.channelId, command: invocation.command }, 'Discord command failed')
+      logger.warn({
+        error,
+        chatId: invocation.channelId,
+        command: invocation.command,
+        correlationId: request.correlationId,
+      }, 'Discord command failed')
       const publicError = localizeLegacyText(error instanceof Error ? error.message : t(locale, 'common.internalError'), locale)
       await this.adapter.sendText(invocation.channelId, t(locale, 'discord.error.public', { error: publicError }), invocation.messageId ? { replyTo: invocation.messageId } : undefined).catch(() => undefined)
       return true
@@ -484,6 +504,7 @@ export class DiscordCommandRouter {
       argText: parsed.argText,
       channelId: normalized.chatId,
       messageId: normalized.messageId,
+      requestMessageId: normalized.messageId,
       user: message.author,
       guildId: message.guild_id,
       source: 'message',
@@ -504,6 +525,7 @@ export class DiscordCommandRouter {
         command,
         argText: commandArgText(data),
         channelId,
+        requestMessageId: interaction.id,
         user,
         guildId: interaction.guild_id,
         source: 'slash',
@@ -531,6 +553,7 @@ export class DiscordCommandRouter {
         command: parsed.command,
         argText: parsed.argText,
         channelId,
+        requestMessageId: interaction.id,
         user,
         guildId: interaction.guild_id,
         source: 'component',

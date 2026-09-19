@@ -14,6 +14,27 @@ import type { LocaleCode, TranslationValues } from './i18n/types.js'
 
 export type { NexoraSocket } from './core/legacy-whatsapp-command-context.js'
 
+export type RequestPermissionSnapshot = Readonly<{
+  isOwner: boolean
+  isStaff: boolean
+  isGroup: boolean
+  isGroupAdmin: boolean
+  isBotGroupAdmin: boolean
+  isInstanceOwner: boolean
+}>
+
+export type RequestContext = Readonly<{
+  platform: PlatformId
+  botInstanceId: string
+  instanceId?: number
+  chatId: string
+  userId: string
+  locale: LocaleCode
+  messageId: string
+  correlationId: string
+  permissions: RequestPermissionSnapshot
+}>
+
 export type CommandCategory =
   | 'general'
   | 'profile'
@@ -37,6 +58,8 @@ export type CommandCategory =
  * WhatsApp socket or WAMessage.
  */
 export interface CommandContext {
+  /** Immutable per-message snapshot introduced by Phase B5. */
+  request: RequestContext
   platform: PlatformId
   adapter: PlatformAdapter
   normalizedMessage: NormalizedMessage

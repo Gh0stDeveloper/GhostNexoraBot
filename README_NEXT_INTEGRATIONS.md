@@ -427,7 +427,7 @@ Cierre B4:
 
 ## B5. RequestContext inmutable
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Evitar estado mutable compartido durante procesamiento concurrente.
 
@@ -441,6 +441,22 @@ El contexto por mensaje debe contener de forma inmutable:
 - permisos;
 - message ID;
 - correlation o request ID.
+
+Implementación B5 en validación:
+
+- nuevos tipos `RequestContext` y `RequestPermissionSnapshot` de solo lectura;
+- `createRequestContext()` congela el snapshot y permisos con `Object.freeze`;
+- correlation ID por request generado con `randomUUID()`;
+- `CommandContext.request` expone el snapshot inmutable sin retirar todavía aliases legacy;
+- `SharedCommandEngine` rechaza bindings cruzados entre request, adapter y `NormalizedMessage`;
+- permisos usados por metadata pueden salir del snapshot B5;
+- WhatsApp crea el snapshot después de resolver permisos relevantes del comando;
+- Discord separa reply `messageId` del `requestMessageId` de slash/components;
+- Telegram crea un snapshot por mensaje procesado;
+- logs de error de los tres routers incluyen el correlation ID del request;
+- B5 no modifica `WhatsAppAdapter.activeUserId`: esa migración permanece en D1;
+- documentación: `docs/v2/PHASE_B5.md`;
+- gate dedicado: `scripts/phase-b5-request-context-smoke.mjs`.
 
 ---
 

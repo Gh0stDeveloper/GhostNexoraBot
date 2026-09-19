@@ -160,6 +160,28 @@ export class SharedCommandEngine {
   ): Promise<SharedCommandExecutionResult> {
     const command = typeof commandOrToken === 'string' ? this.resolve(commandOrToken) : commandOrToken
     if (!command) return { executed: false, reason: 'not_found' }
+
+    assertRequestContextBinding(context.request, {
+      platform: context.adapter.id,
+      botInstanceId: context.adapter.botInstanceId,
+      chatId: context.normalizedMessage.chatId,
+      userId: context.normalizedMessage.senderId,
+      messageId: context.normalizedMessage.messageId,
+    })
+    const requestPermissions = context.request.permissions
+    if (
+      context.platform !== context.request.platform
+      || context.chatId !== context.request.chatId
+      || context.sender !== context.request.userId
+      || context.locale !== context.request.locale
+      || context.isOwner !== requestPermissions.isOwner
+      || context.isBotStaff !== requestPermissions.isStaff
+      || context.isGroup !== requestPermissions.isGroup
+      || context.isSubbotOwner !== requestPermissions.isInstanceOwner
+    ) {
+      throw new Error('CommandContext diverged from immutable RequestContext.')
+    }
+
     if (!options.allowLegacy && !this.isNeutral(command)) {
       return { executed: false, reason: 'legacy_only', command }
     }
@@ -181,10 +203,12 @@ export class SharedCommandEngine {
         throw new Error(context.t('router.staffOnly'))
       }
       if (command.groupOnly && !context.isGroup) throw new Error(context.t('router.groupOnly'))
-      if (command.adminOnly && !context.isOwner && !context.isBotStaff && !context.isSubbotOwner && !options.isGroupAdmin) {
+      const isGroupAdmin = options.isGroupAdmin ?? requestPermissions.isGroupAdmin
+      const botIsGroupAdmin = options.botIsGroupAdmin ?? requestPermissions.isBotGroupAdmin
+      if (command.adminOnly && !context.isOwner && !context.isBotStaff && !context.isSubbotOwner && !isGroupAdmin) {
         throw new Error(context.t('router.adminOnly'))
       }
-      if (command.botAdminOnly && context.isGroup && !options.botIsGroupAdmin) {
+      if (command.botAdminOnly && context.isGroup && !botIsGroupAdmin) {
         throw new Error(context.t('router.botAdminOnly'))
       }
     }

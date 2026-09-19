@@ -27,6 +27,7 @@ import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCa
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
+import { createRequestContext } from '../../core/request-context.js'
 import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import { telegramOwner, telegramStaff } from './config.js'
 import type { TelegramAdapter } from './adapter.js'
@@ -241,6 +242,22 @@ export class TelegramCommandRouter {
     const userId = String(message.from?.id ?? '')
     const isOwner = telegramOwner(message.from?.id)
     const isStaff = telegramStaff(message.from?.id)
+    const request = createRequestContext({
+      platform: 'telegram',
+      botInstanceId: this.adapter.botInstanceId,
+      chatId: normalized.chatId,
+      userId: normalized.senderId,
+      locale,
+      messageId: normalized.messageId,
+      permissions: {
+        isOwner,
+        isStaff,
+        isGroup: message.chat.type !== 'private',
+        isGroupAdmin: false,
+        isBotGroupAdmin: false,
+        isInstanceOwner: false,
+      },
+    })
     const sharedCommand = sharedCommandEngine.resolve(parsed.command)
     if (!sharedCommand) {
       const metadata = commandMetadataForPlatformToken('telegram', parsed.command)
@@ -304,17 +321,14 @@ export class TelegramCommandRouter {
       if (sharedCommand) {
         const args = parsed.argText.trim() ? parsed.argText.trim().split(/\\s+/) : []
         const context = createNeutralCommandContext({
-          platform: 'telegram',
+          request,
           adapter: this.adapter,
           normalizedMessage: normalized,
           commandName: sharedCommand.name,
           args,
           prefix: '/',
           settings,
-          locale,
           t: (key, values = {}) => translate(locale, key, values),
-          isOwner,
-          isBotStaff: isStaff,
         })
         const result = await sharedCommandEngine.execute(sharedCommand, context, { enforceMetadata: true })
         if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Telegram', command: `/${parsed.command}`, help: '/help' }))
@@ -338,7 +352,12 @@ export class TelegramCommandRouter {
       return true
     } catch (error) {
       try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, false, undefined, auditIdentity) } catch {}
-      logger.warn({ error, chatId: normalized.chatId, command: parsed.command }, 'Telegram command failed')
+      logger.warn({
+        error,
+        chatId: normalized.chatId,
+        command: parsed.command,
+        correlationId: request.correlationId,
+      }, 'Telegram command failed')
       const publicError = localizeLegacyText(error instanceof Error ? error.message : t(locale, 'common.internalError'), locale)
       await this.adapter.sendText(normalized.chatId, t(locale, 'telegram.error.public', { error: publicError }), { replyTo: normalized.messageId }).catch(() => undefined)
       return true
