@@ -15,6 +15,77 @@ import {
 
 const prohibited = /\b(child|children|underage|minor|preteen|pre-teen|niñ[oa]s?|menor(?:es)?)\b/i
 
+const roleplaySendQueue = new Map<string, Promise<void>>()
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function errorText(error: unknown) {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause
+    return [error.name, error.message, cause ? String(cause) : ''].join(' ').toLowerCase()
+  }
+  try { return JSON.stringify(error).toLowerCase() } catch { return String(error).toLowerCase() }
+}
+
+function isRateOverlimit(error: unknown) {
+  const text = errorText(error)
+  return text.includes('rate-overlimit')
+    || text.includes('rate overlimit')
+    || text.includes('rate limit')
+    || text.includes('too many requests')
+    || text.includes('statuscode":429')
+    || text.includes('status":429')
+}
+
+async function queuedRoleplaySend(chatId: string, task: () => Promise<void>) {
+  const previous = roleplaySendQueue.get(chatId) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => { release = resolve })
+  roleplaySendQueue.set(chatId, previous.catch(() => undefined).then(() => current))
+
+  await previous.catch(() => undefined)
+  try {
+    await task()
+  } finally {
+    release()
+    if (roleplaySendQueue.get(chatId) === current) roleplaySendQueue.delete(chatId)
+  }
+}
+
+async function sendRoleplayText(ctx: CommandContext, caption: string, mentions: string[]) {
+  let lastError: unknown
+  for (const delay of [0, 2500, 5000]) {
+    if (delay) await wait(delay)
+    try {
+      await queuedRoleplaySend(ctx.chatId, async () => {
+        await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions }, { quoted: ctx.message })
+      })
+      return
+    } catch (error) {
+      lastError = error
+      if (!isRateOverlimit(error)) throw error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('rate-overlimit')
+}
+
+async function sendMediaOrTextFallback(
+  ctx: CommandContext,
+  sendMedia: () => Promise<void>,
+  caption: string,
+  mentions: string[],
+) {
+  try {
+    await queuedRoleplaySend(ctx.chatId, sendMedia)
+  } catch (error) {
+    if (!isRateOverlimit(error)) throw error
+    await wait(2500)
+    await sendRoleplayText(ctx, caption, mentions)
+  }
+}
+
 function normalizeJid(value?: string | null) {
   if (!value) return ''
   try {
@@ -156,16 +227,23 @@ async function sendGifPlayback(
   mentions: string[],
   mimetype = 'video/mp4',
 ) {
-  await ctx.socket.sendMessage(
-    ctx.chatId,
-    {
-      video,
-      gifPlayback: true,
-      mimetype,
-      caption,
-      mentions,
+  await sendMediaOrTextFallback(
+    ctx,
+    async () => {
+      await ctx.socket.sendMessage(
+        ctx.chatId,
+        {
+          video,
+          gifPlayback: true,
+          mimetype,
+          caption,
+          mentions,
+        },
+        { quoted: ctx.message },
+      )
     },
-    { quoted: ctx.message },
+    caption,
+    mentions,
   )
 }
 
@@ -202,10 +280,17 @@ async function run(def: Def, ctx: CommandContext) {
       )
       return
     }
-    await ctx.socket.sendMessage(
-      ctx.chatId,
-      { image: local.data, caption, mentions },
-      { quoted: ctx.message },
+    await sendMediaOrTextFallback(
+      ctx,
+      async () => {
+        await ctx.socket.sendMessage(
+          ctx.chatId,
+          { image: local.data, caption, mentions },
+          { quoted: ctx.message },
+        )
+      },
+      caption,
+      mentions,
     )
     return
   }
@@ -225,8 +310,12 @@ async function run(def: Def, ctx: CommandContext) {
     const reaction = await getReactionGif(def.category)
     const video = await reactionGifToMp4(reaction.url)
     await sendGifPlayback(ctx, video, caption, mentions)
-  } catch {
-    await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions }, { quoted: ctx.message })
+  } catch (error) {
+    if (isRateOverlimit(error)) {
+      await sendRoleplayText(ctx, caption, mentions)
+      return
+    }
+    await sendRoleplayText(ctx, caption, mentions)
   }
 }
 
