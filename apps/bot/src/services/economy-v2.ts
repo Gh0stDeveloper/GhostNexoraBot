@@ -26,6 +26,7 @@ function mark(userJid: string, action: string) {
 function ledger(userJid: string, kind: string, amount: number, counterparty?: string, note?: string) {
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, counterparty_jid, note, created_at) VALUES(?, ?, ?, ?, ?, ?)')
     .run(userJid, kind, amount, counterparty ?? null, note ?? null, now())
+  economy.recordGlobalLedger(userJid, kind, amount, counterparty, note)
 }
 
 export const economyV2 = {
