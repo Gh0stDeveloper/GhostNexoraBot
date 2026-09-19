@@ -65,7 +65,6 @@ function searchCommands(query: string): SearchHit[] {
     .map(({ command, tokens }) => ({ command, tokens, score: scoreCommand(command, tokens, query) }))
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score || a.command.name.localeCompare(b.command.name))
-    .slice(0, 12)
 }
 
 export const commandSearchCommands: BotCommand[] = [
@@ -92,7 +91,7 @@ export const commandSearchCommands: BotCommand[] = [
       }
 
       const groupAdmin = ctx.isGroup ? await isGroupAdministrator(ctx).catch(() => false) : false
-      const hits = searchCommands(query).filter((hit) => visibleTo(ctx, hit.command, groupAdmin))
+      const hits = searchCommands(query).filter((hit) => visibleTo(ctx, hit.command, groupAdmin)).slice(0, 12)
       if (!hits.length) {
         await ctx.reply(`No encontré comandos activos relacionados con *${ctx.argText.trim()}*.`)
         return
