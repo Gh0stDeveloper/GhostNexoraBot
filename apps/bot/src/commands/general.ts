@@ -6,6 +6,7 @@ import { community } from '../services/community.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
 import { commandPlatformSupport } from '../services/command-platform-support.js'
 import { effectiveCommands } from '../services/menu-registry.js'
+import { commandRuntimeDecision } from '../services/command-runtime-config.js'
 
 function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400)
@@ -56,6 +57,17 @@ export const generalCommands: NeutralBotCommand[] = [
           .filter((command) => commandPlatformSupport(command)[ctx.platform])
           .filter((command) => !command.ownerOnly || ctx.isOwner)
           .filter((command) => !command.staffOnly || ctx.isBotStaff)
+          .filter((command) => commandRuntimeDecision({
+            commandName: command.name,
+            category: command.category,
+            platform: ctx.platform,
+            isGroup: ctx.isGroup,
+            userId: ctx.sender,
+            isOwner: ctx.isOwner,
+            isStaff: ctx.isBotStaff,
+            isSubbotOwner: ctx.isSubbotOwner,
+            checkCooldown: false,
+          }).allowed)
           .sort((a, b) => a.name.localeCompare(b.name))
         await ctx.sendUi({
           kind: 'list',
