@@ -31,6 +31,20 @@ const columns = new Set(
 )
 if (!columns.has('category')) {
   opsDb.exec("ALTER TABLE ops_runtime_logs ADD COLUMN category TEXT NOT NULL DEFAULT 'runtime'")
+  opsDb.exec(`
+    UPDATE ops_runtime_logs
+    SET category = CASE
+      WHEN LOWER(source) LIKE '%whatsapp%' OR source = 'groups' OR LOWER(source) LIKE 'group-%' THEN 'whatsapp'
+      WHEN LOWER(source) LIKE '%discord%' THEN 'discord'
+      WHEN LOWER(source) LIKE '%telegram%' THEN 'telegram'
+      WHEN LOWER(source) LIKE 'command.%' OR LOWER(source) LIKE '%router%' THEN 'command'
+      WHEN LOWER(source) LIKE '%download%' OR LOWER(source) LIKE '%media%' OR LOWER(source) LIKE '%resource%' THEN 'download'
+      WHEN LOWER(source) LIKE '%api%' OR LOWER(source) LIKE '%provider%' OR LOWER(source) LIKE '%openrouter%' OR LOWER(source) LIKE '%lempi%' THEN 'api'
+      WHEN LOWER(source) LIKE '%security%' OR LOWER(source) LIKE '%auth%' OR LOWER(source) LIKE '%session%' THEN 'security'
+      ELSE 'runtime'
+    END
+    WHERE category = 'runtime';
+  `)
 }
 opsDb.exec('CREATE INDEX IF NOT EXISTS idx_ops_runtime_logs_instance_category_created ON ops_runtime_logs(instance_key, category, created_at DESC)')
 
