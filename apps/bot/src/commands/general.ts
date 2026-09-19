@@ -1,9 +1,8 @@
 import { config } from '../config.js'
-import type { BotCommand } from '../types.js'
+import type { BotCommand, CommandContext } from '../types.js'
 import { getBrandingAsset } from '../services/branding.js'
 import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
-import { sendInteractiveCard } from '../services/interactive.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
 
 function formatUptime(seconds: number) {
@@ -13,19 +12,12 @@ function formatUptime(seconds: number) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', `${minutes}m`].filter(Boolean).join(' ')
 }
 
-async function botAvatar(ctx: Parameters<BotCommand['handler']>[0]) {
-  const jid = ctx.socket.user?.id
-  if (!jid) return undefined
-  return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
-}
-
-async function menuArtwork(ctx: Parameters<BotCommand['handler']>[0]) {
+async function menuArtwork(ctx: CommandContext) {
   const banner = await getBrandingAsset('menu', ctx.instanceId).catch(() => null)
-  if (banner?.kind === 'image') return banner.path
-  return botAvatar(ctx)
+  return banner?.kind === 'image' ? banner.path : undefined
 }
 
-function identity(ctx: Parameters<BotCommand['handler']>[0]) {
+function identity(ctx: CommandContext) {
   if (ctx.instanceId) {
     const custom = subbotCustomization.get(ctx.instanceId)
     return { shortName: custom.shortName, longName: custom.longName, currencyName: custom.currencyName, label: `Subbot #${ctx.instanceId}` }
@@ -33,16 +25,17 @@ function identity(ctx: Parameters<BotCommand['handler']>[0]) {
   return { shortName: ctx.settings.botDisplayName, longName: ctx.settings.botDisplayName, currencyName: ctx.settings.currencyName, label: 'MainBot' }
 }
 
-async function sendMenu(ctx: Parameters<BotCommand['handler']>[0], artwork: string | undefined, menu: string, brand: ReturnType<typeof identity>) {
-  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+async function sendMenu(ctx: CommandContext, artwork: string | undefined, menu: string, brand: ReturnType<typeof identity>) {
+  await ctx.sendUi({
+    kind: 'card',
     title: `👻 ${brand.shortName} · MENÚ`,
     body: menu,
     footer: 'Ghost Developer / Nexora',
     imageUrl: artwork,
     buttons: [
-      { type: 'url', text: '📢 Ver canal', url: config.officialChannelUrl },
-      { type: 'reply', text: '👤 Mi perfil', id: `${ctx.prefix}profile` },
-      { type: 'reply', text: '🛒 Tienda', id: `${ctx.prefix}shop` },
+      { kind: 'url', label: '📢 Ver canal', value: config.officialChannelUrl },
+      { kind: 'command', label: '👤 Mi perfil', value: `${ctx.prefix}profile` },
+      { kind: 'command', label: '🛒 Tienda', value: `${ctx.prefix}shop` },
     ],
   })
 }
@@ -217,8 +210,9 @@ ${staffSection}
     name: 'ping', category: 'general', description: 'Comprueba latencia y disponibilidad.',
     async handler(ctx) {
       const start = performance.now()
-      await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
+      await ctx.setTyping(true).catch(() => undefined)
       const latency = Math.max(0, Math.round(performance.now() - start))
+      await ctx.setTyping(false).catch(() => undefined)
       const brand = identity(ctx)
       await ctx.reply(`╭━━〔 🏓 *${brand.shortName} · PONG* 〕━━╮\n┃ Latencia » *${latency} ms*\n┃ Uptime » *${formatUptime(process.uptime())}*\n┃ Estado » *ONLINE*\n╰━━━━━━━━━━━━━━╯`)
     },
@@ -231,8 +225,8 @@ ${staffSection}
       const body = [
         `╭━━〔 👻 *${brand.longName}* 〕━━╮`,
         `┃ Instancia » ${brand.label}`,
-        '┃ Plataforma » WhatsApp Multi-Device',
-        '┃ Core » TypeScript + Baileys',
+        `┃ Plataforma » ${ctx.platform.toUpperCase()}`,
+        '┃ Core » TypeScript + PlatformAdapter',
         '┃ Panel » Next.js',
         '┃ Economía » Nexora Economy',
         '┃ Juegos » IA + PvP',
@@ -243,7 +237,11 @@ ${staffSection}
         '╰━━━━━━━━━━━━━━━━╯',
       ].join('\n')
       if (artwork) {
-        const sent = await ctx.socket.sendMessage(ctx.chatId, { image: { url: artwork }, caption: body }, { quoted: ctx.message }).catch(() => null)
+        const sent = await ctx.sendMedia({
+          kind: 'image',
+          source: { kind: 'path', value: artwork },
+          caption: body,
+        }).catch(() => null)
         if (sent) return
       }
       await ctx.reply(body)
