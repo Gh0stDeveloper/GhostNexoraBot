@@ -60,7 +60,7 @@ assert.doesNotMatch(adminPage, /<nav className="mt-5 flex gap-2 overflow-x-auto/
 
 assert.match(subbotPage, /const navigationItems: UnifiedNavItem\[] = sections\.map/, 'Subbot navigation must derive from isolated sections')
 assert.match(subbotPage, /brandTitle=\{`SUBBOT #\$\{subbot\.id\}`\}/, 'Subbot identity must remain visible in shared sidebar')
-assert.match(subbotPage, /sectionIds: SubbotSection\[] = \['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'account'\]/, 'Subbot must retain only its isolated sections')
+assert.match(subbotPage, /sectionIds: SubbotSection\[] = \['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'audit', 'diagnostics', 'account'\]/, 'Subbot must retain only its isolated sections, including its own E10 logs')
 assert.match(subbotPage, /\['providers', t\('nav\.providers'\)/, 'Subbot must expose only its own provider telemetry')
 assert.match(subbotPage, /\['commands', t\('nav\.commands'\)/, 'Subbot must expose only its own command telemetry')
 assert.doesNotMatch(subbotPage, /management|nav\.subbots|nav\.security/, 'Subbot sidebar must not expose MainBot owner navigation')
@@ -71,6 +71,7 @@ assert.match(i18n, /'home\.navAria': 'Primary navigation'/, 'English public navi
 assert.match(i18n, /'nav\.providers': 'Providers'/, 'Providers navigation label missing')
 assert.match(i18n, /'nav\.commands': 'Comandos'/, 'Spanish Commands navigation label missing')
 assert.match(i18n, /'nav\.commands': 'Commands'/, 'English Commands navigation label missing')
+assert.match(i18n, /'nav\.logs': 'Logs'/, 'E10 Logs navigation label missing')
 assert.match(i18n, /'nav\.close': 'Cerrar navegación'/, 'Spanish drawer close label missing')
 assert.match(i18n, /'nav\.close': 'Close navigation'/, 'English drawer close label missing')
 
