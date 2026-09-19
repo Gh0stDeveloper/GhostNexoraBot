@@ -4,6 +4,8 @@ import { getBrandingAsset } from '../services/branding.js'
 import { economy } from '../services/economy.js'
 import { community } from '../services/community.js'
 import { subbotCustomization } from '../services/subbot-customization.js'
+import { commandPlatformSupport } from '../services/command-platform-support.js'
+import { effectiveCommands } from '../services/menu-registry.js'
 
 function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400)
@@ -47,6 +49,27 @@ export const generalCommands: NeutralBotCommand[] = [
       const p = ctx.prefix
       const artwork = await menuArtwork(ctx)
       const brand = identity(ctx)
+
+      if (ctx.platform !== 'whatsapp') {
+        const rows = effectiveCommands()
+          .map(({ command }) => command)
+          .filter((command) => commandPlatformSupport(command)[ctx.platform])
+          .filter((command) => !command.ownerOnly || ctx.isOwner)
+          .filter((command) => !command.staffOnly || ctx.isBotStaff)
+          .sort((a, b) => a.name.localeCompare(b.name))
+        await ctx.sendUi({
+          kind: 'list',
+          title: `${brand.shortName} · ${ctx.platform.toUpperCase()}`,
+          body: 'Comandos compartidos disponibles en esta plataforma.',
+          items: rows.map((command) => ({
+            id: command.name,
+            title: `${p}${command.name}`,
+            description: command.description,
+            action: { kind: 'command', label: command.name, value: `${p}${command.name}` },
+          })),
+        })
+        return
+      }
       const privateUntil = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner ? null : economy.hasEntitlement(ctx.sender, 'private_access')
       const privateUnlocked = ctx.isGroup || ctx.isBotStaff || ctx.isSubbotOwner || Boolean(privateUntil)
       const groupEnabled = !ctx.isGroup || community.getGroupSettings(ctx.chatId).botEnabled
