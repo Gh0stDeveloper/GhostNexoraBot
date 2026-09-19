@@ -79,8 +79,11 @@ export async function addAdultReactionMedia(
     throw new Error('Etiqueta bloqueada por el filtro de seguridad.')
   }
 
+  const equivalentPools = equivalentAdultMediaCommands(target)
+  const equivalentPlaceholders = equivalentPools.map(() => '?').join(',')
   const count = Number(
-    (db.prepare('SELECT COUNT(*) as count FROM adult_reaction_media WHERE command_name = ?').get(target) as { count: number }).count,
+    (db.prepare(`SELECT COUNT(*) as count FROM adult_reaction_media WHERE command_name IN (${equivalentPlaceholders})`)
+      .get(...equivalentPools) as { count: number }).count,
   )
   if (count >= MAX_PER_COMMAND) {
     throw new Error('Ese comando ya tiene ' + MAX_PER_COMMAND + ' medios. Elimina uno antes de añadir otro.')
