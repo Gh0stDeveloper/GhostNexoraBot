@@ -20,6 +20,8 @@ import { discordCommandAliases } from '../../services/command-platform-support.j
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
+import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
+import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import type { DiscordAdapter } from './adapter.js'
 import { discordConfig, discordOwner, discordStaff } from './config.js'
 import { normalizeDiscordMessage } from './normalize.js'
@@ -33,6 +35,7 @@ import type {
 } from './types.js'
 
 const aliases = discordCommandAliases
+const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
 
 function localizedDescription(key: string) {
   return {
@@ -166,7 +169,7 @@ function splitCommand(raw: string) {
   const name = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).toLowerCase()
   return {
     rawName: name,
-    command: aliases.get(name),
+    command: aliases.get(name) ?? sharedCommandEngine.resolve(name)?.name,
     argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(),
   }
 }
@@ -383,7 +386,8 @@ export class DiscordCommandRouter {
     const locale = this.locale(invocation)
     const isOwner = discordOwner(invocation.user.id)
     const isStaff = discordStaff(invocation.user.id)
-    const category = resolveConfiguredCommandCategory(invocation.command)
+    const sharedCommand = sharedCommandEngine.resolve(invocation.command)
+    const category = sharedCommand?.category ?? resolveConfiguredCommandCategory(invocation.command)
     const runtimeDecision = commandRuntimeDecision({
       commandName: invocation.command,
       category,
@@ -418,7 +422,34 @@ export class DiscordCommandRouter {
     const auditStarted = performance.now()
     await this.adapter.setTyping?.(invocation.channelId, true).catch(() => undefined)
     try {
-      if (invocation.command === 'help') await this.help(invocation, locale)
+      if (sharedCommand) {
+        const args = invocation.argText.trim() ? invocation.argText.trim().split(/\\s+/) : []
+        const normalizedMessage = {
+          platform: 'discord' as const,
+          botInstanceId: this.adapter.botInstanceId,
+          chatId: invocation.channelId,
+          senderId: `discord:${invocation.user.id}`,
+          messageId: invocation.messageId ?? '',
+          text: [invocation.command, invocation.argText].filter(Boolean).join(' '),
+          isGroup: Boolean(invocation.guildId),
+          pushName: invocation.user.global_name ?? invocation.user.username,
+        }
+        const context = createNeutralCommandContext({
+          platform: 'discord',
+          adapter: this.adapter,
+          normalizedMessage,
+          commandName: sharedCommand.name,
+          args,
+          prefix: '/',
+          settings,
+          locale,
+          t: (key, values = {}) => translate(locale, key, values),
+          isOwner,
+          isBotStaff: isStaff,
+        })
+        const result = await sharedCommandEngine.execute(sharedCommand, context, { enforceMetadata: true })
+        if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Discord', command: invocation.command, help: '/help' }))
+      } else if (invocation.command === 'help') await this.help(invocation, locale)
       else if (invocation.command === 'language') await this.language(invocation, locale)
       else if (invocation.command === 'ping') {
         const started = Date.now()
@@ -503,7 +534,7 @@ export class DiscordCommandRouter {
 
     if (interaction.type === 2) {
       const data = interaction.data as DiscordApplicationCommandData
-      const command = aliases.get(data.name.toLowerCase())
+      const command = aliases.get(data.name.toLowerCase()) ?? sharedCommandEngine.resolve(data.name)?.name
       if (!command) return false
       return this.execute({
         command,
