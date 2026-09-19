@@ -1,6 +1,6 @@
 # Fase B4 — Capability-aware command execution
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -34,3 +34,14 @@ El comando declara intención mediante `requiresCapabilities`; no necesita pregu
 ## Validación
 
 El gate `scripts/phase-b4-capability-execution-smoke.mjs` valida fallbacks de UI, typing, edición y archivos, además del bloqueo previo para polls.
+
+
+## Cierre validado
+
+- `SharedCommandEngine` realiza preflight de `requiresCapabilities`.
+- Los fallbacks degradables se ejecutan sin duplicar handlers por plataforma.
+- `polls` y `groupModeration` bloquean antes del handler cuando no existe soporte.
+- Los comandos nativos restantes de Discord/Telegram usan el mismo resolvedor.
+- `scripts/phase-b4-capability-execution-smoke.mjs` pasó en CI.
+- Typecheck, Build, Windows, Termux y regresión completa pasaron sobre `07c27051f50b16eb228ea9d5cb14ed6083a9cb40`.
+- Evidencia funcional: CI run `35471325648` · success.

@@ -388,7 +388,7 @@ Cierre B3:
 
 ## B4. Capability-aware command execution
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Los comandos deben declarar capacidades requeridas cuando aplique:
 
@@ -414,6 +414,16 @@ Implementación B4:
 - `menu`, `ping` e `info` declaran capacidades reales para cubrir UI, typing y archivos;
 - documentación técnica: `docs/v2/PHASE_B4.md`;
 - gate dedicado: `scripts/phase-b4-capability-execution-smoke.mjs`.
+
+Cierre B4:
+
+- Typecheck y Build completos en verde sobre `07c27051f50b16eb228ea9d5cb14ed6083a9cb40`;
+- smoke B4 ejecutado en CI y validado con fallbacks de UI, typing, edición y archivos;
+- hard requirements sin fallback seguro bloquean antes del handler;
+- B1, B2 y B3 permanecen en verde;
+- Windows y Termux continúan compatibles;
+- CI funcional completo: run `35471325648` · success;
+- PR de cierre: #85 `feat: complete Phase B4 capability-aware execution`.
 
 ## B5. RequestContext inmutable
 
@@ -1530,10 +1540,11 @@ Estas tareas están incluidas dentro de las fases anteriores:
 |---|---|---|---|---|
 | 2026-09-18 | Plan general | Se crea este roadmap de próximas integraciones | TERMINADO | — |
 | 2026-09-18 | Fase A | Login, roles, sesiones, Passkeys, TOTP y seguridad Web | TERMINADO | PR #75 · c01c0ee61726fd4325a6fc60bd62108a880684e4 |
-| 2026-09-19 | Fase B | Núcleo multiplataforma · B1–B3 completadas | EN PROGRESO | PR #83 |
+| 2026-09-19 | Fase B | Núcleo multiplataforma · B1–B4 completadas | EN PROGRESO | PR #83 · PR #85 |
 | 2026-09-19 | Fase B1 | CommandContext neutral y frontera legacy WhatsApp | TERMINADO | 0f4d48dc1cf4120fd1a1b7169a8bdedb16f35c52 |
 | 2026-09-19 | Fase B2 | Shared Command Engine para WhatsApp/Discord/Telegram | TERMINADO | 95bac21414c2b4f5f6256763b196dc7031037e54 |
 | 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 |
+| 2026-09-19 | Fase B4 | Capability-aware command execution | TERMINADO | PR #85 |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
@@ -1552,13 +1563,13 @@ Estas tareas están incluidas dentro de las fases anteriores:
 
 # Próximo paso
 
-**FASE B está EN PROGRESO con B1, B2 y B3 terminadas.**
+**FASE B está EN PROGRESO con B1, B2, B3 y B4 terminadas.**
 
-El siguiente trabajo acordado es **B4 · Capability-aware command execution**.
+El siguiente trabajo acordado es **B5 · RequestContext inmutable**.
 
-B4 debe hacer que cada comando declare las capacidades que necesita y que el motor aplique fallbacks cuando una plataforma no soporte una UI u operación nativa, sin duplicar handlers.
+B5 debe aislar el contexto de cada mensaje para evitar estado mutable compartido durante procesamiento concurrente e incluir plataforma, instancia, chat, usuario, locale, permisos, message ID y correlation/request ID.
 
-No iniciar B4 automáticamente sin indicación del usuario.
+No iniciar B5 automáticamente sin indicación del usuario.
 
 Las fases C y D permanecen pospuestas. La Fase F sigue pendiente para cuando corresponda retomarla.
 
