@@ -327,7 +327,7 @@ export class CommandRouter {
       const executionStarted = performance.now()
       const heapBefore = process.memoryUsage().heapUsed
       if (!isOwner && !isBotStaff && !isSubbotOwner && runtimeDecision.config.cooldownMs > 0) {
-        markCommandCooldown('main', 'whatsapp', command.name, sender)
+        markCommandCooldown('whatsapp', command.name, sender)
       }
       try {
         await command.handler(context)
