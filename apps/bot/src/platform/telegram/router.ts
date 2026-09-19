@@ -1,4 +1,4 @@
-import type { NormalizedUi } from '@ghostnexora/platform-contracts'
+import { resolveCapabilityRequirements, type NormalizedUi } from '@ghostnexora/platform-contracts'
 import { config } from '../../config.js'
 import { settings } from '../../core/settings.js'
 import {
@@ -19,6 +19,7 @@ import { providerHealthSnapshot } from '../../services/download-providers/runtim
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
 import { telegramCommandAliases } from '../../services/command-platform-support.js'
 import {
+  commandMetadataForPlatformToken,
   commandMetadataVisibleTo,
   platformCommandMetadata,
 } from '../../services/command-metadata.js'
@@ -241,6 +242,24 @@ export class TelegramCommandRouter {
     const isOwner = telegramOwner(message.from?.id)
     const isStaff = telegramStaff(message.from?.id)
     const sharedCommand = sharedCommandEngine.resolve(parsed.command)
+    if (!sharedCommand) {
+      const metadata = commandMetadataForPlatformToken('telegram', parsed.command)
+      const capabilityResolution = resolveCapabilityRequirements(
+        this.adapter.capabilities,
+        metadata?.requiredCapabilities ?? [],
+      )
+      if (capabilityResolution.missing.length) {
+        await this.adapter.sendText(
+          normalized.chatId,
+          t(locale, 'router.capabilityUnavailable', {
+            platform: 'Telegram',
+            capabilities: capabilityResolution.missing.join(', '),
+          }),
+          { replyTo: normalized.messageId },
+        )
+        return true
+      }
+    }
     const category = sharedCommand?.category ?? resolveConfiguredCommandCategory(parsed.command)
     const runtimeDecision = commandRuntimeDecision({
       commandName: parsed.command,

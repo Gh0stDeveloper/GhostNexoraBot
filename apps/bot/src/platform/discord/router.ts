@@ -1,4 +1,4 @@
-import type { NormalizedUi } from '@ghostnexora/platform-contracts'
+import { resolveCapabilityRequirements, type NormalizedUi } from '@ghostnexora/platform-contracts'
 import { config } from '../../config.js'
 import { settings } from '../../core/settings.js'
 import {
@@ -345,6 +345,24 @@ export class DiscordCommandRouter {
     const isOwner = discordOwner(invocation.user.id)
     const isStaff = discordStaff(invocation.user.id)
     const sharedCommand = sharedCommandEngine.resolve(invocation.command)
+    if (!sharedCommand) {
+      const metadata = commandMetadataForPlatformToken('discord', invocation.command)
+      const capabilityResolution = resolveCapabilityRequirements(
+        this.adapter.capabilities,
+        metadata?.requiredCapabilities ?? [],
+      )
+      if (capabilityResolution.missing.length) {
+        await this.adapter.sendText(
+          invocation.channelId,
+          t(locale, 'router.capabilityUnavailable', {
+            platform: 'Discord',
+            capabilities: capabilityResolution.missing.join(', '),
+          }),
+          invocation.messageId ? { replyTo: invocation.messageId } : undefined,
+        )
+        return true
+      }
+    }
     const category = sharedCommand?.category ?? resolveConfiguredCommandCategory(invocation.command)
     const runtimeDecision = commandRuntimeDecision({
       commandName: invocation.command,

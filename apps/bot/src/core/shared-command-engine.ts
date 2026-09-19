@@ -1,7 +1,9 @@
-import type {
-  NormalizedMessage,
-  PlatformAdapter,
-  PlatformId,
+import {
+  resolveCapabilityRequirements,
+  type CapabilityName,
+  type NormalizedMessage,
+  type PlatformAdapter,
+  type PlatformId,
 } from '@ghostnexora/platform-contracts'
 import type {
   BotCommand,
@@ -32,12 +34,13 @@ export type SharedCommandContextInput = {
 export type SharedCommandExecuteOptions = {
   allowLegacy?: boolean
   enforceMetadata?: boolean
+  enforceCapabilities?: boolean
   isGroupAdmin?: boolean
   botIsGroupAdmin?: boolean
 }
 
 export type SharedCommandExecutionResult =
-  | { executed: true; command: BotCommand }
+  | { executed: true; command: BotCommand; fallbackCapabilities: CapabilityName[] }
   | { executed: false; reason: 'not_found' | 'legacy_only'; command?: BotCommand }
 
 export function createNeutralCommandContext(input: SharedCommandContextInput): CommandContext {
@@ -65,23 +68,32 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   })
   const sendText: CommandContext['sendText'] = (text, options) =>
     adapter.sendText(chatId, text, withCurrentReply(options))
-  const sendMedia: CommandContext['sendMedia'] = (media, options) =>
-    adapter.sendMedia(chatId, media, withCurrentReply(options))
+  const sendMedia: CommandContext['sendMedia'] = async (media, options) => {
+    if (adapter.capabilities.files) return adapter.sendMedia(chatId, media, withCurrentReply(options))
+    if (media.source.kind === 'url') {
+      const fallbackText = [media.caption, media.source.value].filter(Boolean).join('\n')
+      return adapter.sendText(chatId, fallbackText || media.source.value, withCurrentReply(options))
+    }
+    throw new Error(t('router.capabilityUnavailable', { platform, capabilities: 'files' }))
+  }
   const sendUi: CommandContext['sendUi'] = (ui, options) =>
     adapter.sendUi(chatId, ui, withCurrentReply(options))
   const setTyping: CommandContext['setTyping'] = async (active) => {
-    if (adapter.setTyping) await adapter.setTyping(chatId, active)
+    if (adapter.capabilities.typing && adapter.setTyping) await adapter.setTyping(chatId, active)
   }
   const editMessage: CommandContext['editMessage'] = async (messageId, text) => {
-    if (!adapter.editMessage) throw new Error(`La plataforma ${adapter.id} no soporta edición de mensajes.`)
-    await adapter.editMessage(chatId, messageId, text)
+    if (adapter.capabilities.editMessage && adapter.editMessage) {
+      await adapter.editMessage(chatId, messageId, text)
+      return
+    }
+    await sendText(text)
   }
   const reply: CommandContext['reply'] = async (text) => {
     const sent = await sendText(text)
     return sent.raw
   }
   const react: CommandContext['react'] = async (reaction) => {
-    if (!normalizedMessage.messageId || !adapter.react) return undefined
+    if (!normalizedMessage.messageId || !adapter.capabilities.reactions || !adapter.react) return undefined
     await adapter.react(chatId, normalizedMessage.messageId, reaction)
     return undefined
   }
@@ -152,6 +164,17 @@ export class SharedCommandEngine {
       return { executed: false, reason: 'legacy_only', command }
     }
 
+    const capabilityResolution = resolveCapabilityRequirements(
+      context.adapter.capabilities,
+      command.requiresCapabilities ?? [],
+    )
+    if (options.enforceCapabilities !== false && capabilityResolution.missing.length) {
+      throw new Error(context.t('router.capabilityUnavailable', {
+        platform: context.platform,
+        capabilities: capabilityResolution.missing.join(', '),
+      }))
+    }
+
     if (options.enforceMetadata !== false) {
       if (command.ownerOnly && !context.isOwner) throw new Error(context.t('router.ownerOnly'))
       if (command.staffOnly && !context.isBotStaff && !(command.subbotOwnerAllowed && context.isSubbotOwner)) {
@@ -167,6 +190,10 @@ export class SharedCommandEngine {
     }
 
     await command.handler(context as LegacyCompatibleCommandContext)
-    return { executed: true, command }
+    return {
+      executed: true,
+      command,
+      fallbackCapabilities: capabilityResolution.fallback.map((entry) => entry.name),
+    }
   }
 }

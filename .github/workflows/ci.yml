@@ -56,6 +56,9 @@ jobs:
       - name: Phase B3 central command metadata smoke
         run: node scripts/phase-b3-command-metadata-smoke.mjs
 
+      - name: Phase B4 capability-aware command execution smoke
+        run: node scripts/phase-b4-capability-execution-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 

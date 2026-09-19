@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import {
+  CAPABILITY_FALLBACKS,
   PLATFORM_IDS,
+  canExecuteWithCapabilityFallbacks,
   createPlatformCapabilities,
   isPlatformId,
   normalizedUiToText,
+  resolveCapabilityRequirements,
   supportsCapabilities,
 } from '../packages/platform-contracts/dist/index.js'
 import { MemoryPlatformAdapter } from '../packages/platform-contracts/dist/testing.js'
@@ -32,6 +35,15 @@ const capabilities = createPlatformCapabilities({
 })
 assert.equal(supportsCapabilities(capabilities, ['editMessage', 'buttons']), true)
 assert.equal(supportsCapabilities(capabilities, ['carousel']), false)
+assert.equal(CAPABILITY_FALLBACKS.carousel, 'text')
+assert.equal(CAPABILITY_FALLBACKS.files, 'operation')
+assert.deepEqual(resolveCapabilityRequirements(capabilities, ['editMessage', 'carousel']), {
+  supported: ['editMessage'],
+  fallback: [{ name: 'carousel', kind: 'text' }],
+  missing: [],
+})
+assert.equal(canExecuteWithCapabilityFallbacks(capabilities, ['carousel']), true)
+assert.equal(canExecuteWithCapabilityFallbacks(capabilities, ['polls']), false)
 assert.throws(() => createPlatformCapabilities({ maxUploadBytes: -1 }), /non-negative safe integer/)
 
 const cardText = normalizedUiToText({
@@ -76,7 +88,8 @@ assert.deepEqual(
 )
 assert.equal(isCommandAvailable({ ...commandFixture[0], scope: 'shared' }, 'discord', capabilities), true)
 assert.equal(isCommandAvailable({ ...commandFixture[0], scope: 'runtime-only' }, 'discord', capabilities), false)
-assert.equal(isCommandAvailable({ ...commandFixture[0], requiresCapabilities: ['carousel'] }, 'telegram', capabilities), false)
+assert.equal(isCommandAvailable({ ...commandFixture[0], requiresCapabilities: ['carousel'] }, 'telegram', capabilities), true)
+assert.equal(isCommandAvailable({ ...commandFixture[0], requiresCapabilities: ['polls'] }, 'telegram', capabilities), false)
 
 const identity = { platform: 'whatsapp', botInstanceId: 'main bot' }
 assert.equal(createRuntimeNamespace(identity), 'whatsapp:main%20bot')
