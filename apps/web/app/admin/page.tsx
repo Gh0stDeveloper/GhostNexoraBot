@@ -9,6 +9,7 @@ import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { SecurityCenter } from '../../components/security-center'
+import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
 import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
@@ -103,8 +104,34 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const canManageGroups = hasPermission(role, 'groups:manage')
   const canLeaveGroups = hasPermission(role, 'groups:leave')
   const canResetAudit = hasPermission(role, 'audit:reset')
+  const navIcon: Record<AdminSection, UnifiedNavIcon> = {
+    overview: 'dashboard',
+    platforms: 'platforms',
+    groups: 'groups',
+    audit: 'audit',
+    diagnostics: 'diagnostics',
+    management: 'settings',
+    subbots: 'subbots',
+    security: 'security',
+  }
+  const navigationItems: UnifiedNavItem[] = sections.map(([id, label]) => ({
+    id,
+    label,
+    href: hrefFor(id),
+    icon: navIcon[id],
+    active: section === id,
+  }))
 
-  return <main className="ops-page">
+  return <main className="ops-shell">
+    <UnifiedNavigation
+      items={navigationItems}
+      brandSubtitle={t('admin.title')}
+      brandHref={hrefFor('overview')}
+      badge={roleLabel(role)}
+      ariaLabel={t('admin.navAria')}
+      closeLabel={t('nav.close')}
+    />
+    <div className="ops-shell-content">
     <div className="mx-auto w-full max-w-[1540px] px-4 py-7 md:px-7 lg:px-9">
       <header className="flex flex-col gap-5 border-b border-white/[.07] pb-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
@@ -130,10 +157,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           </form>
         </div>
       </header>
-
-      <nav className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label={t('admin.navAria')}>
-        {sections.map(([id, label, Icon]) => <a key={id} href={hrefFor(id)} className={section === id ? 'ops-tab-active' : 'ops-tab'}><Icon className="size-4"/>{label}</a>)}
-      </nav>
 
       {params.ok && <div className="mt-5 rounded-xl border border-emerald-500/15 bg-emerald-500/[.07] px-4 py-3 text-sm text-emerald-300">{t('admin.ok')}</div>}
       {params.error && <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/[.07] px-4 py-3 text-sm text-red-300">{t('admin.error', { error: params.error })}</div>}
@@ -200,6 +223,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </section> : null}
 
       {section === 'security' ? <div className="mt-6"><SecurityCenter locale={locale}/></div> : null}
+    </div>
     </div>
   </main>
 }

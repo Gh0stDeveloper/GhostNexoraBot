@@ -8,6 +8,7 @@ import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
 import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { SecurityCenter } from '../../components/security-center'
+import { UnifiedNavigation, type UnifiedNavIcon, type UnifiedNavItem } from '../../components/unified-navigation'
 import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
@@ -57,17 +58,38 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const cards = [[Smartphone,t('subbot.number'),subbot.phone??t('common.unlinked')],[Bot,t('subbot.runtime'),snapshot.runtime.connected?t('admin.connected'):labels[subbot.status]??subbot.status],[Clock3,t('subbot.subscription'),new Date(Number(subbot.expiresAt)).toLocaleString(intl)],[UsersRound,t('subbot.groups'),(snapshot.platformGroups.length || snapshot.groups.length).toLocaleString(intl)],[Activity,t('admin.stat.platforms'),platformStatuses.filter((item) => item.connected).length.toLocaleString(intl)],[Download,t('subbot.downloads'),`${(Number(subbot.downloadBytes)/1024/1024).toFixed(1)} MB`]] as const
   const hrefFor = (target: SubbotSection) => `/subbot?section=${target}`
   const instanceLabel = `Subbot #${subbot.id}`
+  const navIcon: Record<SubbotSection, UnifiedNavIcon> = {
+    overview: 'dashboard',
+    platforms: 'platforms',
+    groups: 'groups',
+    audit: 'audit',
+    diagnostics: 'diagnostics',
+    account: 'account',
+  }
+  const navigationItems: UnifiedNavItem[] = sections.map(([id, label]) => ({
+    id,
+    label,
+    href: hrefFor(id),
+    icon: navIcon[id],
+    active: section === id,
+  }))
 
-  return <main className="ops-page">
+  return <main className="ops-shell">
+    <UnifiedNavigation
+      items={navigationItems}
+      brandTitle={`SUBBOT #${subbot.id}`}
+      brandSubtitle={t('subbot.operations')}
+      brandHref={hrefFor('overview')}
+      badge={snapshot.runtime.connected ? t('subbot.connected') : t('subbot.noHeartbeat')}
+      ariaLabel={t('subbot.navAria')}
+      closeLabel={t('nav.close')}
+    />
+    <div className="ops-shell-content">
     <div className="mx-auto w-full max-w-[1540px] px-4 py-7 md:px-7 lg:px-9">
       <header className="flex flex-col gap-5 border-b border-white/[.07] pb-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><Bot className="size-5 text-blue-400"/></span><div><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-500">{t('subbot.operations')}</p><h1 className="mt-1 text-2xl font-black tracking-tight">Subbot #{subbot.id}</h1><p className="mt-1 text-xs text-zinc-600">{t('subbot.subtitle', { status: snapshot.runtime.connected ? t('subbot.connected') : t('subbot.noHeartbeat') })}</p></div></div>
         <form method="post" action="/api/auth/logout"><input type="hidden" name="_csrf" value={csrfToken}/><button className="ops-button-muted"><LogOut className="size-4"/>{t('common.logout')}</button></form>
       </header>
-
-      <nav className="mt-5 flex gap-2 overflow-x-auto pb-1" aria-label={t('subbot.navAria')}>
-        {sections.map(([id,label,Icon])=><a key={id} href={hrefFor(id)} className={section===id?'ops-tab-active':'ops-tab'}><Icon className="size-4"/>{label}</a>)}
-      </nav>
 
       {params.ok && <div className="mt-5 rounded-xl border border-emerald-500/15 bg-emerald-500/[.07] px-4 py-3 text-sm text-emerald-300">{t('subbot.ok')}</div>}
       {params.error && <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/[.07] px-4 py-3 text-sm text-red-300">{t('subbot.error', { error: params.error })}</div>}
@@ -103,6 +125,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
       {section === 'diagnostics' && <div className="mt-6"><DeveloperDiagnostics snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canResetAudit/></div>}
 
       {section === 'account' && <div className="mt-6 space-y-6"><section className="ops-panel p-5"><div className="flex items-center gap-2 font-bold"><RefreshCcw className="size-4 text-blue-400"/>{t('subbot.resetTitle')}</div><p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">{t('subbot.resetText')}</p><form action="/api/control" method="post" className="mt-4"><input type="hidden" name="_csrf" value={csrfToken}/><input type="hidden" name="section" value="account"/><input type="hidden" name="action" value="reset_own_subbot"/><button className="ops-button-danger"><RefreshCcw className="size-4"/>{t('subbot.resetButton')}</button></form><p className="mt-5 text-xs text-zinc-700">{t('subbot.webSession', { date: new Date(Number(session.exp)).toLocaleString(intl) })}</p></section><SecurityCenter locale={locale}/></div>}
+    </div>
     </div>
   </main>
 }
