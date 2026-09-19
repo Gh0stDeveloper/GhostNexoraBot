@@ -53,11 +53,11 @@ function normalizeSection(value: unknown, session: WebSession) {
   const owner = session.role === 'owner'
   const privileged = session.role === 'owner' || session.role === 'admin' || session.role === 'support'
   const allowed = session.role === 'subbot'
-    ? new Set(['overview', 'groups', 'audit', 'account'])
+    ? new Set(['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'account'])
     : owner
-      ? new Set(['overview', 'groups', 'audit', 'management', 'subbots', 'security'])
+      ? new Set(['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security'])
       : privileged
-        ? new Set(['overview', 'groups', 'audit', 'security'])
+        ? new Set(['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'security'])
         : new Set(['overview'])
   const raw = String(value ?? 'overview').trim().toLowerCase()
   return allowed.has(raw) ? raw : 'overview'
