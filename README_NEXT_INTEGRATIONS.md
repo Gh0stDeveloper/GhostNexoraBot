@@ -1222,7 +1222,7 @@ Cierre:
 
 ## E14. Diseño visual
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 Mantener el tema oscuro pero acercarlo a un producto terminado.
 
@@ -1240,6 +1240,24 @@ Priorizar:
 - responsive móvil.
 
 Reducir textos internos y técnicos en vistas de administración normal.
+
+Implementación E14 en validación:
+
+- sistema visual común `ops-*` para jerarquía, spacing, densidad, cards, inputs, botones y tablas;
+- sidebar de escritorio más compacto y drawer móvil conservando navegación E1;
+- command palette accesible con `Ctrl/Cmd + K`, búsqueda de secciones y soporte móvil;
+- modal propio accesible para confirmaciones críticas, reemplazando `window.confirm`;
+- toasts autocerrables para resultados y errores de Admin/Subbot;
+- skeleton loading dedicado para rutas Admin y Subbot;
+- empty states comunes en rankings, jobs y backups;
+- status pills normalizados con radios y contraste consistente;
+- gráficas con frame visual y densidad compacta;
+- headers Admin/Subbot simplificados y menos técnicos;
+- tablas con encabezado sticky y filas compactas;
+- responsive móvil con márgenes, paneles, modales y toasts adaptados;
+- focus-visible y reduced-motion preservados;
+- copias nuevas integradas al catálogo ES/EN;
+- smoke dedicado E14 integrado al CI.
 
 ---
 
