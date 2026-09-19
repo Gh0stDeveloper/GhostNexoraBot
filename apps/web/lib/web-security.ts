@@ -22,6 +22,7 @@ export type WebPermission =
   | 'users:financial'
   | 'users:moderation'
   | 'users:subbots'
+  | 'economy:ledger'
   | 'audit:view'
   | 'audit:reset'
   | 'management:economy'
@@ -36,7 +37,7 @@ const permissions: Record<WebRole, ReadonlySet<WebPermission>> = {
   owner: new Set<WebPermission>([
     'dashboard:view', 'groups:view', 'groups:sync', 'groups:manage', 'groups:leave',
     'platforms:view', 'platforms:operate', 'platforms:disable', 'commands:view', 'commands:manage',
-    'users:view', 'users:financial', 'users:moderation', 'users:subbots', 'audit:view', 'audit:reset', 'management:economy', 'management:subbots',
+    'users:view', 'users:financial', 'users:moderation', 'users:subbots', 'economy:ledger', 'audit:view', 'audit:reset', 'management:economy', 'management:subbots',
     'management:broadcast', 'backups:read', 'backups:write', 'security:manage',
     'sessions:manage',
   ]),
