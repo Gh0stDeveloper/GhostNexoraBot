@@ -607,7 +607,7 @@ a una sección Developer o Diagnostics.
 
 ## E3. Pantalla Plataformas
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Mostrar por plataforma.
 
@@ -657,6 +657,14 @@ Implementación actual de E3:
 - desconectar exige autenticación reciente;
 - token del Control API permanece exclusivamente en servidor;
 - contrato Control API V2 ampliado con métricas y endpoint restart por plataforma.
+
+Cierre:
+
+- PR: #77 `feat: complete Phase E3 platforms dashboard`;
+- merge a `main`: `f6d557309d2029fd4d47cff39e41bc952e291a9d`;
+- CI principal: success;
+- V2 Phase 0–8: success;
+- Typecheck, Build, E0 smoke, E3 smoke e i18n: success.
 
 ## E4. Dashboard de Providers y APIs
 
