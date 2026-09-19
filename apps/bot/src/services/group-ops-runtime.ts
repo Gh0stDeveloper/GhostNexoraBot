@@ -384,12 +384,18 @@ async function syncOneGroup(groupJid: string, force = false) {
 async function hydrateNextObservedGroup() {
   const socket = currentSocket
   if (!socket || !socket.authState.creds.registered) return
-  const row = opsDb.prepare(`SELECT group_jid AS groupJid
+  const rows = opsDb.prepare(`SELECT group_jid AS groupJid
     FROM ops_groups
     WHERE instance_key = ?
       AND (name = group_jid OR TRIM(name) = '' OR participant_count = 0)
     ORDER BY updated_at DESC
-    LIMIT 1`).get(instanceKey) as { groupJid?: string } | undefined
+    LIMIT 25`).all(instanceKey) as unknown as Array<{ groupJid?: string }>
+
+  const now = Date.now()
+  const row = rows.find((candidate) => {
+    const groupJid = String(candidate.groupJid ?? '')
+    return groupJid.endsWith('@g.us') && now - (groupRefreshAt.get(groupJid) ?? 0) >= 60_000
+  })
   const groupJid = String(row?.groupJid ?? '')
   if (!groupJid.endsWith('@g.us')) return
   await syncOneGroup(groupJid, true)
