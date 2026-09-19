@@ -51,6 +51,8 @@ jobs:
       - name: Phase E4 providers dashboard smoke
         run: node scripts/phase-e4-providers-dashboard-smoke.mjs
 
+      - name: Phase E5 command center smoke
+        run: node scripts/phase-e5-command-center-smoke.mjs
 
       - name: Spotify, anime, adult permissions and Windows installer smoke
         run: node scripts/media-windows-permissions-smoke.mjs
