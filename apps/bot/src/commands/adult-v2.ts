@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -6,7 +6,7 @@ import { downloadAdult, searchAdult, type AdultProvider } from '../services/adul
 import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
-function assertAdult(ctx: CommandContext) {
+function assertAdult(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`El módulo 18+ está desactivado en este grupo. Un administrador puede usar ${ctx.prefix}adultmode on.`)
   } else if (!settings.adultEnabled || !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
@@ -16,7 +16,7 @@ function assertAdult(ctx: CommandContext) {
 function isUrl(value: string) { try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false } }
 function mb(value: number) { return `${(value / 1024 / 1024).toFixed(1)} MB` }
 
-async function sendVideo(ctx: CommandContext, provider: string, url: string) {
+async function sendVideo(ctx: LegacyCompatibleCommandContext, provider: string, url: string) {
   assertAdult(ctx)
   const progress = await createDownloadProgress(ctx, `${provider.toUpperCase()} · video`)
   await progress.update('downloading', 'Extrayendo la fuente directa y validando el archivo')
@@ -30,7 +30,7 @@ async function sendVideo(ctx: CommandContext, provider: string, url: string) {
   } finally { await result.cleanup() }
 }
 
-async function searchOrDownload(ctx: CommandContext, provider: AdultProvider) {
+async function searchOrDownload(ctx: LegacyCompatibleCommandContext, provider: AdultProvider) {
   assertAdult(ctx)
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}${provider} <búsqueda|url>`)

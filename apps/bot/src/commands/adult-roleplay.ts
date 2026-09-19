@@ -1,11 +1,11 @@
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { economy } from '../services/economy.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 import { getContextInfo } from '../utils/message.js'
 
-async function canonicalTarget(ctx: CommandContext) {
+async function canonicalTarget(ctx: LegacyCompatibleCommandContext) {
   const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
   if (!mention) return null
   if (!ctx.isGroup) return mention
@@ -14,7 +14,7 @@ async function canonicalTarget(ctx: CommandContext) {
   return participant?.phoneNumber ?? participant?.id ?? mention
 }
 
-function assertAdultContext(ctx: CommandContext) {
+function assertAdultContext(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no habilitó NSFW. Un administrador puede usar ${ctx.prefix}adultmode on.`)
   } else {
@@ -23,7 +23,7 @@ function assertAdultContext(ctx: CommandContext) {
   if (!economy.hasEntitlement(ctx.sender, 'adult_consent')) throw new Error(`Primero confirma que eres mayor de edad con ${ctx.prefix}adult18 accept.`)
 }
 
-async function requireMutualConsent(ctx: CommandContext) {
+async function requireMutualConsent(ctx: LegacyCompatibleCommandContext) {
   assertAdultContext(ctx)
   const target = await canonicalTarget(ctx)
   if (!target) throw new Error('Menciona a otro usuario que haya confirmado acceso 18+.')

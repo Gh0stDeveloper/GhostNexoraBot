@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -86,7 +86,7 @@ function getCached(token: string) {
   return item
 }
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.chatId.endsWith('@g.us')) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
       throw new Error(`El módulo 18+ está desactivado en este grupo. Un administrador puede habilitarlo con ${ctx.prefix}adultmode on.`)
@@ -111,7 +111,7 @@ function providerFromUrl(input: string): AdultProvider | undefined {
   }
 }
 
-async function sendVideo(ctx: CommandContext, provider: AdultProvider, url: string, title?: string) {
+async function sendVideo(ctx: LegacyCompatibleCommandContext, provider: AdultProvider, url: string, title?: string) {
   const actual = providerFromUrl(url)
   if (!actual) throw new Error('La URL no pertenece a XVideos, XNXX o Pornhub.')
   if (actual !== provider) throw new Error(`Ese enlace pertenece a ${providerLabel(actual)}. Usa ${ctx.prefix}${actual} <url>.`)
@@ -143,7 +143,7 @@ async function sendVideo(ctx: CommandContext, provider: AdultProvider, url: stri
   }
 }
 
-async function searchProvider(ctx: CommandContext, provider: AdultProvider, query: string) {
+async function searchProvider(ctx: LegacyCompatibleCommandContext, provider: AdultProvider, query: string) {
   const raw = await searchAdult(provider, query, 15)
   const results = raw
     .filter((item) => relevant(query, item))
@@ -167,7 +167,7 @@ async function searchProvider(ctx: CommandContext, provider: AdultProvider, quer
   })
 }
 
-async function selectResult(ctx: CommandContext) {
+async function selectResult(ctx: LegacyCompatibleCommandContext) {
   assertAdultAccess(ctx)
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error('Selecciona primero un resultado de la búsqueda.')
@@ -181,7 +181,7 @@ async function selectResult(ctx: CommandContext) {
   })
 }
 
-async function searchOrDownload(ctx: CommandContext, provider: AdultProvider) {
+async function searchOrDownload(ctx: LegacyCompatibleCommandContext, provider: AdultProvider) {
   assertAdultAccess(ctx)
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}${provider} <búsqueda|url>`)
@@ -192,7 +192,7 @@ async function searchOrDownload(ctx: CommandContext, provider: AdultProvider) {
   await searchProvider(ctx, provider, input.slice(0, 160))
 }
 
-async function adultDownload(ctx: CommandContext) {
+async function adultDownload(ctx: LegacyCompatibleCommandContext) {
   assertAdultAccess(ctx)
   const value = ctx.args[0] ?? ''
   if (!value) throw new Error('Selecciona un resultado o indica una URL soportada.')

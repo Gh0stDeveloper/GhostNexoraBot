@@ -1,7 +1,7 @@
 import { jidNormalizedUser } from 'baileys'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { economy } from '../services/economy.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 import { digitsFromJid, getContextInfo } from '../utils/message.js'
@@ -55,7 +55,7 @@ async function queuedRoleplaySend(chatId: string, task: () => Promise<void>) {
   }
 }
 
-async function sendRoleplayText(ctx: CommandContext, caption: string, mentions: string[]) {
+async function sendRoleplayText(ctx: LegacyCompatibleCommandContext, caption: string, mentions: string[]) {
   let lastError: unknown
   for (const delay of [0, 2500, 5000]) {
     if (delay) await wait(delay)
@@ -73,7 +73,7 @@ async function sendRoleplayText(ctx: CommandContext, caption: string, mentions: 
 }
 
 async function sendMediaOrTextFallback(
-  ctx: CommandContext,
+  ctx: LegacyCompatibleCommandContext,
   sendMedia: () => Promise<void>,
   caption: string,
   mentions: string[],
@@ -96,7 +96,7 @@ function normalizeJid(value?: string | null) {
   }
 }
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
       throw new Error(
@@ -116,7 +116,7 @@ function assertAdultAccess(ctx: CommandContext) {
   }
 }
 
-async function resolveTargetJid(ctx: CommandContext): Promise<string> {
+async function resolveTargetJid(ctx: LegacyCompatibleCommandContext): Promise<string> {
   const info = getContextInfo(ctx.message)
   const mention = info?.mentionedJid?.[0]
   const quotedParticipant = info?.participant
@@ -222,7 +222,7 @@ async function fetchNsfwAnimeGif(tags: string[]): Promise<string | null> {
 }
 
 async function sendGifPlayback(
-  ctx: CommandContext,
+  ctx: LegacyCompatibleCommandContext,
   video: Buffer,
   caption: string,
   mentions: string[],
@@ -248,7 +248,7 @@ async function sendGifPlayback(
   )
 }
 
-async function run(def: Def, ctx: CommandContext) {
+async function run(def: Def, ctx: LegacyCompatibleCommandContext) {
   assertAdultAccess(ctx)
   const other = await resolveTargetJid(ctx)
 
@@ -326,7 +326,7 @@ async function run(def: Def, ctx: CommandContext) {
   }
 }
 
-function requireStaff(ctx: CommandContext) {
+function requireStaff(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isBotStaff && !ctx.isOwner && !ctx.isSubbotOwner) {
     throw new Error('Solo staff, owner o dueño del subbot puede editar textos de roleplay.')
   }
@@ -342,7 +342,7 @@ export const adultRoleplayV8Commands: BotCommand[] = [
       def.name +
       '. Mensaje personalizable y medios con adultgif/adulttext.',
     usage: def.name + ' @usuario',
-    handler: (ctx: CommandContext) => run(def, ctx),
+    handler: (ctx: LegacyCompatibleCommandContext) => run(def, ctx),
   })),
   {
     name: 'adulttext',

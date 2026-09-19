@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { downloadMessageMedia } from '../utils/message.js'
 import {
   addAdultReactionMedia,
@@ -10,13 +10,13 @@ import {
   removeAdultReactionMedia,
 } from '../services/adult-media-v8.js'
 
-function requireStaff(ctx: CommandContext) {
+function requireStaff(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isBotStaff && !ctx.isOwner && !ctx.isSubbotOwner) {
     throw new Error('Solo staff, owner o dueño del subbot puede administrar estos medios.')
   }
 }
 
-async function add(ctx: CommandContext) {
+async function add(ctx: LegacyCompatibleCommandContext) {
   requireStaff(ctx)
   const command = ctx.args[0]
   if (!command || !adultMediaCommandAllowed(command)) {
@@ -38,7 +38,7 @@ async function add(ctx: CommandContext) {
   )
 }
 
-async function importUrls(ctx: CommandContext) {
+async function importUrls(ctx: LegacyCompatibleCommandContext) {
   requireStaff(ctx)
   const command = ctx.args[0]
   const urls = ctx.args.slice(1).filter((u) => /^https?:\/\//i.test(u))
@@ -75,7 +75,7 @@ async function importUrls(ctx: CommandContext) {
   )
 }
 
-async function list(ctx: CommandContext) {
+async function list(ctx: LegacyCompatibleCommandContext) {
   requireStaff(ctx)
   const rows = listAdultReactionMedia(ctx.args[0]) as Array<{
     id: number
@@ -89,7 +89,7 @@ async function list(ctx: CommandContext) {
   )
 }
 
-async function remove(ctx: CommandContext) {
+async function remove(ctx: LegacyCompatibleCommandContext) {
   requireStaff(ctx)
   const id = Number(ctx.args[0])
   if (!Number.isInteger(id) || id <= 0) throw new Error(`Uso: ${ctx.prefix}adultgif remove <id>`)
@@ -97,7 +97,7 @@ async function remove(ctx: CommandContext) {
   await ctx.reply(`🗑️ Medio *#${id}* eliminado.`)
 }
 
-async function clear(ctx: CommandContext) {
+async function clear(ctx: LegacyCompatibleCommandContext) {
   requireStaff(ctx)
   const command = ctx.args[0]
   if (!command || !adultMediaCommandAllowed(command)) {
@@ -107,7 +107,7 @@ async function clear(ctx: CommandContext) {
   await ctx.reply(`🧹 Medios de *${command}* eliminados.`)
 }
 
-async function help(ctx: CommandContext) {
+async function help(ctx: LegacyCompatibleCommandContext) {
   requireStaff(ctx)
   await ctx.reply(
     [
