@@ -17,6 +17,9 @@ export type OpsCommand = {
   commandName: string
   category: string
   description: string
+  whatsapp: boolean
+  discord: boolean
+  telegram: boolean
   invocations: number
   successes: number
   failures: number
@@ -454,7 +457,15 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
     }
 
     if (tableExists(db, 'ops_command_catalog')) {
+      const commandCatalogColumns = new Set(
+        (db.prepare('PRAGMA table_info(ops_command_catalog)').all() as Array<{ name?: string }>)
+          .map((column) => String(column.name ?? '')),
+      )
+      const whatsappColumn = commandCatalogColumns.has('whatsapp') ? 'c.whatsapp' : '1'
+      const discordColumn = commandCatalogColumns.has('discord') ? 'c.discord' : '0'
+      const telegramColumn = commandCatalogColumns.has('telegram') ? 'c.telegram' : '0'
       const rows = db.prepare(`SELECT c.command_name AS commandName, c.category, c.description,
+        ${whatsappColumn} AS whatsapp, ${discordColumn} AS discord, ${telegramColumn} AS telegram,
         COALESCE(m.invocations, 0) AS invocations, COALESCE(m.successes, 0) AS successes,
         COALESCE(m.failures, 0) AS failures, COALESCE(m.total_us, 0) AS totalUs,
         COALESCE(m.min_us, 0) AS minUs, COALESCE(m.max_us, 0) AS maxUs,
@@ -473,6 +484,7 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
         const successRate = invocations ? successes / invocations * 100 : 100
         return {
           commandName: String(row.commandName), category: String(row.category), description: String(row.description),
+          whatsapp: Boolean(row.whatsapp), discord: Boolean(row.discord), telegram: Boolean(row.telegram),
           invocations, successes, failures: Number(row.failures ?? 0), successRate,
           minUs: Number(row.minUs ?? 0), avgUs, maxUs, lastUs: Number(row.lastUs ?? 0),
           heapDeltaKb: invocations ? Math.round((Number(row.heapDeltaTotal ?? 0) / invocations) / 1024) : 0,
