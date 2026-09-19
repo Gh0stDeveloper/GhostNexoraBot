@@ -11,7 +11,7 @@ const adminPage = read('apps/web/app/admin/page.tsx')
 const subbotPage = read('apps/web/app/subbot/page.tsx')
 const i18n = read('apps/web/lib/i18n.ts')
 
-assert.match(roadmap, /## E1\. Navegación lateral[\s\S]*Estado: EN PROGRESO/, 'E1 roadmap must be in progress while PR is open')
+assert.match(roadmap, /## E1\. Navegación lateral[\s\S]*Estado: (?:EN PROGRESO|TERMINADO)/, 'E1 roadmap state must track the active or completed phase')
 
 assert.match(navigation, /'use client'/, 'Unified navigation must be interactive on mobile')
 assert.match(navigation, /export function UnifiedNavigation/, 'Shared navigation component missing')
