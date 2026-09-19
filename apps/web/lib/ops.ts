@@ -20,6 +20,15 @@ export type OpsCommand = {
   whatsapp: boolean
   discord: boolean
   telegram: boolean
+  enabled: boolean
+  whatsappEnabled: boolean
+  discordEnabled: boolean
+  telegramEnabled: boolean
+  cooldownMs: number
+  allowGroups: boolean
+  allowPrivate: boolean
+  permissionMode: 'inherit' | 'staff' | 'owner'
+  categoryEnabled: boolean
   invocations: number
   successes: number
   failures: number
@@ -31,6 +40,11 @@ export type OpsCommand = {
   heapDeltaKb: number
   lastErrorAt: number
   status: 'optimal' | 'warning' | 'slow' | 'critical'
+}
+
+export type OpsCommandCategory = {
+  category: string
+  enabled: boolean
 }
 
 export type OpsGroup = {
@@ -158,6 +172,7 @@ export type OpsSnapshot = {
   analytics: OpsUsageAnalytics
   stages: OpsStage[]
   commands: OpsCommand[]
+  commandCategories: OpsCommandCategory[]
   groups: OpsGroup[]
   platformGroups: OpsPlatformGroup[]
   providers: OpsProviderHealth[]
@@ -247,7 +262,7 @@ function empty(instanceKey: string): OpsSnapshot {
     summary: { throughputMps: 0, averageE2eUs: 0, processingNodes: 7, auditedCommands: 0, bottlenecks: 0 },
     analytics: emptyAnalytics(),
     stages: STAGES.map(([id, name]) => ({ id, name, invocations: 0, minUs: 0, avgUs: 0, maxUs: 0, lastUs: 0, firstAt: 0, lastAt: 0, status: 'optimal' })),
-    commands: [], groups: [], platformGroups: [], providers: [], adminAudit: [], requests: [],
+    commands: [], commandCategories: [], groups: [], platformGroups: [], providers: [], adminAudit: [], requests: [],
   }
 }
 
@@ -464,8 +479,23 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
       const whatsappColumn = commandCatalogColumns.has('whatsapp') ? 'c.whatsapp' : '1'
       const discordColumn = commandCatalogColumns.has('discord') ? 'c.discord' : '0'
       const telegramColumn = commandCatalogColumns.has('telegram') ? 'c.telegram' : '0'
+      const hasCommandSettings = tableExists(db, 'ops_command_settings')
+      const hasCategorySettings = tableExists(db, 'ops_command_category_settings')
+      const commandSettingsColumns = hasCommandSettings
+        ? new Set((db.prepare('PRAGMA table_info(ops_command_settings)').all() as Array<{ name?: string }>).map((column) => String(column.name ?? '')))
+        : new Set<string>()
+      const settingColumn = (name: string, fallback: string) => commandSettingsColumns.has(name) ? `COALESCE(s.${name}, ${fallback})` : fallback
       const rows = db.prepare(`SELECT c.command_name AS commandName, c.category, c.description,
         ${whatsappColumn} AS whatsapp, ${discordColumn} AS discord, ${telegramColumn} AS telegram,
+        ${settingColumn('enabled', '1')} AS configEnabled,
+        ${settingColumn('whatsapp', '1')} AS whatsappEnabled,
+        ${settingColumn('discord', '1')} AS discordEnabled,
+        ${settingColumn('telegram', '1')} AS telegramEnabled,
+        ${settingColumn('cooldown_ms', '0')} AS cooldownMs,
+        ${settingColumn('allow_groups', '1')} AS allowGroups,
+        ${settingColumn('allow_private', '1')} AS allowPrivate,
+        ${commandSettingsColumns.has('permission_mode') ? "COALESCE(s.permission_mode, 'inherit')" : "'inherit'"} AS permissionMode,
+        ${hasCategorySettings ? 'COALESCE(cs.enabled, 1)' : '1'} AS categoryEnabled,
         COALESCE(m.invocations, 0) AS invocations, COALESCE(m.successes, 0) AS successes,
         COALESCE(m.failures, 0) AS failures, COALESCE(m.total_us, 0) AS totalUs,
         COALESCE(m.min_us, 0) AS minUs, COALESCE(m.max_us, 0) AS maxUs,
@@ -473,6 +503,8 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
         COALESCE(m.last_error_at, 0) AS lastErrorAt
         FROM ops_command_catalog c
         LEFT JOIN ops_command_metrics m ON m.instance_key = c.instance_key AND m.command_name = c.command_name
+        ${hasCommandSettings ? 'LEFT JOIN ops_command_settings s ON s.instance_key = c.instance_key AND s.command_name = c.command_name' : ''}
+        ${hasCategorySettings ? 'LEFT JOIN ops_command_category_settings cs ON cs.instance_key = c.instance_key AND cs.category = c.category' : ''}
         WHERE c.instance_key = ?
         ORDER BY COALESCE(m.total_us * 1.0 / NULLIF(m.invocations, 0), 0) DESC, c.command_name ASC`)
         .all(instanceKey) as unknown as Array<Record<string, number | string>>
@@ -485,12 +517,28 @@ export function readOpsSnapshot(instanceKey: string): OpsSnapshot {
         return {
           commandName: String(row.commandName), category: String(row.category), description: String(row.description),
           whatsapp: Boolean(row.whatsapp), discord: Boolean(row.discord), telegram: Boolean(row.telegram),
+          enabled: Boolean(row.configEnabled),
+          whatsappEnabled: Boolean(row.whatsapp) && Boolean(row.whatsappEnabled),
+          discordEnabled: Boolean(row.discord) && Boolean(row.discordEnabled),
+          telegramEnabled: Boolean(row.telegram) && Boolean(row.telegramEnabled),
+          cooldownMs: Math.max(0, Number(row.cooldownMs ?? 0)),
+          allowGroups: Boolean(row.allowGroups),
+          allowPrivate: Boolean(row.allowPrivate),
+          permissionMode: (['staff', 'owner'].includes(String(row.permissionMode)) ? String(row.permissionMode) : 'inherit') as OpsCommand['permissionMode'],
+          categoryEnabled: Boolean(row.categoryEnabled),
           invocations, successes, failures: Number(row.failures ?? 0), successRate,
           minUs: Number(row.minUs ?? 0), avgUs, maxUs, lastUs: Number(row.lastUs ?? 0),
           heapDeltaKb: invocations ? Math.round((Number(row.heapDeltaTotal ?? 0) / invocations) / 1024) : 0,
           lastErrorAt: Number(row.lastErrorAt ?? 0), status: commandStatus(avgUs, maxUs, successRate),
         }
       })
+      const categoryStates = new Map<string, boolean>()
+      for (const command of snapshot.commands) {
+        if (!categoryStates.has(command.category)) categoryStates.set(command.category, command.categoryEnabled)
+      }
+      snapshot.commandCategories = [...categoryStates.entries()]
+        .map(([category, enabled]) => ({ category, enabled }))
+        .sort((a, b) => a.category.localeCompare(b.category))
     }
 
     if (tableExists(db, 'ops_groups')) {
