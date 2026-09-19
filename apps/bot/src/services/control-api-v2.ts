@@ -17,6 +17,7 @@ import { telegramRuntimeStatus, startTelegramPlatform, stopTelegramPlatform } fr
 import { discordRuntimeStatus, startDiscordPlatform, stopDiscordPlatform } from '../platform/discord/runtime.js'
 import { logger } from '../utils/logger.js'
 import { recordOpsRuntimeLog } from './ops-runtime-log.js'
+import { countPlatformGroups } from './platform-group-registry.js'
 
 const startedAt = new Date().toISOString()
 const logEntries: LogEntry[] = []
@@ -26,6 +27,13 @@ let pairState: PairStatusResponse = { ok: true, platform: 'whatsapp', state: 'id
 export interface ControlApiV2Deps {
   whatsappConnected: () => boolean
   whatsappAccountLabel: () => string | null
+  whatsappRuntimeMetrics?: () => {
+    connectedAt?: string | null
+    lastActivityAt?: string | null
+    messagesPerMinute?: number
+    messagesProcessed?: number
+    reconnects?: number
+  }
   connectWhatsApp: () => Promise<void>
   disconnectWhatsApp: () => Promise<void>
   startWhatsAppPairing: (request: PairStartRequest) => Promise<{ pairingCode?: string | null; detail?: string | null }>
@@ -106,18 +114,62 @@ function authorized(req: http.IncomingMessage) {
 function platforms(deps: ControlApiV2Deps): PlatformStatus[] {
   const telegram = telegramRuntimeStatus()
   const discord = discordRuntimeStatus()
+  const whatsapp = deps.whatsappRuntimeMetrics?.() ?? {}
   return [
     {
-      id: 'whatsapp', enabled: true, connected: deps.whatsappConnected(),
-      state: deps.whatsappConnected() ? 'running' : 'stopped', accountLabel: deps.whatsappAccountLabel(),
+      id: 'whatsapp',
+      enabled: true,
+      connected: deps.whatsappConnected(),
+      state: deps.whatsappConnected() ? 'running' : 'stopped',
+      accountLabel: deps.whatsappAccountLabel(),
+      metrics: {
+        groups: countPlatformGroups('whatsapp'),
+        messagesPerMinute: Number(whatsapp.messagesPerMinute ?? 0),
+        reconnects: Number(whatsapp.reconnects ?? 0),
+        lastActivityAt: whatsapp.lastActivityAt ?? null,
+        startedAt: whatsapp.connectedAt ?? null,
+        eventsProcessed: Number(whatsapp.messagesProcessed ?? 0),
+      },
     },
     {
-      id: 'telegram', enabled: telegram.configured, connected: telegram.state === 'running',
-      state: telegram.state, accountLabel: telegram.username ? `@${telegram.username}` : null, detail: telegram.lastError,
+      id: 'telegram',
+      enabled: telegram.configured,
+      connected: telegram.state === 'running',
+      state: telegram.state,
+      accountLabel: telegram.username ? `@${telegram.username}` : null,
+      detail: telegram.lastError,
+      metrics: {
+        groups: countPlatformGroups('telegram'),
+        reconnects: Number(telegram.reconnects ?? 0),
+        lastActivityAt: telegram.lastUpdateAt,
+        startedAt: telegram.startedAt,
+        updatesProcessed: telegram.updatesProcessed,
+        offset: telegram.offset,
+        webhookConfigured: Boolean(telegram.webhookUrl),
+        bridgeChannelConfigured: telegram.bridgeChannelConfigured,
+      },
     },
     {
-      id: 'discord', enabled: discord.configured, connected: discord.state === 'running',
-      state: discord.state, accountLabel: discord.username, detail: discord.lastError,
+      id: 'discord',
+      enabled: discord.configured,
+      connected: discord.state === 'running',
+      state: discord.state,
+      accountLabel: discord.username,
+      detail: discord.lastError,
+      metrics: {
+        groups: countPlatformGroups('discord'),
+        reconnects: Number(discord.reconnects ?? 0),
+        lastActivityAt: discord.lastEventAt,
+        startedAt: discord.startedAt,
+        readyAt: discord.readyAt,
+        eventsProcessed: discord.eventsProcessed,
+        sequence: discord.sequence,
+        sessionResumable: discord.sessionResumable,
+        commandRegistrationEnabled: discord.commandRegistrationEnabled,
+        commandScope: discord.commandScope,
+        commandSyncAt: discord.lastCommandSyncAt,
+        commandSyncError: discord.lastCommandSyncError,
+      },
     },
   ]
 }
@@ -145,13 +197,33 @@ async function patchConfig(patch: ConfigPatch) {
   return publicConfig()
 }
 
-async function platformAction(id: string, connect: boolean, deps: ControlApiV2Deps) {
+async function platformAction(id: string, action: 'connect' | 'disconnect' | 'restart', deps: ControlApiV2Deps) {
   const platform = safePlatformId(id)
   if (!platform) throw new Error('invalid_platform')
-  if (platform === 'whatsapp') connect ? await deps.connectWhatsApp() : await deps.disconnectWhatsApp()
-  else if (platform === 'telegram') connect ? await startTelegramPlatform() : await stopTelegramPlatform()
-  else connect ? await startDiscordPlatform() : await stopDiscordPlatform()
-  recordControlLog('info', `${platform} ${connect ? 'connect' : 'disconnect'} requested`)
+
+  const connect = async () => {
+    if (platform === 'whatsapp') await deps.connectWhatsApp()
+    else if (platform === 'telegram') await startTelegramPlatform()
+    else await startDiscordPlatform()
+  }
+
+  const disconnect = async () => {
+    if (platform === 'whatsapp') await deps.disconnectWhatsApp()
+    else if (platform === 'telegram') await stopTelegramPlatform()
+    else await stopDiscordPlatform()
+  }
+
+  if (action === 'restart') {
+    await disconnect()
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    await connect()
+  } else if (action === 'connect') {
+    await connect()
+  } else {
+    await disconnect()
+  }
+
+  recordControlLog('info', `${platform} ${action} requested`)
   return platforms(deps).find((item) => item.id === platform)
 }
 
@@ -231,9 +303,10 @@ export async function handleControlApiV2(req: http.IncomingMessage, res: http.Se
       json(res, 200, { ok: true, platforms: platforms(deps) })
       return true
     }
-    const platformMatch = /^\/v2\/platforms\/([^/]+)\/(connect|disconnect)$/.exec(url.pathname)
+    const platformMatch = /^\/v2\/platforms\/([^/]+)\/(connect|disconnect|restart)$/.exec(url.pathname)
     if (req.method === 'POST' && platformMatch) {
-      const item = await platformAction(platformMatch[1] ?? '', platformMatch[2] === 'connect', deps)
+      const action = platformMatch[2] as 'connect' | 'disconnect' | 'restart'
+      const item = await platformAction(platformMatch[1] ?? '', action, deps)
       json(res, 200, { ok: true, platform: item })
       return true
     }

@@ -1,9 +1,10 @@
-import { Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound } from 'lucide-react'
+import { Activity, Bot, Clock3, Download, Gauge, LayoutDashboard, LogOut, RefreshCcw, Settings, Smartphone, UsersRound } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
+import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { SUBBOT_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
@@ -14,8 +15,8 @@ import { openBotDb } from '../../lib/runtime'
 
 export const dynamic = 'force-dynamic'
 type SubbotRow = { id: number; phone: string | null; status: string; expiresAt: number; messagesProcessed: number; downloadBytes: number }
-type SubbotSection = 'overview' | 'groups' | 'audit' | 'account'
-const sectionIds: SubbotSection[] = ['overview', 'groups', 'audit', 'account']
+type SubbotSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'account'
+const sectionIds: SubbotSection[] = ['overview', 'platforms', 'groups', 'audit', 'account']
 
 function normalizeSection(value?: string): SubbotSection {
   return sectionIds.includes(value as SubbotSection) ? value as SubbotSection : 'overview'
@@ -31,6 +32,7 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
   const t = (key: Parameters<typeof webT>[1], values: Record<string, string | number | null | undefined> = {}) => webT(locale, key, values)
   const sections: Array<[SubbotSection, string, typeof Bot]> = [
     ['overview', t('nav.overview'), LayoutDashboard],
+    ['platforms', t('nav.platforms'), Activity],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
     ['account', t('nav.account'), Settings],
@@ -72,6 +74,22 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
         <div className="mt-6"><OpsUsageDashboard analytics={snapshot.analytics} instanceLabel={instanceLabel} locale={locale}/></div>
         <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={hrefFor('overview')} instanceLabel={instanceLabel} view="overview" locale={locale} csrfToken={csrfToken} canSyncGroups canManageGroups canLeaveGroups canResetAudit/></div>
       </>}
+
+      {section === 'platforms' && <div className="mt-6">
+        <PlatformsDashboard
+          instanceKey={instanceKey}
+          instanceLabel={instanceLabel}
+          statuses={platformStatuses}
+          locale={locale}
+          csrfToken={csrfToken}
+          canOperate={false}
+          canDisable={false}
+          mainRuntimeActions={false}
+          baseHref={hrefFor('platforms')}
+          focus={null}
+          logs={null}
+        />
+      </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
         <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp platformStatuses={platformStatuses}/>

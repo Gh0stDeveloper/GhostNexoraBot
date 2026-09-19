@@ -1,16 +1,17 @@
-import { Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, Settings, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
+import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, Settings, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { BackupPanel } from '../../components/backup-panel'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
+import { PlatformsDashboard } from '../../components/platforms-dashboard'
 import { SecurityCenter } from '../../components/security-center'
 import { ADMIN_SESSION_COOKIE, sessionCsrfToken, verifySession } from '../../lib/auth'
 import { getWebLocale } from '../../lib/i18n-server'
 import { webIntlLocale, webT } from '../../lib/i18n'
 import { readOpsSnapshot } from '../../lib/ops'
-import { readMainPlatformStatuses, subbotPlatformStatuses } from '../../lib/platform-status'
+import { readMainPlatformStatuses, subbotPlatformStatuses, type WebPlatformId } from '../../lib/platform-status'
 import { openBotDb } from '../../lib/runtime'
 import { hasPermission, roleLabel, type PrivilegedWebRole } from '../../lib/web-security'
 
@@ -26,11 +27,12 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'groups' | 'audit' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'groups' | 'audit' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
     ['overview', t('nav.overview'), LayoutDashboard],
+    ['platforms', t('nav.platforms'), Activity],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
   ]
@@ -43,12 +45,12 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'groups', 'audit', 'management', 'subbots', 'security']
-    : ['overview', 'groups', 'audit', 'security']
+    ? ['overview', 'platforms', 'groups', 'audit', 'management', 'subbots', 'security']
+    : ['overview', 'platforms', 'groups', 'audit', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; instance?: string; section?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; instance?: string; section?: string; focus?: string; logs?: string }> }) {
   const cookieStore = await cookies()
   const session = verifySession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
   if (!session || session.role === 'subbot') redirect('/login')
@@ -90,6 +92,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const runtimeStatus = snapshot.runtime.connected ? t('admin.connected') : snapshot.runtime.registered ? t('admin.linkedNoHeartbeat') : t('admin.notLinked')
 
   const canSyncGroups = hasPermission(role, 'groups:sync')
+  const canOperatePlatforms = hasPermission(role, 'platforms:operate')
+  const canDisablePlatforms = hasPermission(role, 'platforms:disable')
+  const safePlatform = (value: string | undefined): WebPlatformId | null =>
+    value === 'whatsapp' || value === 'discord' || value === 'telegram' ? value : null
+  const focusedPlatform = safePlatform(params.focus)
+  const logsPlatform = safePlatform(params.logs)
   const canManageGroups = hasPermission(role, 'groups:manage')
   const canLeaveGroups = hasPermission(role, 'groups:leave')
   const canResetAudit = hasPermission(role, 'audit:reset')
@@ -145,6 +153,22 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <div className="mt-6"><OpsUsageDashboard analytics={snapshot.analytics} instanceLabel={instanceLabel} locale={locale}/></div>
         <div className="mt-6"><OpsConsole snapshot={snapshot} refreshHref={refreshHref} instanceLabel={instanceLabel} view="overview" locale={locale} csrfToken={csrfToken} canSyncGroups={canSyncGroups} canManageGroups={canManageGroups} canLeaveGroups={canLeaveGroups} canResetAudit={canResetAudit}/></div>
       </>}
+
+      {section === 'platforms' && <div className="mt-6">
+        <PlatformsDashboard
+          instanceKey={selectedInstance}
+          instanceLabel={instanceLabel}
+          statuses={platformStatuses}
+          locale={locale}
+          csrfToken={csrfToken}
+          canOperate={canOperatePlatforms}
+          canDisable={canDisablePlatforms}
+          mainRuntimeActions={selectedInstance === 'main'}
+          baseHref={hrefFor('platforms')}
+          focus={focusedPlatform}
+          logs={logsPlatform}
+        />
+      </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
         <PlatformGroupsPanel snapshot={snapshot} instanceLabel={instanceLabel} locale={locale} csrfToken={csrfToken} canSyncWhatsApp={canSyncGroups} platformStatuses={platformStatuses}/>

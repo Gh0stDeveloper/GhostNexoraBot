@@ -16,6 +16,7 @@ export const CONTROL_API_PATHS = {
   platforms: '/v2/platforms',
   platformConnect: (id: PlatformId) => `/v2/platforms/${id}/connect`,
   platformDisconnect: (id: PlatformId) => `/v2/platforms/${id}/disconnect`,
+  platformRestart: (id: PlatformId) => `/v2/platforms/${id}/restart`,
 } as const
 
 export type PlatformId = 'whatsapp' | 'telegram' | 'discord'
@@ -38,6 +39,26 @@ export interface HealthResponse {
   uptimeSeconds: number
 }
 
+export interface PlatformMetrics {
+  groups?: number
+  messagesPerMinute?: number
+  reconnects?: number
+  lastActivityAt?: string | null
+  startedAt?: string | null
+  readyAt?: string | null
+  eventsProcessed?: number
+  sequence?: number | null
+  sessionResumable?: boolean
+  commandRegistrationEnabled?: boolean
+  commandScope?: string | null
+  commandSyncAt?: string | null
+  commandSyncError?: string | null
+  updatesProcessed?: number
+  offset?: number
+  webhookConfigured?: boolean
+  bridgeChannelConfigured?: boolean
+}
+
 export interface PlatformStatus {
   id: PlatformId
   enabled: boolean
@@ -45,6 +66,7 @@ export interface PlatformStatus {
   state: string
   accountLabel?: string | null
   detail?: string | null
+  metrics?: PlatformMetrics
 }
 
 export interface RuntimeStatusResponse {

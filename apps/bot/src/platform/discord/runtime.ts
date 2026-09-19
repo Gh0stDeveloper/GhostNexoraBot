@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { logger } from '../../utils/logger.js'
 import { removePlatformGroup, replacePlatformGroups, upsertPlatformGroup } from '../../services/platform-group-registry.js'
+import { recordOpsRuntimeLog } from '../../services/ops-runtime-log.js'
 import { DiscordAdapter } from './adapter.js'
 import { discordConfig } from './config.js'
 import { DiscordGateway, type DiscordGatewayState } from './gateway.js'
@@ -62,6 +63,9 @@ export class DiscordRuntime {
   private applicationId?: string
   private guildCount = 0
   private eventsProcessed = 0
+  private reconnects = 0
+  private lastCommandSyncAt?: string
+  private lastCommandSyncError?: string
   private session: DiscordGatewaySession | null = null
   private rest?: DiscordRestClient
   private adapter?: DiscordAdapter
@@ -81,11 +85,14 @@ export class DiscordRuntime {
       lastError: this.lastError ?? null,
       guildCount: this.guildCount,
       eventsProcessed: this.eventsProcessed,
+      reconnects: this.reconnects,
       sessionResumable: Boolean(this.session?.sessionId && this.session?.resumeGatewayUrl),
       sequence: this.session?.sequence ?? null,
       messageContentEnabled: discordConfig.messageContentEnabled,
       commandRegistrationEnabled: discordConfig.registerCommands,
       commandScope: discordConfig.guildId ? `guild:${discordConfig.guildId}` : 'global',
+      lastCommandSyncAt: this.lastCommandSyncAt ?? null,
+      lastCommandSyncError: this.lastCommandSyncError ?? null,
     }
   }
 
@@ -132,7 +139,11 @@ export class DiscordRuntime {
   private mapGatewayState(state: DiscordGatewayState, error?: string) {
     if (error) this.lastError = error
     if (state === 'ready') this.state = 'running'
-    else if (state === 'reconnecting') this.state = 'reconnecting'
+    else if (state === 'reconnecting') {
+      this.state = 'reconnecting'
+      this.reconnects += 1
+      recordOpsRuntimeLog('warn', 'discord', 'Discord Gateway reconnecting')
+    }
     else if (state === 'error') this.state = 'error'
     else if (state === 'stopped') this.state = 'stopped'
     else if (state === 'connecting' || state === 'identifying' || state === 'resuming') this.state = 'starting'
@@ -203,7 +214,14 @@ export class DiscordRuntime {
 
   private async registerCommands(applicationId: string) {
     if (!discordConfig.registerCommands || !this.rest) return
-    await this.rest.overwriteApplicationCommands(applicationId, discordApplicationCommands, discordConfig.guildId || undefined)
+    try {
+      await this.rest.overwriteApplicationCommands(applicationId, discordApplicationCommands, discordConfig.guildId || undefined)
+      this.lastCommandSyncAt = new Date().toISOString()
+      this.lastCommandSyncError = undefined
+    } catch (error) {
+      this.lastCommandSyncError = error instanceof Error ? error.message : String(error)
+      throw error
+    }
     logger.info({
       commands: discordApplicationCommands.length,
       scope: discordConfig.guildId ? `guild:${discordConfig.guildId}` : 'global',
@@ -229,6 +247,7 @@ export class DiscordRuntime {
       this.lastError = error instanceof Error ? error.message : String(error)
       logger.warn({ error }, 'Discord application command sync failed; Gateway remains active')
     }
+    recordOpsRuntimeLog('info', 'discord', `Discord ready as ${this.username ?? this.botId ?? 'bot'} in ${this.guildCount} guild(s)`)
     logger.info({ botId: this.botId, username: this.username, guilds: this.guildCount }, 'Discord native platform ready')
   }
 
@@ -245,6 +264,7 @@ export class DiscordRuntime {
         logger.warn({ error }, 'Discord command sync after RESUMED failed; Gateway remains active')
       }
     }
+    recordOpsRuntimeLog('info', 'discord', `Discord Gateway resumed at sequence ${this.session?.sequence ?? 'unknown'}`)
     logger.info({ botId: this.botId, username: this.username, sequence: this.session?.sequence }, 'Discord native platform resumed')
   }
 
@@ -330,6 +350,7 @@ export class DiscordRuntime {
     } catch (error) {
       this.state = 'error'
       this.lastError = error instanceof Error ? error.message : String(error)
+      recordOpsRuntimeLog('error', 'discord', `Discord start failed: ${this.lastError}`)
       logger.warn({ error }, 'Discord native platform not started')
       return false
     }
@@ -339,6 +360,7 @@ export class DiscordRuntime {
     await this.gateway?.stop().catch((error) => logger.warn({ error }, 'Discord Gateway stop failed'))
     await this.adapter?.stop().catch(() => undefined)
     this.state = 'stopped'
+    recordOpsRuntimeLog('info', 'discord', 'Discord platform stopped')
   }
 }
 
@@ -364,10 +386,13 @@ export function discordRuntimeStatus() {
     lastError: null,
     guildCount: 0,
     eventsProcessed: 0,
+    reconnects: 0,
     sessionResumable: false,
     sequence: null,
     messageContentEnabled: discordConfig.messageContentEnabled,
     commandRegistrationEnabled: discordConfig.registerCommands,
     commandScope: discordConfig.guildId ? `guild:${discordConfig.guildId}` : 'global',
+    lastCommandSyncAt: null,
+    lastCommandSyncError: null,
   }
 }

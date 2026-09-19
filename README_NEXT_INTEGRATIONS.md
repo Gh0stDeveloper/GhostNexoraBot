@@ -544,7 +544,7 @@ Convertir Operations Center en un dashboard de producto más ordenado y menos de
 
 ## E0. Inventario de comunidades por plataforma
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Objetivo inmediato:
 
@@ -642,6 +642,21 @@ Acciones:
 - reiniciar conexión;
 - ver logs;
 - activar o desactivar cuando sea seguro.
+
+Implementación actual de E3:
+
+- nueva sección Plataformas en Admin;
+- vista aislada y solo lectura en portal Subbot;
+- WhatsApp: grupos, mensajes/min, reconexiones, última actividad, cuenta parcialmente ocultada;
+- Discord: guilds, eventos, sequence, reconnects, session resume, scope y sincronización de comandos;
+- Telegram: grupos observados, updates, offset, reconnects, webhook y bridge channel;
+- diagnóstico detallado por plataforma;
+- logs recientes filtrados y sanitizados;
+- acciones server-side con CSRF/Origin y auditoría;
+- Admin puede conectar/reiniciar; solo Owner puede desconectar;
+- desconectar exige autenticación reciente;
+- token del Control API permanece exclusivamente en servidor;
+- contrato Control API V2 ampliado con métricas y endpoint restart por plataforma.
 
 ## E4. Dashboard de Providers y APIs
 

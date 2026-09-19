@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { ingestTelegramChannelPost, initTelegramBridgeCache } from '../../services/telegram-bridge-v7.js'
 import { removePlatformGroup, upsertPlatformGroup } from '../../services/platform-group-registry.js'
+import { recordOpsRuntimeLog } from '../../services/ops-runtime-log.js'
 import { logger } from '../../utils/logger.js'
 import { TelegramAdapter } from './adapter.js'
 import { TelegramBotApiClient, TelegramApiError } from './client.js'
@@ -29,6 +30,7 @@ export class TelegramRuntime {
   private lastError?: string
   private webhookUrl?: string
   private updatesProcessed = 0
+  private reconnects = 0
   private adapter?: TelegramAdapter
   private client?: TelegramBotApiClient
   private router?: TelegramCommandRouter
@@ -46,6 +48,7 @@ export class TelegramRuntime {
       webhookUrl: this.webhookUrl ?? null,
       offset: this.offset,
       updatesProcessed: this.updatesProcessed,
+      reconnects: this.reconnects,
       bridgeChannelConfigured: Boolean(telegramConfig.channelId),
     }
   }
@@ -144,6 +147,8 @@ export class TelegramRuntime {
           logger.error({ error: this.lastError }, 'Telegram getUpdates conflict; another poller or webhook is active')
           break
         }
+        this.reconnects += 1
+        recordOpsRuntimeLog('warn', 'telegram', `Telegram long poll retry: ${this.lastError}`)
         logger.warn({ error }, 'Telegram long poll failed; retrying')
         await new Promise((resolve) => setTimeout(resolve, telegramConfig.reconnectDelayMs))
       }
@@ -184,11 +189,13 @@ export class TelegramRuntime {
       this.startedAt = new Date().toISOString()
       this.lastError = undefined
       this.loopPromise = this.loop()
+      recordOpsRuntimeLog('info', 'telegram', `Telegram started as @${this.identity.username ?? this.identity.id}`)
       logger.info({ botId: this.identity.id, username: this.identity.username, offset: this.offset }, 'Telegram native platform started')
       return true
     } catch (error) {
       this.state = 'error'
       this.lastError = error instanceof Error ? error.message : String(error)
+      recordOpsRuntimeLog('error', 'telegram', `Telegram start failed: ${this.lastError}`)
       logger.warn({ error }, 'Telegram native platform not started')
       return false
     }
@@ -200,6 +207,7 @@ export class TelegramRuntime {
     await this.persistState().catch(() => undefined)
     await this.adapter?.stop().catch(() => undefined)
     void this.loopPromise
+    recordOpsRuntimeLog('info', 'telegram', 'Telegram platform stopped')
   }
 }
 
@@ -224,6 +232,7 @@ export function telegramRuntimeStatus() {
     webhookUrl: null,
     offset: 0,
     updatesProcessed: 0,
+    reconnects: 0,
     bridgeChannelConfigured: Boolean(telegramConfig.channelId),
   }
 }

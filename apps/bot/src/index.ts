@@ -54,6 +54,10 @@ let reconnectAttempts = 0
 let mainSocket: WASocket | null = null
 let socketGeneration = 0
 let whatsappPaused = false
+let whatsappReconnectsTotal = 0
+let whatsappMessagesProcessed = 0
+let whatsappLastActivityAt: string | null = null
+const whatsappMessageWindow: number[] = []
 let pendingPairRequest: {
   mode: 'qr' | 'code'
   phoneNumber: string
@@ -147,10 +151,23 @@ async function controlStartWhatsAppPairing(request: PairStartRequest) {
   })
 }
 
+function whatsappMessagesPerMinute() {
+  const cutoff = Date.now() - 60_000
+  while (whatsappMessageWindow.length && whatsappMessageWindow[0]! < cutoff) whatsappMessageWindow.shift()
+  return whatsappMessageWindow.length
+}
+
 function controlApiDeps() {
   return {
     whatsappConnected: effectiveMainConnected,
     whatsappAccountLabel: () => mainSocket?.user?.id ?? activeJid,
+    whatsappRuntimeMetrics: () => ({
+      connectedAt: connectedAt?.toISOString() ?? null,
+      lastActivityAt: whatsappLastActivityAt,
+      messagesPerMinute: whatsappMessagesPerMinute(),
+      messagesProcessed: whatsappMessagesProcessed,
+      reconnects: whatsappReconnectsTotal,
+    }),
     connectWhatsApp: controlConnectWhatsApp,
     disconnectWhatsApp: controlDisconnectWhatsApp,
     startWhatsAppPairing: controlStartWhatsAppPairing,
@@ -361,6 +378,7 @@ async function routeMessage(
 function scheduleMainReconnect(reason: string) {
   if (whatsappPaused || reconnectTimer) return
   reconnectAttempts += 1
+  whatsappReconnectsTotal += 1
   const exponent = Math.min(5, Math.max(0, reconnectAttempts - 1))
   const delay = Math.min(60_000, 2000 * (2 ** exponent)) + Math.floor(Math.random() * 1000)
   logger.warn({ reconnectAttempts, delay, reason }, 'main WhatsApp reconnect scheduled')
@@ -392,6 +410,11 @@ async function connect() {
     markMainSocketLive(socket)
     for (const message of messages) {
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
+      const stamp = Date.now()
+      whatsappMessagesProcessed += 1
+      whatsappLastActivityAt = new Date(stamp).toISOString()
+      whatsappMessageWindow.push(stamp)
+      whatsappMessagesPerMinute()
       const chatId = message.key.remoteJid
       void withTimeout(routeMessage(socket, message, router), config.botMessageTimeoutMs, 'routeMessage ' + chatId)
         .catch((error) => logger.error({ error, chatId }, 'mensaje colgado o falló'))
@@ -432,11 +455,13 @@ async function connect() {
       mainSocket = socket
       reconnectAttempts = 0
       markControlPairConnected()
+      whatsappLastActivityAt = new Date().toISOString()
       recordControlLog('info', 'WhatsApp MainBot connected')
       logger.info({ jid: activeJid, prefix: settings.prefix, generation }, config.botName + ' connected')
     }
     if (connection === 'close') {
       connected = false
+      whatsappLastActivityAt = new Date().toISOString()
       if (mainSocket === socket) mainSocket = null
       const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode
       const loggedOut = statusCode === DisconnectReason.loggedOut
