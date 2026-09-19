@@ -39,8 +39,8 @@ export const TELEGRAM_COMMAND_ALIAS_ENTRIES = [
 export const discordCommandAliases = new Map<string, string>(DISCORD_COMMAND_ALIAS_ENTRIES)
 export const telegramCommandAliases = new Map<string, string>(TELEGRAM_COMMAND_ALIAS_ENTRIES)
 
-const discordTokens = new Set(DISCORD_COMMAND_ALIAS_ENTRIES.map(([token]) => token))
-const telegramTokens = new Set(TELEGRAM_COMMAND_ALIAS_ENTRIES.map(([token]) => token))
+const discordTokens = new Set<string>(DISCORD_COMMAND_ALIAS_ENTRIES.map(([token]) => token))
+const telegramTokens = new Set<string>(TELEGRAM_COMMAND_ALIAS_ENTRIES.map(([token]) => token))
 
 function normalizedTokens(command: Pick<BotCommand, 'name' | 'aliases'>) {
   return [command.name, ...(command.aliases ?? [])]
