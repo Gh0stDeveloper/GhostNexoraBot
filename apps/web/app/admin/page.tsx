@@ -1,7 +1,8 @@
-import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, ServerCog, Settings, ShieldCheck, UserPlus, UsersRound, Wrench } from 'lucide-react'
+import { Activity, Bot, Coins, Download, Fingerprint, Gauge, LayoutDashboard, LogOut, MessageSquare, RefreshCcw, Send, ServerCog, Settings, ShieldCheck, SquareTerminal, UserPlus, UsersRound, Wrench } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { BackupPanel } from '../../components/backup-panel'
+import { CommandCenter } from '../../components/command-center'
 import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
 import { OperationsOverview } from '../../components/operations-overview'
 import { OpsConsole } from '../../components/ops-console'
@@ -31,13 +32,14 @@ type Subbot = {
   downloadBytes: number
 }
 
-type AdminSection = 'overview' | 'platforms' | 'providers' | 'groups' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
+type AdminSection = 'overview' | 'platforms' | 'providers' | 'commands' | 'groups' | 'audit' | 'diagnostics' | 'management' | 'subbots' | 'security'
 
 function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof webT>[1]) => string) {
   const base: Array<[AdminSection, string, typeof Bot]> = [
     ['overview', t('nav.overview'), LayoutDashboard],
     ['platforms', t('nav.platforms'), Activity],
     ['providers', t('nav.providers'), ServerCog],
+    ['commands', t('nav.commands'), SquareTerminal],
     ['groups', t('nav.groups'), UsersRound],
     ['audit', t('nav.audit'), Gauge],
     ['diagnostics', t('nav.diagnostics'), Wrench],
@@ -51,8 +53,8 @@ function availableSections(role: PrivilegedWebRole, t: (key: Parameters<typeof w
 
 function normalizeSection(value: string | undefined, role: PrivilegedWebRole): AdminSection {
   const allowed: AdminSection[] = role === 'owner'
-    ? ['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security']
-    : ['overview', 'platforms', 'providers', 'groups', 'audit', 'diagnostics', 'security']
+    ? ['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'management', 'subbots', 'security']
+    : ['overview', 'platforms', 'providers', 'commands', 'groups', 'audit', 'diagnostics', 'security']
   return allowed.includes(value as AdminSection) ? value as AdminSection : 'overview'
 }
 
@@ -110,6 +112,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     overview: 'dashboard',
     platforms: 'platforms',
     providers: 'providers',
+    commands: 'commands',
     groups: 'groups',
     audit: 'audit',
     diagnostics: 'diagnostics',
@@ -201,6 +204,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {section === 'providers' && <div className="mt-6">
         <ProvidersDashboard providers={snapshot.providers} instanceLabel={instanceLabel} locale={locale}/>
+      </div>}
+
+      {section === 'commands' && <div className="mt-6">
+        <CommandCenter commands={snapshot.commands} locale={locale} instanceLabel={instanceLabel}/>
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
