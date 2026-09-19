@@ -3,6 +3,7 @@ import type { BotCommand, CommandCategory } from '../types.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 
 export const COMMAND_PERMISSION_MODES = ['inherit', 'staff', 'owner'] as const
+let lastCooldownPruneAt = 0
 export type CommandPermissionMode = typeof COMMAND_PERMISSION_MODES[number]
 
 export type CommandRuntimeConfig = {
@@ -177,7 +178,8 @@ export function markCommandCooldown(platform: PlatformId, commandName: string, u
     VALUES(?, ?, ?, ?, ?)
     ON CONFLICT(instance_key, platform, command_name, user_id) DO UPDATE SET last_used_at = excluded.last_used_at`)
     .run(instanceKey, platform, canonical, userId, stamp)
-  if (Math.random() < 0.01) {
+  if (stamp - lastCooldownPruneAt >= 3_600_000) {
+    lastCooldownPruneAt = stamp
     opsDb.prepare('DELETE FROM ops_command_cooldowns WHERE last_used_at < ?').run(stamp - 7 * 86_400_000)
   }
 }
@@ -192,6 +194,7 @@ export function commandRuntimeDecision(input: {
   isStaff?: boolean
   isSubbotOwner?: boolean
   instanceKey?: string
+  checkCooldown?: boolean
 }): CommandRuntimeDecision {
   const instanceKey = input.instanceKey ?? opsInstanceKey()
   const commandName = resolveConfiguredCommandName(input.commandName, instanceKey)
@@ -211,7 +214,7 @@ export function commandRuntimeDecision(input: {
     return { allowed: false, commandName, config, reason: 'permission' }
   }
 
-  if (!elevated && config.cooldownMs > 0) {
+  if (input.checkCooldown !== false && !elevated && config.cooldownMs > 0) {
     const remainingMs = remainingCooldown(instanceKey, input.platform, commandName, input.userId, config.cooldownMs)
     if (remainingMs > 0) return { allowed: false, commandName, config, reason: 'cooldown', remainingMs }
   }
