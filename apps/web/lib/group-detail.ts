@@ -21,6 +21,7 @@ export type GroupDetailSettings = {
   goodbyeText: string | null
   policyProfile: string
   adultCategoryAllowed: boolean
+  commandCategories: Record<string, boolean>
   updatedAt: number
 }
 
@@ -39,6 +40,7 @@ export type GroupDetail = {
   mutedUntil: number
   updatedAt: number
   messagesToday: number
+  messages24h: number
   messages7d: number
   messages30d: number
   activeToday: number
@@ -68,6 +70,7 @@ const defaultSettings = (): GroupDetailSettings => ({
   goodbyeText: null,
   policyProfile: 'community',
   adultCategoryAllowed: false,
+  commandCategories: {},
   updatedAt: 0,
 })
 
@@ -96,7 +99,9 @@ export function readGroupDetail(instanceKey: string, groupJid: string): GroupDet
     }
 
     const today = Math.floor(Date.now() / 86_400_000)
+    const currentHour = Math.floor(Date.now() / 3_600_000)
     let messagesToday = 0
+    let messages24h = 0
     let messages7d = 0
     let messages30d = 0
     if (tableExists(db, 'ops_group_daily_stats')) {
@@ -110,6 +115,15 @@ export function readGroupDetail(instanceKey: string, groupJid: string): GroupDet
       messagesToday = Number(stats?.today ?? 0)
       messages7d = Number(stats?.seven ?? 0)
       messages30d = Number(stats?.thirty ?? 0)
+    }
+
+    if (tableExists(db, 'ops_group_hourly_stats')) {
+      const row = db.prepare(`SELECT COALESCE(SUM(messages), 0) AS messages FROM ops_group_hourly_stats
+        WHERE instance_key = ? AND group_jid = ? AND hour >= ? AND hour <= ?`)
+        .get(instanceKey, groupJid, currentHour - 23, currentHour) as { messages?: number } | undefined
+      messages24h = Number(row?.messages ?? 0)
+    } else {
+      messages24h = messagesToday
     }
 
     let activeToday = 0
@@ -143,7 +157,7 @@ export function readGroupDetail(instanceKey: string, groupJid: string): GroupDet
           anti_spam AS antiSpam, adult_allowed AS adultAllowed, restricted_mode AS restrictedMode,
           language, welcome_text AS welcomeText, goodbye_text AS goodbyeText,
           policy_profile AS policyProfile, adult_category_allowed AS adultCategoryAllowed,
-          updated_at AS updatedAt
+          command_categories_json AS commandCategoriesJson, updated_at AS updatedAt
         FROM ops_group_settings_snapshot WHERE instance_key = ? AND group_jid = ?`)
         .get(instanceKey, groupJid) as Record<string, unknown> | undefined
       if (row) {
@@ -160,6 +174,15 @@ export function readGroupDetail(instanceKey: string, groupJid: string): GroupDet
           goodbyeText: row.goodbyeText ? String(row.goodbyeText) : null,
           policyProfile: String(row.policyProfile || 'community'),
           adultCategoryAllowed: Boolean(row.adultCategoryAllowed),
+          commandCategories: (() => {
+            try {
+              const parsed = JSON.parse(String(row.commandCategoriesJson ?? '{}'))
+              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+              return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, Boolean(value)]))
+            } catch {
+              return {}
+            }
+          })(),
           updatedAt: Number(row.updatedAt ?? 0),
         }
       }
@@ -180,6 +203,7 @@ export function readGroupDetail(instanceKey: string, groupJid: string): GroupDet
       mutedUntil,
       updatedAt: Number(group.updatedAt ?? 0),
       messagesToday,
+      messages24h,
       messages7d,
       messages30d,
       activeToday,
