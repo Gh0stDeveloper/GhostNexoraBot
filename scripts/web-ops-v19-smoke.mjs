@@ -13,6 +13,7 @@ const control = read('apps/web/app/api/control/route.ts')
 const admin = read('apps/web/app/admin/page.tsx')
 const subbotPage = read('apps/web/app/subbot/page.tsx')
 const consoleSource = read('apps/web/components/ops-console.tsx')
+const developerDiagnostics = read('apps/web/components/developer-diagnostics.tsx')
 const quickStart = read('apps/web/components/PublicQuickStart.tsx')
 const home = read('apps/web/app/page.tsx')
 const webI18n = read('apps/web/lib/i18n.ts')
@@ -34,15 +35,17 @@ assert.match(ops, /fresh = updatedAt > 0/, 'stale runtime heartbeats must not be
 assert.match(control, /health\?\.connected\) \|\| persisted\.connected/, 'web diagnostic must combine health server and persisted heartbeat')
 assert.match(control, /groupCount: persisted\.groupCount/, 'web diagnostic must expose safe group count')
 
-for (const section of ['overview', 'groups', 'audit', 'management', 'subbots']) {
+for (const section of ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'management', 'subbots']) {
   assert.ok(admin.includes(`'${section}'`), `admin panel must expose ${section} section`)
 }
-for (const section of ['overview', 'groups', 'audit', 'account']) {
+for (const section of ['overview', 'platforms', 'groups', 'audit', 'diagnostics', 'account']) {
   assert.ok(subbotPage.includes(`'${section}'`), `subbot panel must expose ${section} section`)
 }
 assert.match(admin, /<table className="ops-table/, 'subbot instances must render as a compact table')
-assert.match(consoleSource, /view === 'groups'/, 'groups must have a dedicated view')
-assert.match(consoleSource, /view === 'audit'/, 'command audit must have a dedicated view')
+assert.match(consoleSource, /export type OpsConsoleView = 'groups' \| 'audit'/, 'groups and administrative audit must remain dedicated views')
+assert.ok(admin.includes('view="groups"') && subbotPage.includes('view="groups"'), 'groups must have a dedicated view')
+assert.match(consoleSource, /view === 'audit'/, 'administrative audit must have a dedicated view')
+assert.match(developerDiagnostics, /CommandAuditTable/, 'technical command audit must move to diagnostics')
 
 assert.match(quickStart, /className="ops-button-primary fixed bottom-5 right-5/, 'quick-start button must reuse the site primary button theme')
 assert.doesNotMatch(quickStart, /cyan-300|violet-300|violet-400/, 'quick-start UI must not keep the old cyan/violet theme')
