@@ -1,4 +1,5 @@
 import { economy, COIN_SYMBOL } from './economy.js'
+import { providerCircuitAllows, recordProviderAttempt } from './provider-health.js'
 
 export type WaifuRarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Mythic'
 
@@ -150,6 +151,8 @@ db.exec(`
 `)
 
 async function fetchJikanJson<T>(url: string): Promise<T> {
+  if (!providerCircuitAllows('jikan')) throw new Error('provider_circuit_open:jikan')
+  const started = performance.now()
   let lastError: unknown
   for (let attempt = 1; attempt <= JIKAN_MAX_ATTEMPTS; attempt += 1) {
     await paceJikan()
@@ -158,7 +161,11 @@ async function fetchJikanJson<T>(url: string): Promise<T> {
         headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/1.1' },
         signal: AbortSignal.timeout(20_000),
       })
-      if (response.ok) return response.json() as Promise<T>
+      if (response.ok) {
+        const value = await response.json() as T
+        try { recordProviderAttempt('jikan', { ok: true, latencyMs: performance.now() - started, label: 'Jikan' }) } catch {}
+        return value
+      }
 
       const error = new Error(`Jikan respondió HTTP ${response.status}.`)
       lastError = error
@@ -178,7 +185,9 @@ async function fetchJikanJson<T>(url: string): Promise<T> {
       await sleep(backoff)
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('Jikan no respondió después de varios intentos.')
+  const finalError = lastError instanceof Error ? lastError : new Error('Jikan no respondió después de varios intentos.')
+  try { recordProviderAttempt('jikan', { ok: false, latencyMs: performance.now() - started, label: 'Jikan', errorCode: finalError.message }) } catch {}
+  throw finalError
 }
 
 async function fetchRandomCharacter() {
