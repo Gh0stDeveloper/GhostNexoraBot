@@ -146,23 +146,67 @@ function Require-WinGet {
   Write-Ok 'WinGet disponible.'
 }
 
+function Test-WinGetPackageInstalled([string]$Id) {
+  try {
+    $output = (& winget.exe list --id $Id -e --accept-source-agreements --disable-interactivity 2>$null | Out-String)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) { return $false }
+    return $output -match [regex]::Escape($Id)
+  } catch {
+    return $false
+  }
+}
+
 function Install-Package([string]$Id, [string]$Command, [string]$Label) {
-  if (Get-Command $Command -ErrorAction SilentlyContinue) {
+  if (Repair-CommandPath $Command) {
     Write-Ok "$Label ya está instalado."
     return
   }
 
-  Write-Info "Instalando $Label ($Id)..."
+  $wasInstalled = Test-WinGetPackageInstalled $Id
+  if ($wasInstalled) {
+    Write-Info "$Label ya está registrado en WinGet. Verificando disponibilidad..."
+    if (Repair-CommandPath $Command) {
+      Write-Ok "$Label ya está instalado y disponible."
+      return
+    }
+    Write-Warn "$Label ya está instalado, pero su comando aún no está visible en PATH. WinGet intentará reparar o confirmar el paquete."
+  } else {
+    Write-Info "Instalando $Label ($Id)..."
+  }
+
   & winget.exe install --id $Id -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-  if ($LASTEXITCODE -ne 0) { throw "WinGet no pudo instalar $Label. Código de salida: $LASTEXITCODE." }
+  $wingetExit = $LASTEXITCODE
+
+  if ($wingetExit -ne 0) {
+    # WinGet usa códigos distintos de cero también para estados no fatales, por ejemplo:
+    # "el paquete ya está instalado" + "no hay una actualización disponible".
+    # No se aborta si WinGet confirma que el paquete sigue instalado.
+    $installedAfter = Test-WinGetPackageInstalled $Id
+    if ($installedAfter) {
+      Write-Warn "WinGet terminó con código $wingetExit, pero $Label ya está instalado. Se continúa sin tratarlo como error."
+    } else {
+      throw "WinGet no pudo instalar $Label. Código de salida: $wingetExit."
+    }
+  }
 
   $available = $false
   for ($i = 0; $i -lt 8; $i++) {
     if (Repair-CommandPath $Command) { $available = $true; break }
     Start-Sleep -Seconds 1
   }
-  if (-not $available) { throw "$Label terminó de instalarse, pero $Command no apareció en PATH." }
-  Write-Ok "$Label instalado y disponible en esta misma terminal."
+
+  if ($available) {
+    Write-Ok "$Label instalado y disponible en esta misma terminal."
+    return
+  }
+
+  if (Test-WinGetPackageInstalled $Id) {
+    Write-Warn "$Label figura instalado en WinGet, aunque $Command no quedó visible en esta terminal. La instalación continuará; ghostnexora doctor puede revisarlo después."
+    return
+  }
+
+  throw "$Label terminó de instalarse, pero $Command no apareció en PATH."
 }
 
 function Set-EnvValue([string]$Key, [string]$Value) {
