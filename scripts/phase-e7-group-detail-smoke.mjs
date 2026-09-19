@@ -32,6 +32,7 @@ const [
 assert.match(roadmap, /## E7\. Vista detallada de grupo[\s\S]*Estado: (?:EN PROGRESO|TERMINADO)/, 'E7 roadmap must track active/completed implementation')
 
 assert.match(groupRuntime, /CREATE TABLE IF NOT EXISTS ops_group_members/, 'E7 member snapshot table missing')
+assert.match(groupRuntime, /CREATE TABLE IF NOT EXISTS ops_group_hourly_stats/, 'E7 rolling 24h activity table missing')
 assert.match(groupRuntime, /CREATE TABLE IF NOT EXISTS ops_group_settings_snapshot/, 'E7 settings snapshot table missing')
 assert.match(groupRuntime, /ensureColumn\('ops_group_control_requests', 'payload_json'/, 'E7 request payload migration missing')
 assert.match(groupRuntime, /syncGroupMembers\(jid, participants, stamp\)/, 'E7 group member synchronization missing')
@@ -44,6 +45,8 @@ assert.match(groupDetail, /readGroupDetail\(instanceKey: string, groupJid: strin
 assert.match(groupDetail, /WHERE instance_key = \? AND group_jid = \?/, 'E7 detail queries must remain instance-scoped')
 assert.match(groupDetail, /ops_group_members/, 'E7 detail reader must expose members/admins')
 assert.match(groupDetail, /ops_group_settings_snapshot/, 'E7 detail reader must expose group configuration')
+assert.match(groupDetail, /messages24h/, 'E7 detail reader must expose rolling 24h activity')
+assert.match(groupDetail, /commandCategories/, 'E7 detail reader must expose command category policy')
 
 assert.match(groupView, /group_config_update/, 'E7 configuration form missing')
 assert.match(groupView, /group_broadcast/, 'E7 group broadcast form missing')
