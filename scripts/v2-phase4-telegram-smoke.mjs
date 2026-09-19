@@ -151,8 +151,14 @@ try {
   assert.equal(status.updatesProcessed, 1)
   assert.equal(status.offset, 901)
   assert.equal(status.state, 'error', '409 must stop the competing long poller')
-  assert.ok(apiCalls.some((call) => call.method === 'sendMessage' && call.body.text === 'Pong · comprobando…'))
-  assert.ok(apiCalls.some((call) => call.method === 'editMessageText'))
+  const sharedPing = apiCalls.find((call) =>
+    call.method === 'sendMessage'
+    && typeof call.body.text === 'string'
+    && call.body.text.includes('PONG')
+    && call.body.text.includes('Latencia')
+    && call.body.text.includes('Estado')
+  )
+  assert.ok(sharedPing, 'Telegram /ping must execute the canonical B2 shared ping handler')
   const persisted = JSON.parse(await readFile(runtimeStateFile, 'utf8'))
   assert.equal(persisted.offset, 901)
   await runtime.stop()

@@ -290,13 +290,7 @@ export class TelegramCommandRouter {
         if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Telegram', command: `/${parsed.command}`, help: '/help' }))
       } else if (parsed.command === 'start' || parsed.command === 'help') await this.help(normalized.chatId, locale, normalized.messageId)
       else if (parsed.command === 'language') await this.language(message, parsed.argText, locale)
-      else if (parsed.command === 'ping') {
-        const started = Date.now()
-        const sent = await this.adapter.sendText(normalized.chatId, t(locale, 'telegram.ping.checking'), { replyTo: normalized.messageId })
-        await this.adapter.editMessage?.(normalized.chatId, sent.messageId, t(locale, 'telegram.ping.result', { ms: Date.now() - started }))
-      } else if (parsed.command === 'info') {
-        await this.adapter.sendText(normalized.chatId, [config.botName, t(locale, 'telegram.info.platform'), t(locale, 'telegram.info.runtime'), t(locale, 'telegram.info.whatsappPrefix', { prefix: settings.prefix }), t(locale, 'telegram.info.commands')].join('\n'), { replyTo: normalized.messageId })
-      } else if (parsed.command === 'vk') await this.vk(normalized.chatId, normalized.messageId, parsed.argText, locale)
+      else if (parsed.command === 'vk') await this.vk(normalized.chatId, normalized.messageId, parsed.argText, locale)
       else if (parsed.command === 'apkmirror') await this.store(normalized.chatId, normalized.messageId, 'apkmirror', parsed.argText, locale)
       else if (parsed.command === 'apkpure') await this.store(normalized.chatId, normalized.messageId, 'apkpure', parsed.argText, locale)
       else if (parsed.command === 'apkmirrordl') await this.storeDownload(normalized.chatId, normalized.messageId, 'apkmirror', parsed.argText.split(/\s+/)[0] || '', locale)

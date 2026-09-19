@@ -23,7 +23,7 @@ import { logger } from '../../utils/logger.js'
 import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
 import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import type { DiscordAdapter } from './adapter.js'
-import { discordConfig, discordOwner, discordStaff } from './config.js'
+import { discordOwner, discordStaff } from './config.js'
 import { normalizeDiscordMessage } from './normalize.js'
 import type {
   DiscordApplicationCommandData,
@@ -451,19 +451,7 @@ export class DiscordCommandRouter {
         if (!result.executed) throw new Error(t(locale, 'common.commandUnavailable', { platform: 'Discord', command: invocation.command, help: '/help' }))
       } else if (invocation.command === 'help') await this.help(invocation, locale)
       else if (invocation.command === 'language') await this.language(invocation, locale)
-      else if (invocation.command === 'ping') {
-        const started = Date.now()
-        const sent = await this.adapter.sendText(invocation.channelId, t(locale, 'discord.ping.checking'), invocation.messageId ? { replyTo: invocation.messageId } : undefined)
-        await this.adapter.editMessage?.(invocation.channelId, sent.messageId, t(locale, 'discord.ping.result', { ms: Date.now() - started }))
-      } else if (invocation.command === 'info') {
-        await this.adapter.sendText(invocation.channelId, [
-          config.botName,
-          t(locale, 'discord.info.platform'),
-          t(locale, 'discord.info.runtime'),
-          t(locale, discordConfig.messageContentEnabled ? 'discord.info.messageContentEnabled' : 'discord.info.messageContentDisabled'),
-          t(locale, 'discord.info.commands'),
-        ].join('\n'), invocation.messageId ? { replyTo: invocation.messageId } : undefined)
-      } else if (invocation.command === 'vk') await this.vk(invocation, locale)
+      else if (invocation.command === 'vk') await this.vk(invocation, locale)
       else if (invocation.command === 'apkmirror') await this.store(invocation, 'apkmirror', locale)
       else if (invocation.command === 'apkpure') await this.store(invocation, 'apkpure', locale)
       else if (invocation.command === 'apkmirrordl') await this.storeDownload(invocation, 'apkmirror', locale)
