@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { CommandCenter } from '../../components/command-center'
 import { DeveloperDiagnostics } from '../../components/developer-diagnostics'
 import { OperationsOverview } from '../../components/operations-overview'
+import { OpsToast } from '../../components/ops-client-controls'
 import { OpsConsole } from '../../components/ops-console'
 import { OpsUsageDashboard } from '../../components/ops-usage-dashboard'
 import { PlatformGroupsPanel } from '../../components/platform-groups-panel'
@@ -111,14 +112,14 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
       closeLabel={t('nav.close')}
     />
     <div className="ops-shell-content">
-    <div className="mx-auto w-full max-w-[1540px] px-4 py-7 md:px-7 lg:px-9">
-      <header className="flex flex-col gap-5 border-b border-white/[.07] pb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><Bot className="size-5 text-blue-400"/></span><div><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-500">{t('subbot.operations')}</p><h1 className="mt-1 text-2xl font-black tracking-tight">Subbot #{subbot.id}</h1><p className="mt-1 text-xs text-zinc-600">{t('subbot.subtitle', { status: snapshot.runtime.connected ? t('subbot.connected') : t('subbot.noHeartbeat') })}</p></div></div>
+    <div className="ops-page-frame">
+      <header className="ops-page-header">
+        <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><Bot className="size-5 text-blue-400"/></span><div><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-500">{t('subbot.operations')}</p><h1 className="ops-page-title mt-1">Subbot #{subbot.id}</h1><p className="ops-page-subtitle">{t('subbot.subtitle', { status: snapshot.runtime.connected ? t('subbot.connected') : t('subbot.noHeartbeat') })}</p></div></div>
         <form method="post" action="/api/auth/logout"><input type="hidden" name="_csrf" value={csrfToken}/><button className="ops-button-muted"><LogOut className="size-4"/>{t('common.logout')}</button></form>
       </header>
 
-      {params.ok && <div className="mt-5 rounded-xl border border-emerald-500/15 bg-emerald-500/[.07] px-4 py-3 text-sm text-emerald-300">{t('subbot.ok')}</div>}
-      {params.error && <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/[.07] px-4 py-3 text-sm text-red-300">{t('subbot.error', { error: params.error })}</div>}
+      {params.ok ? <OpsToast tone="success">{t('subbot.ok')}</OpsToast> : null}
+      {params.error ? <OpsToast tone="error">{t('subbot.error', { error: params.error })}</OpsToast> : null}
 
       {section === 'overview' && <>
         <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">{cards.map(([Icon,label,value])=><article key={label} className="ops-stat"><Icon className="size-4 text-blue-500"/><p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-600">{label}</p><p className="mt-2 break-all font-bold text-zinc-100">{value}</p></article>)}</section>
