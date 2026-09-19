@@ -53,6 +53,9 @@ jobs:
       - name: Phase B2 shared Command Engine smoke
         run: node scripts/phase-b2-shared-command-engine-smoke.mjs
 
+      - name: Phase B3 central command metadata smoke
+        run: node scripts/phase-b3-command-metadata-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 
