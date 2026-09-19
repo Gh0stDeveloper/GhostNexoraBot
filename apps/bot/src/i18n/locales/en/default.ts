@@ -37,6 +37,7 @@ export const messages: TranslationCatalog = {
   'router.groupRequired': '👥 This command can only be used inside a group.',
   'router.adminOnly': '🛡️ *ADMIN PERMISSION*\n━━━━━━━━━━━━━━\nYou must be a group administrator, global staff member, or owner of this instance.',
   'router.botAdminOnly': '🤖 *MISSING PERMISSION*\n━━━━━━━━━━━━━━\nI need to be a group administrator to perform this action.',
+  'router.categoryDisabled': '🚫 *CATEGORY DISABLED*\n━━━━━━━━━━━━━━\nCommands in *{category}* are disabled by this group\'s policy. Ask a group administrator to enable that category if you need to use it.',
   'router.commandError': '❌ *I COULD NOT COMPLETE {prefix}{command}*\n━━━━━━━━━━━━━━\n{error}',
   'router.internalUnavailable': 'Internal server error, this method is temporarily unavailable.',
   'router.unexpectedError': 'An unexpected error occurred.',
