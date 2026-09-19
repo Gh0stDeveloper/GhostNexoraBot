@@ -8,6 +8,8 @@ const files = {
   runtime: 'apps/bot/src/platform/telegram/runtime.ts',
   bridge: 'apps/bot/src/services/telegram-bridge-v7.ts',
   router: 'apps/bot/src/platform/telegram/router.ts',
+  providers: 'apps/bot/src/commands/download-providers-v3.ts',
+  shared: 'apps/bot/src/commands/shared.ts',
 }
 const source = Object.fromEntries(await Promise.all(Object.entries(files).map(async ([key, file]) => [key, await readFile(file, 'utf8')])))
 
@@ -22,10 +24,13 @@ assert.match(source.runtime, /deleteWebhook\(/)
 assert.match(source.runtime, /blocked-webhook/)
 assert.match(source.adapter, /CALLBACK_LIMIT_BYTES = 64/)
 assert.match(source.adapter, /TELEGRAM_TEXT_LIMIT = 4096/)
-assert.match(source.router, /downloadVkVideo/)
-assert.match(source.router, /searchApkMirror/)
-assert.match(source.router, /searchApkPure/)
-assert.match(source.router, /downloadPhase3Apk/)
+assert.match(source.router, /CommandEngine/)
+assert.match(source.router, /sharedNeutralCommands/)
+assert.match(source.providers, /downloadVkVideo/)
+assert.match(source.providers, /searchApkMirror/)
+assert.match(source.providers, /searchApkPure/)
+assert.match(source.providers, /downloadPhase3Apk/)
+assert.doesNotMatch(source.router, /downloadVkVideo|searchApkMirror|searchApkPure|downloadPhase3Apk/, 'Telegram router must not duplicate shared provider commands')
 assert.match(source.bridge, /ingestTelegramChannelPost/)
 
 const botApiReferences = Object.entries(source).filter(([, text]) => text.includes('api.telegram.org'))
