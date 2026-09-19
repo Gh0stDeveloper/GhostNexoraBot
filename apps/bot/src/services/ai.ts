@@ -22,12 +22,13 @@ export async function getAIStatus() {
   if (!configured) return { ...base, auth: 'missing' as const }
   if (!isOpenRouter()) return { ...base, auth: 'not-checked' as const }
   if (!openRouterKeyShape()) return { ...base, auth: 'invalid-format' as const }
-  const response = await trackedProviderCall('openrouter', async () => fetch('https://openrouter.ai/api/v1/key', { headers: { authorization: `Bearer ${apiKey()}`, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) }), { label: 'OpenRouter' })
-  const type = response.headers.get('content-type') ?? ''; const payload = type.includes('json') ? await response.json() as OpenRouterKeyResponse : undefined
-  if (!response.ok) {
-    try { throw new Error(`openrouter_key_http_${response.status}`) } catch {}
-    return { ...base, auth: 'rejected' as const, httpStatus: response.status, detail: payload?.error?.message || `HTTP ${response.status}` }
-  }
+  const { response, payload } = await trackedProviderCall('openrouter', async () => {
+    const response = await fetch('https://openrouter.ai/api/v1/key', { headers: { authorization: `Bearer ${apiKey()}`, accept: 'application/json' }, signal: AbortSignal.timeout(12_000) })
+    const type = response.headers.get('content-type') ?? ''
+    const payload = type.includes('json') ? await response.json() as OpenRouterKeyResponse : undefined
+    if (!response.ok) throw new Error(`openrouter_key_http_${response.status}`)
+    return { response, payload }
+  }, { label: 'OpenRouter' })
   return { ...base, auth: 'valid' as const, freeTier: payload?.data?.is_free_tier, managementKey: payload?.data?.is_management_key, limit: payload?.data?.limit, limitRemaining: payload?.data?.limit_remaining, limitReset: payload?.data?.limit_reset, expiresAt: payload?.data?.expires_at }
 }
 export async function askAI(messages: AiMessage[], maxTokens = 1600) {
