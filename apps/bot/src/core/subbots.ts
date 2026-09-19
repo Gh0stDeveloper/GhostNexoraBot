@@ -363,6 +363,7 @@ class SubbotManager {
       deleteInstanceRows('ops_group_chat_preferences')
       deleteInstanceRows('ops_group_daily_stats')
       deleteInstanceRows('ops_group_daily_senders')
+      deleteInstanceRows('ops_group_hourly_stats')
       deleteInstanceRows('ops_group_members')
       deleteInstanceRows('ops_group_settings_snapshot')
       deleteInstanceRows('ops_group_command_policy')
