@@ -410,6 +410,8 @@ sudo journalctl -u ghost-nexora-bot -f
 
 Ghost Nexora Bot funciona de forma **nativa, sin WSL**. El instalador no cierra la terminal, no hace pairing automático y deja el bot apagado hasta que el usuario decida iniciarlo.
 
+El asistente permite elegir **cualquier disco o partición** para el código y para los datos persistentes. Si se ejecuta desde `D:`, `E:`, `G:` u otra unidad, puede instalar directamente en esa ubicación en vez de forzar `%USERPROFILE%\GhostNexoraBot` en `C:`.
+
 ## CMD recomendado
 
 ```bat
