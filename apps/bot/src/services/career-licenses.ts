@@ -161,6 +161,7 @@ function debitTotal(userJid: string, price: number, profession: V2ProfessionId) 
   db.prepare('UPDATE economy_users SET wallet = wallet - ?, bank = bank - ? WHERE user_jid = ?').run(walletUse, bankUse, userJid)
   db.prepare('INSERT INTO economy_ledger(user_jid, kind, amount, note, created_at) VALUES(?, ?, ?, ?, ?)')
     .run(userJid, 'profession_license', -price, `profession:${profession}`, now())
+  economy.recordGlobalLedger(userJid, 'profession_license', -price, undefined, `profession:${profession}`)
 }
 
 export const careerLicenses = {
