@@ -302,19 +302,63 @@ Cierre B1:
 
 ## B2. Un solo Command Engine
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
-El comando debe implementarse una sola vez y responder mediante una API neutral con operaciones equivalentes a:
+Objetivo cumplido:
 
-- reply;
-- ui.card;
-- ui.list;
-- ui.carousel;
-- media.send;
-- edit;
-- react.
+- WhatsApp, Discord y Telegram comparten `core/command-engine.ts` como ejecutor de comandos;
+- el engine centraliza:
+  - resolución del comando y aliases del catálogo que recibe;
+  - permisos estáticos (`ownerOnly`, `staffOnly`, grupos y administración);
+  - configuración runtime E6;
+  - cooldowns;
+  - autorización adicional por plataforma/comunidad;
+  - ejecución del handler;
+  - telemetría y auditoría de ejecución;
+- WhatsApp conserva el catálogo completo y la compatibilidad V1 mediante `LegacyCompatibleCommandContext`, pero matcher y ejecución pasan por `CommandEngine`;
+- Discord y Telegram ejecutan `sharedNeutralCommands` mediante el mismo engine y un `CommandContext` neutral;
+- se creó `commands/shared.ts` como catálogo de comandos ya transport-neutral;
+- se migraron al catálogo compartido:
+  - menú/ayuda, ping e info;
+  - idioma;
+  - créditos;
+  - comandos de sistema neutrales;
+  - versión;
+  - VK;
+  - APKMirror;
+  - APKPure;
+  - provider health;
+- `language` usa la plataforma activa en lugar de asumir WhatsApp y conserva la semántica de administradores de grupo;
+- los providers compartidos usan `sendUi` y `sendMedia` en vez de socket/message de Baileys;
+- el menú compartido de Discord/Telegram muestra únicamente comandos soportados y respeta configuración/cooldowns E6;
+- se eliminaron de los routers de Discord y Telegram las implementaciones duplicadas de help/language/ping/info/VK/APK/provider health;
+- `discordstatus` y `tgstatus` permanecen locales porque representan diagnóstico exclusivo del runtime de cada plataforma;
+- callbacks/botones normalizan comandos con prefijo para no producir `//comando` ni IDs inválidos;
+- `performanceAudit.recordCommand` registra la plataforma real de ejecución;
+- se añadió el smoke `phase-b2-shared-command-engine-smoke.mjs` y se integró al CI;
+- las auditorías históricas de E6, providers, telemetría, i18n y runtimes Discord/Telegram se actualizaron para validar la nueva frontera compartida sin relajar sus garantías.
 
-Cada plataforma traduce la intención a su formato nativo.
+Validación B2:
+
+- commit de validación integral: `9a975cc8a782b9a7ff381ae0cc9524ccf1e4124c`;
+- CI #2998: **success**;
+- Typecheck: success;
+- Build: success;
+- smoke B1: success;
+- smoke B2: success;
+- Fase E E0-E14: success;
+- Telegram Phase 4: success;
+- Discord Phase 5: success;
+- i18n Phase 6: success;
+- Termux Lite, Windows installer y regresiones generales: success.
+
+Criterio de B2:
+
+- existe una sola implementación del motor de ejecución;
+- las plataformas preparan entrada/contexto y el adapter traduce la salida;
+- los comandos ya neutrales no vuelven a implementarse por plataforma;
+- la compatibilidad WhatsApp legacy puede seguir migrándose de forma incremental sin crear otro engine.
+
 
 ## B3. Metadata central de comandos
 
