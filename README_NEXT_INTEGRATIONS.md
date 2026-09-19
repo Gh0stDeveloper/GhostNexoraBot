@@ -536,7 +536,7 @@ Crear una capa compartida para:
 
 # FASE E — Dashboard Web V2
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -1222,7 +1222,7 @@ Cierre:
 
 ## E14. Diseño visual
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Mantener el tema oscuro pero acercarlo a un producto terminado.
 
@@ -1241,7 +1241,7 @@ Priorizar:
 
 Reducir textos internos y técnicos en vistas de administración normal.
 
-Implementación E14 en validación:
+Implementación E14:
 
 - sistema visual común `ops-*` para jerarquía, spacing, densidad, cards, inputs, botones y tablas;
 - sidebar de escritorio más compacto y drawer móvil conservando navegación E1;
@@ -1260,6 +1260,19 @@ Implementación E14 en validación:
 - smoke dedicado E14 integrado al CI.
 
 ---
+
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E14 visual en verde;
+- command palette, modales, toasts, skeletons y empty states validados;
+- navegación E1 y responsive móvil preservados;
+- auditoría ES/EN e i18n boundary en verde;
+- E12, E13 y smoke de GIFs adultos continúan en verde;
+- Atomic wallet multi-process, Global wallet migration, Banking V10, V4 persistence y V5 compatibility en verde;
+- Windows installer, Termux Lite y suite completa de regresiones en verde;
+- CI principal #2942: success sobre `efa6d6b28e98a0af17cb198f098db42e2c659649`.
 
 # FASE F — Observabilidad, métricas y operación
 
@@ -1423,7 +1436,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | — | Fase B | Núcleo multiplataforma | PENDIENTE | — |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
-| 2026-09-18 | Fase E | Dashboard Web V2 · inventario de grupos por plataforma | EN PROGRESO | feat/phase-e-platform-groups-dashboard |
+| 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
 | 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
 | 2026-09-19 | Fase E8 | Dashboard de usuarios por instancia y permisos | TERMINADO | d8ae811b618f6c32537bcff4cfbb9d3db36d7e36 |
@@ -1432,22 +1445,18 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E11 | Jobs activos, cancelación/reintento y acceso adulto regular corregido | TERMINADO | aa4c4b6dedb4c1f20d63119816874372ef2fdd8a |
 | 2026-09-19 | Fase E12 | Actualizaciones seguras desde Dashboard con progreso y healthcheck | TERMINADO | 9bec819c28a04be010aa0f2e00d7e86ecf29b255 |
 | 2026-09-19 | Fase E13 | Backups tipados, verificación, dry-run y restore seguro | TERMINADO | ea5d6940c7246c0746570b8568b9170254c11ede |
+| 2026-09-19 | Fase E14 | Pulido visual, command palette, modales, toasts y responsive | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E14 · Diseño visual**.
+**FASE E — Dashboard Web V2 está TERMINADA (E0–E14).**
 
-Prioridad inmediata:
+La siguiente fase nueva del roadmap es **FASE F — Observabilidad, métricas y operación**, comenzando por **F1 · PlatformRuntimeRegistry**.
 
-1. unificar jerarquía visual, spacing y densidad de todas las secciones del Dashboard;
-2. mejorar responsive móvil sin aumentar espacio innecesario;
-3. normalizar tablas, cards, estados, filtros y acciones;
-4. revisar contraste, accesibilidad y consistencia ES/EN;
-5. mantener la navegación E1 y el estilo compacto del Operations Center;
-6. cerrar visualmente la Fase E sin alterar lógica funcional ya validada.
+No iniciar Fase F automáticamente sin indicación del usuario.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
