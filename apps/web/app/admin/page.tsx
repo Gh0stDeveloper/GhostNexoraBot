@@ -210,7 +210,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/[.08]"><ShieldCheck className="size-5 text-blue-400"/></span>
           <div>
-            <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-500">Operations Center</p><span className="ops-badge-good">{roleLabel(role)}</span></div>
+            <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-bold uppercase tracking-[.16em] text-blue-500">{sections.find(([id]) => id === section)?.[1] ?? t('admin.title')}</p><span className="ops-badge-good">{roleLabel(role)}</span></div>
             <h1 className="ops-page-title mt-1">{t('admin.title')}</h1>
             <p className="ops-page-subtitle">{t('admin.currentView', { instance: instanceLabel, status: runtimeStatus })}</p>
           </div>
