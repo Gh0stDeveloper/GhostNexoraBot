@@ -21,6 +21,15 @@ function platformMeta(platform: Platform, locale: WebLocale) {
   return { label: opsExtraT(locale, 'platformGroups.telegram'), Icon: Send }
 }
 
+function maskedAccount(status: WebPlatformStatus | undefined) {
+  if (!status?.accountLabel) return null
+  if (status.id !== 'whatsapp') return status.accountLabel
+  const raw = status.accountLabel.split('@')[0]?.split(':')[0] ?? ''
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length < 6) return '••••'
+  return `${digits.slice(0, 2)}••••••${digits.slice(-4)}`
+}
+
 function statusBadge(status: WebPlatformStatus | undefined, locale: WebLocale) {
   if (!status?.known) return <span className="ops-badge-warn">{opsExtraT(locale, 'platformGroups.unknownStatus')}</span>
   if (status.enabled === false) return <span className="ops-badge">{opsExtraT(locale, 'platformGroups.disabled')}</span>
@@ -64,7 +73,7 @@ function PlatformSection({ platform, rows, locale, status }: {
     </div>
 
     {status?.accountLabel || status?.detail ? <div className="border-b border-white/[.06] px-5 py-3 text-xs text-zinc-600">
-      {status.accountLabel ? <span className="mr-3 font-semibold text-zinc-400">{status.accountLabel}</span> : null}
+      {maskedAccount(status) ? <span className="mr-3 font-semibold text-zinc-400">{maskedAccount(status)}</span> : null}
       {status.detail ? <span>{status.detail}</span> : null}
     </div> : null}
 
