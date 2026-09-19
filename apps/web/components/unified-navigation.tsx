@@ -16,6 +16,7 @@ import {
   Settings,
   ShieldCheck,
   ScrollText,
+  RefreshCcw,
   SquareTerminal,
   UserRound,
   UsersRound,
@@ -41,6 +42,7 @@ export type UnifiedNavIcon =
   | 'economy'
   | 'logs'
   | 'jobs'
+  | 'updates'
   | 'audit'
   | 'diagnostics'
   | 'settings'
@@ -71,6 +73,7 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   economy: Coins,
   logs: ScrollText,
   jobs: Activity,
+  updates: RefreshCcw,
   audit: Gauge,
   diagnostics: Wrench,
   settings: Settings,
