@@ -96,15 +96,27 @@ function updateJob(id: string, patch: {
     .get(id, instanceKey) as Record<string, unknown> | undefined
   if (!row) return false
   const stamp = Date.now()
+  const detail = patch.detail === undefined
+    ? (row.detail === null || row.detail === undefined ? null : String(row.detail))
+    : patch.detail ? clean(patch.detail, 500) : null
+  const error = patch.error === undefined
+    ? (row.error === null || row.error === undefined ? null : String(row.error))
+    : patch.error ? clean(patch.error, 700) : null
+  const startedAt = patch.startedAt === undefined
+    ? (row.startedAt === null || row.startedAt === undefined ? null : Number(row.startedAt))
+    : patch.startedAt
+  const completedAt = patch.completedAt === undefined
+    ? (row.completedAt === null || row.completedAt === undefined ? null : Number(row.completedAt))
+    : patch.completedAt
   opsDb.prepare(`UPDATE ops_jobs SET status = ?, progress = ?, detail = ?, error = ?,
       started_at = ?, completed_at = ?, updated_at = ?
     WHERE id = ? AND instance_key = ?`).run(
       patch.status ?? String(row.status),
       patch.progress === undefined ? Number(row.progress ?? 0) : clampProgress(patch.progress),
-      patch.detail === undefined ? (row.detail ?? null) : patch.detail ? clean(patch.detail, 500) : null,
-      patch.error === undefined ? (row.error ?? null) : patch.error ? clean(patch.error, 700) : null,
-      patch.startedAt === undefined ? (row.startedAt ?? null) : patch.startedAt,
-      patch.completedAt === undefined ? (row.completedAt ?? null) : patch.completedAt,
+      detail,
+      error,
+      startedAt,
+      completedAt,
       stamp,
       id,
       instanceKey,
