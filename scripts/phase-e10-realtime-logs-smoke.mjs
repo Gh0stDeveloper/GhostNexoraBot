@@ -116,6 +116,7 @@ try {
   assert.match(apiRoute, /ADMIN_SESSION_COOKIE/, 'E10 privileged session auth missing')
   assert.match(apiRoute, /SUBBOT_SESSION_COOKIE/, 'E10 subbot session auth missing')
   assert.match(apiRoute, /hasPermission\(current\.role, 'logs:view'\)/, 'E10 logs permission check missing')
+  assert.match(apiRoute, /current\.mfaPending/, 'E10 logs API must enforce completed MFA')
   assert.match(apiRoute, /ownerInstanceExists/, 'E10 owner subbot validation missing')
   assert.match(apiRoute, /cache-control': 'no-store/, 'E10 API must not cache logs')
 
