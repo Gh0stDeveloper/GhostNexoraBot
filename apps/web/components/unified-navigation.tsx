@@ -4,6 +4,7 @@ import {
   Activity,
   Bot,
   Boxes,
+  Coins,
   Download,
   Fingerprint,
   Gauge,
@@ -36,6 +37,7 @@ export type UnifiedNavIcon =
   | 'commands'
   | 'groups'
   | 'users'
+  | 'economy'
   | 'audit'
   | 'diagnostics'
   | 'settings'
@@ -63,6 +65,7 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   commands: SquareTerminal,
   groups: UsersRound,
   users: UserRound,
+  economy: Coins,
   audit: Gauge,
   diagnostics: Wrench,
   settings: Settings,
