@@ -1,4 +1,5 @@
 import { economy } from './economy.js'
+import { providerCircuitAllows, recordProviderAttempt } from './provider-health.js'
 
 export type JikanV2Character = {
   characterId: number
@@ -47,6 +48,8 @@ async function request<T>(url: string, useCache = true): Promise<T> {
     const hit = cache.get(url)
     if (hit && Date.now() - hit.at < CACHE_TTL) return hit.value as T
   }
+  if (!providerCircuitAllows('jikan')) throw new Error('provider_circuit_open:jikan')
+  const started = performance.now()
   let lastError: unknown
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await pace()
@@ -58,6 +61,7 @@ async function request<T>(url: string, useCache = true): Promise<T> {
       if (response.ok) {
         const value = await response.json() as T
         if (useCache) cache.set(url, { at: Date.now(), value })
+        try { recordProviderAttempt('jikan', { ok: true, latencyMs: Math.max(0, performance.now() - started), label: 'Jikan' }) } catch {}
         return value
       }
       const retryable = response.status === 429 || response.status >= 500
@@ -72,7 +76,16 @@ async function request<T>(url: string, useCache = true): Promise<T> {
       await sleep(Math.min(8_000, 900 * 2 ** attempt))
     }
   }
-  throw lastError instanceof Error ? lastError : new Error('Jikan no respondió.')
+  const finalError = lastError instanceof Error ? lastError : new Error('Jikan no respondió.')
+  try {
+    recordProviderAttempt('jikan', {
+      ok: false,
+      latencyMs: Math.max(0, performance.now() - started),
+      label: 'Jikan',
+      errorCode: finalError.message,
+    })
+  } catch {}
+  throw finalError
 }
 
 function rarity(favorites: number): JikanV2Character['rarity'] {
