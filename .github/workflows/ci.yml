@@ -39,6 +39,9 @@ jobs:
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 
+      - name: Phase E1 unified navigation smoke
+        run: node scripts/phase-e1-unified-navigation-smoke.mjs
+
       - name: Phase E2 operations diagnostics smoke
         run: node scripts/phase-e2-operations-diagnostics-smoke.mjs
 
