@@ -1,4 +1,7 @@
-import type { NormalizedUi } from '@ghostnexora/platform-contracts'
+import type { NormalizedMessage, NormalizedUi } from '@ghostnexora/platform-contracts'
+import { sharedNeutralCommands } from '../../commands/shared.js'
+import { CommandEngine } from '../../core/command-engine.js'
+import type { CommandContext } from '../../types.js'
 import { config } from '../../config.js'
 import { settings } from '../../core/settings.js'
 import {
@@ -69,6 +72,8 @@ async function progress(adapter: TelegramAdapter, chatId: string, replyTo: strin
 }
 
 export class TelegramCommandRouter {
+  private readonly engine = new CommandEngine<CommandContext>(sharedNeutralCommands)
+
   constructor(
     private readonly adapter: TelegramAdapter,
     private readonly botUsername?: string,
@@ -209,6 +214,64 @@ export class TelegramCommandRouter {
       await update(t(locale, 'common.videoSent'))
     } finally {
       await result.cleanup()
+    }
+  }
+
+  private commandContext(
+    message: TelegramMessage,
+    normalizedMessage: NormalizedMessage,
+    commandName: string,
+    argText: string,
+    locale: LocaleCode,
+    isOwner: boolean,
+    isStaff: boolean,
+  ): CommandContext {
+    const chatId = normalizedMessage.chatId
+    const replyTo = normalizedMessage.messageId
+    const sendText: CommandContext['sendText'] = (value, options) =>
+      this.adapter.sendText(chatId, value, { ...options, replyTo: options?.replyTo ?? replyTo })
+    const sendMedia: CommandContext['sendMedia'] = (media, options) =>
+      this.adapter.sendMedia(chatId, media, { ...options, replyTo: options?.replyTo ?? replyTo })
+    const sendUi: CommandContext['sendUi'] = (ui, options) =>
+      this.adapter.sendUi(chatId, ui, { ...options, replyTo: options?.replyTo ?? replyTo })
+    const reply: CommandContext['reply'] = async (value) => (await sendText(value)).raw
+    const react: CommandContext['react'] = async (emoji) => {
+      if (!this.adapter.react) return undefined
+      return this.adapter.react(chatId, replyTo, emoji)
+    }
+
+    return {
+      platform: 'telegram',
+      adapter: this.adapter,
+      normalizedMessage,
+      chatId,
+      sender: `telegram:${message.from?.id ?? message.sender_chat?.id ?? message.chat.id}`,
+      pushName: normalizedMessage.pushName ?? 'Telegram',
+      commandName,
+      args: argText.trim().split(/\s+/).filter(Boolean),
+      argText,
+      prefix: '/',
+      settings,
+      locale,
+      t: (key, values = {}) => translate(locale, key, values),
+      isOwner,
+      isBotStaff: isStaff,
+      isGroup: normalizedMessage.isGroup,
+      isGroupAdmin: isStaff,
+      isBotGroupAdmin: false,
+      isSubbotOwner: false,
+      reply,
+      react,
+      sendText,
+      sendMedia,
+      sendUi,
+      setTyping: async (active) => {
+        if (this.adapter.setTyping) await this.adapter.setTyping(chatId, active)
+      },
+      editMessage: async (messageId, value) => {
+        if (!this.adapter.editMessage) throw new Error('Telegram no soporta edición en este adapter.')
+        await this.adapter.editMessage(chatId, messageId, value)
+      },
     }
   }
 
