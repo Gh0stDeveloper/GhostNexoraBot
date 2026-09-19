@@ -1,5 +1,6 @@
 import { config } from '../config.js'
 import type { ChatTurn } from './conversation-memory.js'
+import { createOpsJob } from './ops-jobs.js'
 
 export type OllamaMessage = {
   role: 'system' | 'user' | 'assistant'
@@ -53,10 +54,13 @@ let failedUntil = 0
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = generationTimeoutMs()): Promise<T> {
   const { controller, timer } = abortAfter(timeoutMs)
   try {
+    const signal = init.signal
+      ? AbortSignal.any([controller.signal, init.signal])
+      : controller.signal
     const response = await fetch(`${config.ollamaBaseUrl}${path}`, {
       ...init,
       headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
-      signal: controller.signal,
+      signal,
     })
     if (!response.ok) {
       const body = await response.text().catch(() => '')
@@ -196,27 +200,61 @@ export const ollama = {
     if (contextText) messages.push({ role: 'system', content: contextText })
     messages.push(...historyToMessages(input.history ?? []), { role: 'user', content: userText })
 
+    const job = createOpsJob({
+      type: 'ai',
+      label: `Ollama · ${config.ollamaModel}`,
+      source: 'ollama',
+      cancellable: true,
+      retryable: false,
+      waitingDetail: 'queued_for_generation',
+    })
+    const externalAbort = new AbortController()
+    let cancelled = false
+    job.setCancelHandler(() => {
+      cancelled = true
+      externalAbort.abort()
+      return true
+    })
+
     try {
-      const data = await enqueueGeneration(() => request<ChatResponse>('/api/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: config.ollamaModel,
-          messages,
-          stream: false,
-          keep_alive: config.ollamaKeepAlive,
-          options: {
-            temperature: config.ollamaTemperature,
-            top_p: config.ollamaTopP,
-            num_predict: config.ollamaNumPredict,
-          },
-        }),
-      }, generationTimeoutMs()))
-      if (!data) return null
+      const data = await enqueueGeneration(async () => {
+        if (cancelled) throw new Error('job_cancelled')
+        job.start('ollama_generation')
+        return request<ChatResponse>('/api/chat', {
+          method: 'POST',
+          signal: externalAbort.signal,
+          body: JSON.stringify({
+            model: config.ollamaModel,
+            messages,
+            stream: false,
+            keep_alive: config.ollamaKeepAlive,
+            options: {
+              temperature: config.ollamaTemperature,
+              top_p: config.ollamaTopP,
+              num_predict: config.ollamaNumPredict,
+            },
+          }),
+        }, generationTimeoutMs())
+      })
+      if (cancelled) {
+        job.cancelled()
+        return null
+      }
+      if (!data) {
+        job.fail('ollama_queue_full_or_timeout')
+        return null
+      }
       const answer = clean(data.message?.content, 4000)
-      if (!answer) return null
+      if (!answer) {
+        job.fail('ollama_empty_response')
+        return null
+      }
+      job.complete('generation_completed')
       failedUntil = 0
       return answer
-    } catch {
+    } catch (error) {
+      if (cancelled) job.cancelled()
+      else job.fail(error)
       failedUntil = Date.now() + 10_000
       return null
     }
