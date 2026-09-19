@@ -560,7 +560,7 @@ Objetivo inmediato:
 
 ## E1. Navegación lateral
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Reemplazar o complementar tabs horizontales con sidebar.
 
@@ -596,6 +596,14 @@ Implementación E1 en curso:
 - página pública usa el mismo shell sin exponer controles privados;
 - acceso /login queda como acción del sidebar público;
 - navegación accesible mediante aria-current, aria-expanded, aria-controls y focus-visible.
+
+Cierre:
+
+- PR: #79 `feat: complete Phase E1 unified navigation`;
+- merge a `main`: `5f368efb3da6d6839035cd946664d5fca3d2b909`;
+- CI principal: success;
+- V2 Phase 0, Phase 6 y Phase 8: success;
+- smoke E1, Typecheck, Build e i18n: success.
 
 ## E2. Separar información operativa de diagnóstico
 
