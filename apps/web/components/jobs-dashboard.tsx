@@ -179,9 +179,7 @@ export function JobsDashboard({
             </tr>
           })}</tbody>
         </table>
-      </div> : <div className="grid min-h-48 place-items-center p-8 text-center">
-        <div><Activity className="mx-auto size-7 text-zinc-700"/><p className="mt-3 text-sm text-zinc-600">{x('jobs.noRows')}</p></div>
-      </div>}
+      </div> : <div className="ops-empty-state"><Activity className="size-6"/><p>{x('jobs.noRows')}</p></div>}
     </section>
   </div>
 }
