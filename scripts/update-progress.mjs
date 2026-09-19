@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -14,6 +14,7 @@ const stateDir = process.env.STATE_DIR || '/var/lib/ghost-nexora-bot'
 const dataDir = process.env.DATA_DIR || path.join(stateDir, 'data')
 const statusFile = path.join(dataDir, 'update-status.json')
 const envFile = path.join(installDir, '.env')
+mkdirSync(dataDir, { recursive: true })
 const now = Date.now()
 
 function envSecrets() {
