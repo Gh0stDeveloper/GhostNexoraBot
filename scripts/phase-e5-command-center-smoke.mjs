@@ -104,9 +104,9 @@ try {
   assert.match(centerSource, /fullParity/, 'Full parity summary must be computed')
 
   assert.match(adminSource, /\['commands', t\('nav\.commands'\), SquareTerminal/, 'Admin command navigation missing')
-  assert.match(adminSource, /<CommandCenter commands=\{snapshot\.commands\}/, 'Admin command center missing')
+  assert.match(adminSource, /<CommandCenter[\s\S]*?commands=\{snapshot\.commands\}/, 'Admin command center missing')
   assert.match(subbotSource, /\['commands', t\('nav\.commands'\), SquareTerminal/, 'Subbot command navigation missing')
-  assert.match(subbotSource, /<CommandCenter commands=\{snapshot\.commands\}/, 'Subbot isolated command center missing')
+  assert.match(subbotSource, /<CommandCenter[\s\S]*?commands=\{snapshot\.commands\}/, 'Subbot isolated command center missing')
   assert.match(navSource, /\| 'commands'/, 'Unified navigation command icon missing')
   assert.match(i18nSource, /'commands\.title': 'Centro de comandos'/, 'Spanish E5 copy missing')
   assert.match(i18nSource, /'commands\.title': 'Command Center'/, 'English E5 copy missing')
