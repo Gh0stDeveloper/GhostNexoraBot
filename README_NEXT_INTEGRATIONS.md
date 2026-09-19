@@ -949,7 +949,7 @@ Cierre:
 
 ## E9. Ledger de economía
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Añadir un libro contable de movimientos.
 
@@ -976,7 +976,7 @@ Ejemplos:
 
 Objetivo: poder auditar siempre de dónde salió o a dónde fue cada cambio de saldo.
 
-Implementación E9 en validación:
+Implementación E9:
 
 - tabla global `economy_transactions` en la base de economía compartida;
 - IDs de transacción independientes `nxc_<random>`;
@@ -991,6 +991,18 @@ Implementación E9 en validación:
 - resumen de créditos, débitos, neto, total y movimientos sin atribuir;
 - tabla con saldo antes/después, deltas, instancia y transaction_id;
 - smoke ejecutable E9 integrado al CI.
+
+Cierre:
+
+- Typecheck y Build en verde;
+- smoke E9 de ledger y ranking público en verde;
+- auditoría ES/EN e i18n boundary en verde;
+- Atomic wallet multi-process en verde tras hacer idempotente la inicialización concurrente de triggers;
+- Global wallet migration, Banking V10, V4 persistence y V5 compatibility en verde;
+- Windows installer y suite completa de regresiones en verde;
+- CI principal #2806: success sobre `373f552ff59a8731ba53b6df25d1684747bb3f70`;
+- top público de comandos rediseñado a filas compactas en dos columnas, con descripción de una línea y métricas condensadas.
+
 
 ## E10. Logs en tiempo real
 
@@ -1274,22 +1286,23 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
 | 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
 | 2026-09-19 | Fase E8 | Dashboard de usuarios por instancia y permisos | TERMINADO | d8ae811b618f6c32537bcff4cfbb9d3db36d7e36 |
+| 2026-09-19 | Fase E9 | Ledger económico auditable y ranking público compacto | TERMINADO | 373f552ff59a8731ba53b6df25d1684747bb3f70 |
 | — | Fase F | Observabilidad | PENDIENTE | — |
 
 ---
 
 # Próximo paso
 
-La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E9 · Ledger de economía**.
+La siguiente tarea oficial dentro de **FASE E — Dashboard Web V2** es **E10 · Logs en tiempo real**.
 
 Prioridad inmediata:
 
-1. registrar cada movimiento económico con identificador único;
-2. conservar saldo anterior y posterior;
-3. identificar origen/tipo de cada movimiento;
-4. unificar auditoría de MainBot y subbots sobre la economía global compartida;
-5. exponer el ledger desde la Web con filtros por usuario, tipo y fecha;
-6. validar que ningún cambio de NXC pueda quedar sin trazabilidad.
+1. mostrar un stream de logs operativos recientes con actualización continua;
+2. filtrar por WhatsApp, Discord, Telegram, errores, downloads, API y comandos;
+3. sanitizar tokens, API keys, cookies, credenciales y session IDs antes de persistir o mostrar;
+4. mantener aislamiento estricto por `instance_key` entre MainBot y subbots;
+5. limitar retención y volumen para que el panel no afecte al runtime;
+6. integrar la vista al Operations Center con permisos y smoke dedicado en CI.
 
 Las fases B, C y D quedan pospuestas hasta nueva indicación.
 
