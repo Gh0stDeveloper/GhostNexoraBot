@@ -338,7 +338,7 @@ export class CommandRouter {
           isStaff: isBotStaff,
           isGroup,
           isGroupAdmin: senderIsGroupAdmin,
-          isBotGroupAdmin,
+          isBotGroupAdmin: botIsGroupAdmin,
           isInstanceOwner: isSubbotOwner,
         },
       })
