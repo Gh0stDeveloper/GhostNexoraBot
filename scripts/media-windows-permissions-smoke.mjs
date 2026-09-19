@@ -42,6 +42,8 @@ assert.match(adultRoleplay, /isRateOverlimit/, 'Adult roleplay must detect Whats
 assert.match(adultRoleplay, /for \(const delay of \[0, 2500, 5000\]\)/, 'Adult roleplay must retry text delivery with bounded backoff')
 assert.match(adultRoleplay, /sendMediaOrTextFallback/, 'Adult roleplay media delivery must fall back to text on WhatsApp rate limits')
 assert.match(router, /router\.rateLimited/, 'Router must not expose raw rate-overlimit strings')
+assert.match(router, /react\('⚡'\)\.catch\(\(\) => undefined\)/, 'Command start reactions must not abort command execution when WhatsApp throttles reactions')
+assert.match(router, /react\('✅'\)\.catch\(\(\) => undefined\)/, 'Success reactions must not turn an already-completed command into a failure')
 assert.match(esLocale, /'router\.rateLimited'/, 'Spanish rate-limit explanation missing')
 
 assert.deepEqual(Array.from(installerBytes.subarray(0, 3)), [0xef, 0xbb, 0xbf], 'Windows installer must keep a UTF-8 BOM for Windows PowerShell 5.1')
