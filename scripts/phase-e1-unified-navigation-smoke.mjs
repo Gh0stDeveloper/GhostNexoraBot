@@ -60,7 +60,7 @@ assert.doesNotMatch(adminPage, /<nav className="mt-5 flex gap-2 overflow-x-auto/
 
 assert.match(subbotPage, /const navigationItems: UnifiedNavItem\[] = sections\.map/, 'Subbot navigation must derive from isolated sections')
 assert.match(subbotPage, /brandTitle=\{`SUBBOT #\$\{subbot\.id\}`\}/, 'Subbot identity must remain visible in shared sidebar')
-assert.match(subbotPage, /sectionIds: SubbotSection\[] = \['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'audit', 'diagnostics', 'account'\]/, 'Subbot must retain only its isolated sections, including its own E10 logs')
+assert.match(subbotPage, /sectionIds: SubbotSection\[] = \['overview', 'platforms', 'providers', 'commands', 'groups', 'logs', 'jobs', 'audit', 'diagnostics', 'account'\]/, 'Subbot must retain only its isolated sections, including E10 logs and E11 jobs')
 assert.match(subbotPage, /\['providers', t\('nav\.providers'\)/, 'Subbot must expose only its own provider telemetry')
 assert.match(subbotPage, /\['commands', t\('nav\.commands'\)/, 'Subbot must expose only its own command telemetry')
 assert.doesNotMatch(subbotPage, /management|nav\.subbots|nav\.security/, 'Subbot sidebar must not expose MainBot owner navigation')
