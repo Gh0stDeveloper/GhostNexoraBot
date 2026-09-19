@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import { config } from '../config.js'
+import { trackedProviderCall } from './provider-health.js'
 
 export type AnimeSearchResult = { id: string; title: string; image?: string; source?: string }
 export type AnimeEpisode = { id: string; number: number; season: number }
@@ -33,20 +34,35 @@ interface AnimeProvider {
   sources(episodeId: string): Promise<AnimeSource[]>
 }
 
-const jsonRequest = async (url: string, init: RequestInit = {}, timeoutMs = 18_000) => {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+function animeProviderId(url: string) {
   try {
-    const response = await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/2.0', ...(init.headers ?? {}) },
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    return await response.json() as unknown
-  } finally {
-    clearTimeout(timer)
-  }
+    if (config.anime1vApiUrl && url.startsWith(config.anime1vApiUrl)) return 'anime1v'
+    if (config.consumetApiUrl && url.startsWith(config.consumetApiUrl)) return 'consumet'
+    const host = new URL(url).hostname.toLowerCase()
+    if (host === 'api.jikan.moe') return 'jikan'
+    if (host.includes('weeb-api')) return 'weeb'
+    if (host.includes('anime-api-lyart')) return 'animeapi'
+  } catch {}
+  return 'anime'
+}
+
+const jsonRequest = async (url: string, init: RequestInit = {}, timeoutMs = 18_000) => {
+  const providerId = animeProviderId(url)
+  return trackedProviderCall(providerId, async () => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+        headers: { accept: 'application/json', 'user-agent': 'GhostNexoraBot/2.0', ...(init.headers ?? {}) },
+      })
+      if (!response.ok) throw new Error(`${providerId}_http_${response.status}`)
+      return await response.json() as unknown
+    } finally {
+      clearTimeout(timer)
+    }
+  })
 }
 
 const record = (value: unknown): Record<string, unknown> | null =>
