@@ -253,12 +253,34 @@ function Install-Manager {
   }
   if ($env:Path -notlike "*$binDir*") { $env:Path += ';' + $binDir }
 
+  # A child PowerShell process cannot modify the PATH of the terminal that launched it.
+  # Windows 10/11 already exposes this per-user directory in PATH in normal shells, so
+  # install a tiny CMD shim there. That makes "ghostnexora" usable immediately from the
+  # original CMD/PowerShell window, without reopening it and without changing execution policy.
+  $windowsAppsDir = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'
+  $shimPath = Join-Path $windowsAppsDir 'ghostnexora.cmd'
+  $shimInstalled = $false
+  if (Test-Path $windowsAppsDir) {
+    try {
+      $shim = '@echo off' + [Environment]::NewLine + 'call "%LOCALAPPDATA%\GhostNexora\bin\ghostnexora.cmd" %*'
+      Set-Content -LiteralPath $shimPath -Value $shim -Encoding ascii
+      $shimInstalled = Test-Path -LiteralPath $shimPath
+      if ($shimInstalled) { Write-Ok "Acceso inmediato instalado: $shimPath" }
+    } catch {
+      Write-Warn ("No se pudo crear el acceso inmediato en WindowsApps: " + $_.Exception.Message)
+    }
+  }
+
   [Environment]::SetEnvironmentVariable('GHOST_NEXORA_HOME', $InstallDir, 'User')
   [Environment]::SetEnvironmentVariable('GHOST_NEXORA_STATE', $StateDir, 'User')
   $env:GHOST_NEXORA_HOME = $InstallDir
   $env:GHOST_NEXORA_STATE = $StateDir
 
+  if (-not (Test-Path -LiteralPath $cmdPath)) { throw 'No se pudo instalar el gestor ghostnexora.cmd.' }
   Write-Ok "Gestor instalado: $cmdPath"
+  if (-not $shimInstalled) {
+    Write-Warn 'El gestor quedó instalado en PATH de usuario. Si esta terminal ya estaba abierta antes de instalar, vuelve a abrirla una vez.'
+  }
   return $managerTarget
 }
 
@@ -562,6 +584,9 @@ try {
   Write-Host '     ghostnexora update' -ForegroundColor White
   Write-Host '     ghostnexora doctor' -ForegroundColor White
   if ($webEnabled) { Write-Host '     ghostnexora web-start / web-stop' -ForegroundColor White }
+  Write-Host ''
+  Write-Host '   Nota: no uses "npm start" desde PowerShell. El gestor usa npm.cmd internamente' -ForegroundColor DarkGray
+  Write-Host '   y no requiere cambiar la ExecutionPolicy del sistema.' -ForegroundColor DarkGray
   Write-Host ''
   Write-Line '═' Green
 } catch {
