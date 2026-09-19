@@ -127,7 +127,16 @@ export default async function SubbotPortal({ searchParams }: { searchParams: Pro
       </div>}
 
       {section === 'commands' && <div className="mt-6">
-        <CommandCenter commands={snapshot.commands} locale={locale} instanceLabel={instanceLabel}/>
+        <CommandCenter
+          commands={snapshot.commands}
+          categories={snapshot.commandCategories}
+          locale={locale}
+          instanceLabel={instanceLabel}
+          instanceKey={instanceKey}
+          csrfToken={csrfToken}
+          canManage
+          canManageOwnerCommands
+        />
       </div>}
 
       {section === 'groups' && <div className="mt-6 space-y-6">
