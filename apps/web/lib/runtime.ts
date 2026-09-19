@@ -52,12 +52,39 @@ export const runtime = {
   botHealthUrl: process.env.BOT_HEALTH_URL ?? fileEnv.BOT_HEALTH_URL ?? 'http://127.0.0.1:3001/health',
 }
 
-function botDbFile() {
-  return path.join(runtime.dataDir, 'ghostnexora.sqlite')
+function botDbFile(instanceKey = 'main') {
+  const match = /^subbot:(\d+)$/.exec(instanceKey)
+  return match?.[1]
+    ? path.join(runtime.dataDir, 'subbots', String(Number(match[1])), 'ghostnexora.sqlite')
+    : path.join(runtime.dataDir, 'ghostnexora.sqlite')
+}
+
+function globalEconomyDbFile() {
+  return process.env.NEXORA_GLOBAL_ECONOMY_DB ?? fileEnv.NEXORA_GLOBAL_ECONOMY_DB ?? path.join(runtime.dataDir, 'nexora-economy.sqlite')
 }
 
 export function openBotDb() {
   const file = botDbFile()
+  if (!existsSync(file)) return null
+  try {
+    return new DatabaseSync(file, { readOnly: true })
+  } catch {
+    return null
+  }
+}
+
+export function openInstanceBotDb(instanceKey: string) {
+  const file = botDbFile(instanceKey)
+  if (!existsSync(file)) return null
+  try {
+    return new DatabaseSync(file, { readOnly: true })
+  } catch {
+    return null
+  }
+}
+
+export function openGlobalEconomyDb() {
+  const file = globalEconomyDbFile()
   if (!existsSync(file)) return null
   try {
     return new DatabaseSync(file, { readOnly: true })
