@@ -5,6 +5,7 @@ import { community } from '../services/community.js'
 import { economy } from '../services/economy.js'
 import { groupInactivityReport, normalizeInactiveDays } from '../services/group-inactivity.js'
 import { sendInteractiveCard } from '../services/interactive.js'
+import { forceSyncOpsGroups } from '../services/group-ops-runtime.js'
 
 async function targetJids(ctx: CommandContext) {
   const context = getContextInfo(ctx.message)
@@ -146,6 +147,26 @@ async function kickInactiveUsersCommand(ctx: CommandContext) {
 }
 
 export const groupCommands: BotCommand[] = [
+  {
+    name: 'syncgroups',
+    aliases: ['sincronizargrupos', 'refreshgroups', 'actualizargrupos'],
+    category: 'groups',
+    description: 'Fuerza la detección y sincronización de todos los grupos de WhatsApp de esta instancia.',
+    usage: 'syncgroups',
+    staffOnly: true,
+    subbotOwnerAllowed: true,
+    async handler(ctx) {
+      const result = await forceSyncOpsGroups(ctx.socket)
+      if (!result.ok) throw new Error('Esta instancia de WhatsApp todavía no está registrada.')
+      await ctx.reply([
+        '👥 *SINCRONIZACIÓN DE GRUPOS*',
+        '━━━━━━━━━━━━━━',
+        `Grupos registrados: *${result.count}*`,
+        '',
+        'La web se actualiza también con cualquier mensaje recibido en un grupo.',
+      ].join('\n'))
+    },
+  },
   {
     name: 'bot',
     aliases: ['botgroup', 'botmode'],
