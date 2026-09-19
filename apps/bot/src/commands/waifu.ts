@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import {
@@ -15,7 +15,7 @@ import {
 
 const nxc = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} NXC`
 
-async function canonicalTarget(ctx: CommandContext) {
+async function canonicalTarget(ctx: LegacyCompatibleCommandContext) {
   const mentioned = getContextInfo(ctx.message)?.mentionedJid?.[0]
   const directNumber = ctx.args.find((arg) => /^\+?\d{8,15}$/.test(arg.replace(/[ -]/g, '')))?.replace(/\D/g, '')
   const candidate = mentioned ?? (directNumber ? `${directNumber}@s.whatsapp.net` : null)

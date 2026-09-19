@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import {
   getAdultRoleplayMessage,
   listAdultRoleplayMessages,
@@ -118,7 +118,7 @@ async function adultMsg(ctx: CommandContext) {
   throw new Error(help(ctx))
 }
 
-export const adultRoleplayMessagesV14Commands: BotCommand[] = [
+export const adultRoleplayMessagesV14Commands: NeutralBotCommand[] = [
   {
     name: 'adultmsg',
     aliases: ['18msg', 'nsfwmsg', 'rolemsg', 'adultmessage'],

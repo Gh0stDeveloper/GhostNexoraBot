@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { downloadLempiMedia, searchLempiPinterest, type LempiDownloadedMedia } from '../services/lempi-api.js'
 import { downloadLempiInstagramV2, stalkLempiInstagram } from '../services/lempi-media-endpoints.js'
@@ -20,7 +20,7 @@ function requireUrl(value: string, usage: string) {
   return source
 }
 
-function requireText(ctx: CommandContext, usage: string) {
+function requireText(ctx: LegacyCompatibleCommandContext, usage: string) {
   const value = ctx.argText.trim()
   if (value.length < 2) throw new Error(usage)
   return value.slice(0, 500)
@@ -37,7 +37,7 @@ function compact(value?: number) {
     : new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
 }
 
-async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedMedia, label: string, quoted = true) {
+async function sendDownloadedMedia(ctx: LegacyCompatibleCommandContext, result: LempiDownloadedMedia, label: string, quoted = true) {
   const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\n👻 Ghost Nexora Bot`
 
   if (result.kind === 'image') {
@@ -60,7 +60,7 @@ async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedM
   }, quoted ? { quoted: ctx.message } : undefined)
 }
 
-async function sendPinterestAlbum(ctx: CommandContext, files: LempiDownloadedMedia[], totalFound: number) {
+async function sendPinterestAlbum(ctx: LegacyCompatibleCommandContext, files: LempiDownloadedMedia[], totalFound: number) {
   if (!files.length) throw new Error('No se pudo descargar ninguna imagen de Pinterest.')
 
   if (files.length === 1) {
@@ -85,7 +85,7 @@ async function sendPinterestAlbum(ctx: CommandContext, files: LempiDownloadedMed
   }, { quoted: index === 0 ? ctx.message : undefined })))
 }
 
-async function runPinterest(ctx: CommandContext) {
+async function runPinterest(ctx: LegacyCompatibleCommandContext) {
   const query = requireText(ctx, `Uso: ${ctx.prefix}pinterest <búsqueda>`)
   let results
   try {
@@ -118,7 +118,7 @@ async function runPinterest(ctx: CommandContext) {
   }
 }
 
-async function runInstagramDownload(ctx: CommandContext, source: string, imagesOnly: boolean) {
+async function runInstagramDownload(ctx: LegacyCompatibleCommandContext, source: string, imagesOnly: boolean) {
   const sourceUrl = requireUrl(source, `Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'ig'} <url de Instagram>`)
   await ctx.reply('📥 *INSTAGRAM*\n━━━━━━━━━━━━━━\n⬇️ Preparando la descarga...')
 
@@ -136,7 +136,7 @@ async function runInstagramDownload(ctx: CommandContext, source: string, imagesO
   }
 }
 
-async function runInstagramProfile(ctx: CommandContext, input: string) {
+async function runInstagramProfile(ctx: LegacyCompatibleCommandContext, input: string) {
   const target = input.trim()
   if (!target) throw new Error(`Uso: ${ctx.prefix}ig profile <usuario>`)
   let profile
@@ -160,7 +160,7 @@ async function runInstagramProfile(ctx: CommandContext, input: string) {
   })
 }
 
-async function instagram(ctx: CommandContext) {
+async function instagram(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? '').toLowerCase()
   if (['profile', 'perfil', 'user', 'usuario', 'stalk'].includes(action)) {
     await runInstagramProfile(ctx, ctx.args.slice(1).join(' '))

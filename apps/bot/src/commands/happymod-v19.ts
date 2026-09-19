@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import {
   downloadHappyModApk,
@@ -10,7 +10,7 @@ import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const PAGE_SIZE = 8
 
-function requireQuery(ctx: CommandContext) {
+function requireQuery(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}happymod <aplicación>`)
   return query.slice(0, 120)
@@ -44,7 +44,7 @@ function happyBody(item: HappyModItem) {
   ].filter(Boolean).join('\n').slice(0, 130) || 'HappyMod'
 }
 
-async function sendMoreButton(ctx: CommandContext, query: string, nextOffset: number, total: number) {
+async function sendMoreButton(ctx: LegacyCompatibleCommandContext, query: string, nextOffset: number, total: number) {
   if (nextOffset >= total) return
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: '📦 HappyMod · más resultados',
@@ -58,7 +58,7 @@ async function sendMoreButton(ctx: CommandContext, query: string, nextOffset: nu
   })
 }
 
-async function showPage(ctx: CommandContext, query: string, offset = 0) {
+async function showPage(ctx: LegacyCompatibleCommandContext, query: string, offset = 0) {
   const results = await searchHappyMod(query)
   if (!results.length) throw new Error(`HappyMod no encontró resultados para “${query}”.`)
 
@@ -84,7 +84,7 @@ async function showPage(ctx: CommandContext, query: string, offset = 0) {
   await sendMoreButton(ctx, query, safeOffset + page.length, results.length)
 }
 
-async function selectHappyMod(ctx: CommandContext) {
+async function selectHappyMod(ctx: LegacyCompatibleCommandContext) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}happymod <aplicación>.`)
   const item = getHappyModItem(token)
@@ -103,7 +103,7 @@ async function selectHappyMod(ctx: CommandContext) {
   })
 }
 
-async function downloadHappyMod(ctx: CommandContext) {
+async function downloadHappyMod(ctx: LegacyCompatibleCommandContext) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}happymod <aplicación>.`)
   const result = await downloadHappyModApk(token)

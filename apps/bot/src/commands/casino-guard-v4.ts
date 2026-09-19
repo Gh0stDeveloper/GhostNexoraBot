@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { casinoPlay, casinoSummary } from '../services/world-v4.js'
 
 const nxc = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} NXC`
@@ -15,7 +15,7 @@ async function guardedGame(ctx: CommandContext, game: 'slots' | 'roulette' | 'di
   await ctx.reply(`🎰 *${game.toUpperCase()}*\nResultado: *${result.result}*\nApuesta: ${nxc(result.bet)}\nPremio: ${nxc(result.payout)}\nBalance neto: ${result.net >= 0 ? '+' : ''}${nxc(result.net)}\nCartera+banco: *${nxc(result.balance.total)}*`)
 }
 
-export const casinoGuardV4Commands: BotCommand[] = [
+export const casinoGuardV4Commands: NeutralBotCommand[] = [
   { name: 'slots', aliases: ['tragamonedas'], category: 'games', description: 'Slots NXC con límite estricto de pérdidas.', handler: (ctx) => guardedGame(ctx, 'slots') },
   { name: 'roulette', aliases: ['ruleta'], category: 'games', description: 'Ruleta NXC con límite estricto de pérdidas.', handler: (ctx) => guardedGame(ctx, 'roulette') },
   { name: 'dicebet', aliases: ['dadoapuesta'], category: 'games', description: 'Apuesta de dado NXC con límite estricto de pérdidas.', handler: (ctx) => guardedGame(ctx, 'dice') },

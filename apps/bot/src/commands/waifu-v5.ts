@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
 import { getClaim, rarityEmoji } from '../services/waifu.js'
 import { aniListCharacter, aniListDisplayId, createAniListWaifuRoll, searchAniListCharacters } from '../services/anilist-waifu-v5.js'
@@ -28,7 +28,7 @@ async function resolveCharacter(query: string) {
   return row
 }
 
-async function roll(ctx: CommandContext) {
+async function roll(ctx: LegacyCompatibleCommandContext) {
   const result = await createAniListWaifuRoll(ctx.sender)
   if (!result.ok) throw new Error(`Espera ${waitText(result.remaining)} antes de otro roll.`)
   const c = result.character
@@ -47,7 +47,7 @@ async function roll(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function search(ctx: CommandContext) {
+async function search(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}wsearch <personaje>`)
   const rows = await searchAniListCharacters(query, 8)
@@ -55,7 +55,7 @@ async function search(ctx: CommandContext) {
   await ctx.reply(`🔎 *PERSONAJES · ANILIST*\n━━━━━━━━━━━━━━\n${rows.map((c, i) => `${i + 1}. ${rarityEmoji(c.rarity)} *${c.name}* · ${aniListDisplayId(c)}\n   ❤️ ${c.favorites.toLocaleString('es-MX')} · Info: *${ctx.prefix}winfo AL-${c.aniListId}*`).join('\n\n')}`)
 }
 
-async function info(ctx: CommandContext) {
+async function info(ctx: LegacyCompatibleCommandContext) {
   const c = await resolveCharacter(ctx.argText)
   const stored = getClaim(c.characterId)
   const owner = stored?.ownerJid
@@ -74,12 +74,12 @@ async function info(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function image(ctx: CommandContext) {
+async function image(ctx: LegacyCompatibleCommandContext) {
   const c = await resolveCharacter(ctx.argText)
   await ctx.socket.sendMessage(ctx.chatId, { image: { url: c.imageUrl }, caption: `🖼️ *${c.name}* · AniList AL-${c.aniListId}` }, { quoted: ctx.message })
 }
 
-async function animeInfo(ctx: CommandContext) {
+async function animeInfo(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (!query) throw new Error('Indica una serie de anime.')
   const series = (await searchAniListSeries(query, 1))[0]
@@ -102,7 +102,7 @@ async function animeInfo(ctx: CommandContext) {
   })
 }
 
-async function animeList(ctx: CommandContext) {
+async function animeList(ctx: LegacyCompatibleCommandContext) {
   const page = Math.max(1, Number(ctx.args[0] ?? 1) || 1)
   const series = await popularAniListSeries(page, 15)
   if (!series.length) throw new Error('No pude obtener la lista de series.')

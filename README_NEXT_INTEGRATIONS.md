@@ -264,10 +264,23 @@ Implementación B1 en validación:
   - `editMessage`;
 - reply y reactions usan `normalizedMessage.messageId`;
 - se añadió `NeutralBotCommand` para módulos que ya no pueden acceder a Baileys en compile-time;
-- primer lote certificado:
+- módulos neutrales certificados en B1:
   - `general.ts`;
   - `credits.ts`;
   - `system.ts`;
+  - `dox-sim.ts`;
+  - `language.ts`;
+  - `balance-v10.ts`;
+  - `banking-v10.ts`;
+  - `developer-v8.ts`;
+  - `minershop-v10.ts`;
+  - `command-search.ts`;
+  - `casino-guard-v4.ts`;
+  - `group-controls-v9.ts`;
+  - `economy-careers-v8.ts`;
+  - `adult-roleplay-messages-v14.ts`;
+- los módulos que todavía usan `ctx.socket`, `ctx.message` o imports de Baileys quedan tipados explícitamente con `LegacyCompatibleCommandContext`;
+- el smoke B1 audita todo `apps/bot/src/commands` para impedir que un módulo con superficie legacy vuelva a declararse como `CommandContext`;
 - `menu` usa `sendUi`;
 - `ping` usa `setTyping`;
 - `info` usa `sendMedia`;

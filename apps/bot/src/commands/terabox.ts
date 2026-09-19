@@ -1,8 +1,8 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { downloadLempiTerabox, type LempiRemoteFile } from '../services/lempi-media-endpoints.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
-function requireTeraboxUrl(ctx: CommandContext) {
+function requireTeraboxUrl(ctx: LegacyCompatibleCommandContext) {
   const value = ctx.argText.trim()
   if (!value || !/^https?:\/\//i.test(value)) throw new Error(`Uso: ${ctx.prefix}terabox <url>`)
   let url: URL
@@ -18,7 +18,7 @@ function bytes(value: number) {
   return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
-async function sendFile(ctx: CommandContext, file: LempiRemoteFile, first: boolean) {
+async function sendFile(ctx: LegacyCompatibleCommandContext, file: LempiRemoteFile, first: boolean) {
   const caption = first
     ? [
         '📦 *TERABOX*',
@@ -52,7 +52,7 @@ async function sendFile(ctx: CommandContext, file: LempiRemoteFile, first: boole
   }, options)
 }
 
-async function terabox(ctx: CommandContext) {
+async function terabox(ctx: LegacyCompatibleCommandContext) {
   const sourceUrl = requireTeraboxUrl(ctx)
   await ctx.reply('📦 *TERABOX*\n━━━━━━━━━━━━━━\nPreparando los archivos…')
   let files: LempiRemoteFile[]

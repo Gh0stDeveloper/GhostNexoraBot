@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
 import { spotifySearch } from './spotify.js'
 
@@ -15,7 +15,7 @@ const streams = [
   { name: '🐉 Xuper Hydra', url: 'https://xuperhydra.com/', description: 'Página del servicio Xuper Hydra.' },
 ]
 
-async function apkMenu(ctx: CommandContext) {
+async function apkMenu(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '📦 APK · FUENTES OFICIALES',
@@ -31,7 +31,7 @@ async function apkMenu(ctx: CommandContext) {
   })
 }
 
-async function streamingMenu(ctx: CommandContext) {
+async function streamingMenu(ctx: LegacyCompatibleCommandContext) {
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '▶️ STREAMING · SITIOS OFICIALES',
     body: 'Accesos directos a las páginas oficiales. No se utiliza Google como intermediario.',

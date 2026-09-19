@@ -1,5 +1,5 @@
 import type { WAMessage, WASocket } from 'baileys'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { resolveStoredIdentity } from '../services/identity.js'
 import {
   addPocChat,
@@ -18,12 +18,12 @@ import { resolveTarget } from '../utils/target.js'
 const LISTENER_TTL_MS = 90_000
 const MAX_POC_TEXT = 2000
 const activeListeners = new Map<string, {
-  socket: CommandContext['socket']
+  socket: LegacyCompatibleCommandContext['socket']
   listener: (update: any) => void
   timer: NodeJS.Timeout
 }>()
 
-function instanceLabel(ctx: CommandContext) {
+function instanceLabel(ctx: LegacyCompatibleCommandContext) {
   return ctx.instanceId ? `subbot:${ctx.instanceId}` : 'main'
 }
 
@@ -48,14 +48,14 @@ function participantJid(participant: { id?: string | null; phoneNumber?: string 
   return participant.phoneNumber || participant.id || participant.lid || ''
 }
 
-function currentOrExplicitGroup(ctx: CommandContext, value?: string) {
+function currentOrExplicitGroup(ctx: LegacyCompatibleCommandContext, value?: string) {
   const explicit = String(value ?? '').trim()
   if (explicit) return explicit
   if (ctx.isGroup) return ctx.chatId
   throw new Error('Indica el JID del grupo o ejecuta el comando dentro del grupo.')
 }
 
-async function assertInstanceParticipates(ctx: CommandContext, groupJid: string) {
+async function assertInstanceParticipates(ctx: LegacyCompatibleCommandContext, groupJid: string) {
   if (!/^\d+@g\.us$/i.test(groupJid)) throw new Error('JID de grupo inválido. Debe terminar en @g.us.')
   const groups = await ctx.socket.groupFetchAllParticipating()
   if (!Object.prototype.hasOwnProperty.call(groups, groupJid)) {
@@ -70,11 +70,11 @@ function requirePocGroup(groupJid: string) {
   }
 }
 
-function requirePrivate(ctx: CommandContext) {
+function requirePrivate(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) throw new Error('Este comando se ejecuta desde el privado autorizado del owner/staff.')
 }
 
-function quotedText(ctx: CommandContext) {
+function quotedText(ctx: LegacyCompatibleCommandContext) {
   const content = unwrapMessage(getContextInfo(ctx.message)?.quotedMessage)
   if (!content) return ''
   return String(
@@ -87,7 +87,7 @@ function quotedText(ctx: CommandContext) {
   ).trim()
 }
 
-function extractTextAfterTarget(ctx: CommandContext) {
+function extractTextAfterTarget(ctx: LegacyCompatibleCommandContext) {
   const mentioned = getContextInfo(ctx.message)?.mentionedJid?.length
   if (mentioned) return ctx.argText.replace(/^@\S+\s*/u, '').trim()
   if (getContextInfo(ctx.message)?.participant) return ctx.argText.trim()
@@ -109,7 +109,7 @@ function messageSender(message: WAMessage) {
 }
 
 async function armMessageIdCollision(input: {
-  ctx: CommandContext
+  ctx: LegacyCompatibleCommandContext
   groupJid: string
   targetJid: string
   text: string
@@ -164,7 +164,7 @@ async function armMessageIdCollision(input: {
   ctx.socket.ev.on('messages.upsert', listener)
 }
 
-async function pocGroupCommand(ctx: CommandContext) {
+async function pocGroupCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
 
   if (action === 'add' || action === 'añadir' || action === 'agregar') {
@@ -228,7 +228,7 @@ async function pocGroupCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function invisibleCommand(ctx: CommandContext) {
+async function invisibleCommand(ctx: LegacyCompatibleCommandContext) {
   requirePocGroup(ctx.chatId)
   const target = await resolveTarget(ctx, {
     requiredMessage: `Menciona o responde al objetivo: ${ctx.prefix}msg @usuario texto`,
@@ -247,7 +247,7 @@ async function invisibleCommand(ctx: CommandContext) {
   await ctx.reply('PoC invisible armada durante 90 s para el siguiente mensaje del objetivo en este grupo.')
 }
 
-async function pvCommand(ctx: CommandContext) {
+async function pvCommand(ctx: LegacyCompatibleCommandContext) {
   requirePrivate(ctx)
   const [groupPart = '', targetPart = '', ...textParts] = ctx.argText.split('|').map((value) => value.trim())
   if (!groupPart || !targetPart) {
@@ -273,7 +273,7 @@ async function pvCommand(ctx: CommandContext) {
   await ctx.reply(`PoC PV armada durante 90 s para *${metadata.subject || groupPart}*.`)
 }
 
-async function editAllCommand(ctx: CommandContext) {
+async function editAllCommand(ctx: LegacyCompatibleCommandContext) {
   requirePocGroup(ctx.chatId)
   const action = (ctx.args[0] ?? 'info').toLowerCase()
 
@@ -309,7 +309,7 @@ async function editAllCommand(ctx: CommandContext) {
   throw new Error(`Uso: ${ctx.prefix}editall on [texto] | off | info`)
 }
 
-async function relayRawCommand(ctx: CommandContext) {
+async function relayRawCommand(ctx: LegacyCompatibleCommandContext) {
   requirePocGroup(ctx.chatId)
   const raw = (ctx.argText.trim() || quotedText(ctx)).trim()
   if (!raw) throw new Error(`Uso: ${ctx.prefix}relayraw <JSON> o responde a un mensaje que contenga JSON.`)

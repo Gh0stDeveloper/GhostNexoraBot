@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import * as cheerio from 'cheerio'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
 
 /**
@@ -133,7 +133,7 @@ async function resolveDownload(item: Result) {
 
 const selected = new Map<string, Result>()
 
-function buttons(ctx: CommandContext, item: Result) {
+function buttons(ctx: LegacyCompatibleCommandContext, item: Result) {
   selected.set(item.token, item)
   return [
     { type: 'reply' as const, text: '⬇️ Descargar', id: `${ctx.prefix}apkofficialdl ${item.token}` },
@@ -141,7 +141,7 @@ function buttons(ctx: CommandContext, item: Result) {
   ]
 }
 
-async function searchCommand(ctx: CommandContext, source: OfficialSource) {
+async function searchCommand(ctx: LegacyCompatibleCommandContext, source: OfficialSource) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}apkofficialv7 <aplicación> (legacy). Prefer ${ctx.prefix}apk / ${ctx.prefix}happymod.`)
   const results = await searchSource(source, query)
@@ -154,7 +154,7 @@ async function searchCommand(ctx: CommandContext, source: OfficialSource) {
   })
 }
 
-async function downloadCommand(ctx: CommandContext) {
+async function downloadCommand(ctx: LegacyCompatibleCommandContext) {
   const item = selected.get(ctx.args[0] || '')
   if (!item) throw new Error(`Selecciona primero una APK con el flujo actual: ${ctx.prefix}apk, ${ctx.prefix}uptodown, ${ctx.prefix}liteapks o ${ctx.prefix}happymod.`)
   const direct = await resolveDownload(item)

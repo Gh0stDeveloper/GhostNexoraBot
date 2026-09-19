@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { community } from '../services/community.js'
 import { economy } from '../services/economy.js'
 import { getContextInfo } from '../utils/message.js'
@@ -17,7 +17,7 @@ function fmtRemaining(ms: number) {
   return [h ? `${h}h` : '', m ? `${m}m` : '', !h && s ? `${s}s` : ''].filter(Boolean).join(' ')
 }
 
-async function canonicalTarget(ctx: CommandContext) {
+async function canonicalTarget(ctx: LegacyCompatibleCommandContext) {
   const mentioned = getContextInfo(ctx.message)?.mentionedJid?.[0]
   if (!mentioned) return null
   if (!ctx.isGroup) return mentioned
@@ -26,7 +26,7 @@ async function canonicalTarget(ctx: CommandContext) {
   return participant?.phoneNumber ?? participant?.id ?? mentioned
 }
 
-async function profilePicture(ctx: CommandContext, jid: string) {
+async function profilePicture(ctx: LegacyCompatibleCommandContext, jid: string) {
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 

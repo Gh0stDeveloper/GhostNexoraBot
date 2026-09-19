@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { professionsV2, V2_PROFESSIONS } from '../services/professions-v2.js'
@@ -75,7 +75,7 @@ import {
 const nxc = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} NXC`
 const shortWait = (ms: number) => ms < 60_000 ? `${Math.ceil(ms / 1000)}s` : `${Math.ceil(ms / 60_000)}m`
 
-async function unifiedMenu(ctx: CommandContext) {
+async function unifiedMenu(ctx: LegacyCompatibleCommandContext) {
   const title = equippedTitle(ctx.sender)
   const body = [
     `👤 ${ctx.pushName}${title ? ` · ${title}` : ''}`,
@@ -113,7 +113,7 @@ async function unifiedMenu(ctx: CommandContext) {
   })
 }
 
-async function jobText(ctx: CommandContext) {
+async function jobText(ctx: LegacyCompatibleCommandContext) {
   const requested = ctx.argText.trim()
   if (requested && !['list', 'lista', 'menu'].includes(requested.toLowerCase())) {
     const selected = professionsV2.set(ctx.sender, requested)
@@ -125,13 +125,13 @@ async function jobText(ctx: CommandContext) {
   await ctx.reply(`💼 *PROFESIONES NEXORA*\nActual: ${current.emoji} *${current.label}*\n\n${rows.join('\n')}\n\nCambiar: *${ctx.prefix}job <id>*\nEjemplo: *${ctx.prefix}job scientist*`)
 }
 
-async function achievementsCommand(ctx: CommandContext) {
+async function achievementsCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = syncAchievements(ctx.sender)
   const unlocked = rows.filter((item) => item.unlocked)
   await ctx.reply(`🏆 *LOGROS NEXORA*\nDesbloqueados: *${unlocked.length}/${rows.length}*\n\n${rows.map((item) => `${item.unlocked ? '✅' : '🔒'} *${item.label}* — ${item.description}${item.unlocked ? `\n   Título: ${item.title}` : ''}`).join('\n\n')}`)
 }
 
-async function titlesCommand(ctx: CommandContext) {
+async function titlesCommand(ctx: LegacyCompatibleCommandContext) {
   syncAchievements(ctx.sender)
   const action = (ctx.args[0] ?? '').toLowerCase()
   if (action === 'set' || action === 'equip') {
@@ -145,7 +145,7 @@ async function titlesCommand(ctx: CommandContext) {
   await ctx.reply(`🏷️ *TÍTULOS DESBLOQUEADOS*\n${rows.map((item) => `${item.equipped ? '✅' : '•'} *${item.title}* — id: ${item.id}`).join('\n')}\n\nEquipar: *${ctx.prefix}titles set <id>*`)
 }
 
-async function seasonCommand(ctx: CommandContext) {
+async function seasonCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'top').toLowerCase()
   if (['history', 'historial', 'past'].includes(action)) {
     const history = seasonHistory(6)
@@ -161,13 +161,13 @@ async function seasonCommand(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function reputationCommand(ctx: CommandContext) {
+async function reputationCommand(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx) ?? ctx.sender
   const data = reputation(target)
   await ctx.socket.sendMessage(ctx.chatId, { text: `⭐ *REPUTACIÓN*\n@${target.split('@')[0]}\nPuntuación: *${data.score}*\n✅ Positivas: ${data.positive}\n⚠️ Negativas: ${data.negative}\n\nValorar: *${ctx.prefix}rep + @user razón*`, mentions: [target] }, { quoted: ctx.message })
 }
 
-async function repCommand(ctx: CommandContext) {
+async function repCommand(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al usuario que quieres valorar.' })
   const token = ctx.args.find((item) => ['+', '+1', '-', '-1'].includes(item)) ?? '+'
   const value: 1 | -1 = token.startsWith('-') ? -1 : 1
@@ -176,7 +176,7 @@ async function repCommand(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `${value > 0 ? '⭐' : '⚠️'} Reputación de @${target!.split('@')[0]}: *${result.score}*${reason ? `\nMotivo: ${reason}` : ''}`, mentions: [target!] }, { quoted: ctx.message })
 }
 
-async function repTopCommand(ctx: CommandContext) {
+async function repTopCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = reputationTop(10)
   const mentions = rows.map((row) => row.userJid)
   await ctx.socket.sendMessage(ctx.chatId, { text: `⭐ *TOP REPUTACIÓN*\n${rows.map((row, i) => `${i + 1}. @${row.userJid.split('@')[0]} — *${row.score}*`).join('\n') || 'Sin datos.'}`, mentions }, { quoted: ctx.message })
@@ -191,7 +191,7 @@ type ClanDetailsView = {
   members: Array<{ userJid: string; role: string; contributed: number }>
 }
 
-async function clanCommand(ctx: CommandContext) {
+async function clanCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'info').toLowerCase()
   if (action === 'create' || action === 'crear') {
     const name = ctx.args.slice(1).join(' ')
@@ -229,24 +229,24 @@ async function clanCommand(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `🛡️ *${details.name.toUpperCase()}*\nNivel: *${details.level}* · XP: ${nxc(details.xp)}\nTesorería: *${nxc(details.treasury)}*\nCódigo: *${details.code}*\nMiembros: ${members.length}/${Math.min(50, 15 + (details.level - 1) * 5)}\n\n${members.slice(0, 15).map((m) => `• @${m.userJid.split('@')[0]} · ${m.role} · ${nxc(m.contributed)}`).join('\n')}\n\n${ctx.prefix}clan donate <NXC> · ${ctx.prefix}clan upgrade · ${ctx.prefix}clan leave`, mentions: members.map((m) => m.userJid) }, { quoted: ctx.message })
 }
 
-async function clanTopCommand(ctx: CommandContext) {
+async function clanTopCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = clanTop(10)
   await ctx.reply(`🛡️ *TOP CLANES*\n${rows.map((row, i) => `${i + 1}. *${row.name}* · Nv.${row.level} · ${row.members} miembros · ${nxc(row.treasury)}`).join('\n') || 'Aún no hay clanes.'}`)
 }
 
-async function marketCommand(ctx: CommandContext) {
+async function marketCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = marketListings(20)
   if (!rows.length) { await ctx.reply(`🛒 *MERCADO ENTRE USUARIOS*\nNo hay publicaciones activas.\nVender: *${ctx.prefix}sell <item> <cantidad> <precio total>*`); return }
   const mentions = rows.map((row) => row.sellerJid)
   await ctx.socket.sendMessage(ctx.chatId, { text: `🛒 *MERCADO NEXORA*\n${rows.map((row) => `#${row.id} · *${ITEM_CATALOG[row.itemId]?.label ?? row.itemId}* x${row.quantity} — *${nxc(row.price)}*\n   Vendedor: @${row.sellerJid.split('@')[0]} · Comprar: ${ctx.prefix}buylisting ${row.id}`).join('\n\n')}`, mentions }, { quoted: ctx.message })
 }
 
-async function inventoryCommand(ctx: CommandContext) {
+async function inventoryCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = inventory(ctx.sender)
   await ctx.reply(`🎒 *INVENTARIO*\n${rows.length ? rows.map((row) => `• ${ITEM_CATALOG[row.itemId]?.label ?? row.itemId} (${row.itemId}) x${row.quantity} · ${row.kind}`).join('\n') : 'Inventario vacío.'}\n\nRecolecta: *${ctx.prefix}gather* · Fabrica: *${ctx.prefix}craft list*`)
 }
 
-async function propertyCommand(ctx: CommandContext) {
+async function propertyCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'buy' || action === 'comprar') {
     const item = buyAsset(ctx.sender, ctx.args[1] ?? '', 'property')
@@ -257,7 +257,7 @@ async function propertyCommand(ctx: CommandContext) {
   await ctx.reply(`🏠 *PROPIEDADES*\nPosees: ${owned.map((item) => item.label).join(', ') || 'ninguna'}\n\n${catalog.map(([id, item]) => `• *${item.label}* (${id}) — ${nxc(item.price!)}\n  ${item.description}`).join('\n')}\n\nComprar: *${ctx.prefix}property buy <id>*`)
 }
 
-async function vehicleCommand(ctx: CommandContext) {
+async function vehicleCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'buy' || action === 'comprar') {
     const item = buyAsset(ctx.sender, ctx.args[1] ?? '', 'vehicle')
@@ -268,7 +268,7 @@ async function vehicleCommand(ctx: CommandContext) {
   await ctx.reply(`🚗 *VEHÍCULOS*\nPosees: ${owned.map((item) => item.label).join(', ') || 'ninguno'}\n\n${catalog.map(([id, item]) => `• *${item.label}* (${id}) — ${nxc(item.price!)}`).join('\n')}\n\nComprar: *${ctx.prefix}vehicle buy <id>*`)
 }
 
-async function petCommand(ctx: CommandContext) {
+async function petCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'adopt' || action === 'adoptar') {
     const species = ctx.args[1] ?? ''
@@ -291,13 +291,13 @@ async function petCommand(ctx: CommandContext) {
   await ctx.reply(`🐾 *MASCOTAS*\n${rows.length ? rows.map((p) => `${p.active ? '✅' : '•'} #${p.id} *${p.name}* · ${PET_CATALOG[p.species]?.label ?? p.species} · Nv.${p.level} · XP ${p.xp} · hambre ${p.hunger}/100`).join('\n') : 'No tienes mascotas.'}\n\nAdoptar:\n${catalog}\n\n${ctx.prefix}pet adopt <especie> [nombre]\n${ctx.prefix}pet feed · ${ctx.prefix}pet train · ${ctx.prefix}pet active <id>`)
 }
 
-async function gatherCommand(ctx: CommandContext) {
+async function gatherCommand(ctx: LegacyCompatibleCommandContext) {
   const result = gather(ctx.sender)
   if (!result.ok) throw new Error(`Vuelve a recolectar en ${shortWait(result.remaining)}.`)
   await ctx.reply(`🌲 *RECOLECCIÓN COMPLETADA*\n${Object.entries(result.drops).map(([id, qty]) => `• ${ITEM_CATALOG[id]?.label ?? id} x${qty}`).join('\n')}\n\nInventario: *${ctx.prefix}inventory*`)
 }
 
-async function craftCommand(ctx: CommandContext) {
+async function craftCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'list' || action === 'lista') {
     await ctx.reply(`⚒️ *RECETAS DE CRAFTING*\n${Object.entries(RECIPES).map(([id, r]) => `• *${r.label}* (${id}) → x${r.qty}\n  ${Object.entries(r.ingredients).map(([item, qty]) => `${ITEM_CATALOG[item]?.label ?? item} x${qty}`).join(' + ')}`).join('\n\n')}\n\nFabricar: *${ctx.prefix}craft <id> [cantidad]*`)
@@ -307,18 +307,18 @@ async function craftCommand(ctx: CommandContext) {
   await ctx.reply(`⚒️ Fabricaste *${result.recipe.label}* x${result.produced}.`)
 }
 
-async function questsCommand(ctx: CommandContext) {
+async function questsCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = quests(ctx.sender)
   await ctx.reply(`📋 *QUESTS NEXORA*\n${rows.map((q) => `${q.claimed ? '✅' : q.completed ? '🎁' : '▫️'} *${q.label}* [${q.type === 'day' ? 'diaria' : 'semanal'}]\n   ${q.progress}/${q.target} · recompensa ${nxc(q.reward)} + ${ITEM_CATALOG[q.item]?.label ?? q.item} x${q.itemQty}\n   id: ${q.id}`).join('\n\n')}\n\nReclamar: *${ctx.prefix}quest claim <id>*`)
 }
 
-async function questCommand(ctx: CommandContext) {
+async function questCommand(ctx: LegacyCompatibleCommandContext) {
   if ((ctx.args[0] ?? '').toLowerCase() !== 'claim') { await questsCommand(ctx); return }
   const result = claimQuest(ctx.sender, ctx.args[1] ?? '')
   await ctx.reply(`🎁 Quest *${result.label}* reclamada: *${nxc(result.reward)}* + ${ITEM_CATALOG[result.item]?.label ?? result.item} x${result.itemQty}.`)
 }
 
-async function raidCommand(ctx: CommandContext) {
+async function raidCommand(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isGroup) throw new Error('Las raids son cooperativas y solo funcionan en grupos.')
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (action === 'start' || action === 'crear') {
@@ -338,25 +338,25 @@ async function raidCommand(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `🐉 *${raid.bossName}*\nHP: *${raid.hp}/${raid.maxHp}*\nParticipantes: ${members.length}\n\n${members.slice(0, 15).map((m, i) => `${i + 1}. @${m.userJid.split('@')[0]} — ${m.damage} daño`).join('\n')}\n\n${ctx.prefix}raid join · ${ctx.prefix}raid attack [kit]`, mentions: members.map((m) => m.userJid) }, { quoted: ctx.message })
 }
 
-async function casinoCommand(ctx: CommandContext) {
+async function casinoCommand(ctx: LegacyCompatibleCommandContext) {
   const s = casinoSummary(ctx.sender)
   await ctx.reply(`🎰 *CASINO NEXORA · SOLO NXC*\nNo usa dinero real.\nApostado hoy: *${nxc(s.wagered)} / ${nxc(s.maxWager)}*\nResultado neto: *${nxc(s.net)}*\nJugadas: ${s.plays}\nLímite por apuesta: *${nxc(s.maxBet)}*\nLímite de pérdidas: *${nxc(s.maxLoss)}*\n\n${ctx.prefix}slots <NXC>\n${ctx.prefix}roulette <NXC> <rojo|negro|verde>\n${ctx.prefix}dicebet <NXC> <1-6>`)
 }
 
-async function casinoGame(ctx: CommandContext, game: 'slots' | 'roulette' | 'dice') {
+async function casinoGame(ctx: LegacyCompatibleCommandContext, game: 'slots' | 'roulette' | 'dice') {
   const bet = Number(ctx.args[0])
   const result = casinoPlay(ctx.sender, game, bet, ctx.args[1])
   await ctx.reply(`🎰 *${game.toUpperCase()}*\nResultado: *${result.result}*\nApuesta: ${nxc(result.bet)}\nPremio: ${nxc(result.payout)}\nBalance neto: ${result.net >= 0 ? '+' : ''}${nxc(result.net)}\nCartera+banco: *${nxc(result.balance.total)}*`)
 }
 
-async function groupStatsCommand(ctx: CommandContext) {
+async function groupStatsCommand(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isGroup) throw new Error('Este comando solo funciona en grupos.')
   const stats = groupStats(ctx.chatId)
   const mentions = stats.topUsers.map((u) => u.userJid)
   await ctx.socket.sendMessage(ctx.chatId, { text: `📊 *ESTADÍSTICAS DEL GRUPO*\nMensajes observados: *${stats.messages.toLocaleString('es-MX')}*\nComandos: *${stats.commands.toLocaleString('es-MX')}*\nUsuarios activos: *${stats.uniqueUsers}*\nEconomía combinada: *${nxc(stats.economyTotal)}*\n${stats.firstSeenAt ? `Registro desde: ${new Date(stats.firstSeenAt).toLocaleDateString('es-MX')}` : ''}\n\n*Más activos*\n${stats.topUsers.map((u, i) => `${i + 1}. @${u.userJid.split('@')[0]} — ${u.messages} mensajes · ${u.commands} comandos`).join('\n') || 'Sin datos.'}`, mentions }, { quoted: ctx.message })
 }
 
-async function announceCommand(ctx: CommandContext) {
+async function announceCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'add' || action === 'crear') {
     const [durationRaw, ...messageParts] = ctx.argText.replace(/^\S+\s*/, '').split('|').map((x) => x.trim())
@@ -372,7 +372,7 @@ async function announceCommand(ctx: CommandContext) {
   await ctx.reply(`📢 *ANUNCIOS PROGRAMADOS*\n${rows.map((row) => `#${row.id} · cada ${formatDuration(row.intervalMs)} · ${row.enabled ? 'ON' : 'OFF'}\n${row.message.slice(0, 100)}`).join('\n\n') || 'No hay anuncios.'}\n\nCrear: *${ctx.prefix}announce add 1h | mensaje*`)
 }
 
-async function rssCommand(ctx: CommandContext) {
+async function rssCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'add' || action === 'agregar') {
     const raw = ctx.argText.replace(/^\S+\s*/, '')
@@ -387,7 +387,7 @@ async function rssCommand(ctx: CommandContext) {
   await ctx.reply(`📰 *RSS / NOTICIAS CONFIGURADAS*\n${rows.map((row) => `#${row.id} · *${row.label || 'Feed'}* · ${row.enabled ? 'ON' : 'OFF'}\n${row.url}`).join('\n\n') || 'No hay feeds.'}\n\nAgregar: *${ctx.prefix}rss add <url> | nombre*`)
 }
 
-async function pollCommand(ctx: CommandContext) {
+async function pollCommand(ctx: LegacyCompatibleCommandContext) {
   const raw = ctx.argText.trim()
   if (!raw) throw new Error(`Uso: ${ctx.prefix}poll [multi |] Pregunta | Opción 1 | Opción 2 [| close=2h]`)
   const parts = raw.split('|').map((x) => x.trim()).filter(Boolean)
@@ -408,17 +408,17 @@ async function pollCommand(ctx: CommandContext) {
   if (closesAt) await ctx.reply(`📊 Encuesta #${id} registrada. Cierre informativo: ${new Date(closesAt).toLocaleString('es-MX')}. WhatsApp no permite cerrar remotamente una encuesta ya enviada.`)
 }
 
-async function pollsCommand(ctx: CommandContext) {
+async function pollsCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = listPolls(ctx.chatId)
   await ctx.reply(`📊 *ENCUESTAS RECIENTES*\n${rows.map((p) => `#${p.id} · ${p.question}${p.closesAt ? ` · hasta ${new Date(p.closesAt).toLocaleString('es-MX')}` : ''}`).join('\n') || 'No hay encuestas registradas.'}`)
 }
 
-async function notifyOwners(ctx: CommandContext, text: string) {
+async function notifyOwners(ctx: LegacyCompatibleCommandContext, text: string) {
   const ownerJids = config.owners.map((number) => `${number}@s.whatsapp.net`)
   for (const jid of ownerJids) await ctx.socket.sendMessage(jid, { text }).catch(() => undefined)
 }
 
-async function ticketCommand(ctx: CommandContext) {
+async function ticketCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'open' || action === 'crear') {
     const raw = ctx.argText.replace(/^\S+\s*/, '')
@@ -456,12 +456,12 @@ async function ticketCommand(ctx: CommandContext) {
   await ctx.reply(`🎫 *MIS TICKETS*\n${rows.map((t) => `#${t.id} · ${t.status} · ${t.subject}`).join('\n') || 'No tienes tickets.'}\n\nCrear: *${ctx.prefix}ticket open <asunto> | <mensaje>*`)
 }
 
-async function ticketsStaffCommand(ctx: CommandContext) {
+async function ticketsStaffCommand(ctx: LegacyCompatibleCommandContext) {
   const rows = listTickets(undefined, (ctx.args[0] ?? 'open').toLowerCase(), 30) as Array<{ id: number; userJid: string; subject: string; status: string }>
   await ctx.socket.sendMessage(ctx.chatId, { text: `🎫 *TICKETS · STAFF*\n${rows.map((t) => `#${t.id} · ${t.status} · @${t.userJid.split('@')[0]} · ${t.subject}`).join('\n') || 'No hay tickets.'}`, mentions: rows.map((t) => t.userJid) }, { quoted: ctx.message })
 }
 
-async function apiInfoCommand(ctx: CommandContext) {
+async function apiInfoCommand(ctx: LegacyCompatibleCommandContext) {
   const world = worldSummary(); const auto = automationSummary()
   await ctx.reply(`🔌 *GHOST NEXORA API · V1*\nAutenticación: Bearer ADMIN_WEB_TOKEN\nBase local: http://127.0.0.1:${config.healthPort}\n\nGET /api/v1/status\nGET /api/v1/seasons/current\nGET /api/v1/clans\nGET /api/v1/market\nGET /api/v1/groups/<jid>/stats\nGET /api/v1/users/<jid>/profile\nGET /api/v1/tickets\n\nEstado V4: ${world.clans} clanes · ${world.activeListings} ventas · ${world.activeRaids} raids · ${auto.openTickets} tickets.`)
 }

@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { groupControlsV9 } from '../services/group-controls-v9.js'
 
 function requireGroupAdmin(ctx: CommandContext) {
@@ -8,7 +8,7 @@ function requireGroupAdmin(ctx: CommandContext) {
   }
 }
 
-export const groupControlsV9Commands: BotCommand[] = [
+export const groupControlsV9Commands: NeutralBotCommand[] = [
   {
     name: 'antiviewonce',
     aliases: ['anti-viewonce', 'aviewonce', 'antiveruna', 'antiverunauna'],

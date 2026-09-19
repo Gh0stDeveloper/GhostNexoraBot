@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { games, renderTtt } from '../services/games.js'
 import { htmlGameUnavailableText, sendAiHtmlMessage } from '../services/ai-html.js'
 import { buildMarioGameHtml } from '../services/mario-game.js'
@@ -28,7 +28,7 @@ function normalizeArcadeViewport(name: string, html: string) {
     .replace('var ox=0,oy=-60;', 'var ox=0,oy=0;')
 }
 
-async function sendArcadeGame(ctx: CommandContext, name: string, title: string, icon: string, build: () => string) {
+async function sendArcadeGame(ctx: LegacyCompatibleCommandContext, name: string, title: string, icon: string, build: () => string) {
   try {
     const html = normalizeArcadeViewport(name, build())
     await sendAiHtmlMessage(ctx.socket, ctx.chatId, html, { title: `${title} · Ghost Nexora`, trustedSources: [], quoted: ctx.message })

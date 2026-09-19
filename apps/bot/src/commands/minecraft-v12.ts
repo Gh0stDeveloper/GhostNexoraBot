@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { parseHostPort, pingMinecraftServer } from '../services/minecraft.js'
 import {
   resolveMinecraftCapes,
@@ -8,7 +8,7 @@ import {
 
 const FOOTER = 'Minecraft Tools · Ghost Nexora Bot'
 
-function playerQuery(ctx: CommandContext) {
+function playerQuery(ctx: LegacyCompatibleCommandContext) {
   const value = ctx.argText.trim().replace(/\s+/g, ' ')
   if (!value) throw new Error(`Uso: ${ctx.prefix}mcplayer <nickname o Gamertag>`)
   return value
@@ -23,7 +23,7 @@ function preferredImage(identity: MinecraftIdentity) {
   return identity.skinRenderUrl || identity.avatarUrl
 }
 
-async function sendIdentity(ctx: CommandContext, identity: MinecraftIdentity, lines: string[]) {
+async function sendIdentity(ctx: LegacyCompatibleCommandContext, identity: MinecraftIdentity, lines: string[]) {
   const imageUrl = preferredImage(identity)
   const caption = lines.filter(Boolean).join('\n')
   if (imageUrl) {
@@ -37,7 +37,7 @@ async function sendIdentity(ctx: CommandContext, identity: MinecraftIdentity, li
   await ctx.reply(caption)
 }
 
-async function minecraftHelp(ctx: CommandContext) {
+async function minecraftHelp(ctx: LegacyCompatibleCommandContext) {
   await ctx.reply([
     '╭━━〔 ⛏️ *MINECRAFT · GHOST NEXORA* 〕━━╮',
     '┃ Herramientas para Java y Bedrock',
@@ -75,7 +75,7 @@ async function minecraftHelp(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function minecraftPlayer(ctx: CommandContext) {
+async function minecraftPlayer(ctx: LegacyCompatibleCommandContext) {
   const query = playerQuery(ctx)
   await ctx.react('🔎').catch(() => undefined)
   const identity = await resolveMinecraftIdentity(query)
@@ -117,7 +117,7 @@ async function minecraftPlayer(ctx: CommandContext) {
   ])
 }
 
-async function minecraftSkin(ctx: CommandContext) {
+async function minecraftSkin(ctx: LegacyCompatibleCommandContext) {
   const query = playerQuery(ctx)
   await ctx.react('🔎').catch(() => undefined)
   const identity = await resolveMinecraftIdentity(query)
@@ -149,7 +149,7 @@ async function minecraftSkin(ctx: CommandContext) {
   ])
 }
 
-async function minecraftCape(ctx: CommandContext) {
+async function minecraftCape(ctx: LegacyCompatibleCommandContext) {
   const query = playerQuery(ctx)
   await ctx.react('🔎').catch(() => undefined)
   const identity = await resolveMinecraftIdentity(query)
@@ -196,7 +196,7 @@ async function minecraftCape(ctx: CommandContext) {
   await ctx.reply(lines.join('\n'))
 }
 
-async function minecraftServer(ctx: CommandContext) {
+async function minecraftServer(ctx: LegacyCompatibleCommandContext) {
   const raw = ctx.argText.trim()
   if (!raw) throw new Error(`Uso: ${ctx.prefix}mcserver <ip[:puerto]>`)
   const { host, port } = parseHostPort(raw)

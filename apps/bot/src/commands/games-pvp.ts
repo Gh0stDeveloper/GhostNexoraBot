@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { games, renderTtt } from '../services/games.js'
 import { parseCheckersMove, pvpGames, renderCheckers, renderPvpTtt } from '../services/games-pvp.js'
@@ -19,7 +19,7 @@ function checkersBet(args: string[]) {
   return plainBet(args)
 }
 
-async function canonicalTarget(ctx: CommandContext) {
+async function canonicalTarget(ctx: LegacyCompatibleCommandContext) {
   const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
   const direct = ctx.args.find((arg) => /^\+?\d{8,15}$/.test(arg.replace(/[ -]/g, '')))?.replace(/\D/g, '')
   const candidate = mention ?? (direct ? `${direct}@s.whatsapp.net` : null)
@@ -32,7 +32,7 @@ async function canonicalTarget(ctx: CommandContext) {
 
 function cards(hand: Array<{ label: string }>) { return hand.map((card) => card.label).join(' · ') }
 
-async function runTttPvp(ctx: CommandContext) {
+async function runTttPvp(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? '').toLowerCase()
   if (['accept', 'aceptar'].includes(action)) {
     const game = pvpGames.acceptTtt(ctx.sender, ctx.chatId)
@@ -90,7 +90,7 @@ async function runTttPvp(ctx: CommandContext) {
   })
 }
 
-async function runLocalTtt(ctx: CommandContext) {
+async function runLocalTtt(ctx: LegacyCompatibleCommandContext) {
   const first = (ctx.args[0] ?? '').toLowerCase()
   const active = games.ttt(ctx.sender)
   if (first === 'cancel' || first === 'cancelar') {

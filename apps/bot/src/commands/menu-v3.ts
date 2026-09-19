@@ -1,15 +1,15 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
 
 type MenuSection = {
   title: string
-  body: (ctx: CommandContext) => string
-  buttons?: (ctx: CommandContext) => InteractiveButton[]
+  body: (ctx: LegacyCompatibleCommandContext) => string
+  buttons?: (ctx: LegacyCompatibleCommandContext) => InteractiveButton[]
 }
 
-const commonButtons = (ctx: CommandContext): InteractiveButton[] => [
+const commonButtons = (ctx: LegacyCompatibleCommandContext): InteractiveButton[] => [
   { type: 'reply', text: '🏠 Menú', id: `${ctx.prefix}menu` },
   { type: 'reply', text: '👤 Perfil', id: `${ctx.prefix}profile` },
   { type: 'url', text: '📢 Canal', url: config.officialChannelUrl },
@@ -143,13 +143,13 @@ const sections: Record<string, MenuSection> = {
   },
 }
 
-async function canUseAdminMenu(ctx: CommandContext) {
+async function canUseAdminMenu(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isOwner || ctx.isBotStaff) return true
   if (!ctx.isGroup) return false
   return isGroupAdministrator(ctx)
 }
 
-async function sendSection(ctx: CommandContext, section: string) {
+async function sendSection(ctx: LegacyCompatibleCommandContext, section: string) {
   const item = sections[section]
   if (!item) return false
   if (section === 'admin' && !await canUseAdminMenu(ctx)) throw new Error('Este menú está disponible únicamente para administradores del grupo o staff del bot.')
@@ -162,7 +162,7 @@ async function sendSection(ctx: CommandContext, section: string) {
   return true
 }
 
-async function menuHandler(ctx: CommandContext) {
+async function menuHandler(ctx: LegacyCompatibleCommandContext) {
   const requested = (ctx.args[0] ?? '').toLowerCase()
   if (requested && await sendSection(ctx, requested)) return
 

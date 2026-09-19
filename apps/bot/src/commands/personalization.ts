@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { downloadMessageMedia } from '../utils/message.js'
 import { community } from '../services/community.js'
 import { sendInteractiveCard } from '../services/interactive.js'
@@ -10,7 +10,7 @@ function inviteCode(input: string) {
   return match?.[1] ?? null
 }
 
-async function previewBranding(ctx: CommandContext, slot: BrandingSlot, asset: BrandingAsset) {
+async function previewBranding(ctx: LegacyCompatibleCommandContext, slot: BrandingSlot, asset: BrandingAsset) {
   const labels: Record<BrandingSlot, string> = { menu: 'MENÚ', welcome: 'BIENVENIDA', goodbye: 'DESPEDIDA' }
   const scope = ctx.instanceId ? `SUBBOT #${ctx.instanceId}` : 'MAINBOT'
   const title = `✅ ${labels[slot]} · ${scope}`
@@ -30,7 +30,7 @@ async function previewBranding(ctx: CommandContext, slot: BrandingSlot, asset: B
   }, { quoted: ctx.message })
 }
 
-async function setBanner(ctx: CommandContext, slot: BrandingSlot) {
+async function setBanner(ctx: LegacyCompatibleCommandContext, slot: BrandingSlot) {
   const media = await downloadMessageMedia(ctx.message)
   if (!media) throw new Error('Envía o cita una imagen. Para bienvenida/despedida también puedes citar un GIF/video corto.')
   const asset = await saveBrandingAsset(slot, media, ctx.instanceId)

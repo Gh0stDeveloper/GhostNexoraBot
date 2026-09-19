@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { economy } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
@@ -28,7 +28,7 @@ function amount(value?: string, fallback = 1) {
   return Math.floor(parsed)
 }
 
-async function target(ctx: CommandContext) {
+async function target(ctx: LegacyCompatibleCommandContext) {
   const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
   if (!mention) return null
   if (!ctx.isGroup) return mention
@@ -37,7 +37,7 @@ async function target(ctx: CommandContext) {
   return participant?.phoneNumber ?? participant?.id ?? mention
 }
 
-async function botAvatar(ctx: CommandContext) {
+async function botAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)

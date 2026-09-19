@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -11,7 +11,7 @@ const PAGE_SIZE = 8
 const PROHIBITED = /\b(child|children|underage|minor|preteen|pre-teen|loli|shota|niñ[oa]s?|menor(?:es)?)\b/i
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/131 Safari/131 Safari/131 Safari/131 GhostNexoraBot/1.5'
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) throw new Error(`Este grupo no está autorizado para el módulo 18+. Un administrador puede usar ${ctx.prefix}adultmode on.`)
   } else if (!settings.adultEnabled || !config.adultPrivateEnabled) throw new Error('El módulo 18+ está desactivado en chats privados.')
@@ -67,7 +67,7 @@ async function enrich(item: HentaiItem): Promise<HentaiItem> {
   }
 }
 
-async function show(ctx: CommandContext, mode: 'hot' | 'new' | 'search', currentPage: number, query?: string) {
+async function show(ctx: LegacyCompatibleCommandContext, mode: 'hot' | 'new' | 'search', currentPage: number, query?: string) {
   const result = mode === 'search'
     ? await searchHentai(query ?? '', currentPage, PAGE_SIZE)
     : await exploreHentai(mode, currentPage, PAGE_SIZE)
@@ -102,7 +102,7 @@ async function show(ctx: CommandContext, mode: 'hot' | 'new' | 'search', current
   })
 }
 
-async function editStatus(ctx: CommandContext, status: unknown, text: string) {
+async function editStatus(ctx: LegacyCompatibleCommandContext, status: unknown, text: string) {
   const key = (status as { key?: unknown } | null)?.key
   if (!key) return
   try {
@@ -112,7 +112,7 @@ async function editStatus(ctx: CommandContext, status: unknown, text: string) {
   }
 }
 
-async function download(ctx: CommandContext, value: string) {
+async function download(ctx: LegacyCompatibleCommandContext, value: string) {
   let title = 'Hentai'
   try { title = getHentaiItem(value).title } catch { /* URL directa */ }
   const status = await ctx.reply(`⬇️ *HENTAI · DESCARGANDO*\n${title}`)

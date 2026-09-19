@@ -1,9 +1,9 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { downloadLempiLikee } from '../services/lempi-media-endpoints.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
-function requireLikeeUrl(ctx: CommandContext) {
+function requireLikeeUrl(ctx: LegacyCompatibleCommandContext) {
   const value = ctx.argText.trim()
   if (!value || !/^https?:\/\//i.test(value)) throw new Error(`Uso: ${ctx.prefix}likee <url>`)
   let url: URL
@@ -19,7 +19,7 @@ function bytes(value: number) {
   return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 ** 2).toFixed(1)} MB`
 }
 
-async function likee(ctx: CommandContext) {
+async function likee(ctx: LegacyCompatibleCommandContext) {
   const sourceUrl = requireLikeeUrl(ctx)
   const progress = await createDownloadProgress(ctx, 'Likee · video')
   await progress.update('downloading', 'Preparando y descargando el video…')

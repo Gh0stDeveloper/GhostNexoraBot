@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import {
@@ -13,7 +13,7 @@ const bytes = (value: number) => (value >= 1024 ** 2
   : `${Math.max(1, Math.round(value / 1024))} KB`)
 
 async function sendDownloadedFiles(
-  ctx: CommandContext,
+  ctx: LegacyCompatibleCommandContext,
   source: 'Instagram' | 'Pinterest',
   files: SocialDownloadedFile[],
   provider: string,
@@ -49,7 +49,7 @@ async function sendDownloadedFiles(
   recordSubbotDownload(ctx.instanceId, total)
 }
 
-async function runInstagram(ctx: CommandContext, preferImages: boolean) {
+async function runInstagram(ctx: LegacyCompatibleCommandContext, preferImages: boolean) {
   const url = ctx.args[0]
   if (!url || !/^https?:\/\//i.test(url)) {
     throw new Error(`Uso: ${ctx.prefix}${preferImages ? 'igimg' : 'ig'} <url de Instagram>`)
@@ -67,7 +67,7 @@ async function runInstagram(ctx: CommandContext, preferImages: boolean) {
   }
 }
 
-async function runPinterest(ctx: CommandContext) {
+async function runPinterest(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}pinterest <url|búsqueda>`)
 

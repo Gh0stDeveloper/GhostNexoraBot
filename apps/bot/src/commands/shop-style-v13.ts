@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { COIN_SYMBOL, economy } from '../services/economy.js'
 import { mining, MINER_HOURLY_YIELD, MINER_MAX_COUNT } from '../services/mining.js'
@@ -16,18 +16,18 @@ const shopProducts = [
 
 type ShopProductId = typeof shopProducts[number]['id']
 
-async function currentBotAvatar(ctx: CommandContext) {
+async function currentBotAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-async function styledImage(ctx: CommandContext) {
+async function styledImage(ctx: LegacyCompatibleCommandContext) {
   const avatar = await currentBotAvatar(ctx)
   return resolveCurrentBotVisualImage(avatar)
 }
 
-async function shopCommand(ctx: CommandContext) {
+async function shopCommand(ctx: LegacyCompatibleCommandContext) {
   const balance = economy.balance(ctx.sender)
   const miner = mining.summary(ctx.sender)
   const imageUrl = await styledImage(ctx)
@@ -90,7 +90,7 @@ async function shopCommand(ctx: CommandContext) {
   })
 }
 
-async function buyCommand(ctx: CommandContext) {
+async function buyCommand(ctx: LegacyCompatibleCommandContext) {
   const id = (ctx.args[0] ?? '').toLowerCase()
   if (id.startsWith('private')) {
     throw new Error(`El acceso por chat privado ya no se vende. Solo el owner puede autorizar usuarios con ${ctx.prefix}private allow @usuario.`)

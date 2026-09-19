@@ -1,6 +1,6 @@
 import QRCode from 'qrcode'
 import { config } from '../config.js'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { economy, type SubbotRecord } from '../services/economy.js'
 import { subbotManager } from '../core/subbots.js'
 
@@ -48,7 +48,7 @@ function cleanupSelectorLabel(raw: string) {
   return selector
 }
 
-async function sendQr(ctx: CommandContext, instanceId: number, qr: string, reason?: string) {
+async function sendQr(ctx: LegacyCompatibleCommandContext, instanceId: number, qr: string, reason?: string) {
   const image = await QRCode.toBuffer(qr, { type: 'png', width: 720, margin: 2, errorCorrectionLevel: 'M' })
   await ctx.socket.sendMessage(ctx.chatId, {
     image,

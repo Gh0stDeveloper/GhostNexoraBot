@@ -1,5 +1,5 @@
 import * as vm from 'node:vm'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { grantOneShotPrivateSend } from '../services/private-chat-policy.js'
 import { digitsFromJid, getContextInfo, unwrapMessage } from '../utils/message.js'
 import { resolveTarget } from '../utils/target.js'
@@ -12,7 +12,7 @@ import { resolveTarget } from '../utils/target.js'
 const MAX_TEXT_CHUNK = 3200
 const privateSendWindows = new Map<string, number[]>()
 
-function requirePrivate(ctx: CommandContext) {
+function requirePrivate(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) throw new Error('Este comando solo está disponible en el chat privado autorizado con esta instancia.')
 }
 
@@ -24,7 +24,7 @@ function enforcePrivateSendRate(sender: string) {
   privateSendWindows.set(sender, recent)
 }
 
-async function sendChunks(ctx: CommandContext, text: string) {
+async function sendChunks(ctx: LegacyCompatibleCommandContext, text: string) {
   const value = text || '(vacío)'
   for (let offset = 0; offset < value.length; offset += MAX_TEXT_CHUNK) {
     const chunk = value.slice(offset, offset + MAX_TEXT_CHUNK)
@@ -60,7 +60,7 @@ function safeJson(value: unknown) {
   return JSON.stringify(safeClone(value), null, 2)
 }
 
-function quotedContent(ctx: CommandContext) {
+function quotedContent(ctx: LegacyCompatibleCommandContext) {
   return unwrapMessage(getContextInfo(ctx.message)?.quotedMessage)
 }
 
@@ -70,7 +70,7 @@ function messageType(content: ReturnType<typeof quotedContent>) {
   return key ?? ''
 }
 
-function quotedText(ctx: CommandContext) {
+function quotedText(ctx: LegacyCompatibleCommandContext) {
   const content = quotedContent(ctx)
   if (!content) return ''
   return (content.conversation
@@ -81,11 +81,11 @@ function quotedText(ctx: CommandContext) {
     ?? '').trim()
 }
 
-async function participatingGroups(ctx: CommandContext) {
+async function participatingGroups(ctx: LegacyCompatibleCommandContext) {
   return ctx.socket.groupFetchAllParticipating()
 }
 
-async function ownedGroup(ctx: CommandContext, groupJid: string) {
+async function ownedGroup(ctx: LegacyCompatibleCommandContext, groupJid: string) {
   if (!/^\d+@g\.us$/i.test(groupJid)) throw new Error('JID de grupo inválido. Debe terminar en @g.us.')
   const groups = await participatingGroups(ctx)
   if (!Object.prototype.hasOwnProperty.call(groups, groupJid)) throw new Error('Esta instancia no pertenece a ese grupo.')
@@ -109,7 +109,7 @@ function sameIdentity(left?: string | null, right?: string | null) {
   return Boolean(ad && bd && ad === bd)
 }
 
-function textAfterTarget(ctx: CommandContext, target: string) {
+function textAfterTarget(ctx: LegacyCompatibleCommandContext, target: string) {
   const context = getContextInfo(ctx.message)
   if (context?.mentionedJid?.length) return ctx.argText.replace(/^@\S+\s*/u, '').trim()
   if (context?.participant) return ctx.argText.trim()
@@ -118,7 +118,7 @@ function textAfterTarget(ctx: CommandContext, target: string) {
   return ctx.argText.trim()
 }
 
-async function sendPrivateTarget(ctx: CommandContext, target: string, text: string, groupLabel: string) {
+async function sendPrivateTarget(ctx: LegacyCompatibleCommandContext, target: string, text: string, groupLabel: string) {
   enforcePrivateSendRate(ctx.sender)
   // Permiso efímero de una sola salida: NO agrega al usuario a la allowlist y
   // cualquier respuesta privada del destinatario continúa bloqueada. El permiso
@@ -136,7 +136,7 @@ async function sendPrivateTarget(ctx: CommandContext, target: string, text: stri
   if (!delivered) throw new Error('No pude entregar el mensaje privado al destino.')
 }
 
-async function groupsCommand(ctx: CommandContext) {
+async function groupsCommand(ctx: LegacyCompatibleCommandContext) {
   requirePrivate(ctx)
   const groups = await participatingGroups(ctx)
   const rows = Object.entries(groups).sort((a, b) => (a[1].subject ?? '').localeCompare(b[1].subject ?? '', 'es'))
@@ -152,7 +152,7 @@ async function groupsCommand(ctx: CommandContext) {
   await sendChunks(ctx, lines.join('\n'))
 }
 
-async function participantsCommand(ctx: CommandContext) {
+async function participantsCommand(ctx: LegacyCompatibleCommandContext) {
   requirePrivate(ctx)
   const groupJid = ctx.argText.trim()
   if (!groupJid) throw new Error(`Uso: ${ctx.prefix}partcjid <jid-del-grupo>@g.us`)
@@ -167,23 +167,23 @@ async function participantsCommand(ctx: CommandContext) {
   await sendChunks(ctx, lines.join('\n'))
 }
 
-async function getQuotedCommand(ctx: CommandContext) {
+async function getQuotedCommand(ctx: LegacyCompatibleCommandContext) {
   const quoted = quotedContent(ctx)
   if (!quoted) throw new Error('Responde al mensaje que deseas inspeccionar.')
   await sendChunks(ctx, `*JSON DEL MENSAJE CITADO*\n\n\`\`\`json\n${safeJson(quoted)}\n\`\`\``)
 }
 
-async function myMessageCommand(ctx: CommandContext) {
+async function myMessageCommand(ctx: LegacyCompatibleCommandContext) {
   await sendChunks(ctx, `*MENSAJE ACTUAL COMPLETO*\n\n\`\`\`json\n${safeJson(ctx.message)}\n\`\`\``)
 }
 
-async function getTypeCommand(ctx: CommandContext) {
+async function getTypeCommand(ctx: LegacyCompatibleCommandContext) {
   const type = messageType(quotedContent(ctx))
   if (!type) throw new Error('Responde al mensaje cuyo tipo deseas consultar.')
   await ctx.reply(`Tipo de mensaje: *${type}*`)
 }
 
-async function codeBlockCommand(ctx: CommandContext) {
+async function codeBlockCommand(ctx: LegacyCompatibleCommandContext) {
   const code = quotedText(ctx)
   if (!code) throw new Error('Responde a un mensaje de texto/caption para convertirlo en bloque de código.')
   const parts = ctx.argText.split('|').map((value) => value.trim())
@@ -195,7 +195,7 @@ async function codeBlockCommand(ctx: CommandContext) {
   await sendChunks(ctx, text)
 }
 
-async function relayCommand(ctx: CommandContext) {
+async function relayCommand(ctx: LegacyCompatibleCommandContext) {
   const text = ctx.argText.trim() || quotedText(ctx)
   if (!text) throw new Error(`Uso: ${ctx.prefix}relay <texto> o responde a un texto.`)
   if (text.length > 3500) throw new Error('El relay está limitado a 3500 caracteres.')
@@ -204,7 +204,7 @@ async function relayCommand(ctx: CommandContext) {
   await ctx.socket.relayMessage(ctx.chatId, { conversation: text }, {})
 }
 
-async function safeEvalCommand(ctx: CommandContext) {
+async function safeEvalCommand(ctx: LegacyCompatibleCommandContext) {
   const expression = ctx.argText.trim()
   if (!expression) throw new Error(`Uso: ${ctx.prefix}eval <expresión JavaScript>`)
   if (expression.length > 1000) throw new Error('La expresión supera el límite de 1000 caracteres.')
@@ -215,7 +215,7 @@ async function safeEvalCommand(ctx: CommandContext) {
   await sendChunks(ctx, `*EVAL SEGURO*\n\n\`\`\`\n${String(result).slice(0, 6000)}\n\`\`\``)
 }
 
-async function invisibleGroupMessage(ctx: CommandContext) {
+async function invisibleGroupMessage(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: `Menciona o responde al usuario: ${ctx.prefix}msg @usuario mensaje` })
   if (!target) throw new Error('No pude resolver el usuario objetivo.')
   const text = textAfterTarget(ctx, target)
@@ -228,7 +228,7 @@ async function invisibleGroupMessage(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { delete: ctx.message.key }).catch(() => undefined)
 }
 
-async function privateFromControlChat(ctx: CommandContext) {
+async function privateFromControlChat(ctx: LegacyCompatibleCommandContext) {
   requirePrivate(ctx)
   const [groupPart = '', targetPart = '', ...messageParts] = ctx.argText.split('|').map((value) => value.trim())
   if (!groupPart || !targetPart) throw new Error(`Uso: ${ctx.prefix}pv <grupo@g.us> | <número/JID> | <mensaje>`)
@@ -245,7 +245,7 @@ async function privateFromControlChat(ctx: CommandContext) {
   await ctx.reply(`Mensaje privado entregado al miembro seleccionado de *${metadata.subject || groupPart}*.`)
 }
 
-async function editBotMessage(ctx: CommandContext) {
+async function editBotMessage(ctx: LegacyCompatibleCommandContext) {
   const context = getContextInfo(ctx.message)
   const stanzaId = context?.stanzaId
   const text = ctx.argText.trim()

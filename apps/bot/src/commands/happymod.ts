@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import {
   downloadHappyModApk,
@@ -10,7 +10,7 @@ import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
 const MAX_CARDS = 8
 
-function requireQuery(ctx: CommandContext) {
+function requireQuery(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}happymod <nombre de aplicación>`)
   return query
@@ -23,7 +23,7 @@ function bytes(value?: number) {
 }
 
 /** Short body · max 2 buttons (Erome style). */
-function resultButtons(ctx: CommandContext, item: HappyModItem): InteractiveButton[] {
+function resultButtons(ctx: LegacyCompatibleCommandContext, item: HappyModItem): InteractiveButton[] {
   const buttons: InteractiveButton[] = [
     { type: 'reply', text: '⬇️ Descargar', id: `${ctx.prefix}happymoddl ${item.token}` },
   ]
@@ -38,7 +38,7 @@ function cardBody(item: HappyModItem) {
     .slice(0, 80) || 'HappyMod'
 }
 
-async function showResults(ctx: CommandContext, query: string) {
+async function showResults(ctx: LegacyCompatibleCommandContext, query: string) {
   await ctx.reply(`🧩 HappyMod · buscando ${query}…`)
 
   const results = (await searchHappyMod(query, MAX_CARDS)).slice(0, MAX_CARDS)

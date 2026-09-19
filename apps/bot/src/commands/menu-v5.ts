@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { COIN_NAME, COIN_SYMBOL } from '../services/economy.js'
 import { professionsV2 } from '../services/professions-v2.js'
@@ -73,13 +73,13 @@ function sectionFor(command: BotCommand): SectionId {
   return 'other'
 }
 
-function visible(ctx: CommandContext, command: BotCommand) {
+function visible(ctx: LegacyCompatibleCommandContext, command: BotCommand) {
   if (command.ownerOnly && !ctx.isOwner) return false
   if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
   return true
 }
 
-function restrictionLabel(ctx: CommandContext, command: BotCommand) {
+function restrictionLabel(ctx: LegacyCompatibleCommandContext, command: BotCommand) {
   return [
     command.groupOnly ? ctx.t('menu.restriction.group') : '',
     command.adminOnly ? ctx.t('menu.restriction.admin') : '',
@@ -88,7 +88,7 @@ function restrictionLabel(ctx: CommandContext, command: BotCommand) {
   ].filter(Boolean).join('/')
 }
 
-function renderTokens(ctx: CommandContext, command: BotCommand, tokens: string[]) {
+function renderTokens(ctx: LegacyCompatibleCommandContext, command: BotCommand, tokens: string[]) {
   const usage = command.usage?.trim()
   const primary = usage ? `${ctx.prefix}${usage}` : `${ctx.prefix}${command.name}`
   const aliases = tokens
@@ -125,7 +125,7 @@ function formatUptime() {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', `${minutes}m`].filter(Boolean).join(' ')
 }
 
-async function roleLabel(ctx: CommandContext) {
+async function roleLabel(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isOwner) return ctx.t('menu.role.owner')
   if (ctx.isSubbotOwner) return ctx.t('menu.role.owner')
   if (ctx.isBotStaff) return ctx.t('menu.role.staff')
@@ -133,13 +133,13 @@ async function roleLabel(ctx: CommandContext) {
   return ctx.t('menu.role.user')
 }
 
-async function currentBotAvatar(ctx: CommandContext) {
+async function currentBotAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-async function currentVisualIdentity(ctx: CommandContext) {
+async function currentVisualIdentity(ctx: LegacyCompatibleCommandContext) {
   const style = getCurrentBotVisualStyle()
   const fallback = await currentBotAvatar(ctx)
   if (style.id === 'default') {
@@ -161,7 +161,7 @@ async function currentVisualIdentity(ctx: CommandContext) {
   }
 }
 
-async function gamesCatalog(ctx: CommandContext) {
+async function gamesCatalog(ctx: LegacyCompatibleCommandContext) {
   const lines = interactiveGameCatalog.map((game) => [
     `${game.icon} *${ctx.prefix}${game.command}* · ${game.label}`,
     `   ${ctx.t(game.descriptionKey)}`,
@@ -200,7 +200,7 @@ async function gamesCatalog(ctx: CommandContext) {
   })
 }
 
-async function menu(ctx: CommandContext) {
+async function menu(ctx: LegacyCompatibleCommandContext) {
   const profession = professionsV2.get(ctx.sender)
   const role = await roleLabel(ctx)
   const privateAccess = ctx.isOwner || ctx.isSubbotOwner || isPrivateChatApproved(ctx.sender)

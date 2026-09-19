@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { downloadYouTubeSearchAudio } from '../services/downloader.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
@@ -39,7 +39,7 @@ async function resolveTrack(value: string) {
   return getSpotifyTrack(value)
 }
 
-async function showTrack(ctx: CommandContext, track: SpotifyTrack) {
+async function showTrack(ctx: LegacyCompatibleCommandContext, track: SpotifyTrack) {
   const token = remember(track)
   await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
     title: `Spotify · ${track.name}`,
@@ -58,7 +58,7 @@ async function showTrack(ctx: CommandContext, track: SpotifyTrack) {
   })
 }
 
-export async function spotifySearch(ctx: CommandContext) {
+export async function spotifySearch(ctx: LegacyCompatibleCommandContext) {
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}spotify <canción|artista|enlace de Spotify>`)
 
@@ -95,7 +95,7 @@ export async function spotifySearch(ctx: CommandContext) {
   })
 }
 
-async function spotifyDownload(ctx: CommandContext) {
+async function spotifyDownload(ctx: LegacyCompatibleCommandContext) {
   const value = ctx.args[0]?.trim() ?? ''
   if (!value) throw new Error(`Uso: ${ctx.prefix}spotifydl <resultado|enlace Spotify>`)
   const track = await resolveTrack(value)

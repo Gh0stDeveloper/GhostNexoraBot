@@ -1,8 +1,8 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { downloadMessageMedia } from '../utils/message.js'
 import { globalStickers } from '../services/human-stickers.js'
 
-async function botSticker(ctx: CommandContext) {
+async function botSticker(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'list') {
     const rows = globalStickers.list()
@@ -45,7 +45,7 @@ async function botSticker(ctx: CommandContext) {
   throw new Error(`Usa ${ctx.prefix}botsticker add [etiqueta | palabra,frase], list o remove <id>.`)
 }
 
-async function kickSticker(ctx: CommandContext) {
+async function kickSticker(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (action === 'clear' || action === 'off') {
     globalStickers.clearAction('kick')

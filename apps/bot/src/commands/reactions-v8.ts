@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { resolveTarget } from '../utils/target.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 
@@ -31,7 +31,7 @@ const variants: ReactionDef[] = [
   { name: 'cuddle2', aliases: ['mimos2'], category: 'cuddle', emoji: '🤗', solo: 'quiere mimos', directed: 'llenó de mimos a' },
 ]
 
-async function execute(ctx: CommandContext, def: ReactionDef): Promise<void> {
+async function execute(ctx: LegacyCompatibleCommandContext, def: ReactionDef): Promise<void> {
   const other = await resolveTarget(ctx)
   const sender = `@${ctx.sender.split('@')[0]}`; const target = other ? `@${other.split('@')[0]}` : ''
   const text = other ? `${sender} ${def.directed} ${target}` : `${sender} ${def.solo}`
@@ -41,4 +41,4 @@ async function execute(ctx: CommandContext, def: ReactionDef): Promise<void> {
   catch { await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions }, { quoted: ctx.message }) }
 }
 
-export const reactionV8Commands: BotCommand[] = variants.map((def) => ({ name: def.name, aliases: def.aliases, category: 'social', description: `Reacción ${def.name}; admite respuesta o mención.`, usage: `${def.name} [@usuario]`, handler: (ctx: CommandContext) => execute(ctx, def) }))
+export const reactionV8Commands: BotCommand[] = variants.map((def) => ({ name: def.name, aliases: def.aliases, category: 'social', description: `Reacción ${def.name}; admite respuesta o mención.`, usage: `${def.name} [@usuario]`, handler: (ctx: LegacyCompatibleCommandContext) => execute(ctx, def) }))

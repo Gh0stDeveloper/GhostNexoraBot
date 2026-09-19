@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { downloadMessageMedia } from '../utils/message.js'
 import { globalStickers } from '../services/human-stickers.js'
 import { premiumStickersV18 } from '../services/premium-stickers-v18.js'
@@ -14,7 +14,7 @@ function regularRows() {
   return globalStickers.list() as Array<{ id: number; label?: string | null; triggers?: string | null }>
 }
 
-async function addSticker(ctx: CommandContext, packName?: string) {
+async function addSticker(ctx: LegacyCompatibleCommandContext, packName?: string) {
   const premium = premiumStickersV18.extract(ctx.message)
   const rawStart = packName ? 2 : 1
   const meta = descriptor(ctx.args.slice(rawStart).join(' '))
@@ -49,7 +49,7 @@ async function addSticker(ctx: CommandContext, packName?: string) {
   return { kind: 'webp' as const, id: row.id }
 }
 
-async function listLibrary(ctx: CommandContext) {
+async function listLibrary(ctx: LegacyCompatibleCommandContext) {
   const webp = regularRows()
   const lottie = premiumStickersV18.list()
   const packs = premiumStickersV18.packs()
@@ -80,7 +80,7 @@ async function listLibrary(ctx: CommandContext) {
   ].filter(Boolean).join('\n'))
 }
 
-async function botStickerV18(ctx: CommandContext) {
+async function botStickerV18(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (['list', 'lista', 'library', 'biblioteca'].includes(action)) return listLibrary(ctx)
   if (['packs', 'packlist'].includes(action)) {
@@ -120,7 +120,7 @@ async function botStickerV18(ctx: CommandContext) {
   throw new Error(`Usa ${ctx.prefix}botsticker add, packadd, packsend, packs, list o remove.`)
 }
 
-async function lottieStickerCommand(ctx: CommandContext) {
+async function lottieStickerCommand(ctx: LegacyCompatibleCommandContext) {
   const packName = ctx.args.join(' ').trim() || undefined
   const row = premiumStickersV18.addFromMessage(ctx.message, ctx.sender, { packName })
   await premiumStickersV18.sendById(ctx.socket, ctx.chatId, row.id, ctx.message)

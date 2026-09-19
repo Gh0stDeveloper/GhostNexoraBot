@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel } from '../services/interactive.js'
 import { downloadMessageMedia } from '../utils/message.js'
 
@@ -24,7 +24,7 @@ const streamingSources: LinkItem[] = [
   { id: 'xuperhydra', title: '🐉 XuperHydra', description: 'Abre una búsqueda del servicio indicado.', url: 'https://www.google.com/search?q=XuperHydra' },
 ]
 
-function sourceCarousel(ctx: CommandContext, title: string, items: LinkItem[], query?: string) {
+function sourceCarousel(ctx: LegacyCompatibleCommandContext, title: string, items: LinkItem[], query?: string) {
   return sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title,
     body: query ? `Consulta: ${query}` : 'Selecciona un servicio para abrirlo.',
@@ -37,7 +37,7 @@ function sourceCarousel(ctx: CommandContext, title: string, items: LinkItem[], q
   })
 }
 
-async function sourceCommand(ctx: CommandContext, items: LinkItem[], title: string) {
+async function sourceCommand(ctx: LegacyCompatibleCommandContext, items: LinkItem[], title: string) {
   const query = ctx.argText.trim()
   if (!query) {
     await sourceCarousel(ctx, title, items)
@@ -59,7 +59,7 @@ async function sourceCommand(ctx: CommandContext, items: LinkItem[], title: stri
   }, { quoted: ctx.message })
 }
 
-async function validateApkZip(ctx: CommandContext) {
+async function validateApkZip(ctx: LegacyCompatibleCommandContext) {
   const media = await downloadMessageMedia(ctx.message)
   if (!media || media.kind !== 'document') throw new Error('Responde a un archivo ZIP de proyecto Android.')
   const max = 100 * 1024 * 1024
@@ -92,7 +92,7 @@ async function validateApkZip(ctx: CommandContext) {
   }
 }
 
-async function devMenu(ctx: CommandContext) {
+async function devMenu(ctx: LegacyCompatibleCommandContext) {
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
     title: '🛠️ GHOST NEXORA · DEVELOPER',
     body: 'Herramientas de desarrollo disponibles para el owner/staff.',

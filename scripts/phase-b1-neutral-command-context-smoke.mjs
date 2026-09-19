@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 const root = process.cwd()
@@ -36,7 +36,24 @@ assert.match(router, /const setTyping: LegacyCompatibleCommandContext\['setTypin
 assert.match(router, /const editMessage: LegacyCompatibleCommandContext\['editMessage'\]/, 'router editMessage binding missing')
 assert.match(router, /normalizedMessage\.messageId/, 'neutral reply/reaction must use normalized message id')
 
-for (const [name, source] of [['general', general], ['credits', credits], ['system', system]]) {
+const certifiedNeutralModules = [
+  ['general', general],
+  ['credits', credits],
+  ['system', system],
+  ['dox-sim', read('apps/bot/src/commands/dox-sim.ts')],
+  ['language', read('apps/bot/src/commands/language.ts')],
+  ['balance-v10', read('apps/bot/src/commands/balance-v10.ts')],
+  ['banking-v10', read('apps/bot/src/commands/banking-v10.ts')],
+  ['developer-v8', read('apps/bot/src/commands/developer-v8.ts')],
+  ['minershop-v10', read('apps/bot/src/commands/minershop-v10.ts')],
+  ['command-search', read('apps/bot/src/commands/command-search.ts')],
+  ['casino-guard-v4', read('apps/bot/src/commands/casino-guard-v4.ts')],
+  ['group-controls-v9', read('apps/bot/src/commands/group-controls-v9.ts')],
+  ['economy-careers-v8', read('apps/bot/src/commands/economy-careers-v8.ts')],
+  ['adult-roleplay-messages-v14', read('apps/bot/src/commands/adult-roleplay-messages-v14.ts')],
+]
+
+for (const [name, source] of certifiedNeutralModules) {
   assert.match(source, /NeutralBotCommand/, `${name} batch must be typed as NeutralBotCommand`)
   assert.doesNotMatch(source, /ctx\.socket\b/, `${name} must not use ctx.socket after B1 migration`)
   assert.doesNotMatch(source, /ctx\.message\b/, `${name} must not use ctx.message after B1 migration`)
@@ -46,6 +63,28 @@ for (const [name, source] of [['general', general], ['credits', credits], ['syst
 assert.match(general, /ctx\.sendUi\(/, 'menu must use neutral sendUi')
 assert.match(general, /ctx\.sendMedia\(/, 'info must use neutral sendMedia')
 assert.match(general, /ctx\.setTyping\(/, 'ping must use neutral setTyping')
+
+
+const commandDir = path.join(root, 'apps/bot/src/commands')
+for (const file of readdirSync(commandDir).filter((name) => name.endsWith('.ts'))) {
+  const source = read(path.join('apps/bot/src/commands', file))
+  const usesLegacySurface =
+    /ctx\.(?:socket|message)\b/.test(source) ||
+    /from ['"]baileys['"]/.test(source)
+  if (!usesLegacySurface) continue
+
+  const importedContextNames = [...source.matchAll(/import type\s*\{([\s\S]*?)\}\s*from\s*['"]\.\.\/types\.js['"]/g)]
+    .flatMap((match) => match[1].split(',').map((name) => name.trim()))
+  assert.ok(
+    !importedContextNames.includes('CommandContext'),
+    `${file} uses the legacy WhatsApp/Baileys surface but imports neutral CommandContext`,
+  )
+  assert.doesNotMatch(
+    source,
+    /\bctx\s*:\s*CommandContext\b/,
+    `${file} uses the legacy WhatsApp/Baileys surface with a neutral ctx annotation`,
+  )
+}
 
 assert.match(
   roadmap,

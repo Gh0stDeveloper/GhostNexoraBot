@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { COIN_SYMBOL } from '../services/economy.js'
 import {
   MINER_HOURLY_YIELD,
@@ -128,7 +128,7 @@ async function minerCommand(ctx: CommandContext) {
   ].filter(Boolean).join('\n'))
 }
 
-export const minershopV10Commands: BotCommand[] = [
+export const minershopV10Commands: NeutralBotCommand[] = [
   {
     name: 'minershop',
     aliases: ['minertienda', 'miningstore'],

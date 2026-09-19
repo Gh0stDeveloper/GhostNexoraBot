@@ -1,6 +1,6 @@
 import os from 'node:os'
 import { statfsSync } from 'node:fs'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { isDeveloperAccessEnabled } from '../services/developer-access-v7.js'
 import { BOT_VERSION, BOT_STATUS } from './version-v8.js'
@@ -14,7 +14,7 @@ async function devDisk(ctx: CommandContext) { allowed(ctx); const target = proce
 async function devEnv(ctx: CommandContext) { allowed(ctx); const names = Object.keys(process.env).filter((k) => /^(BOT_|DATA_|SESSION_|PUBLIC_|WEB_|LOG_|TELEGRAM_|LEMPI_|AI_|OPENROUTER_|ADULT_)/i.test(k)).filter((k) => !/KEY|TOKEN|COOKIE|SECRET|PASSWORD/i.test(k)); await ctx.reply(`⚙️ *CONFIGURACIÓN NO SENSIBLE*\n━━━━━━━━━━━━━━\n${names.sort().map((n) => `• ${n}`).join('\n') || 'Sin variables públicas.'}\n\n🔐 Valores secretos no se muestran.`) }
 async function devCommands(ctx: CommandContext) { allowed(ctx); const rows = effectiveCommands().map((x) => `${x.command.name} → ${x.command.description}`); await ctx.reply(`🧩 *COMANDOS REGISTRADOS*\n━━━━━━━━━━━━━━\n${rows.join('\n').slice(0, 12000)}`) }
 async function devHelp(ctx: CommandContext) { allowed(ctx); await ctx.reply(`🛠️ *DEVELOPER MENU*\n━━━━━━━━━━━━━━\n${ctx.prefix}devaccess on|off|status\n${ctx.prefix}devstatus · estado runtime\n${ctx.prefix}devmemory · memoria\n${ctx.prefix}devdisk · disco\n${ctx.prefix}devenv · nombres de configuración no sensible\n${ctx.prefix}devcommands · catálogo de comandos\n${ctx.prefix}version · beta del bot\n\nEl owner/dueño de subbot controla la activación.`) }
-export const developerV8Commands: BotCommand[] = [
+export const developerV8Commands: NeutralBotCommand[] = [
   { name: 'devstatus', aliases: ['developerstatus'], category: 'owner', description: 'Estado técnico del modo Developer.', usage: 'devstatus', handler: devStatus },
   { name: 'devmemory', aliases: ['devram'], category: 'owner', description: 'Muestra memoria del proceso.', usage: 'devmemory', handler: devMemory },
   { name: 'devdisk', aliases: ['devstorage'], category: 'owner', description: 'Muestra espacio del sistema de archivos.', usage: 'devdisk', handler: devDisk },

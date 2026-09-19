@@ -1,11 +1,11 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { effectiveCommands } from '../services/menu-registry.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
 import { commandRuntimeDecision } from '../services/command-runtime-config.js'
 import { isGroupAdministrator } from '../utils/target.js'
 
 type SearchHit = {
-  command: BotCommand
+  command: NeutralBotCommand
   tokens: string[]
   score: number
 }
@@ -18,7 +18,7 @@ function normalize(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function permissions(command: BotCommand) {
+function permissions(command: NeutralBotCommand) {
   const rows: string[] = []
   if (command.ownerOnly) rows.push('owner')
   if (command.staffOnly) rows.push('staff')
@@ -29,7 +29,7 @@ function permissions(command: BotCommand) {
   return rows.length ? rows.join(', ') : 'todos'
 }
 
-function scoreCommand(command: BotCommand, tokens: string[], query: string) {
+function scoreCommand(command: NeutralBotCommand, tokens: string[], query: string) {
   const name = normalize(command.name)
   const aliases = (command.aliases ?? []).map(normalize)
   const category = normalize(command.category)
@@ -52,7 +52,7 @@ function scoreCommand(command: BotCommand, tokens: string[], query: string) {
   return 0
 }
 
-function visibleTo(ctx: CommandContext, command: BotCommand, groupAdmin: boolean) {
+function visibleTo(ctx: CommandContext, command: NeutralBotCommand, groupAdmin: boolean) {
   if (command.ownerOnly && !ctx.isOwner) return false
   if (command.staffOnly && !ctx.isBotStaff && !(command.subbotOwnerAllowed && ctx.isSubbotOwner) && !ctx.isOwner) return false
   const runtime = commandRuntimeDecision({
@@ -80,7 +80,7 @@ function searchCommands(query: string): SearchHit[] {
     .sort((a, b) => b.score - a.score || a.command.name.localeCompare(b.command.name))
 }
 
-export const commandSearchCommands: BotCommand[] = [
+export const commandSearchCommands: NeutralBotCommand[] = [
   {
     name: 'buscarcomando',
     aliases: ['buscarcmd', 'findcmd', 'comandobuscar'],

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { downloadContentFromMessage } from 'baileys'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { getContextInfo, unwrapMessage } from '../utils/message.js'
 
@@ -9,7 +9,7 @@ const PVZ_DIR = path.join(config.dataDir, 'pvz2')
 const PVZ_FILE = path.join(PVZ_DIR, 'pp.dat')
 const MAX_BYTES = 25 * 1024 * 1024
 
-function documentNode(ctx: CommandContext) {
+function documentNode(ctx: LegacyCompatibleCommandContext) {
   const own = unwrapMessage(ctx.message.message)
   if (own?.documentMessage) return { node: own.documentMessage, fileName: own.documentMessage.fileName ?? '' }
   const quoted = unwrapMessage(getContextInfo(ctx.message)?.quotedMessage)
@@ -17,7 +17,7 @@ function documentNode(ctx: CommandContext) {
   return null
 }
 
-async function readDocument(ctx: CommandContext) {
+async function readDocument(ctx: LegacyCompatibleCommandContext) {
   const target = documentNode(ctx)
   if (!target) throw new Error('Responde directamente al archivo pp.dat para guardarlo.')
   const name = target.fileName.toLowerCase()
@@ -34,7 +34,7 @@ async function readDocument(ctx: CommandContext) {
   return { buffer: Buffer.concat(chunks), fileName: target.fileName || 'pp.dat' }
 }
 
-async function pvz2Info(ctx: CommandContext) {
+async function pvz2Info(ctx: LegacyCompatibleCommandContext) {
   try {
     const info = await stat(PVZ_FILE)
     await ctx.reply([
@@ -51,7 +51,7 @@ async function pvz2Info(ctx: CommandContext) {
   }
 }
 
-async function sendPvz2(ctx: CommandContext) {
+async function sendPvz2(ctx: LegacyCompatibleCommandContext) {
   try {
     await stat(PVZ_FILE)
   } catch {
@@ -80,7 +80,7 @@ async function sendPvz2(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function setPvz2(ctx: CommandContext) {
+async function setPvz2(ctx: LegacyCompatibleCommandContext) {
   const media = await readDocument(ctx)
   await mkdir(PVZ_DIR, { recursive: true })
   const temp = path.join(PVZ_DIR, `.pp.dat.${process.pid}.${Date.now()}.tmp`)
@@ -101,7 +101,7 @@ async function setPvz2(ctx: CommandContext) {
   }
 }
 
-async function deletePvz2(ctx: CommandContext) {
+async function deletePvz2(ctx: LegacyCompatibleCommandContext) {
   await rm(PVZ_FILE, { force: true })
   await ctx.reply('🗑️ *PP.DAT ELIMINADO*\n━━━━━━━━━━━━━━\nEl archivo de Plants vs Zombies 2 ya no está disponible mediante el bot.')
 }

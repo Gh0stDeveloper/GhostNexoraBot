@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { resolveTarget } from '../utils/target.js'
 
 const COUNTRIES = [
@@ -78,7 +78,7 @@ async function handleDoxSimulation(ctx: CommandContext) {
   ].join('\n'))
 }
 
-export const doxSimulationCommands: BotCommand[] = [
+export const doxSimulationCommands: NeutralBotCommand[] = [
   {
     name: 'doxear',
     aliases: ['doxer', 'doxeo', 'doxsim'],

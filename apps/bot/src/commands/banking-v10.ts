@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { COIN_SYMBOL } from '../services/economy.js'
 import { bankingV10 } from '../services/banking-v10.js'
 
@@ -199,7 +199,7 @@ async function bankCommand(ctx: CommandContext) {
   throw new Error(`Acción bancaria no reconocida. Usa ${ctx.prefix}bank para ver el menú.`)
 }
 
-export const bankingV10Commands: BotCommand[] = [
+export const bankingV10Commands: NeutralBotCommand[] = [
   {
     name: 'bank',
     aliases: ['banco', 'loan', 'prestamo', 'credito'],

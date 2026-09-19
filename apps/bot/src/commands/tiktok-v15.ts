@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { createDownloadProgress } from '../services/progress.js'
 import { downloadLempiMedia } from '../services/lempi-api.js'
@@ -82,7 +82,7 @@ function getVideo(token: string) {
   return row
 }
 
-async function downloadTikTok(ctx: CommandContext, source: string, title?: string, directUrl?: string) {
+async function downloadTikTok(ctx: LegacyCompatibleCommandContext, source: string, title?: string, directUrl?: string) {
   if (!directUrl && !isTikTokUrl(source)) throw new Error('La URL no pertenece a TikTok.')
   const progress = await createDownloadProgress(ctx, 'TikTok · video')
   await progress.update('downloading', title ? `Descargando: ${title.slice(0, 90)}` : 'Preparando y descargando el video…')
@@ -122,7 +122,7 @@ function videoBody(item: LempiTikTokVideo) {
   ].filter(Boolean).join('\n').slice(0, 135)
 }
 
-async function showVideos(ctx: CommandContext, title: string, body: string, rows: LempiTikTokVideo[]) {
+async function showVideos(ctx: LegacyCompatibleCommandContext, title: string, body: string, rows: LempiTikTokVideo[]) {
   const unique = [...new Map(rows.map((item) => [item.url, item])).values()].slice(0, MAX_RESULTS)
   if (!unique.length) throw new Error('No encontré videos de TikTok para esa consulta.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -141,7 +141,7 @@ async function showVideos(ctx: CommandContext, title: string, body: string, rows
   })
 }
 
-async function searchVideos(ctx: CommandContext, query: string) {
+async function searchVideos(ctx: LegacyCompatibleCommandContext, query: string) {
   let rows: LempiTikTokVideo[]
   try {
     rows = await searchLempiTikTokVideosV2(query, MAX_RESULTS)
@@ -151,7 +151,7 @@ async function searchVideos(ctx: CommandContext, query: string) {
   await showVideos(ctx, '🎵 TIKTOK · BÚSQUEDA', `Resultados para: ${query}`, rows)
 }
 
-async function searchProfiles(ctx: CommandContext, query: string) {
+async function searchProfiles(ctx: LegacyCompatibleCommandContext, query: string) {
   let profiles
   try {
     profiles = await searchLempiTikTokProfilesV2(query, MAX_RESULTS)
@@ -176,7 +176,7 @@ async function searchProfiles(ctx: CommandContext, query: string) {
   })
 }
 
-async function showProfile(ctx: CommandContext, target: string) {
+async function showProfile(ctx: LegacyCompatibleCommandContext, target: string) {
   let profile
   try {
     profile = await getLempiTikTokProfileV2(target)
@@ -214,7 +214,7 @@ async function showProfile(ctx: CommandContext, target: string) {
   )
 }
 
-async function selectVideo(ctx: CommandContext) {
+async function selectVideo(ctx: LegacyCompatibleCommandContext) {
   const token = ctx.args[0] ?? ''
   if (!token) throw new Error(`Usa primero ${ctx.prefix}tiktok <búsqueda> o ${ctx.prefix}tiktok profile <usuario>.`)
   const item = getVideo(token)
@@ -231,7 +231,7 @@ async function selectVideo(ctx: CommandContext) {
   })
 }
 
-async function downloadSelected(ctx: CommandContext) {
+async function downloadSelected(ctx: LegacyCompatibleCommandContext) {
   const tokenOrUrl = ctx.args[0] ?? ''
   if (!tokenOrUrl) throw new Error(`Uso: ${ctx.prefix}tiktokdl <resultado>`)
   if (isTikTokUrl(tokenOrUrl)) {
@@ -242,7 +242,7 @@ async function downloadSelected(ctx: CommandContext) {
   await downloadTikTok(ctx, item.url, item.title, item.directUrl)
 }
 
-async function tiktok(ctx: CommandContext) {
+async function tiktok(ctx: LegacyCompatibleCommandContext) {
   const input = requireText(ctx.argText, `Uso: ${ctx.prefix}tiktok <url|búsqueda> | ${ctx.prefix}tiktok profile <usuario>`)
 
   if (looksLikeUrl(input)) {

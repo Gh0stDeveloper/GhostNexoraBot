@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { COIN_SYMBOL, economy } from '../services/economy.js'
 import { sendCarousel } from '../services/interactive.js'
 import {
@@ -29,13 +29,13 @@ function parsePlan(value?: string): MinerSubscriptionPlanId | null {
   return clean in MINER_SUBSCRIPTION_PLANS ? clean as MinerSubscriptionPlanId : null
 }
 
-async function botAvatar(ctx: CommandContext) {
+async function botAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-async function minerShopCommand(ctx: CommandContext) {
+async function minerShopCommand(ctx: LegacyCompatibleCommandContext) {
   const summary = mining.summary(ctx.sender)
   const balance = economy.balance(ctx.sender)
   const avatar = await botAvatar(ctx)
@@ -72,7 +72,7 @@ async function minerShopCommand(ctx: CommandContext) {
   })
 }
 
-async function minerBuyCommand(ctx: CommandContext, shifted = false) {
+async function minerBuyCommand(ctx: LegacyCompatibleCommandContext, shifted = false) {
   const plan = parsePlan(ctx.args[shifted ? 1 : 0])
   if (!plan) throw new Error(`Plan inválido. Usa ${ctx.prefix}minershop para consultar 1d, 7d, 15d y 1m.`)
   const quantity = Number(ctx.args[shifted ? 2 : 1] ?? '1')
@@ -94,7 +94,7 @@ async function minerBuyCommand(ctx: CommandContext, shifted = false) {
   ].filter(Boolean).join('\n'))
 }
 
-async function minerCommand(ctx: CommandContext) {
+async function minerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (['shop', 'tienda', 'store'].includes(action)) {
     await minerShopCommand(ctx)

@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import {
   downloadYouTubeAudio,
   downloadYouTubeVideo,
@@ -62,7 +62,7 @@ function wantsDocument(value?: string) {
   return ['doc', 'document', 'documento', 'file', 'archivo'].includes((value ?? '').trim().toLowerCase())
 }
 
-async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
+async function sendYoutube(ctx: LegacyCompatibleCommandContext, kind: 'audio' | 'video') {
   const url = youtubeUrl(ctx.args[0] ?? '')
   const allowed = [144, 240, 360, 480, 720, 1080, 1440, 2160]
   const requested = Number(ctx.args[1] ?? 720)
@@ -118,7 +118,7 @@ async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video') {
   }
 }
 
-async function youtubeDownloadMenu(ctx: CommandContext) {
+async function youtubeDownloadMenu(ctx: LegacyCompatibleCommandContext) {
   const url = youtubeUrl(ctx.args[0] ?? '')
   const info = await getMediaInfo(url, 'youtube').catch((): MediaInfo => ({
     title: 'Video de YouTube',
@@ -175,7 +175,7 @@ async function youtubeDownloadMenu(ctx: CommandContext) {
   })
 }
 
-async function yts(ctx: CommandContext) {
+async function yts(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}yts <búsqueda>`)
   const rows = await searchYouTube(query, 8)

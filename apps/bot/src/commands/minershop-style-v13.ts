@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { COIN_SYMBOL, economy } from '../services/economy.js'
 import { sendCarousel } from '../services/interactive.js'
 import {
@@ -13,13 +13,13 @@ import { minershopV11Commands } from './minershop-v11.js'
 const fmt = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} ${COIN_SYMBOL}`
 const legacyMiner = minershopV11Commands.find((command) => command.name === 'miner')
 
-async function currentBotAvatar(ctx: CommandContext) {
+async function currentBotAvatar(ctx: LegacyCompatibleCommandContext) {
   const jid = ctx.socket.user?.id
   if (!jid) return undefined
   return ctx.socket.profilePictureUrl(jid, 'image').catch(() => undefined)
 }
 
-async function minerShopCommand(ctx: CommandContext) {
+async function minerShopCommand(ctx: LegacyCompatibleCommandContext) {
   const summary = mining.summary(ctx.sender)
   const balance = economy.balance(ctx.sender)
   const avatar = await currentBotAvatar(ctx)
@@ -59,7 +59,7 @@ async function minerShopCommand(ctx: CommandContext) {
   })
 }
 
-async function minerCommand(ctx: CommandContext) {
+async function minerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (['shop', 'tienda', 'store'].includes(action)) {
     await minerShopCommand(ctx)

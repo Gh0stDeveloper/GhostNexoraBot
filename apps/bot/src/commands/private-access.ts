@@ -1,9 +1,9 @@
 import { jidNormalizedUser } from 'baileys'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { allowPrivateChat, denyPrivateChat, isPrivateChatApproved, listPrivateChatUsers } from '../services/private-chat-policy.js'
 
-async function resolveTarget(ctx: CommandContext) {
+async function resolveTarget(ctx: LegacyCompatibleCommandContext) {
   const mention = getContextInfo(ctx.message)?.mentionedJid?.[0]
   if (mention) {
     if (ctx.isGroup) {
@@ -21,11 +21,11 @@ async function resolveTarget(ctx: CommandContext) {
   return `${digits}@s.whatsapp.net`
 }
 
-function requireInstanceOwner(ctx: CommandContext) {
+function requireInstanceOwner(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isOwner && !ctx.isSubbotOwner) throw new Error('Solo el owner de esta instancia puede administrar el chat privado.')
 }
 
-async function privatePolicyCommand(ctx: CommandContext) {
+async function privatePolicyCommand(ctx: LegacyCompatibleCommandContext) {
   requireInstanceOwner(ctx)
   const action = (ctx.args[0] ?? 'list').toLowerCase()
 

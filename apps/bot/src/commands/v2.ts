@@ -1,5 +1,5 @@
 import QRCode from 'qrcode'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { economy, COIN_SYMBOL } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
@@ -35,11 +35,11 @@ function amount(value?: string) {
 function bytes(value: number) { return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 / 1024).toFixed(1)} MB` }
 function isUrl(value: string) { try { const u = new URL(value); return ['http:', 'https:'].includes(u.protocol) } catch { return false } }
 
-async function requireAdminMenu(ctx: CommandContext) {
+async function requireAdminMenu(ctx: LegacyCompatibleCommandContext) {
   if (!await isGroupAdministrator(ctx)) throw new Error('Este menú está disponible únicamente para administradores del grupo o staff del bot.')
 }
 
-const menus: Record<string, (ctx: CommandContext) => Promise<string> | string> = {
+const menus: Record<string, (ctx: LegacyCompatibleCommandContext) => Promise<string> | string> = {
   downloads: (ctx) => [
     '╭━━〔 ⬇️ *DESCARGAS* 〕━━╮',
     `┃ ${ctx.prefix}yts <texto> — Busca videos en YouTube.`,
@@ -110,7 +110,7 @@ const menus: Record<string, (ctx: CommandContext) => Promise<string> | string> =
   },
 }
 
-async function menuCommand(ctx: CommandContext) {
+async function menuCommand(ctx: LegacyCompatibleCommandContext) {
   const section = (ctx.args[0] ?? '').toLowerCase()
   if (section && menus[section]) { await ctx.reply(await menus[section](ctx)); return }
   await ctx.reply([
@@ -133,7 +133,7 @@ async function menuCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function jobCommand(ctx: CommandContext) {
+async function jobCommand(ctx: LegacyCompatibleCommandContext) {
   const requested = ctx.argText.trim()
   if (requested && !['list', 'lista', 'menu'].includes(requested.toLowerCase())) {
     const selected = professionsV2.set(ctx.sender, requested)
@@ -145,14 +145,14 @@ async function jobCommand(ctx: CommandContext) {
   await ctx.reply(`💼 *PROFESIONES NEXORA*\nActual: ${current.emoji} *${current.label}*\n\n${lines.join('\n\n')}`)
 }
 
-async function workCommand(ctx: CommandContext) {
+async function workCommand(ctx: LegacyCompatibleCommandContext) {
   if (ctx.args[0]) professionsV2.set(ctx.sender, ctx.args[0]!)
   const result = professionsV2.work(ctx.sender)
   if (!result.ok) throw new Error(`Vuelve a trabajar en ${waitText(result.remaining)}.`)
   await ctx.reply(`💼 *TRABAJO COMPLETADO*\n━━━━━━━━━━━━━━\n${result.profession.emoji} ${result.profession.label}\n💰 Ganancia: *${fmt(result.reward)}*\n👛 Cartera global: *${fmt(result.balance.wallet)}*\n⏱️ Próximo trabajo: 1 minuto`)
 }
 
-async function balanceCommand(ctx: CommandContext) {
+async function balanceCommand(ctx: LegacyCompatibleCommandContext) {
   const b = economy.balance(ctx.sender)
   const extra = advancedEconomy.summary(ctx.sender)
   const miner = mining.summary(ctx.sender)
@@ -169,7 +169,7 @@ async function balanceCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function transferCommand(ctx: CommandContext) {
+async function transferCommand(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona, responde o indica el número del usuario que recibirá los NXC.' })
   const value = amount(ctx.args.find((arg) => /^\d[\d,_]*$/.test(arg)))
   const result = economyV2.transfer(ctx.sender, target!, value)
@@ -180,7 +180,7 @@ async function transferCommand(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function topCommand(ctx: CommandContext, global = false) {
+async function topCommand(ctx: LegacyCompatibleCommandContext, global = false) {
   let rows
   let title
   if (global || !ctx.isGroup) {
@@ -198,7 +198,7 @@ async function topCommand(ctx: CommandContext, global = false) {
   }, { quoted: ctx.message })
 }
 
-async function loanCommand(ctx: CommandContext) {
+async function loanCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (['pay', 'pagar', 'payment'].includes(action)) {
     const raw = ctx.args[1]?.toLowerCase()
@@ -217,7 +217,7 @@ async function loanCommand(ctx: CommandContext) {
   await ctx.reply(`🏦 *PRÉSTAMO APROBADO*\nRecibiste *${fmt(result.amount)}* y debes devolver *${fmt(result.due)}*.\nPaga con *${ctx.prefix}loan pay [monto|all]*.`)
 }
 
-async function lendCommand(ctx: CommandContext) {
+async function lendCommand(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al usuario que recibirá el préstamo.' })
   const numbers = ctx.args.filter((arg) => /^\d+(?:\.\d+)?%?$/.test(arg))
   const value = amount(numbers[0]?.replace('%', ''))
@@ -226,7 +226,7 @@ async function lendCommand(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `🤝 *PRÉSTAMO #${result.id}*\n@${target!.split('@')[0]} recibió *${fmt(result.amount)}*.\nInterés: ${result.rate}% · Debe: *${fmt(result.due)}*\nPago: *${ctx.prefix}loan pay*`, mentions: [target!] }, { quoted: ctx.message })
 }
 
-async function robCommand(ctx: CommandContext) {
+async function robCommand(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde a la persona que intentas robar.' })
   const result = economyV2.rob(ctx.sender, target!)
   if (!result.ok) throw new Error(`Podrás volver a intentarlo en ${waitText(result.remaining)}.`)
@@ -235,7 +235,7 @@ async function robCommand(ctx: CommandContext) {
   else await ctx.reply(`🚓 *TE ATRAPARON*\nPerdiste *${fmt(result.amount)}*.`)
 }
 
-async function minerCommand(ctx: CommandContext) {
+async function minerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (['buy', 'comprar'].includes(action)) {
     const result = mining.buy(ctx.sender)
@@ -260,7 +260,7 @@ const products = {
   subbot30d: { price: 100000, kind: 'subbot_slot', duration: 30 * 86400_000, label: 'Subbot · 30 días' },
 } as const
 
-async function shopCommand(ctx: CommandContext) {
+async function shopCommand(ctx: LegacyCompatibleCommandContext) {
   const b = economy.balance(ctx.sender)
   const miner = mining.summary(ctx.sender)
   await ctx.reply([
@@ -276,7 +276,7 @@ async function shopCommand(ctx: CommandContext) {
   ].join('\n'))
 }
 
-async function buyCommand(ctx: CommandContext) {
+async function buyCommand(ctx: LegacyCompatibleCommandContext) {
   const id = (ctx.args[0] ?? '').toLowerCase()
   if (id === 'miner') { const result = mining.buy(ctx.sender); await ctx.reply(`✅ Compraste un minero por *${fmt(result.price)}*. Producción total: *${fmt(result.hourly)}/h*.`); return }
   const item = products[id as keyof typeof products]
@@ -290,7 +290,7 @@ async function buyCommand(ctx: CommandContext) {
   await ctx.reply(`✅ *COMPRA COMPLETADA*\n${item.label}\nPrecio: *${fmt(item.price)}*\nVence: ${new Date(result.expiresAt).toLocaleString('es-MX')}`)
 }
 
-async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video', url: string, quality?: number) {
+async function sendYoutube(ctx: LegacyCompatibleCommandContext, kind: 'audio' | 'video', url: string, quality?: number) {
   if (!isUrl(url)) throw new Error(`Este comando solo acepta enlaces de YouTube. Para buscar usa ${ctx.prefix}yts <texto>.`)
   const progress = await createDownloadProgress(ctx, kind === 'audio' ? 'YouTube · audio' : `YouTube · video${quality ? ` ${quality}p` : ''}`)
   await progress.update('downloading', 'Proveedor: API Lempi')
@@ -304,7 +304,7 @@ async function sendYoutube(ctx: CommandContext, kind: 'audio' | 'video', url: st
   } finally { await result.cleanup() }
 }
 
-async function ytsCommand(ctx: CommandContext) {
+async function ytsCommand(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}yts <búsqueda>`)
   const rows = await searchYouTube(query, 8)
@@ -316,7 +316,7 @@ async function ytsCommand(ctx: CommandContext) {
   await ctx.reply(`🔎 *YOUTUBE · RESULTADOS*\nBúsqueda: *${query}*\n\n${text}`)
 }
 
-async function facebookCommand(ctx: CommandContext) {
+async function facebookCommand(ctx: LegacyCompatibleCommandContext) {
   const url = ctx.args[0] ?? ''
   if (!isUrl(url)) throw new Error(`Uso: ${ctx.prefix}facebook <url>`)
   const progress = await createDownloadProgress(ctx, 'Facebook · video')
@@ -341,7 +341,7 @@ async function facebookCommand(ctx: CommandContext) {
   } finally { await result?.cleanup() }
 }
 
-async function adultSearchOrDownload(ctx: CommandContext, provider: AdultProvider) {
+async function adultSearchOrDownload(ctx: LegacyCompatibleCommandContext, provider: AdultProvider) {
   const input = ctx.argText.trim()
   if (!input) throw new Error(`Uso: ${ctx.prefix}${provider} <búsqueda|url>`)
   if (isUrl(input)) { await adultDownload(ctx, provider, input); return }
@@ -351,7 +351,7 @@ async function adultSearchOrDownload(ctx: CommandContext, provider: AdultProvide
   await ctx.reply(`🔞 *${provider.toUpperCase()} · RESULTADOS*\n━━━━━━━━━━━━━━\n${body}`)
 }
 
-async function adultDownload(ctx: CommandContext, provider: string, url: string) {
+async function adultDownload(ctx: LegacyCompatibleCommandContext, provider: string, url: string) {
   const progress = await createDownloadProgress(ctx, `${provider.toUpperCase()} · video`)
   await progress.update('downloading', 'Extrayendo fuente directa del sitio')
   const result = await downloadAdult(url)
@@ -363,7 +363,7 @@ async function adultDownload(ctx: CommandContext, provider: string, url: string)
   } finally { await result.cleanup() }
 }
 
-async function subbotCommand(ctx: CommandContext) {
+async function subbotCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   const record = economy.getActiveSubbot(ctx.sender)
   if (!record) throw new Error(`No tienes una suscripción de subbot vigente. Consulta ${ctx.prefix}shop.`)
@@ -403,7 +403,7 @@ async function subbotCommand(ctx: CommandContext) {
   throw new Error('Usa subbot status, pair, qr, reset o portal.')
 }
 
-async function addNxc(ctx: CommandContext) {
+async function addNxc(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al usuario que recibirá NXC.' })
   const value = amount(ctx.args.find((arg) => /^\d[\d,_]*$/.test(arg)))
   const b = economyV2.credit(target!, value, 'admin_nxc_grant')
@@ -418,7 +418,7 @@ function grantDuration(raw: string) {
   const n = Number(match[1]); return { duration: n * (match[2] === 'h' ? 3600_000 : 86400_000), label: value }
 }
 
-async function subbotGrant(ctx: CommandContext) {
+async function subbotGrant(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al usuario que recibirá el subbot.' })
   const rawDuration = ctx.args.find((arg) => /^(?:\d+[dh]|permanent|permanente|forever)$/i.test(arg)) ?? '7d'
   const parsed = grantDuration(rawDuration)
@@ -429,7 +429,7 @@ async function subbotGrant(ctx: CommandContext) {
   await ctx.socket.sendMessage(ctx.chatId, { text: `🎁 *SUBBOT REGALADO*\n@${target!.split('@')[0]} recibió acceso *${parsed.label}*.\nVigencia: ${new Date(expiresAt).toLocaleString('es-MX')}`, mentions: [target!] }, { quoted: ctx.message })
 }
 
-async function subbotResetAdmin(ctx: CommandContext) {
+async function subbotResetAdmin(ctx: LegacyCompatibleCommandContext) {
   const idArg = ctx.args.find((arg) => /^#?\d+$/.test(arg))
   if (idArg) { await subbotManager.resetById(Number(idArg.replace('#', ''))); await ctx.reply(`🧹 Sesión de subbot ${idArg} restablecida.`); return }
   const target = await resolveTarget(ctx, { requiredMessage: 'Indica #ID, menciona o responde al propietario del subbot.' })
@@ -439,7 +439,7 @@ async function subbotResetAdmin(ctx: CommandContext) {
   await ctx.reply(`🧹 Sesión del subbot #${record.id} eliminada. La suscripción del usuario permanece vigente.`)
 }
 
-async function subbotRevoke(ctx: CommandContext) {
+async function subbotRevoke(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al propietario.' })
   const rows = economy.db.prepare('SELECT id FROM subbots WHERE owner_jid = ? AND expires_at > ?').all(target!, Date.now()) as Array<{ id: number }>
   for (const row of rows) await subbotManager.resetById(row.id)
@@ -448,7 +448,7 @@ async function subbotRevoke(ctx: CommandContext) {
   await ctx.reply('🚫 Acceso de subbot revocado y sesiones eliminadas.')
 }
 
-async function botStickerCommand(ctx: CommandContext) {
+async function botStickerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'list').toLowerCase()
   if (action === 'list') {
     const rows = globalStickers.list(); await ctx.reply(`🎭 *STICKERS GLOBALES*\n${rows.length ? rows.map((row) => `#${row.id} · ${row.label ?? 'sin etiqueta'}${row.triggers ? ` · triggers: ${row.triggers}` : ''}`).join('\n') : 'No hay stickers configurados.'}`); return
@@ -466,7 +466,7 @@ async function botStickerCommand(ctx: CommandContext) {
   throw new Error(`Usa ${ctx.prefix}botsticker add [etiqueta | trigger1,trigger2], list o remove <id>.`)
 }
 
-async function kickStickerCommand(ctx: CommandContext) {
+async function kickStickerCommand(ctx: LegacyCompatibleCommandContext) {
   const action = (ctx.args[0] ?? 'status').toLowerCase()
   if (action === 'clear') { globalStickers.clearAction('kick'); await ctx.reply('✅ Sticker de expulsión desactivado.'); return }
   if (action === 'set') {
@@ -478,7 +478,7 @@ async function kickStickerCommand(ctx: CommandContext) {
   await ctx.reply(`🚫 *KICK STICKER*\nConfigurar: ${ctx.prefix}kicksticker set (respondiendo al sticker)\nDesactivar: ${ctx.prefix}kicksticker clear`)
 }
 
-async function broadcastCommand(ctx: CommandContext) {
+async function broadcastCommand(ctx: LegacyCompatibleCommandContext) {
   const text = ctx.argText.trim()
   if (!text) throw new Error(`Uso: ${ctx.prefix}broadcast <mensaje>`)
   const groups = Object.values(await ctx.socket.groupFetchAllParticipating())
@@ -521,14 +521,14 @@ async function broadcastCommand(ctx: CommandContext) {
   }
 }
 
-async function rulesCommand(ctx: CommandContext) {
+async function rulesCommand(ctx: LegacyCompatibleCommandContext) {
   if (!ctx.isGroup) throw new Error('Este comando se usa dentro de grupos.')
   const metadata = await ctx.socket.groupMetadata(ctx.chatId)
   const policy = economy.getGroupPolicy(ctx.chatId)
   await ctx.reply([`📜 *REGLAS Y MODERACIÓN · ${metadata.subject}*`, '━━━━━━━━━━━━━━', metadata.desc?.trim() || 'Este grupo no tiene una descripción de reglas configurada.', '', `🔗 Anti-link: *${policy.antiLink ? 'ON' : 'OFF'}* · 3 advertencias`, `🚦 Anti-spam: *${policy.antiSpam ? 'ON' : 'OFF'}* · 3 advertencias`, `👋 Bienvenida: *${policy.welcome ? 'ON' : 'OFF'}*`, `🔞 Adultos: *${policy.adultAllowed ? 'ON' : 'OFF'}*`].join('\n'))
 }
 
-async function groupRoleAction(ctx: CommandContext, action: 'remove' | 'promote' | 'demote') {
+async function groupRoleAction(ctx: LegacyCompatibleCommandContext, action: 'remove' | 'promote' | 'demote') {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al usuario objetivo.' })
   await ctx.socket.groupParticipantsUpdate(ctx.chatId, [target!], action)
   await ctx.socket.sendMessage(ctx.chatId, { text: `${action === 'remove' ? '🚫 Expulsado' : action === 'promote' ? '🛡️ Promovido a admin' : '👤 Retirado de admin'}: @${target!.split('@')[0]}`, mentions: [target!] }, { quoted: ctx.message })
@@ -551,7 +551,7 @@ function extraReaction(def: ExtraReaction): BotCommand {
   } }
 }
 
-async function adultRole(ctx: CommandContext, kind: 'fuck' | 'cum' | 'preñar') {
+async function adultRole(ctx: LegacyCompatibleCommandContext, kind: 'fuck' | 'cum' | 'preñar') {
   const policy = ctx.isGroup ? economy.getGroupPolicy(ctx.chatId).adultAllowed : config.adultPrivateEnabled
   if (!policy || !economy.hasEntitlement(ctx.sender, 'adult_consent')) throw new Error(`Debes habilitar el módulo 18+ y confirmar mayoría de edad con ${ctx.prefix}adult18 accept.`)
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde a otro usuario con consentimiento 18+.' })
@@ -564,33 +564,33 @@ async function adultRole(ctx: CommandContext, kind: 'fuck' | 'cum' | 'preñar') 
   else await ctx.socket.sendMessage(ctx.chatId, { text: caption, mentions: [ctx.sender, target!] }, { quoted: ctx.message })
 }
 
-async function waifuRoll(ctx: CommandContext) {
+async function waifuRoll(ctx: LegacyCompatibleCommandContext) {
   const result = await createV2WaifuRoll(ctx.sender)
   if (!result.ok) throw new Error(`Espera ${waitText(result.remaining)} antes de otro roll.`)
   const c = result.character
   await ctx.socket.sendMessage(ctx.chatId, { image: { url: c.imageUrl }, caption: `🌸 *NEXORA WAIFU · JIKAN*\n━━━━━━━━━━━━━━\n${rarityEmoji(c.rarity)} *${c.name}*\n🆔 MAL: ${c.characterId}\n❤️ Favoritos: ${c.favorites.toLocaleString('es-MX')}\n💎 Valor: ${fmt(c.value)}\n🪙 Claim: ${fmt(c.claimPrice)}\n${result.owner ? '🔒 Ya pertenece a otro usuario.' : `✅ Disponible · reclama con *${ctx.prefix}claim*`}` }, { quoted: ctx.message })
 }
 
-async function waifuSearch(ctx: CommandContext) {
+async function waifuSearch(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim(); if (!query) throw new Error('Indica un personaje.')
   const rows = await jikanSearchCharacters(query, 8); if (!rows.length) throw new Error('Jikan no devolvió resultados.')
   await ctx.reply(`🔎 *JIKAN · PERSONAJES*\n${rows.map((c, i) => `${i + 1}. ${rarityEmoji(c.rarity)} *${c.name}* · MAL ${c.characterId} · ❤️ ${c.favorites.toLocaleString('es-MX')}\n   Info: *${ctx.prefix}winfo ${c.characterId}*`).join('\n\n')}`)
 }
 
-async function waifuInfoV2(ctx: CommandContext) {
+async function waifuInfoV2(ctx: LegacyCompatibleCommandContext) {
   const id = Number(ctx.args[0]); if (!Number.isInteger(id) || id <= 0) throw new Error('Indica el ID de MyAnimeList.')
   const c = await jikanCharacter(id); const owner = getClaim(id)?.ownerJid
   await ctx.socket.sendMessage(ctx.chatId, { image: { url: c.imageUrl }, caption: `${rarityEmoji(c.rarity)} *${c.name}*\n🆔 MAL ${c.characterId}\n❤️ ${c.favorites.toLocaleString('es-MX')} favoritos\n💎 ${fmt(c.value)}\n${owner ? `🔒 Propietario: @${owner.split('@')[0]}` : '✅ Disponible'}`, mentions: owner ? [owner] : [] }, { quoted: ctx.message })
 }
 
-async function waifuGiveV2(ctx: CommandContext) {
+async function waifuGiveV2(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx, { requiredMessage: 'Menciona o responde al usuario que recibirá el personaje.' })
   const id = Number(ctx.args.find((arg) => /^\d{1,8}$/.test(arg))); if (!id) throw new Error('Indica el ID del personaje.')
   const claim = giveWaifu(ctx.sender, target!, id)
   await ctx.socket.sendMessage(ctx.chatId, { text: `🎁 *${claim.name}* fue transferida a @${target!.split('@')[0]}.`, mentions: [target!] }, { quoted: ctx.message })
 }
 
-async function haremV2(ctx: CommandContext) {
+async function haremV2(ctx: LegacyCompatibleCommandContext) {
   const target = await resolveTarget(ctx) ?? ctx.sender
   const page = Number(ctx.args.find((arg) => /^\d{1,3}$/.test(arg)) ?? 1)
   const result = listHarem(target, page, 10)

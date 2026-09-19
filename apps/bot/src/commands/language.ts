@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { community } from '../services/community.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import {
@@ -135,7 +135,7 @@ async function languageCommand(ctx: CommandContext) {
   throw new Error(ctx.t('language.usage.phase6', { command: `${ctx.prefix}language` }))
 }
 
-export const languageCommands: BotCommand[] = [
+export const languageCommands: NeutralBotCommand[] = [
   {
     name: 'language',
     aliases: ['lang', 'idioma'],

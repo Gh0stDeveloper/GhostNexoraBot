@@ -6,7 +6,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import { config } from '../config.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
@@ -210,13 +210,13 @@ function packageKind(url: string) {
   return /\.xapk(?:$|[?#])/i.test(url) ? 'XAPK' : /\.apks(?:$|[?#])/i.test(url) ? 'APKS' : 'APK'
 }
 
-async function editMessage(ctx: CommandContext, statusMessage: unknown, text: string) {
+async function editMessage(ctx: LegacyCompatibleCommandContext, statusMessage: unknown, text: string) {
   const key = (statusMessage as { key?: unknown } | null)?.key
   if (!key) return
   try { await ctx.socket.sendMessage(ctx.chatId, { text }, { edit: key as never }) } catch { /* best effort */ }
 }
 
-async function downloadAndSend(ctx: CommandContext, item: Item) {
+async function downloadAndSend(ctx: LegacyCompatibleCommandContext, item: Item) {
   const status = await ctx.reply(`⬇️ *DESCARGANDO*\n${item.name}\nFuente: ${item.source}\nPreparando enlace…`)
   let dir: string | undefined
   try {
@@ -279,7 +279,7 @@ async function downloadAndSend(ctx: CommandContext, item: Item) {
   }
 }
 
-async function showPage(ctx: CommandContext, source: Source, query: string, page: number) {
+async function showPage(ctx: LegacyCompatibleCommandContext, source: Source, query: string, page: number) {
   const items = await searchSource(source, query, page)
   if (!items.length) throw new Error(`No encontré más resultados de ${source}.`)
   const allForPage = items.slice(0, PAGE_SIZE)

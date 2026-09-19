@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { resolveTarget } from '../utils/target.js'
 import { getReactionGif, reactionGifToMp4, type ReactionCategory } from '../services/reactions.js'
 
@@ -35,7 +35,7 @@ const definitions: ReactionDefinition[] = [
 ]
 
 function reactionCommand(def: ReactionDefinition): BotCommand {
-  return { name: def.name, aliases: def.aliases, category: 'social', description: `Reacción anime ${def.name}; admite mención o respuesta.`, async handler(ctx: CommandContext) {
+  return { name: def.name, aliases: def.aliases, category: 'social', description: `Reacción anime ${def.name}; admite mención o respuesta.`, async handler(ctx: LegacyCompatibleCommandContext) {
     const other = await resolveTarget(ctx)
     const senderTag = `@${ctx.sender.split('@')[0]}`; const targetTag = other ? `@${other.split('@')[0]}` : ''
     const caption = other ? `${def.emoji} *REACCIÓN · ${def.name.toUpperCase()}*\n━━━━━━━━━━━━━━\n${senderTag} ${def.directed} ${targetTag}` : `${def.emoji} *REACCIÓN · ${def.name.toUpperCase()}*\n━━━━━━━━━━━━━━\n${senderTag} ${def.solo}`

@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { getContextInfo } from '../utils/message.js'
 import { sendCarousel, sendInteractiveCard } from '../services/interactive.js'
 import { community } from '../services/community.js'
@@ -25,7 +25,7 @@ import {
 
 const nxc = (value: number) => `${Math.floor(value).toLocaleString('es-MX')} NXC`
 
-async function target(ctx: CommandContext) {
+async function target(ctx: LegacyCompatibleCommandContext) {
   const mentioned = getContextInfo(ctx.message)?.mentionedJid?.[0]
   const direct = ctx.args.find((arg) => /^\+?\d{8,20}$/.test(arg.replace(/[ -]/g, '')))?.replace(/\D/g, '')
   const candidate = mentioned ?? (direct ? `${direct}@s.whatsapp.net` : null)
@@ -36,7 +36,7 @@ async function target(ctx: CommandContext) {
   return participant?.phoneNumber ?? participant?.id ?? candidate
 }
 
-function withoutMention(ctx: CommandContext) {
+function withoutMention(ctx: LegacyCompatibleCommandContext) {
   return ctx.argText.replace(/@\d{5,20}/g, '').replace(/\s+/g, ' ').trim()
 }
 

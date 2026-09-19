@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendCarousel, type InteractiveButton } from '../services/interactive.js'
 import {
   askLempiDeepSeek,
@@ -46,7 +46,7 @@ function takeDownload(token: string) {
   return item
 }
 
-function requireQuery(ctx: CommandContext, usage: string) {
+function requireQuery(ctx: LegacyCompatibleCommandContext, usage: string) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(usage)
   return query.slice(0, 500)
@@ -124,7 +124,7 @@ function splitForWhatsApp(input: string, limit = 3500) {
   return chunks
 }
 
-async function sendFormattedText(ctx: CommandContext, text: string) {
+async function sendFormattedText(ctx: LegacyCompatibleCommandContext, text: string) {
   for (const chunk of splitForWhatsApp(text)) await ctx.reply(chunk)
 }
 
@@ -141,7 +141,7 @@ function tiktokBody(item: LempiTikTokResult) {
   ].filter(Boolean).join('\n')
 }
 
-async function showTikTok(ctx: CommandContext, query: string) {
+async function showTikTok(ctx: LegacyCompatibleCommandContext, query: string) {
   const results = await searchLempiTikTok(query)
   if (!results.length) throw new Error('No encontré videos de TikTok para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -172,7 +172,7 @@ function pinterestBody(item: LempiPinterestResult) {
   ].filter(Boolean).join('\n')
 }
 
-async function sendImagesDirectly(ctx: CommandContext, items: Array<{ url: string; baseName: string }>, source: string) {
+async function sendImagesDirectly(ctx: LegacyCompatibleCommandContext, items: Array<{ url: string; baseName: string }>, source: string) {
   let sent = 0
   let total = 0
   for (const item of items.slice(0, 12)) {
@@ -199,7 +199,7 @@ async function sendImagesDirectly(ctx: CommandContext, items: Array<{ url: strin
   return sent
 }
 
-async function showPinterest(ctx: CommandContext, query: string) {
+async function showPinterest(ctx: LegacyCompatibleCommandContext, query: string) {
   const results = await searchLempiPinterest(query, 20)
   const images = results
     .map((item, index) => item.download ? { url: item.download, baseName: `pinterest-${index + 1}` } : null)
@@ -226,7 +226,7 @@ function instagramMedia(item: LempiInstagramResult) {
   return null
 }
 
-async function showInstagram(ctx: CommandContext, query: string) {
+async function showInstagram(ctx: LegacyCompatibleCommandContext, query: string) {
   const results = await searchLempiInstagram(query, 10)
   const usable = results
     .map((item) => ({ item, media: instagramMedia(item) }))
@@ -253,7 +253,7 @@ async function showInstagram(ctx: CommandContext, query: string) {
   })
 }
 
-async function runInstagramDirect(ctx: CommandContext, imagesOnly: boolean) {
+async function runInstagramDirect(ctx: LegacyCompatibleCommandContext, imagesOnly: boolean) {
   const sourceUrl = ctx.args[0]?.trim()
   if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) {
     throw new Error(`Uso: ${ctx.prefix}${imagesOnly ? 'igimg' : 'ig'} <url de Instagram>`)
@@ -280,7 +280,7 @@ function happyModBody(item: LempiHappyModResult) {
   ].filter(Boolean).join('\n')
 }
 
-async function showHappyMod(ctx: CommandContext, query: string) {
+async function showHappyMod(ctx: LegacyCompatibleCommandContext, query: string) {
   const results = await searchLempiHappyMod(query, 20)
   if (!results.length) throw new Error('No encontré APKs para esa búsqueda.')
   await sendCarousel(ctx.socket, ctx.chatId, ctx.message, {
@@ -308,7 +308,7 @@ async function showHappyMod(ctx: CommandContext, query: string) {
   })
 }
 
-async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedMedia, label: string, quoted: boolean) {
+async function sendDownloadedMedia(ctx: LegacyCompatibleCommandContext, result: LempiDownloadedMedia, label: string, quoted: boolean) {
   const caption = `📥 *${label}*\n━━━━━━━━━━━━━━\n📦 ${formatBytes(result.size)}\n👻 Ghost Nexora Bot`
   if (result.kind === 'image') {
     await ctx.socket.sendMessage(ctx.chatId, { image: { url: result.filePath }, caption }, { quoted: quoted ? ctx.message : undefined })
@@ -326,7 +326,7 @@ async function sendDownloadedMedia(ctx: CommandContext, result: LempiDownloadedM
   }
 }
 
-async function sendPendingDownload(ctx: CommandContext, token: string, label: string) {
+async function sendPendingDownload(ctx: LegacyCompatibleCommandContext, token: string, label: string) {
   const item = takeDownload(token)
   await ctx.reply(`📥 *${label}*\n━━━━━━━━━━━━━━\n⬇️ Descargando...`)
   let sourceUrl = item.url

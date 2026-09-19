@@ -6,7 +6,7 @@
  * JavaScript solo mejora la navegación entre páginas ya precargadas.
  */
 import { randomBytes } from 'node:crypto'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import {
   buildOfflineBrowserBundle,
   humanBrowserBytes,
@@ -19,7 +19,7 @@ import {
 import { createRichResponseId, relayWhatsAppRichResponse } from '../platform/whatsapp/rich-response.js'
 import { logger } from '../utils/logger.js'
 
-function browserLabels(ctx: CommandContext): BrowserLabels {
+function browserLabels(ctx: LegacyCompatibleCommandContext): BrowserLabels {
   return {
     go: ctx.t('browser.go'),
     preloaded: ctx.t('browser.preloaded'),
@@ -40,7 +40,7 @@ function browserLabels(ctx: CommandContext): BrowserLabels {
   }
 }
 
-async function relayBrowserPayload(ctx: CommandContext, responseId: string, payload: PreparedOfflineBrowser) {
+async function relayBrowserPayload(ctx: LegacyCompatibleCommandContext, responseId: string, payload: PreparedOfflineBrowser) {
   const message = await relayWhatsAppRichResponse(ctx.socket, ctx.chatId, {
     responseId,
     submessages: [{ messageType: 2, messageText: ctx.t('browser.messageTitle') }],
@@ -65,7 +65,7 @@ function logPayload(startUrl: string, payload: PreparedOfflineBrowser, attempt: 
   }, 'offline browser payload prepared')
 }
 
-async function sendBrowserMessage(ctx: CommandContext, startUrl: string) {
+async function sendBrowserMessage(ctx: LegacyCompatibleCommandContext, startUrl: string) {
   const sid = randomBytes(16).toString('hex')
   const labels = browserLabels(ctx)
 

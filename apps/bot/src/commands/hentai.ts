@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { economy } from '../services/economy.js'
@@ -12,7 +12,7 @@ import {
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 
-function assertAdultAccess(ctx: CommandContext) {
+function assertAdultAccess(ctx: LegacyCompatibleCommandContext) {
   if (ctx.isGroup) {
     if (!economy.getGroupPolicy(ctx.chatId).adultAllowed) {
       throw new Error(
@@ -48,7 +48,7 @@ function decodeQuery(value: string) {
 
 /** Erome-style listing: few cards, short bodies, separate navigation card. */
 async function listingUi(
-  ctx: CommandContext,
+  ctx: LegacyCompatibleCommandContext,
   mode: 'hot' | 'new' | 'search',
   page: number,
   query: string | undefined,
@@ -109,7 +109,7 @@ async function listingUi(
   })
 }
 
-async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', page: number, query?: string) {
+async function showListing(ctx: LegacyCompatibleCommandContext, mode: 'hot' | 'new' | 'search', page: number, query?: string) {
   const result =
     mode === 'search'
       ? await searchHentai(query ?? '', page, 8)
@@ -118,7 +118,7 @@ async function showListing(ctx: CommandContext, mode: 'hot' | 'new' | 'search', 
   await listingUi(ctx, mode, page, query, result.items)
 }
 
-async function sendDownload(ctx: CommandContext, tokenOrUrl: string) {
+async function sendDownload(ctx: LegacyCompatibleCommandContext, tokenOrUrl: string) {
   let title = 'Hentai'
   try {
     if (/^ht_/i.test(tokenOrUrl)) title = getHentaiItem(tokenOrUrl).title

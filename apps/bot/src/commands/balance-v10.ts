@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { NeutralBotCommand, CommandContext } from '../types.js'
 import { COIN_SYMBOL, economy } from '../services/economy.js'
 import { advancedEconomy } from '../services/economy-advanced.js'
 import { bankingV10 } from '../services/banking-v10.js'
@@ -64,7 +64,7 @@ async function balanceV10(ctx: CommandContext) {
   ].join('\n'))
 }
 
-export const balanceV10Commands: BotCommand[] = [
+export const balanceV10Commands: NeutralBotCommand[] = [
   {
     name: 'balance',
     aliases: ['bal', 'wallet', 'cartera'],

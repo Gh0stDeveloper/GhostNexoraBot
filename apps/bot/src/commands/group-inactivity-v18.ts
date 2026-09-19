@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { digitsFromJid } from '../utils/message.js'
 import {
@@ -10,7 +10,7 @@ import {
   type GroupInactiveMember,
 } from '../services/group-inactivity.js'
 
-function inactivityProtection(ctx: CommandContext) {
+function inactivityProtection(ctx: LegacyCompatibleCommandContext) {
   const protectedJids = [ctx.socket.user?.id, ctx.socket.user?.lid, ctx.instanceOwnerJid]
     .filter((value): value is string => Boolean(value))
   const protectedNumbers = [...config.owners, ...ctx.settings.botAdmins]
@@ -36,7 +36,7 @@ function reasonText(member: GroupInactiveMember, days: number, minMessages: numb
   return `última actividad ≥ ${days} días`
 }
 
-function effectivePolicy(ctx: CommandContext, args = ctx.args) {
+function effectivePolicy(ctx: LegacyCompatibleCommandContext, args = ctx.args) {
   const stored = getGroupInactivitySettings(ctx.chatId)
   return {
     days: normalizeInactiveDays(args[0], stored.days),
@@ -45,7 +45,7 @@ function effectivePolicy(ctx: CommandContext, args = ctx.args) {
   }
 }
 
-async function configureInactivity(ctx: CommandContext, args = ctx.args) {
+async function configureInactivity(ctx: LegacyCompatibleCommandContext, args = ctx.args) {
   const current = getGroupInactivitySettings(ctx.chatId)
   const action = (args[0] ?? 'status').toLowerCase()
 
@@ -83,7 +83,7 @@ async function configureInactivity(ctx: CommandContext, args = ctx.args) {
   ].join('\n'))
 }
 
-async function inactiveUsersCommand(ctx: CommandContext) {
+async function inactiveUsersCommand(ctx: LegacyCompatibleCommandContext) {
   const first = (ctx.args[0] ?? '').toLowerCase()
   if (['config', 'ajustes', 'set', 'establecer'].includes(first)) {
     await configureInactivity(ctx, ctx.args)
@@ -131,7 +131,7 @@ async function inactiveUsersCommand(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function kickInactiveUsersCommand(ctx: CommandContext) {
+async function kickInactiveUsersCommand(ctx: LegacyCompatibleCommandContext) {
   const policy = effectivePolicy(ctx)
   const metadata = await ctx.socket.groupMetadata(ctx.chatId)
   const report = groupInactivityReport(ctx.chatId, metadata.participants, policy.days, {

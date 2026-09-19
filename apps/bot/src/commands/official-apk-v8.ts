@@ -6,7 +6,7 @@ import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { sendInteractiveCard } from '../services/interactive.js'
 import { config } from '../config.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
@@ -307,7 +307,7 @@ function bytes(value?: number) {
  * "Actualizar WhatsApp" en muchas versiones/clientes (sobre todo cuenta empresa).
  * Texto plano siempre legible + hasta 3 botones quick_reply en una sola tarjeta.
  */
-async function showResults(ctx: CommandContext, title: string, query: string, items: Item[]) {
+async function showResults(ctx: LegacyCompatibleCommandContext, title: string, query: string, items: Item[]) {
   const list = items.slice(0, MAX_RESULTS)
   const lines = list.map((item, index) => {
     const ver = item.version ? ` · v${item.version}` : ''
@@ -409,7 +409,7 @@ async function downloadOfficialApk(item: Item) {
   }
 }
 
-async function searchSource(ctx: CommandContext, source: Source, query: string) {
+async function searchSource(ctx: LegacyCompatibleCommandContext, source: Source, query: string) {
   const text = query.trim()
   if (text.length < 2) throw new Error(`Uso: ${ctx.prefix}${source.toLowerCase()} <aplicación>`)
 
@@ -421,7 +421,7 @@ async function searchSource(ctx: CommandContext, source: Source, query: string) 
   await showResults(ctx, source, text, items)
 }
 
-async function apk(ctx: CommandContext) {
+async function apk(ctx: LegacyCompatibleCommandContext) {
   const query = ctx.argText.trim()
   if (query.length < 2) throw new Error(`Uso: ${ctx.prefix}apk <aplicación>`)
 
@@ -441,7 +441,7 @@ async function apk(ctx: CommandContext) {
   await showResults(ctx, 'APK · oficiales', query, all)
 }
 
-async function info(ctx: CommandContext) {
+async function info(ctx: LegacyCompatibleCommandContext) {
   const item = getSelected(ctx.args[0] || '')
   await ctx.reply(
     [
@@ -456,7 +456,7 @@ async function info(ctx: CommandContext) {
   )
 }
 
-async function download(ctx: CommandContext) {
+async function download(ctx: LegacyCompatibleCommandContext) {
   const item = getSelected(ctx.args[0] || '')
 
   await ctx.reply(`📦 Descargando ${item.name} (${item.source})…`)

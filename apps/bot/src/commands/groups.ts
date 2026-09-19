@@ -1,4 +1,4 @@
-import type { BotCommand, CommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
 import { config } from '../config.js'
 import { digitsFromJid, getContextInfo } from '../utils/message.js'
 import { community } from '../services/community.js'
@@ -7,7 +7,7 @@ import { groupInactivityReport, normalizeInactiveDays } from '../services/group-
 import { sendInteractiveCard } from '../services/interactive.js'
 import { forceSyncOpsGroups } from '../services/group-ops-runtime.js'
 
-async function targetJids(ctx: CommandContext) {
+async function targetJids(ctx: LegacyCompatibleCommandContext) {
   const context = getContextInfo(ctx.message)
   const mentioned = context?.mentionedJid ?? []
   const quoted = context?.participant ? [context.participant] : []
@@ -16,14 +16,14 @@ async function targetJids(ctx: CommandContext) {
   return targets
 }
 
-async function updateGroupOpen(ctx: CommandContext, close: boolean) {
+async function updateGroupOpen(ctx: LegacyCompatibleCommandContext, close: boolean) {
   await ctx.socket.groupSettingUpdate(ctx.chatId, close ? 'announcement' : 'not_announcement')
   await ctx.reply(close
     ? '╭─〔 🔒 *GRUPO CERRADO* 〕\n│ Solo los administradores pueden enviar mensajes.\n╰──────────────'
     : '╭─〔 🔓 *GRUPO ABIERTO* 〕\n│ Todos los participantes pueden enviar mensajes.\n╰──────────────')
 }
 
-function inactivityProtection(ctx: CommandContext) {
+function inactivityProtection(ctx: LegacyCompatibleCommandContext) {
   const protectedJids = [ctx.socket.user?.id, ctx.instanceOwnerJid].filter((value): value is string => Boolean(value))
   const protectedNumbers = [...config.owners, ...ctx.settings.botAdmins]
   if (ctx.instanceOwnerJid) {
@@ -42,7 +42,7 @@ function formatTrackedDate(timestamp: number) {
   return new Date(timestamp).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-async function inactiveUsersCommand(ctx: CommandContext) {
+async function inactiveUsersCommand(ctx: LegacyCompatibleCommandContext) {
   const days = normalizeInactiveDays(ctx.args[0], 30)
   const metadata = await ctx.socket.groupMetadata(ctx.chatId)
   const report = groupInactivityReport(ctx.chatId, metadata.participants, days, inactivityProtection(ctx))
@@ -83,7 +83,7 @@ async function inactiveUsersCommand(ctx: CommandContext) {
   }, { quoted: ctx.message })
 }
 
-async function kickInactiveUsersCommand(ctx: CommandContext) {
+async function kickInactiveUsersCommand(ctx: LegacyCompatibleCommandContext) {
   const days = normalizeInactiveDays(ctx.args[0], 30)
   const metadata = await ctx.socket.groupMetadata(ctx.chatId)
   const report = groupInactivityReport(ctx.chatId, metadata.participants, days, inactivityProtection(ctx))
