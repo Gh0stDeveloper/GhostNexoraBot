@@ -40,6 +40,7 @@ export type UnifiedNavIcon =
   | 'users'
   | 'economy'
   | 'logs'
+  | 'jobs'
   | 'audit'
   | 'diagnostics'
   | 'settings'
@@ -69,6 +70,7 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
   users: UserRound,
   economy: Coins,
   logs: ScrollText,
+  jobs: Activity,
   audit: Gauge,
   diagnostics: Wrench,
   settings: Settings,
