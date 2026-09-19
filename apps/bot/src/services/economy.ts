@@ -239,7 +239,7 @@ export class EconomyStore {
           NEW.wallet,
           NEW.bank,
           NEW.wallet + NEW.bank,
-          'automatic_guard',
+          'system_account',
           NEW.updated_at
         );
       END;
@@ -264,7 +264,7 @@ export class EconomyStore {
           0,
           0,
           0,
-          'automatic_guard',
+          'identity',
           unixepoch('subsec') * 1000
         );
       END;
