@@ -174,9 +174,11 @@ export function readEconomyLedger(filters: EconomyLedgerFilters): EconomyLedgerS
       FROM economy_transactions
       WHERE ${where}`).get(...params) as Record<string, unknown> | undefined
 
+    const kindParams: Array<string | number> = []
+    const kindWhere = instanceClause(filters.instanceKey, kindParams)
     const kinds = (db.prepare(`SELECT DISTINCT kind FROM economy_transactions
-      WHERE ${instanceClause(filters.instanceKey, [])}
-      ORDER BY kind COLLATE NOCASE ASC LIMIT 200`).all() as Array<{ kind?: string }>)
+      WHERE ${kindWhere}
+      ORDER BY kind COLLATE NOCASE ASC LIMIT 200`).all(...kindParams) as Array<{ kind?: string }>)
       .map((row) => String(row.kind ?? '')).filter(Boolean)
 
     const sourceParams: Array<string | number> = []
