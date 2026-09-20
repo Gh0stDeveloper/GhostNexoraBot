@@ -33,6 +33,7 @@ export default async function FourthDimensionPage() {
   const navigation: UnifiedNavItem[] = [
     { id: 'nexora-home', label: t.nav.nexoraHome, href: '/', icon: 'home', group: t.groups.nexora },
     { id: 'project-current', label: t.nav.project, href: '/cuarta-dimension', icon: 'activity', active: true, group: t.groups.projects },
+    { id: 'nexora-helios', label: 'Nexora Helios', href: '/sistema-solar', icon: 'activity', group: t.groups.projects },
     { id: 'home', label: t.nav.overview, href: '#inicio', icon: 'home', group: t.groups.project },
     { id: 'concept', label: t.nav.concept, href: '#concepto', icon: 'modules', group: t.groups.project },
     { id: 'mathematics', label: t.nav.mathematics, href: '#matematica', icon: 'diagnostics', group: t.groups.project },
