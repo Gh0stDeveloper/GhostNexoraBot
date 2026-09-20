@@ -1060,10 +1060,12 @@ function CameraRig({
   selectedId,
   mode,
   approachLevel,
+  explorerId,
 }: {
   selectedId: HeliosBodyId | null
   mode: HeliosCameraMode
   approachLevel: HeliosApproachLevel
+  explorerId: PlanetExplorerId | null
 }) {
   const controls = useRef<any>(null)
   const previous = useRef('')
@@ -1076,7 +1078,7 @@ function CameraRig({
   const { camera } = useThree()
 
   useEffect(() => {
-    const key = `${mode}:${selectedId ?? 'none'}:${approachLevel}`
+    const key = `${mode}:${selectedId ?? 'none'}:${approachLevel}:${explorerId ?? 'system'}`
     if (previous.current === key) return
     previous.current = key
 
@@ -1086,9 +1088,9 @@ function CameraRig({
     }
 
     arriving.current = true
-    const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+    const focusId = explorerId ?? (mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null)
     const system = runtime.systemPosition
-    const position = focusId ? runtime.positions[focusId] : system
+    const position = explorerId ? null : focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
     if (focusId) {
@@ -1103,7 +1105,7 @@ function CameraRig({
       focusDistance.current = OVERVIEW.length()
       goal.current.copy(destination.current).add(OVERVIEW)
     }
-  }, [approachLevel, camera, mode, selectedId])
+  }, [approachLevel, camera, explorerId, mode, selectedId])
 
   useFrame((_, delta) => {
     const controlsInstance = controls.current
@@ -1122,9 +1124,9 @@ function CameraRig({
       return
     }
 
-    const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+    const focusId = explorerId ?? (mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null)
     const system = runtime.systemPosition
-    const position = focusId ? runtime.positions[focusId] : system
+    const position = explorerId ? null : focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
     if (focusId) {
@@ -1160,7 +1162,7 @@ function CameraRig({
     controlsInstance.update()
   })
 
-  const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+  const focusId = explorerId ?? (mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null)
   const minDistance = focusId ? bodyMinimumCameraDistance(focusId) : 1.45
 
   return <OrbitControls
@@ -1169,7 +1171,7 @@ function CameraRig({
     dampingFactor={0.075}
     minDistance={minDistance}
     maxDistance={520}
-    enablePan={approachLevel === 'orbit' || mode === 'free' || mode === 'system'}
+    enablePan={!explorerId && (approachLevel === 'orbit' || mode === 'free' || mode === 'system')}
     makeDefault
     zoomSpeed={approachLevel === 'inspect' ? 0.48 : 0.82}
     rotateSpeed={approachLevel === 'inspect' ? 0.48 : 0.7}
@@ -1182,6 +1184,10 @@ function SolarScene({
   travelSpeed,
   cameraMode,
   approachLevel,
+  explorerId,
+  explorerAutoRotate,
+  explorerAxis,
+  explorerGrid,
   selectedId,
   showOrbits,
   showTrails,
@@ -1194,6 +1200,10 @@ function SolarScene({
   travelSpeed: number
   cameraMode: HeliosCameraMode
   approachLevel: HeliosApproachLevel
+  explorerId: PlanetExplorerId | null
+  explorerAutoRotate: boolean
+  explorerAxis: boolean
+  explorerGrid: boolean
   selectedId: HeliosBodyId | null
   showOrbits: boolean
   showTrails: boolean
@@ -1212,11 +1222,23 @@ function SolarScene({
     <Sparkles count={520} scale={[760, 470, 760]} size={1.7} speed={0.07} color="#91d9ff" opacity={0.3}/>
     <Sparkles count={290} scale={[700, 410, 700]} size={1.35} speed={0.045} color="#ffd6a0" opacity={0.22}/>
     <MilkyWayBand/>
-    <GalacticStarFlow enabled={galacticMotion}/>
+    <GalacticStarFlow enabled={galacticMotion && !explorerId}/>
 
     <RuntimeSync paused={paused} orbitalSpeed={speed} travelSpeed={travelSpeed} galacticMotion={galacticMotion}/>
-    <CameraRig selectedId={selectedId} mode={cameraMode} approachLevel={approachLevel}/>
+    <CameraRig
+      selectedId={selectedId}
+      mode={cameraMode}
+      approachLevel={approachLevel}
+      explorerId={explorerId}
+    />
 
+    {explorerId ? <PlanetExplorerStage
+      id={explorerId}
+      paused={paused}
+      autoRotate={explorerAutoRotate}
+      showAxis={explorerAxis}
+      showGrid={explorerGrid}
+    /> : <>
     <SystemMotion enabled={galacticMotion}>
       <Sun
         selected={selectedId === 'sun'}
@@ -1244,6 +1266,7 @@ function SolarScene({
       travelSpeed={travelSpeed}
       galacticMotion={galacticMotion}
     />
+    </>}
   </>
 }
 
