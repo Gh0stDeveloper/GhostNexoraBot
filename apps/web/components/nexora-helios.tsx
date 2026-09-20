@@ -541,8 +541,8 @@ function WorldTrailLine({
     for (let index = 0; index < WORLD_TRAIL_SAMPLES; index += 1) {
       const ageSeconds = spanSeconds * (1 - index / (WORLD_TRAIL_SAMPLES - 1))
       const sampleDays = runtime.days - ageSeconds * orbitalSpeed
-      const sampleTravel = Math.max(0, runtime.travelSeconds - ageSeconds)
-      const offset = galacticMotion ? heliosSystemOffset(sampleTravel, travelSpeed) : [0, 0, 0] as const
+      const sampleTravel = Math.max(0, runtime.travelSeconds - ageSeconds * travelSpeed)
+      const offset = galacticMotion ? heliosSystemOffset(sampleTravel) : [0, 0, 0] as const
       const local = body.orbit ? heliosPosition(body.orbit, sampleDays) : [0, 0, 0] as const
       position.setXYZ(
         index,
@@ -793,11 +793,9 @@ function GalacticStarFlow({ enabled }: { enabled: boolean }) {
 
 function SystemMotion({
   enabled,
-  travelSpeed,
   children,
 }: {
   enabled: boolean
-  travelSpeed: number
   children: React.ReactNode
 }) {
   const group = useRef<THREE.Group>(null)
@@ -805,7 +803,7 @@ function SystemMotion({
 
   useFrame((_, delta) => {
     if (!group.current) return
-    const offset = enabled ? heliosSystemOffset(runtime.travelSeconds, travelSpeed) : [0, 0, 0] as const
+    const offset = enabled ? heliosSystemOffset(runtime.travelSeconds) : [0, 0, 0] as const
     target.set(offset[0], offset[1], offset[2])
     const amount = 1 - Math.exp(-4.5 * Math.min(delta, 0.1))
     group.current.position.lerp(target, amount)
@@ -822,10 +820,12 @@ function SystemMotion({
 function RuntimeSync({
   paused,
   orbitalSpeed,
+  travelSpeed,
   galacticMotion,
 }: {
   paused: boolean
   orbitalSpeed: number
+  travelSpeed: number
   galacticMotion: boolean
 }) {
   const { camera, size } = useThree()
@@ -834,7 +834,7 @@ function RuntimeSync({
     const step = Math.min(delta, 0.1)
     if (!paused) {
       runtime.days += orbitalSpeed * step
-      if (galacticMotion) runtime.travelSeconds += step
+      if (galacticMotion) runtime.travelSeconds += step * travelSpeed
     }
     runtime.camera = camera
     runtime.size.width = size.width
@@ -987,10 +987,10 @@ function SolarScene({
     <MilkyWayBand/>
     <GalacticStarFlow enabled={galacticMotion}/>
 
-    <RuntimeSync paused={paused} orbitalSpeed={speed} galacticMotion={galacticMotion}/>
+    <RuntimeSync paused={paused} orbitalSpeed={speed} travelSpeed={travelSpeed} galacticMotion={galacticMotion}/>
     <CameraRig selectedId={selectedId} mode={cameraMode}/>
 
-    <SystemMotion enabled={galacticMotion} travelSpeed={travelSpeed}>
+    <SystemMotion enabled={galacticMotion}>
       <Sun
         selected={selectedId === 'sun'}
         paused={paused}
