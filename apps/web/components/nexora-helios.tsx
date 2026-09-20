@@ -1433,13 +1433,31 @@ function BodyInfo({
   locale,
   id,
   approachLevel,
+  explorerActive,
+  explorerAutoRotate,
+  explorerAxis,
+  explorerGrid,
   onApproachChange,
+  onEnterExplorer,
+  onExitExplorer,
+  onExplorerAutoRotateChange,
+  onExplorerAxisChange,
+  onExplorerGridChange,
   onClose,
 }: {
   locale: NexoraHeliosLocale
   id: HeliosBodyId
   approachLevel: HeliosApproachLevel
+  explorerActive: boolean
+  explorerAutoRotate: boolean
+  explorerAxis: boolean
+  explorerGrid: boolean
   onApproachChange: (level: HeliosApproachLevel) => void
+  onEnterExplorer: () => void
+  onExitExplorer: () => void
+  onExplorerAutoRotateChange: (value: boolean) => void
+  onExplorerAxisChange: (value: boolean) => void
+  onExplorerGridChange: (value: boolean) => void
   onClose: () => void
 }) {
   const copy = nexoraHeliosCopy[locale]
@@ -1487,6 +1505,62 @@ function BodyInfo({
     </div>
 
     <p className="mt-3 text-sm leading-6 text-zinc-300">{bodyCopy.blurb}</p>
+
+    {id !== 'sun' ? <div className={explorerActive
+      ? 'mt-4 rounded-xl border border-cyan-300/20 bg-cyan-400/[.06] p-3'
+      : 'mt-4 rounded-xl border border-white/[.08] bg-white/[.035] p-3'}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[.13em] text-cyan-200/80">{copy.controls.planetExplorer}</p>
+          <p className="mt-1 text-[10px] leading-4 text-zinc-500">{explorerActive ? copy.controls.explorerHint : copy.controls.explorerSurfaceNext}</p>
+        </div>
+        <button
+          type="button"
+          onClick={explorerActive ? onExitExplorer : onEnterExplorer}
+          className={explorerActive
+            ? 'shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-[9px] font-black text-zinc-200 hover:bg-white/[.06]'
+            : 'shrink-0 rounded-lg bg-cyan-100 px-2.5 py-2 text-[9px] font-black text-black'}
+        >
+          {explorerActive ? copy.controls.exitPlanetExplorer : copy.controls.enterPlanetExplorer}
+        </button>
+      </div>
+
+      {explorerActive ? <>
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            aria-pressed={explorerAutoRotate}
+            onClick={() => onExplorerAutoRotateChange(!explorerAutoRotate)}
+            className={explorerAutoRotate
+              ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400'}
+          >
+            {copy.controls.explorerAutoRotate}
+          </button>
+          <button
+            type="button"
+            aria-pressed={explorerAxis}
+            onClick={() => onExplorerAxisChange(!explorerAxis)}
+            className={explorerAxis
+              ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400'}
+          >
+            {copy.controls.explorerAxis}
+          </button>
+          <button
+            type="button"
+            aria-pressed={explorerGrid}
+            onClick={() => onExplorerGridChange(!explorerGrid)}
+            className={explorerGrid
+              ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400'}
+          >
+            {copy.controls.explorerGrid}
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] leading-4 text-zinc-500">{copy.controls.explorerSurfaceNext}</p>
+      </> : null}
+    </div> : null}
 
     <div className="mt-4 rounded-xl border border-white/[.08] bg-white/[.035] p-2.5">
       <div className="flex items-center justify-between gap-3">
@@ -1547,6 +1621,10 @@ function Hud({
   travelSpeed,
   cameraMode,
   approachLevel,
+  explorerId,
+  explorerAutoRotate,
+  explorerAxis,
+  explorerGrid,
   selectedId,
   showLabels,
   showOrbits,
@@ -1561,6 +1639,11 @@ function Hud({
   setGalacticMotion,
   onSelectBody,
   onApproachChange,
+  onEnterExplorer,
+  onExitExplorer,
+  onExplorerAutoRotateChange,
+  onExplorerAxisChange,
+  onExplorerGridChange,
   onSystemView,
   onSunView,
   onFreeView,
@@ -1571,6 +1654,10 @@ function Hud({
   travelSpeed: number
   cameraMode: HeliosCameraMode
   approachLevel: HeliosApproachLevel
+  explorerId: PlanetExplorerId | null
+  explorerAutoRotate: boolean
+  explorerAxis: boolean
+  explorerGrid: boolean
   selectedId: HeliosBodyId | null
   showLabels: boolean
   showOrbits: boolean
@@ -1585,6 +1672,11 @@ function Hud({
   setGalacticMotion: (value: boolean) => void
   onSelectBody: (id: HeliosBodyId) => void
   onApproachChange: (level: HeliosApproachLevel) => void
+  onEnterExplorer: () => void
+  onExitExplorer: () => void
+  onExplorerAutoRotateChange: (value: boolean) => void
+  onExplorerAxisChange: (value: boolean) => void
+  onExplorerGridChange: (value: boolean) => void
   onSystemView: () => void
   onSunView: () => void
   onFreeView: () => void
@@ -1626,7 +1718,7 @@ function Hud({
           <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[.15em] text-orange-200/70">{copy.subtitle}</p>
           <p className="mt-1 text-[9px] font-bold uppercase tracking-[.12em] text-cyan-200/60">{copy.controls.motionFrame}</p>
         </div>
-        <div className="hidden gap-1.5 xl:flex">
+        {!explorerId ? <div className="hidden gap-1.5 xl:flex">
           <Toggle pressed={showOrbits} label={copy.controls.orbits} onClick={() => setShowOrbits(!showOrbits)}>
             <Spline className="size-4"/>
           </Toggle>
@@ -1642,7 +1734,7 @@ function Hud({
           <Toggle pressed={cameraMode === 'system'} label={copy.controls.cameraSystem} onClick={onSystemView}>
             <Crosshair className="size-4"/>
           </Toggle>
-        </div>
+        </div> : <div className="hidden rounded-xl border border-cyan-300/15 bg-cyan-400/[.06] px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] text-cyan-100 xl:block">{copy.controls.explorerActive}</div>}
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-black/55 p-3 backdrop-blur-xl md:w-[20rem]">
@@ -1768,7 +1860,7 @@ function Hud({
       </div>
     </header>
 
-    <div className="pointer-events-auto absolute bottom-[4.1rem] left-3 flex gap-1.5 xl:hidden">
+    {!explorerId ? <div className="pointer-events-auto absolute bottom-[4.1rem] left-3 flex gap-1.5 xl:hidden">
       <Toggle pressed={showOrbits} label={copy.controls.orbits} onClick={() => setShowOrbits(!showOrbits)}>
         <Spline className="size-4"/>
       </Toggle>
@@ -1784,7 +1876,7 @@ function Hud({
       <Toggle pressed={cameraMode === 'system'} label={copy.controls.cameraSystem} onClick={onSystemView}>
         <Crosshair className="size-4"/>
       </Toggle>
-    </div>
+    </div> : null}
 
     <nav className="pointer-events-auto absolute bottom-2 left-0 right-0 px-3 md:bottom-4 md:px-5">
       <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1794,7 +1886,11 @@ function Hud({
           return <button
             key={id}
             type="button"
-            onClick={() => active ? onSystemView() : onSelectBody(id)}
+            onClick={() => {
+              if (active && explorerId) return
+              if (active) onSystemView()
+              else onSelectBody(id)
+            }}
             className={active
               ? 'flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-xs font-black text-black shadow-lg'
               : 'flex h-10 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3.5 text-xs font-bold text-zinc-300 backdrop-blur-xl hover:bg-white/10'}
@@ -1811,7 +1907,16 @@ function Hud({
       locale={locale}
       id={selectedId}
       approachLevel={approachLevel}
+      explorerActive={explorerId === selectedId}
+      explorerAutoRotate={explorerAutoRotate}
+      explorerAxis={explorerAxis}
+      explorerGrid={explorerGrid}
       onApproachChange={onApproachChange}
+      onEnterExplorer={onEnterExplorer}
+      onExitExplorer={onExitExplorer}
+      onExplorerAutoRotateChange={onExplorerAutoRotateChange}
+      onExplorerAxisChange={onExplorerAxisChange}
+      onExplorerGridChange={onExplorerGridChange}
       onClose={onSystemView}
     /> : null}
   </div>
