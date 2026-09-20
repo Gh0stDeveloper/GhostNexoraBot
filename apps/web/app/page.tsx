@@ -107,15 +107,17 @@ export default async function Home() {
     [PLATFORM_BRANDS.linux, dt('platform.appimage'), 'AppImage · x64', has('appimage')],
   ] as const
 
+  const nexoraGroup = 'NEXORA'
+  const projectsGroup = locale === 'en' ? 'PROJECTS' : 'PROYECTOS'
   const publicNavigation: UnifiedNavItem[] = [
-    { id: 'home', label: t('home.nav.home'), href: '#inicio', icon: 'home', active: true },
-    { id: 'downloads', label: dt('nav'), href: '#descargas', icon: 'download' },
-    { id: 'commands', label: t('home.nav.commands'), href: '#comandos', icon: 'activity' },
-    { id: 'operation', label: t('home.nav.operation'), href: '#funcionamiento', icon: 'flow' },
-    { id: 'architecture', label: t('home.nav.architecture'), href: '#arquitectura', icon: 'activity' },
-    { id: 'modules', label: t('home.nav.modules'), href: '#modulos', icon: 'modules' },
-    { id: 'fourth-dimension', label: locale === 'en' ? 'Fourth dimension' : 'Cuarta dimensión', href: '/cuarta-dimension', icon: 'activity' },
-    { id: 'security', label: t('home.nav.security'), href: '#seguridad', icon: 'security' },
+    { id: 'home', label: t('home.nav.home'), href: '#inicio', icon: 'home', active: true, group: nexoraGroup },
+    { id: 'downloads', label: dt('nav'), href: '#descargas', icon: 'download', group: nexoraGroup },
+    { id: 'commands', label: t('home.nav.commands'), href: '#comandos', icon: 'activity', group: nexoraGroup },
+    { id: 'operation', label: t('home.nav.operation'), href: '#funcionamiento', icon: 'flow', group: nexoraGroup },
+    { id: 'architecture', label: t('home.nav.architecture'), href: '#arquitectura', icon: 'activity', group: nexoraGroup },
+    { id: 'modules', label: t('home.nav.modules'), href: '#modulos', icon: 'modules', group: nexoraGroup },
+    { id: 'security', label: t('home.nav.security'), href: '#seguridad', icon: 'security', group: nexoraGroup },
+    { id: 'fourth-dimension', label: locale === 'en' ? 'Fourth dimension' : 'Cuarta dimensión', href: '/cuarta-dimension', icon: 'activity', group: projectsGroup },
   ]
 
   return <main className="ops-shell">

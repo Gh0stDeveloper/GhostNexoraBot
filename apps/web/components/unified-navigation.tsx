@@ -57,6 +57,7 @@ export type UnifiedNavItem = {
   href: string
   icon: UnifiedNavIcon
   active?: boolean
+  group?: string
 }
 
 const icons: Record<UnifiedNavIcon, LucideIcon> = {
@@ -85,21 +86,27 @@ const icons: Record<UnifiedNavIcon, LucideIcon> = {
 
 function NavigationList({ items, close, ariaLabel, hash }: { items: UnifiedNavItem[]; close?: () => void; ariaLabel: string; hash: string }) {
   return <nav className="ops-sidebar-nav" aria-label={ariaLabel}>
-    {items.map((item) => {
+    {items.map((item, index) => {
       const Icon = icons[item.icon]
       const anchorActive = item.href.startsWith('#')
         ? (hash ? item.href === hash : item.id === 'home')
         : item.active
-      return <a
-        key={item.id}
-        href={item.href}
-        onClick={close}
-        aria-current={anchorActive ? 'page' : undefined}
-        className={anchorActive ? 'ops-sidebar-link ops-sidebar-link-active' : 'ops-sidebar-link'}
-      >
-        <Icon className="size-4 shrink-0"/>
-        <span className="truncate">{item.label}</span>
-      </a>
+      const previousGroup = index > 0 ? items[index - 1]?.group : undefined
+      const showGroup = Boolean(item.group && item.group !== previousGroup)
+      return <div key={item.id} className="min-w-0">
+        {showGroup ? <div className={index ? 'px-2 pb-1 pt-5' : 'px-2 pb-1 pt-1'}>
+          <span className="font-mono text-[9px] font-black uppercase tracking-[.18em] text-zinc-600">{item.group}</span>
+        </div> : null}
+        <a
+          href={item.href}
+          onClick={close}
+          aria-current={anchorActive ? 'page' : undefined}
+          className={anchorActive ? 'ops-sidebar-link ops-sidebar-link-active' : 'ops-sidebar-link'}
+        >
+          <Icon className="size-4 shrink-0"/>
+          <span className="truncate">{item.label}</span>
+        </a>
+      </div>
     })}
   </nav>
 }
@@ -133,7 +140,7 @@ export function UnifiedNavigation({
   const searchRef = useRef<HTMLInputElement | null>(null)
   const filteredItems = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    return needle ? items.filter((item) => item.label.toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle)) : items
+    return needle ? items.filter((item) => item.label.toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle) || item.group?.toLowerCase().includes(needle)) : items
   }, [items, query])
 
   useEffect(() => {
@@ -258,7 +265,10 @@ export function UnifiedNavigation({
             const Icon = icons[item.icon]
             return <a key={item.id} href={item.href} className="ops-command-result" onClick={() => setPaletteOpen(false)}>
               <span className="ops-command-result-icon"><Icon className="size-4"/></span>
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{item.label}</span>
+                {item.group ? <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[.12em] text-zinc-600">{item.group}</span> : null}
+              </span>
               {item.active ? <span className="ops-badge-good">{t('nav.current')}</span> : null}
             </a>
           }) : <div className="ops-empty-state compact">
