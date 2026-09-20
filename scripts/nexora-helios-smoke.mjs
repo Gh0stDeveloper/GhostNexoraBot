@@ -80,7 +80,7 @@ assert.match(experience, /function ExplorerLighting/, 'Phase 4 solar-direction e
 assert.match(experience, /function ExplorerGuides/, 'Phase 4 planetary axis and grid guides missing')
 assert.match(experience, /sphereGeometry args=\{\[body\.visualRadius, 96, 96\]\}/, 'Phase 4 higher-detail explorer geometry missing')
 assert.match(experience, /explorerId \? <PlanetExplorerStage/, 'Phase 4 must isolate the selected body from the orbital scene')
-assert.match(experience, /visible=\{showLabels && !explorerId\}/, 'Phase 4 must hide orbital labels during Planet Explorer')
+assert.match(experience, /visible=\{showLabels && !explorerId && !surfaceId\}/, 'Phase 4/5 must hide orbital labels during Planet or Surface Explorer')
 assert.match(experience, /setExplorerId/, 'Phase 4 Planet Explorer state transitions missing')
 assert.match(copy, /enterPlanetExplorer: 'Abrir Planet Explorer'/, 'Phase 4 Spanish Planet Explorer copy missing')
 assert.match(copy, /enterPlanetExplorer: 'Open Planet Explorer'/, 'Phase 4 English Planet Explorer copy missing')
