@@ -11,6 +11,7 @@ const menuRegistry = read('apps/bot/src/services/menu-registry.ts')
 const menu = read('apps/bot/src/commands/menu-v5.ts')
 const search = read('apps/bot/src/commands/command-search.ts')
 const discord = read('apps/bot/src/platform/discord/router.ts')
+const discordApplicationCommands = read('apps/bot/src/platform/discord/application-commands.ts')
 const telegram = read('apps/bot/src/platform/telegram/router.ts')
 const audit = read('apps/bot/src/services/performance-audit.ts')
 const webOps = read('apps/web/lib/ops.ts')
@@ -29,7 +30,6 @@ for (const symbol of [
   'platformCommandMetadata',
   'commandMetadataForPlatformToken',
   'commandMetadataVisibleTo',
-  'discordSlashCommandTokens',
 ]) {
   assert.ok(metadata.includes(symbol), `B3 central metadata symbol missing: ${symbol}`)
 }
@@ -42,11 +42,12 @@ assert.match(menuRegistry, /effectiveCommandMetadata/, 'Menu registry must expos
 assert.match(menu, /effectiveCommandMetadata\(\)/, 'WhatsApp menu must consume B3 metadata')
 assert.match(search, /effectiveCommandMetadata\(\)/, 'Command search/help must consume B3 metadata')
 
-assert.match(discord, /discordSlashCommandTokens\(\)/, 'Discord slash definitions must be sourced from B3 metadata')
-assert.match(discord, /commandMetadataForPlatformToken\('discord'/, 'Discord slash metadata lookup missing')
+assert.match(discordApplicationCommands, /platformCommandMetadata\('discord'\)/, 'Discord slash definitions must be sourced from B3 metadata')
+assert.match(discordApplicationCommands, /metadata\.discoverable/, 'Discord slash generation must respect B3 discoverability')
+assert.match(discordApplicationCommands, /metadata\.arguments/, 'Discord slash options must be generated from B3 arguments')
 assert.match(discord, /platformCommandMetadata\('discord'\)/, 'Discord help must be generated from B3 metadata')
-assert.match(discord, /description_localizations/, 'Discord slash descriptions must preserve localized metadata')
-assert.match(discord, /'en-US'/, 'Discord slash descriptions must expose English localization')
+assert.match(discordApplicationCommands, /description_localizations/, 'Discord slash descriptions must preserve localized metadata')
+assert.match(discordApplicationCommands, /'en-US'/, 'Discord slash descriptions must expose English localization')
 assert.match(discord, /metadata\.descriptionKey \? translate\(locale, metadata\.descriptionKey\)/, 'Discord help must localize B3 descriptions')
 assert.match(telegram, /platformCommandMetadata\('telegram'\)/, 'Telegram help must be generated from B3 metadata')
 assert.match(telegram, /metadata\.descriptionKey \? translate\(locale, metadata\.descriptionKey\)/, 'Telegram help must localize B3 descriptions')

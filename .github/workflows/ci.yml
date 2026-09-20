@@ -62,6 +62,9 @@ jobs:
       - name: Phase B5 immutable RequestContext smoke
         run: node scripts/phase-b5-request-context-smoke.mjs
 
+      - name: Phase C1 generated Discord slash commands smoke
+        run: node scripts/phase-c1-discord-slash-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 
