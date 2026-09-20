@@ -1237,10 +1237,14 @@ function Toggle({
 function BodyInfo({
   locale,
   id,
+  approachLevel,
+  onApproachChange,
   onClose,
 }: {
   locale: NexoraHeliosLocale
   id: HeliosBodyId
+  approachLevel: HeliosApproachLevel
+  onApproachChange: (level: HeliosApproachLevel) => void
   onClose: () => void
 }) {
   const copy = nexoraHeliosCopy[locale]
@@ -1288,6 +1292,50 @@ function BodyInfo({
     </div>
 
     <p className="mt-3 text-sm leading-6 text-zinc-300">{bodyCopy.blurb}</p>
+
+    <div className="mt-4 rounded-xl border border-white/[.08] bg-white/[.035] p-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">{copy.controls.approach}</p>
+        <span className="text-[9px] font-bold uppercase tracking-[.1em] text-cyan-300/80">{copy.controls.cameraFlight}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        {([
+          ['orbit', copy.controls.approachOrbit],
+          ['close', copy.controls.approachClose],
+          ['inspect', copy.controls.approachInspect],
+        ] as const).map(([level, label]) => <button
+          key={level}
+          type="button"
+          aria-pressed={approachLevel === level}
+          onClick={() => onApproachChange(level)}
+          className={approachLevel === level
+            ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+            : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400 hover:text-white'}
+        >
+          {label}
+        </button>)}
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        <button
+          type="button"
+          disabled={approachLevel === 'orbit'}
+          onClick={() => onApproachChange(approachLevel === 'inspect' ? 'close' : 'orbit')}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-white/[.08] px-2 py-2 text-[10px] font-bold text-zinc-300 disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <ZoomOut className="size-3.5"/>{copy.controls.approachFarther}
+        </button>
+        <button
+          type="button"
+          disabled={approachLevel === 'inspect'}
+          onClick={() => onApproachChange(approachLevel === 'orbit' ? 'close' : 'inspect')}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-cyan-300/15 bg-cyan-400/[.06] px-2 py-2 text-[10px] font-bold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <ZoomIn className="size-3.5"/>{copy.controls.approachCloser}
+        </button>
+      </div>
+      {approachLevel === 'inspect' ? <p className="mt-2 text-[10px] leading-4 text-zinc-500">{copy.controls.closeViewNote}</p> : null}
+    </div>
+
     <dl className="mt-4 space-y-2">
       {rows.map(([key, value]) => <div key={key} className="flex items-baseline justify-between gap-4 border-t border-white/[.07] pt-2">
         <dt className="text-[11px] text-zinc-500">{key}</dt>
@@ -1560,7 +1608,13 @@ function Hud({
       <p className="mx-auto mt-2 hidden max-w-6xl text-center text-[10px] font-medium tracking-wide text-zinc-500 md:block">{copy.controls.instructions}</p>
     </nav>
 
-    {selectedId ? <BodyInfo locale={locale} id={selectedId} onClose={onSystemView}/> : null}
+    {selectedId ? <BodyInfo
+      locale={locale}
+      id={selectedId}
+      approachLevel={approachLevel}
+      onApproachChange={changeApproach}
+      onClose={onSystemView}
+    /> : null}
   </div>
 }
 
@@ -1569,6 +1623,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   const [speed, setSpeed] = useState(SPEED_DEFAULT)
   const [travelSpeed, setTravelSpeed] = useState(TRAVEL_SPEED_DEFAULT)
   const [cameraMode, setCameraMode] = useState<HeliosCameraMode>('system')
+  const [approachLevel, setApproachLevel] = useState<HeliosApproachLevel>('orbit')
   const [selectedId, setSelectedId] = useState<HeliosBodyId | null>(null)
   const [hoveredId, setHoveredId] = useState<HeliosBodyId | null>(null)
   const [showLabels, setShowLabels] = useState(true)
@@ -1578,21 +1633,31 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
   const selectBody = (id: HeliosBodyId) => {
     setSelectedId(id)
+    setApproachLevel('orbit')
     setCameraMode(id === 'sun' ? 'sun' : 'body')
+  }
+
+  const changeApproach = (level: HeliosApproachLevel) => {
+    if (!selectedId) return
+    setApproachLevel(level)
+    setCameraMode(selectedId === 'sun' ? 'sun' : 'body')
   }
 
   const showSystem = () => {
     setSelectedId(null)
+    setApproachLevel('orbit')
     setCameraMode('system')
   }
 
   const showSun = () => {
     setSelectedId('sun')
+    setApproachLevel('orbit')
     setCameraMode('sun')
   }
 
   const showFree = () => {
     setSelectedId(null)
+    setApproachLevel('orbit')
     setCameraMode('free')
   }
 
@@ -1612,6 +1677,10 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       } else if (event.key >= '1' && event.key <= '8') {
         setSelectedId(HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null)
         setCameraMode('body')
+      } else if (event.key === ']' && selectedId) {
+        setApproachLevel((value) => value === 'orbit' ? 'close' : 'inspect')
+      } else if (event.key === '[' && selectedId) {
+        setApproachLevel((value) => value === 'inspect' ? 'close' : 'orbit')
       } else if (event.key === '+' || event.key === '=') {
         setSpeed((value) => Math.min(SPEED_MAX, value * 1.6))
       } else if (event.key === '-' || event.key === '_') {
@@ -1629,6 +1698,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       speed={speed}
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
+      approachLevel={approachLevel}
       selectedId={selectedId}
       showOrbits={showOrbits}
       showTrails={showTrails}
