@@ -13,9 +13,10 @@ import {
   Square,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { fourthDimensionExplorerCopy, type FourthDimensionLocale } from '../lib/fourth-dimension-i18n'
 
 type Point4 = readonly [number, number, number, number]
-type Locale = 'es' | 'en'
+type Locale = FourthDimensionLocale
 type ExplorerMode = 'explorer' | 'journey'
 
 const VERTICES: readonly Point4[] = [
@@ -31,65 +32,6 @@ const EDGES: readonly (readonly [number, number])[] = [
   [12, 13], [13, 14], [14, 15], [15, 12], [8, 12], [9, 13], [10, 14], [11, 15],
   [0, 8], [1, 9], [2, 10], [3, 11], [4, 12], [5, 13], [6, 14], [7, 15],
 ]
-
-const ui = {
-  es: {
-    projection: 'Proyección 4D → 3D → 2D',
-    live: 'EN TIEMPO REAL',
-    pause: 'Pausar',
-    resume: 'Reanudar',
-    reset: 'Restablecer',
-    wRotation: 'Rotación W',
-    speed: 'Velocidad',
-    vertices: 'Vértices',
-    edges: 'Aristas',
-    faces: 'Caras 2D',
-    cells: 'Celdas 3D',
-    calculator: 'Calculadora del hipercubo',
-    size: 'Tamaño de arista',
-    hypervolume: 'Hipervolumen',
-    surfaceVolume: 'Volumen superficial 3D',
-    formula: 'Para arista a: V₄ = a⁴ y volumen superficial = 8a³.',
-    dimension: 'Dimensión',
-    previous: 'Anterior',
-    next: 'Siguiente',
-    dimensions: [
-      ['0D', 'El punto', 'No tiene longitud, área ni volumen. Solo representa una posición.'],
-      ['1D', 'La línea', 'Añade longitud: un grado de libertad a lo largo de un eje.'],
-      ['2D', 'El plano', 'Añade anchura. Ahora aparecen superficies con área.'],
-      ['3D', 'Nuestro espacio', 'Añade profundidad y permite objetos con volumen.'],
-      ['4D', 'Hiperespacio', 'Añade una coordenada W independiente de x, y y z en el modelo matemático.'],
-    ],
-  },
-  en: {
-    projection: '4D → 3D → 2D projection',
-    live: 'REAL TIME',
-    pause: 'Pause',
-    resume: 'Resume',
-    reset: 'Reset',
-    wRotation: 'W rotation',
-    speed: 'Speed',
-    vertices: 'Vertices',
-    edges: 'Edges',
-    faces: '2D faces',
-    cells: '3D cells',
-    calculator: 'Hypercube calculator',
-    size: 'Edge size',
-    hypervolume: 'Hypervolume',
-    surfaceVolume: '3D surface volume',
-    formula: 'For edge a: V₄ = a⁴ and surface volume = 8a³.',
-    dimension: 'Dimension',
-    previous: 'Previous',
-    next: 'Next',
-    dimensions: [
-      ['0D', 'The point', 'It has no length, area or volume. It only represents a position.'],
-      ['1D', 'The line', 'Adds length: one degree of freedom along an axis.'],
-      ['2D', 'The plane', 'Adds width. Surfaces with area now appear.'],
-      ['3D', 'Our space', 'Adds depth and allows objects with volume.'],
-      ['4D', 'Hyperspace', 'Adds a W coordinate independent from x, y and z in the mathematical model.'],
-    ],
-  },
-} as const
 
 function rotate2D(a: number, b: number, angle: number): [number, number] {
   const cosine = Math.cos(angle)
@@ -121,10 +63,12 @@ function TesseractCanvas({
   paused,
   speed,
   wDegrees,
+  ariaLabel,
 }: {
   paused: boolean
   speed: number
   wDegrees: number
+  ariaLabel: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const angleRef = useRef(0)
@@ -211,12 +155,12 @@ function TesseractCanvas({
   return <canvas
     ref={canvasRef}
     className="h-[360px] w-full rounded-xl border border-white/[.07] bg-[#09090b] sm:h-[460px] lg:h-[560px]"
-    aria-label="Interactive tesseract projection"
+    aria-label={ariaLabel}
   />
 }
 
 function HypercubeCalculator({ locale }: { locale: Locale }) {
-  const t = ui[locale]
+  const t = fourthDimensionExplorerCopy[locale]
   const [size, setSize] = useState(1)
   const safeSize = Number.isFinite(size) && size > 0 ? size : 0
   const volume = safeSize ** 4
@@ -260,7 +204,7 @@ function HypercubeCalculator({ locale }: { locale: Locale }) {
 }
 
 function Explorer({ locale }: { locale: Locale }) {
-  const t = ui[locale]
+  const t = fourthDimensionExplorerCopy[locale]
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(1)
   const [wDegrees, setWDegrees] = useState(22)
@@ -300,7 +244,7 @@ function Explorer({ locale }: { locale: Locale }) {
       </div>
 
       <div className="p-3 md:p-5">
-        <TesseractCanvas key={key} paused={paused} speed={speed} wDegrees={wDegrees}/>
+        <TesseractCanvas key={key} paused={paused} speed={speed} wDegrees={wDegrees} ariaLabel={t.canvasLabel}/>
       </div>
 
       <div className="grid gap-3 border-t border-white/[.07] p-5 md:grid-cols-2">
@@ -389,7 +333,7 @@ function DimensionGlyph({ index }: { index: number }) {
 }
 
 function Journey({ locale }: { locale: Locale }) {
-  const t = ui[locale]
+  const t = fourthDimensionExplorerCopy[locale]
   const [dimension, setDimension] = useState(0)
   const current = t.dimensions[dimension]
   const progress = useMemo(() => dimension / (t.dimensions.length - 1) * 100, [dimension, t.dimensions.length])
