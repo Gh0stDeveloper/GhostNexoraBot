@@ -43,6 +43,21 @@ export const HELIOS_AU_KM = 149_597_870.7
 export const HELIOS_AU_SCALE = 24
 export const HELIOS_DISTANCE_EXPONENT = 0.52
 
+export const HELIOS_SYSTEM_TRAVEL_DIRECTION = [0.72, 0.16, -0.675] as const
+export const HELIOS_SYSTEM_TRAVEL_UNITS_PER_SECOND = 2.35
+
+export function heliosSystemOffset(
+  travelSeconds: number,
+  travelMultiplier = 1,
+): [number, number, number] {
+  const distance = Math.max(0, travelSeconds) * HELIOS_SYSTEM_TRAVEL_UNITS_PER_SECOND * Math.max(0, travelMultiplier)
+  return [
+    HELIOS_SYSTEM_TRAVEL_DIRECTION[0] * distance,
+    HELIOS_SYSTEM_TRAVEL_DIRECTION[1] * distance,
+    HELIOS_SYSTEM_TRAVEL_DIRECTION[2] * distance,
+  ]
+}
+
 export const HELIOS_SUN: HeliosBody = {
   id: 'sun',
   rotationDays: 25.38,
