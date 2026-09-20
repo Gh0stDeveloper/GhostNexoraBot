@@ -480,7 +480,7 @@ Eliminar routers mantenidos manualmente cuando sea posible y generar la experien
 
 ## C1. Slash commands de Discord generados automáticamente
 
-Estado: EN VALIDACIÓN
+Estado: TERMINADO
 
 Generar discordApplicationCommands desde el catálogo central.
 
@@ -504,7 +504,16 @@ Implementación C1 en validación:
 - gate dedicado: `scripts/phase-c1-discord-slash-metadata-smoke.mjs`;
 - documentación: `docs/v2/PHASE_C1.md`.
 
-C1 se marcará TERMINADO únicamente después de validar el PR en GitHub Actions y fusionarlo a `main`.
+Validación C1:
+
+- CI principal #3128: success;
+- Typecheck y Build: success;
+- regresiones B1, B2, B3, B4 y B5: success;
+- smoke C1: success;
+- V2 Discord Phase 5: success;
+- PR de cierre: #87 `feat: complete Phase C1 metadata-driven Discord slash commands`.
+
+Siguiente subfase: C2 — Aliases centralizados.
 
 ## C2. Aliases centralizados
 
