@@ -51,6 +51,17 @@ assert.match(experience, /DeepSpaceColorField/, 'Phase 1 colored deep-space fiel
 assert.match(experience, /bumpMap=\{bumpMap \?\? undefined\}/, 'Phase 1 relief map is not connected to planet materials')
 assert.match(experience, /toneMappingExposure: 1\.28/, 'Phase 1 filmic exposure tuning missing')
 
+assert.match(model, /HELIOS_SYSTEM_TRAVEL_DIRECTION/, 'Phase 2 system travel direction missing')
+assert.match(model, /heliosSystemOffset/, 'Phase 2 directional system offset missing')
+assert.match(experience, /function WorldTrailLine/, 'Phase 2 world-space planet trajectories missing')
+assert.match(experience, /\[HELIOS_SUN, \.\.\.HELIOS_PLANETS\]/, 'Phase 2 Sun trajectory must be rendered with planet trajectories')
+assert.match(experience, /type HeliosCameraMode = 'system' \| 'sun' \| 'body' \| 'free'/, 'Phase 2 camera modes missing')
+assert.match(experience, /cameraMode === 'system'/, 'Phase 2 system-follow camera control missing')
+assert.match(experience, /cameraMode === 'free'/, 'Phase 2 free camera control missing')
+assert.match(experience, /travelSpeed/, 'Phase 2 independent travel speed missing')
+assert.match(experience, /runtime\.travelSeconds \+= step \* travelSpeed/, 'Phase 2 travel speed must integrate continuously')
+assert.doesNotMatch(experience, /Math\.sin\(time \* 0\.045\)/, 'Legacy decorative system wobble must not remain in Phase 2')
+
 const migratedSource = [page, experience, model, textures, copy].join('\n').toLowerCase()
 assert.doesNotMatch(migratedSource, /grok|xai|__grok/, 'Nexora Helios must not include Grok/xAI branding or platform references')
 assert.doesNotMatch(experience, /dangerouslySetInnerHTML|\beval\s*\(/, 'Nexora Helios must not inject raw HTML or evaluate arbitrary code')
