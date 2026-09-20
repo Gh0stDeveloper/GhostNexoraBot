@@ -110,6 +110,9 @@ jobs:
       - name: Phase E14 visual polish smoke
         run: node scripts/phase-e14-visual-polish-smoke.mjs
 
+      - name: Projects menu and Fourth Dimension suite smoke
+        run: node scripts/fourth-dimension-project-smoke.mjs
+
       - name: Adult regular-user access smoke
         run: node scripts/adult-regular-user-access-smoke.mjs
 
