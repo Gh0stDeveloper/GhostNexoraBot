@@ -41,6 +41,11 @@ import {
 } from '../lib/nexora-helios-model'
 import { nexoraHeliosCopy, type NexoraHeliosLocale } from '../lib/nexora-helios-i18n'
 import {
+  hasHeliosSurfaceDataset,
+  type HeliosSurfaceId,
+} from '../lib/nexora-helios-surface-data'
+import { NexoraHeliosSurfaceExplorer } from './nexora-helios-surface-explorer'
+import {
   HELIOS_SUN_CORONA_FRAGMENT_SHADER,
   HELIOS_SUN_CORONA_VERTEX_SHADER,
 } from '../lib/nexora-helios-shaders'
@@ -1443,6 +1448,7 @@ function BodyInfo({
   onExplorerAutoRotateChange,
   onExplorerAxisChange,
   onExplorerGridChange,
+  onEnterSurface,
   onClose,
 }: {
   locale: NexoraHeliosLocale
@@ -1458,11 +1464,13 @@ function BodyInfo({
   onExplorerAutoRotateChange: (value: boolean) => void
   onExplorerAxisChange: (value: boolean) => void
   onExplorerGridChange: (value: boolean) => void
+  onEnterSurface: () => void
   onClose: () => void
 }) {
   const copy = nexoraHeliosCopy[locale]
   const body = HELIOS_BODY_BY_ID[id]
   const bodyCopy = copy.bodies[id]
+  const surfaceAvailable = hasHeliosSurfaceDataset(id)
   const rows: [string, string][] = [
     [copy.stats.class, bodyCopy.type],
     [copy.stats.radius, `${formatNumber(locale, body.radiusKm, 0)} km`],
@@ -1559,6 +1567,17 @@ function BodyInfo({
           </button>
         </div>
         <p className="mt-2 text-[10px] leading-4 text-zinc-500">{copy.controls.explorerSurfaceNext}</p>
+        {surfaceAvailable ? <button
+          type="button"
+          onClick={onEnterSurface}
+          className="mt-3 w-full rounded-xl bg-cyan-100 px-3 py-2.5 text-[10px] font-black uppercase tracking-[.08em] text-black transition hover:bg-white"
+        >
+          {copy.surface.open}
+        </button> : <div className="mt-3 rounded-xl border border-orange-300/10 bg-orange-300/[.04] p-2.5">
+          <p className="text-[9px] font-black uppercase tracking-[.12em] text-orange-200/70">{copy.surface.unavailable}</p>
+          <p className="mt-1 text-[10px] font-semibold leading-4 text-zinc-300">{copy.surface.noSolidSurface}</p>
+          <p className="mt-1 text-[9px] leading-4 text-zinc-500">{copy.surface.noSolidSurfaceDetail}</p>
+        </div>}
       </> : null}
     </div> : null}
 
@@ -1644,6 +1663,7 @@ function Hud({
   onExplorerAutoRotateChange,
   onExplorerAxisChange,
   onExplorerGridChange,
+  onEnterSurface,
   onSystemView,
   onSunView,
   onFreeView,
@@ -1677,6 +1697,7 @@ function Hud({
   onExplorerAutoRotateChange: (value: boolean) => void
   onExplorerAxisChange: (value: boolean) => void
   onExplorerGridChange: (value: boolean) => void
+  onEnterSurface: () => void
   onSystemView: () => void
   onSunView: () => void
   onFreeView: () => void
@@ -1917,6 +1938,7 @@ function Hud({
       onExplorerAutoRotateChange={onExplorerAutoRotateChange}
       onExplorerAxisChange={onExplorerAxisChange}
       onExplorerGridChange={onExplorerGridChange}
+      onEnterSurface={onEnterSurface}
       onClose={onSystemView}
     /> : null}
   </div>
@@ -1929,6 +1951,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   const [cameraMode, setCameraMode] = useState<HeliosCameraMode>('system')
   const [approachLevel, setApproachLevel] = useState<HeliosApproachLevel>('orbit')
   const [explorerId, setExplorerId] = useState<PlanetExplorerId | null>(null)
+  const [surfaceId, setSurfaceId] = useState<HeliosSurfaceId | null>(null)
   const [explorerAutoRotate, setExplorerAutoRotate] = useState(true)
   const [explorerAxis, setExplorerAxis] = useState(false)
   const [explorerGrid, setExplorerGrid] = useState(false)
@@ -1940,6 +1963,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   const [galacticMotion, setGalacticMotion] = useState(true)
 
   const selectBody = (id: HeliosBodyId) => {
+    setSurfaceId(null)
     const keepExplorer = Boolean(explorerId) && id !== 'sun'
     setSelectedId(id)
     setApproachLevel(keepExplorer ? 'close' : 'orbit')
@@ -1956,9 +1980,22 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
   const exitExplorer = () => {
     if (!explorerId) return
+    setSurfaceId(null)
     setExplorerId(null)
     setApproachLevel('orbit')
     setCameraMode('body')
+  }
+
+  const enterSurfaceExplorer = () => {
+    if (!hasHeliosSurfaceDataset(selectedId)) return
+    setExplorerId(selectedId)
+    setApproachLevel('inspect')
+    setCameraMode('body')
+    setSurfaceId(selectedId)
+  }
+
+  const exitSurfaceExplorer = () => {
+    setSurfaceId(null)
   }
 
   const changeApproach = (level: HeliosApproachLevel) => {
@@ -1968,6 +2005,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   }
 
   const showSystem = () => {
+    setSurfaceId(null)
     setExplorerId(null)
     setSelectedId(null)
     setApproachLevel('orbit')
@@ -1975,6 +2013,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   }
 
   const showSun = () => {
+    setSurfaceId(null)
     setExplorerId(null)
     setSelectedId('sun')
     setApproachLevel('orbit')
@@ -1982,6 +2021,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   }
 
   const showFree = () => {
+    setSurfaceId(null)
     setExplorerId(null)
     setSelectedId(null)
     setApproachLevel('orbit')
@@ -1996,7 +2036,9 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
         event.preventDefault()
         setPaused((value) => !value)
       } else if (event.code === 'Escape') {
-        if (explorerId) {
+        if (surfaceId) {
+          setSurfaceId(null)
+        } else if (explorerId) {
           setExplorerId(null)
           setApproachLevel('orbit')
           setCameraMode('body')
@@ -2005,11 +2047,13 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
           setCameraMode('system')
         }
       } else if (event.key === '0') {
+        setSurfaceId(null)
         setExplorerId(null)
         setSelectedId('sun')
         setApproachLevel('orbit')
         setCameraMode('sun')
       } else if (event.key >= '1' && event.key <= '8') {
+        setSurfaceId(null)
         const nextId = HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null
         setSelectedId(nextId)
         if (nextId && explorerId) {
@@ -2032,11 +2076,11 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [explorerId, selectedId])
+  }, [explorerId, selectedId, surfaceId])
 
   return <div className="relative h-[calc(100dvh-4rem)] min-h-[620px] w-full overflow-hidden bg-[#02040a] lg:h-dvh">
     <SolarCanvas
-      paused={paused}
+      paused={paused || Boolean(surfaceId)}
       speed={speed}
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
@@ -2052,7 +2096,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       onSelect={selectBody}
       onHover={setHoveredId}
     />
-    <PlanetLabels locale={locale} visible={showLabels && !explorerId} selectedId={selectedId} hoveredId={hoveredId}/>
+    <PlanetLabels locale={locale} visible={showLabels && !explorerId && !surfaceId} selectedId={selectedId} hoveredId={hoveredId}/>
     <Hud
       locale={locale}
       paused={paused}
@@ -2083,9 +2127,15 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       onExplorerAutoRotateChange={setExplorerAutoRotate}
       onExplorerAxisChange={setExplorerAxis}
       onExplorerGridChange={setExplorerGrid}
+      onEnterSurface={enterSurfaceExplorer}
       onSystemView={showSystem}
       onSunView={showSun}
       onFreeView={showFree}
     />
+    {surfaceId ? <NexoraHeliosSurfaceExplorer
+      locale={locale}
+      id={surfaceId}
+      onClose={exitSurfaceExplorer}
+    /> : null}
   </div>
 }
