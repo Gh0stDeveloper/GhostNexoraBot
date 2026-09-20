@@ -131,6 +131,7 @@ function HitSphere({ radius, id }: { radius: number; id: BodyId }) {
 export function Planet({ body }: { body: BodyDef }) {
   const group = useRef<THREE.Group>(null);
   const spin = useRef<THREE.Group>(null);
+  const cloudSpin = useRef<THREE.Mesh>(null);
   const mapFactory = useMemo(() => () => makePlanetTexture(body.id), [body.id]);
   const cloudFactory = useMemo(
     () => () => (body.id === "earth" ? makeCloudTexture() : null),
@@ -156,6 +157,9 @@ export function Planet({ body }: { body: BodyDef }) {
     const { paused, speed } = useSolar.getState();
     if (!paused && spin.current) {
       spin.current.rotation.y += spinStep(body, speed * d);
+      if (body.id === "earth" && cloudSpin.current) {
+        cloudSpin.current.rotation.y += spinStep(body, speed * d) * 0.035;
+      }
     }
   });
 
@@ -173,8 +177,8 @@ export function Planet({ body }: { body: BodyDef }) {
             />
           </mesh>
           {body.id === "earth" && cloudMap ? (
-            <mesh>
-              <sphereGeometry args={[body.visualRadius * 1.018, 48, 48]} />
+            <mesh ref={cloudSpin}>
+              <sphereGeometry args={[body.visualRadius * 1.018, 64, 64]} />
               <meshStandardMaterial map={cloudMap} transparent depthWrite={false} roughness={1} metalness={0} />
             </mesh>
           ) : null}
