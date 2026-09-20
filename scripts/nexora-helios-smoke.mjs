@@ -34,7 +34,7 @@ assert.match(experience, /GalileanMoons/, 'Galilean moons missing')
 assert.match(experience, /toneMapping: THREE\.ACESFilmicToneMapping/, 'Filmic tone mapping missing')
 
 for (const body of ['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'moon']) {
-  assert.match(copy, new RegExp(`${body}: \\\{`), `Missing localized body copy for ${body}`)
+  assert.ok(copy.includes(`${body}: {`), `Missing localized body copy for ${body}`)
 }
 assert.match(model, /moons: 115/, 'Current Jupiter moon count missing')
 assert.match(model, /moons: 293/, 'Current Saturn moon count missing')
