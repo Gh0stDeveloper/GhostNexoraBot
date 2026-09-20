@@ -113,6 +113,9 @@ jobs:
       - name: Projects menu and Fourth Dimension suite smoke
         run: node scripts/fourth-dimension-project-smoke.mjs
 
+      - name: Nexora Solar Explorer smoke
+        run: node scripts/nexora-solar-explorer-smoke.mjs
+
       - name: Adult regular-user access smoke
         run: node scripts/adult-regular-user-access-smoke.mjs
 
