@@ -118,6 +118,7 @@ export default async function Home() {
     { id: 'modules', label: t('home.nav.modules'), href: '#modulos', icon: 'modules', group: nexoraGroup },
     { id: 'security', label: t('home.nav.security'), href: '#seguridad', icon: 'security', group: nexoraGroup },
     { id: 'fourth-dimension', label: locale === 'en' ? 'Fourth dimension' : 'Cuarta dimensión', href: '/cuarta-dimension', icon: 'activity', group: projectsGroup },
+    { id: 'nexora-helios', label: 'Nexora Helios', href: '/sistema-solar', icon: 'activity', group: projectsGroup },
   ]
 
   return <main className="ops-shell">
