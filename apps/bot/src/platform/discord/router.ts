@@ -20,7 +20,6 @@ import { discordCommandAliases } from '../../services/command-platform-support.j
 import {
   commandMetadataForPlatformToken,
   commandMetadataVisibleTo,
-  discordSlashCommandTokens,
   platformCommandMetadata,
 } from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
@@ -34,7 +33,6 @@ import { discordOwner, discordStaff } from './config.js'
 import { normalizeDiscordMessage } from './normalize.js'
 import type {
   DiscordApplicationCommandData,
-  DiscordApplicationCommandDefinition,
   DiscordComponentInteractionData,
   DiscordInteraction,
   DiscordMessage,
@@ -43,43 +41,6 @@ import type {
 
 const aliases = discordCommandAliases
 const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
-
-function slashDescription(value: string) {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  return (normalized || 'Ghost Nexora Bot command').slice(0, 100)
-}
-
-function localizedSlashDescription(value: string, key?: string) {
-  const es = slashDescription(key ? translate('es', key) : value)
-  const en = slashDescription(key ? translate('en', key) : value)
-  return {
-    description: es,
-    description_localizations: {
-      'en-US': en,
-      'en-GB': en,
-      'es-ES': es,
-      'es-419': es,
-    },
-  }
-}
-
-export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = discordSlashCommandTokens()
-  .flatMap((token): DiscordApplicationCommandDefinition[] => {
-    const metadata = commandMetadataForPlatformToken('discord', token)
-    if (!metadata) return []
-    const options = metadata.arguments.map((argument) => ({
-      type: 3 as const,
-      name: argument.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32),
-      ...localizedSlashDescription(argument.description || argument.name, argument.descriptionKey),
-      required: argument.required === true,
-      ...(argument.maxLength ? { max_length: argument.maxLength } : {}),
-    }))
-    return [{
-      name: token,
-      ...localizedSlashDescription(metadata.description, metadata.descriptionKey),
-      ...(options.length ? { options } : {}),
-    }]
-  })
 
 type Invocation = {
   command: string
