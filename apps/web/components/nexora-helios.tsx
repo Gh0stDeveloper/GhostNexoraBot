@@ -5,12 +5,15 @@ import {
   Eye,
   EyeOff,
   Gauge,
+  MousePointer2,
+  Move3D,
   Orbit,
   Pause,
   Play,
   RotateCcw,
   Sparkles as SparklesIcon,
   Spline,
+  SunMedium,
   X,
 } from 'lucide-react'
 import { AdaptiveDpr, Line, OrbitControls, Sparkles, Stars } from '@react-three/drei'
@@ -29,7 +32,8 @@ import {
   heliosDistanceAu,
   heliosOrbitCurve,
   heliosPosition,
-  heliosTrailCurve,
+  heliosSystemOffset,
+  HELIOS_SYSTEM_TRAVEL_DIRECTION,
   type HeliosBody,
   type HeliosBodyId,
 } from '../lib/nexora-helios-model'
@@ -47,11 +51,14 @@ import {
 } from '../lib/nexora-helios-textures'
 
 type RuntimePosition = { x: number; y: number; z: number }
+type HeliosCameraMode = 'system' | 'sun' | 'body' | 'free'
 
 const runtime = {
   days: heliosDaysSinceJ2000(),
+  travelSeconds: 0,
   camera: null as THREE.Camera | null,
   size: { width: 1, height: 1 },
+  systemPosition: { x: 0, y: 0, z: 0 } as RuntimePosition,
   positions: {} as Partial<Record<HeliosBodyId, RuntimePosition>>,
 }
 
@@ -70,6 +77,10 @@ const NAV_IDS: HeliosBodyId[] = [
 const SPEED_MIN = 0.25
 const SPEED_MAX = 4000
 const SPEED_DEFAULT = 48
+const TRAVEL_SPEED_MIN = 0.25
+const TRAVEL_SPEED_MAX = 3
+const TRAVEL_SPEED_DEFAULT = 1
+const WORLD_TRAIL_SAMPLES = 72
 const OVERVIEW = new THREE.Vector3(36, 58, 188)
 const worldVector = new THREE.Vector3()
 
@@ -495,17 +506,27 @@ function OrbitPaths({ show }: { show: boolean }) {
   </group>
 }
 
-function TrailLine({ body }: { body: HeliosBody }) {
+function WorldTrailLine({
+  body,
+  orbitalSpeed,
+  travelSpeed,
+  galacticMotion,
+}: {
+  body: HeliosBody
+  orbitalSpeed: number
+  travelSpeed: number
+  galacticMotion: boolean
+}) {
   const object = useMemo(() => {
     const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 3), 3))
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(WORLD_TRAIL_SAMPLES * 3), 3))
     const material = new THREE.LineBasicMaterial({
       color: body.color,
       transparent: true,
-      opacity: 0.66,
+      opacity: body.id === 'sun' ? 0.78 : 0.58,
     })
     return new THREE.Line(geometry, material)
-  }, [body.color])
+  }, [body.color, body.id])
 
   useEffect(() => () => {
     object.geometry.dispose()
@@ -513,20 +534,49 @@ function TrailLine({ body }: { body: HeliosBody }) {
   }, [object])
 
   useFrame(() => {
-    if (!body.orbit) return
-    const points = heliosTrailCurve(body.orbit, runtime.days)
     const position = object.geometry.getAttribute('position')
-    points.forEach((point, index) => position.setXYZ(index, point[0], point[1], point[2]))
+    const periodSeconds = body.orbit ? body.orbit.periodDays / Math.max(orbitalSpeed, 0.01) : 18
+    const spanSeconds = Math.min(32, Math.max(10, periodSeconds * 0.62))
+
+    for (let index = 0; index < WORLD_TRAIL_SAMPLES; index += 1) {
+      const ageSeconds = spanSeconds * (1 - index / (WORLD_TRAIL_SAMPLES - 1))
+      const sampleDays = runtime.days - ageSeconds * orbitalSpeed
+      const sampleTravel = Math.max(0, runtime.travelSeconds - ageSeconds)
+      const offset = galacticMotion ? heliosSystemOffset(sampleTravel, travelSpeed) : [0, 0, 0] as const
+      const local = body.orbit ? heliosPosition(body.orbit, sampleDays) : [0, 0, 0] as const
+      position.setXYZ(
+        index,
+        local[0] + offset[0],
+        local[1] + offset[1],
+        local[2] + offset[2],
+      )
+    }
     position.needsUpdate = true
   })
 
   return <primitive object={object}/>
 }
 
-function Trails({ show }: { show: boolean }) {
+function WorldTrails({
+  show,
+  orbitalSpeed,
+  travelSpeed,
+  galacticMotion,
+}: {
+  show: boolean
+  orbitalSpeed: number
+  travelSpeed: number
+  galacticMotion: boolean
+}) {
   if (!show) return null
   return <group>
-    {HELIOS_PLANETS.map((body) => <TrailLine key={body.id} body={body}/>)}
+    {[HELIOS_SUN, ...HELIOS_PLANETS].map((body) => <WorldTrailLine
+      key={body.id}
+      body={body}
+      orbitalSpeed={orbitalSpeed}
+      travelSpeed={travelSpeed}
+      galacticMotion={galacticMotion}
+    />)}
   </group>
 }
 
@@ -722,10 +772,18 @@ function GalacticStarFlow({ enabled }: { enabled: boolean }) {
   useFrame((_, delta) => {
     if (!enabled) return
     const position = object.geometry.getAttribute('position')
+    const velocity = delta * 16
     for (let index = 0; index < position.count; index += 1) {
-      let z = position.getZ(index) + delta * 18
-      if (z > 380) z = -380
-      position.setZ(index, z)
+      let x = position.getX(index) - HELIOS_SYSTEM_TRAVEL_DIRECTION[0] * velocity
+      let y = position.getY(index) - HELIOS_SYSTEM_TRAVEL_DIRECTION[1] * velocity
+      let z = position.getZ(index) - HELIOS_SYSTEM_TRAVEL_DIRECTION[2] * velocity
+      if (x < -180) x += 360
+      if (x > 180) x -= 360
+      if (y < -110) y += 220
+      if (y > 110) y -= 220
+      if (z < -380) z += 760
+      if (z > 380) z -= 760
+      position.setXYZ(index, x, y, z)
     }
     position.needsUpdate = true
   })
@@ -735,30 +793,26 @@ function GalacticStarFlow({ enabled }: { enabled: boolean }) {
 
 function SystemMotion({
   enabled,
+  travelSpeed,
   children,
 }: {
   enabled: boolean
+  travelSpeed: number
   children: React.ReactNode
 }) {
   const group = useRef<THREE.Group>(null)
+  const target = useMemo(() => new THREE.Vector3(), [])
 
-  useFrame(({ clock }) => {
+  useFrame((_, delta) => {
     if (!group.current) return
-    const time = clock.getElapsedTime()
-    if (enabled) {
-      group.current.position.set(
-        Math.sin(time * 0.045) * 6.5,
-        Math.sin(time * 0.027) * 1.8,
-        Math.cos(time * 0.04) * 4.8,
-      )
-      group.current.rotation.y = time * 0.012
-      group.current.rotation.z = Math.sin(time * 0.021) * 0.045
-      group.current.rotation.x = Math.sin(time * 0.017) * 0.02
-    } else {
-      group.current.position.lerp(new THREE.Vector3(0, 0, 0), 0.06)
-      group.current.rotation.y *= 0.94
-      group.current.rotation.z *= 0.94
-      group.current.rotation.x *= 0.94
+    const offset = enabled ? heliosSystemOffset(runtime.travelSeconds, travelSpeed) : [0, 0, 0] as const
+    target.set(offset[0], offset[1], offset[2])
+    const amount = 1 - Math.exp(-4.5 * Math.min(delta, 0.1))
+    group.current.position.lerp(target, amount)
+    runtime.systemPosition = {
+      x: group.current.position.x,
+      y: group.current.position.y,
+      z: group.current.position.z,
     }
   })
 
@@ -767,15 +821,21 @@ function SystemMotion({
 
 function RuntimeSync({
   paused,
-  speed,
+  orbitalSpeed,
+  galacticMotion,
 }: {
   paused: boolean
-  speed: number
+  orbitalSpeed: number
+  galacticMotion: boolean
 }) {
   const { camera, size } = useThree()
 
   useFrame((_, delta) => {
-    if (!paused) runtime.days += speed * Math.min(delta, 0.1)
+    const step = Math.min(delta, 0.1)
+    if (!paused) {
+      runtime.days += orbitalSpeed * step
+      if (galacticMotion) runtime.travelSeconds += step
+    }
     runtime.camera = camera
     runtime.size.width = size.width
     runtime.size.height = size.height
