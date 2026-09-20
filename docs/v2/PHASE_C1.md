@@ -1,6 +1,6 @@
 # Phase C1 — Slash commands de Discord desde metadata central
 
-Estado: EN VALIDACIÓN
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -25,7 +25,7 @@ Gate dedicado: `scripts/phase-c1-discord-slash-metadata-smoke.mjs`.
 
 El gate comprueba fuente de verdad central, discoverability, aliases, colisiones, i18n, argumentos, compatibilidad message commands, SharedCommandEngine y RequestContext. CI también ejecuta Typecheck, Build y los gates B1–B5.
 
-C1 solo se marcará TERMINADO después de que el PR quede verde y sea fusionado a `main`.
+C1 quedó validado con CI principal #3128 en verde: Typecheck, Build, regresiones B1–B5 y smoke C1 pasaron correctamente. El cierre se realiza mediante el PR #87.
 
 ## Siguiente subfase
 
