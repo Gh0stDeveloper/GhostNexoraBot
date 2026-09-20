@@ -35,8 +35,14 @@ import {
 } from '../lib/nexora-helios-model'
 import { nexoraHeliosCopy, type NexoraHeliosLocale } from '../lib/nexora-helios-i18n'
 import {
+  HELIOS_SUN_CORONA_FRAGMENT_SHADER,
+  HELIOS_SUN_CORONA_VERTEX_SHADER,
+} from '../lib/nexora-helios-shaders'
+import {
+  makeHeliosBumpTexture,
   makeHeliosCloudTexture,
   makeHeliosRingTexture,
+  makeHeliosSunDetailTexture,
   makeHeliosTexture,
 } from '../lib/nexora-helios-textures'
 
@@ -146,6 +152,34 @@ function Atmosphere({
   </mesh>
 }
 
+function SunCorona({ radius }: { radius: number }) {
+  const material = useRef<THREE.ShaderMaterial>(null)
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uInner: { value: new THREE.Color('#fff7d8') },
+    uMid: { value: new THREE.Color('#ffca63') },
+    uOuter: { value: new THREE.Color('#ff6b1a') },
+  }), [])
+
+  useFrame(({ clock }) => {
+    if (material.current) material.current.uniforms.uTime.value = clock.getElapsedTime()
+  })
+
+  return <mesh scale={1.22}>
+    <sphereGeometry args={[radius, 48, 48]}/>
+    <shaderMaterial
+      ref={material}
+      uniforms={uniforms}
+      transparent
+      depthWrite={false}
+      blending={THREE.AdditiveBlending}
+      side={THREE.BackSide}
+      vertexShader={HELIOS_SUN_CORONA_VERTEX_SHADER}
+      fragmentShader={HELIOS_SUN_CORONA_FRAGMENT_SHADER}
+    />
+  </mesh>
+}
+
 function FocusRing({ radius, color }: { radius: number; color: string }) {
   const points = useMemo(() => {
     const out: [number, number, number][] = []
@@ -204,7 +238,7 @@ function Sun({
 }) {
   const root = useRef<THREE.Group>(null)
   const spin = useRef<THREE.Mesh>(null)
-  const textureFactory = useMemo(() => () => makeHeliosTexture('sun'), [])
+  const textureFactory = useMemo(() => () => makeHeliosSunDetailTexture(), [])
   const texture = useDeferredTexture(textureFactory)
 
   useFrame((_, delta) => {
@@ -233,24 +267,29 @@ function Sun({
         document.body.style.cursor = ''
       }}
     >
-      <sphereGeometry args={[HELIOS_SUN.visualRadius, 72, 72]}/>
-      <meshBasicMaterial map={texture} color={texture ? '#ffffff' : HELIOS_SUN.color}/>
+      <sphereGeometry args={[HELIOS_SUN.visualRadius, 80, 80]}/>
+      <meshBasicMaterial
+        map={texture}
+        color={texture ? '#fffdf4' : '#fff2c0'}
+        toneMapped={false}
+      />
     </mesh>
 
-    <mesh scale={1.045}>
-      <sphereGeometry args={[HELIOS_SUN.visualRadius, 48, 48]}/>
-      <meshBasicMaterial color="#ff7a18" transparent opacity={0.2} depthWrite={false} blending={THREE.AdditiveBlending}/>
+    <SunCorona radius={HELIOS_SUN.visualRadius}/>
+    <mesh scale={1.055}>
+      <sphereGeometry args={[HELIOS_SUN.visualRadius, 56, 56]}/>
+      <meshBasicMaterial color="#fff0b8" transparent opacity={0.17} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false}/>
     </mesh>
-    <mesh scale={1.13}>
-      <sphereGeometry args={[HELIOS_SUN.visualRadius, 40, 40]}/>
-      <meshBasicMaterial color="#ffb13b" transparent opacity={0.12} depthWrite={false} blending={THREE.AdditiveBlending}/>
+    <mesh scale={1.17}>
+      <sphereGeometry args={[HELIOS_SUN.visualRadius, 44, 44]}/>
+      <meshBasicMaterial color="#ffad42" transparent opacity={0.11} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false}/>
     </mesh>
-    <mesh scale={1.34}>
-      <sphereGeometry args={[HELIOS_SUN.visualRadius, 32, 32]}/>
-      <meshBasicMaterial color="#ffd36b" transparent opacity={0.05} depthWrite={false} blending={THREE.AdditiveBlending}/>
+    <mesh scale={1.42}>
+      <sphereGeometry args={[HELIOS_SUN.visualRadius, 36, 36]}/>
+      <meshBasicMaterial color="#ff6a1a" transparent opacity={0.045} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false}/>
     </mesh>
-    <pointLight color="#fff0bd" intensity={145} distance={650} decay={1.8}/>
-    <pointLight color="#ff8b35" intensity={45} distance={180} decay={1.5}/>
+    <pointLight color="#fff4d6" intensity={168} distance={720} decay={1.78}/>
+    <pointLight color="#ff9d3b" intensity={32} distance={210} decay={1.45}/>
     {selected ? <FocusRing radius={HELIOS_SUN.visualRadius * 1.28} color="#fff2cc"/> : null}
   </group>
 }
@@ -274,9 +313,11 @@ function Planet({
   const spin = useRef<THREE.Group>(null)
   const mapFactory = useMemo(() => () => makeHeliosTexture(body.id), [body.id])
   const cloudFactory = useMemo(() => () => body.id === 'earth' ? makeHeliosCloudTexture() : null, [body.id])
+  const bumpFactory = useMemo(() => () => makeHeliosBumpTexture(body.id), [body.id])
   const ringFactory = useMemo(() => () => body.rings ? makeHeliosRingTexture(body.id === 'uranus') : null, [body.id, body.rings])
   const map = useDeferredTexture(mapFactory)
   const cloudMap = useDeferredTexture(cloudFactory)
+  const bumpMap = useDeferredTexture(bumpFactory)
   const ringMap = useDeferredTexture(ringFactory)
   const tilt = body.obliquity * Math.PI / 180
 
@@ -295,9 +336,11 @@ function Planet({
     <group rotation={[0, 0, tilt]}>
       <group ref={spin}>
         <mesh>
-          <sphereGeometry args={[body.visualRadius, 56, 56]}/>
+          <sphereGeometry args={[body.visualRadius, 64, 64]}/>
           <meshStandardMaterial
             map={map}
+            bumpMap={bumpMap ?? undefined}
+            bumpScale={body.id === 'earth' ? 0.035 : body.id === 'mars' ? 0.055 : 0.065}
             color={map ? '#ffffff' : body.color}
             roughness={body.roughness}
             metalness={body.metalness}
@@ -305,7 +348,7 @@ function Planet({
         </mesh>
 
         {body.id === 'earth' && cloudMap ? <mesh>
-          <sphereGeometry args={[body.visualRadius * 1.018, 56, 56]}/>
+          <sphereGeometry args={[body.visualRadius * 1.019, 64, 64]}/>
           <meshStandardMaterial
             map={cloudMap}
             transparent
@@ -330,9 +373,10 @@ function Planet({
           side={THREE.DoubleSide}
           transparent
           opacity={body.rings.opacity}
+          alphaTest={0.018}
           depthWrite={false}
-          roughness={0.55}
-          metalness={0.08}
+          roughness={0.62}
+          metalness={0.035}
         />
       </mesh> : null}
     </group>
@@ -584,6 +628,64 @@ function MilkyWayBand() {
   return <primitive object={object}/>
 }
 
+function DeepSpaceColorField() {
+  const object = useMemo(() => {
+    const count = 3600
+    const positions = new Float32Array(count * 3)
+    const colors = new Float32Array(count * 3)
+    let seed = 42026
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+
+    const palette = [
+      new THREE.Color('#b8d4ff'),
+      new THREE.Color('#e8f1ff'),
+      new THREE.Color('#fff4d8'),
+      new THREE.Color('#ffd3a6'),
+      new THREE.Color('#d7c8ff'),
+    ]
+
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 3
+      const radius = 250 + random() * 1050
+      const theta = random() * Math.PI * 2
+      const phi = Math.acos(2 * random() - 1)
+      positions[offset] = Math.sin(phi) * Math.cos(theta) * radius
+      positions[offset + 1] = Math.cos(phi) * radius
+      positions[offset + 2] = Math.sin(phi) * Math.sin(theta) * radius
+
+      const base = palette[Math.floor(random() * palette.length)] ?? palette[0]
+      const brightness = 0.58 + random() * 0.42
+      colors[offset] = base.r * brightness
+      colors[offset + 1] = base.g * brightness
+      colors[offset + 2] = base.b * brightness
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const material = new THREE.PointsMaterial({
+      size: 1.08,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    })
+    return new THREE.Points(geometry, material)
+  }, [])
+
+  useEffect(() => () => {
+    object.geometry.dispose()
+    ;(object.material as THREE.Material).dispose()
+  }, [object])
+
+  return <primitive object={object}/>
+}
+
 function GalacticStarFlow({ enabled }: { enabled: boolean }) {
   const object = useMemo(() => {
     const count = 760
@@ -787,14 +889,15 @@ function SolarScene({
   onHover: (id: HeliosBodyId | null) => void
 }) {
   return <>
-    <color attach="background" args={['#02040a']}/>
-    <fog attach="fog" args={['#02040a', 460, 1350]}/>
-    <ambientLight intensity={0.095} color="#b8c9ef"/>
-    <hemisphereLight args={['#8eb6ff', '#22130b', 0.13]}/>
+    <color attach="background" args={['#01030a']}/>
+    <fog attach="fog" args={['#01030a', 500, 1500]}/>
+    <ambientLight intensity={0.075} color="#a9c5ff"/>
+    <hemisphereLight args={['#7fa9ff', '#241308', 0.105]}/>
 
-    <Stars radius={690} depth={210} count={9000} factor={4.2} saturation={0.58} fade speed={0.2}/>
-    <Sparkles count={420} scale={[680, 420, 680]} size={1.8} speed={0.08} color="#8ed8ff" opacity={0.34}/>
-    <Sparkles count={240} scale={[620, 360, 620]} size={1.4} speed={0.05} color="#ffd59f" opacity={0.24}/>
+    <Stars radius={760} depth={260} count={11000} factor={4.5} saturation={0.72} fade speed={0.16}/>
+    <DeepSpaceColorField/>
+    <Sparkles count={520} scale={[760, 470, 760]} size={1.7} speed={0.07} color="#91d9ff" opacity={0.3}/>
+    <Sparkles count={290} scale={[700, 410, 700]} size={1.35} speed={0.045} color="#ffd6a0" opacity={0.22}/>
     <MilkyWayBand/>
     <GalacticStarFlow enabled={galacticMotion}/>
 
@@ -835,7 +938,7 @@ function SolarCanvas(props: Parameters<typeof SolarScene>[0]) {
       alpha: false,
       powerPreference: 'high-performance',
       toneMapping: THREE.ACESFilmicToneMapping,
-      toneMappingExposure: 1.18,
+      toneMappingExposure: 1.28,
     }}
     onCreated={({ gl }) => {
       gl.setClearColor('#02040a')
