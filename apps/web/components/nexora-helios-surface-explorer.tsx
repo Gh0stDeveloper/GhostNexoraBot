@@ -8,7 +8,12 @@ import {
   Plus,
   RotateCcw,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import {
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from 'react'
 import {
   heliosSurfaceDataset,
   type HeliosSurfaceId,
@@ -63,6 +68,7 @@ export function NexoraHeliosSurfaceExplorer({
   const body = copy.bodies[id]
   const dataset = heliosSurfaceDataset(id)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const imageRef = useRef<HTMLImageElement>(null)
   const pointers = useRef(new Map<number, Point>())
   const dragPoint = useRef<Point | null>(null)
   const pinchDistance = useRef<number | null>(null)
@@ -72,9 +78,10 @@ export function NexoraHeliosSurfaceExplorer({
 
   const clampOffset = (next: Point, scale = zoom) => {
     const rect = viewportRef.current?.getBoundingClientRect()
-    if (!rect || scale <= 1) return { x: 0, y: 0 }
-    const maxX = rect.width * (scale - 1) / 2
-    const maxY = rect.height * (scale - 1) / 2
+    const image = imageRef.current
+    if (!rect || !image || scale <= 1) return { x: 0, y: 0 }
+    const maxX = Math.max(0, (image.offsetWidth * scale - rect.width) / 2)
+    const maxY = Math.max(0, (image.offsetHeight * scale - rect.height) / 2)
     return {
       x: Math.max(-maxX, Math.min(maxX, next.x)),
       y: Math.max(-maxY, Math.min(maxY, next.y)),
@@ -92,7 +99,7 @@ export function NexoraHeliosSurfaceExplorer({
     setOffset({ x: 0, y: 0 })
   }
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
     const point = { x: event.clientX, y: event.clientY }
     pointers.current.set(event.pointerId, point)
@@ -106,7 +113,7 @@ export function NexoraHeliosSurfaceExplorer({
     }
   }
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(event.pointerId)) return
     const point = { x: event.clientX, y: event.clientY }
     pointers.current.set(event.pointerId, point)
@@ -131,7 +138,7 @@ export function NexoraHeliosSurfaceExplorer({
     }))
   }
 
-  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
     pointers.current.delete(event.pointerId)
     if (pointers.current.size === 1) {
       dragPoint.current = Array.from(pointers.current.values())[0] ?? null
@@ -142,7 +149,7 @@ export function NexoraHeliosSurfaceExplorer({
     }
   }
 
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault()
     const factor = Math.exp(-event.deltaY * 0.0014)
     applyZoom(zoom * factor)
@@ -150,12 +157,12 @@ export function NexoraHeliosSurfaceExplorer({
 
   const centerCoordinate = () => {
     if (!dataset.coordinateMap) return null
-    const rect = viewportRef.current?.getBoundingClientRect()
-    if (!rect || !rect.width || !rect.height) return { latitude: 0, longitude: 0 }
-    const sourceX = rect.width / 2 - offset.x / zoom
-    const sourceY = rect.height / 2 - offset.y / zoom
-    const longitude = Math.max(-180, Math.min(180, sourceX / rect.width * 360 - 180))
-    const latitude = Math.max(-90, Math.min(90, 90 - sourceY / rect.height * 180))
+    const image = imageRef.current
+    if (!image || !image.offsetWidth || !image.offsetHeight) return { latitude: 0, longitude: 0 }
+    const sourceX = image.offsetWidth / 2 - offset.x / zoom
+    const sourceY = image.offsetHeight / 2 - offset.y / zoom
+    const longitude = Math.max(-180, Math.min(180, sourceX / image.offsetWidth * 360 - 180))
+    const latitude = Math.max(-90, Math.min(90, 90 - sourceY / image.offsetHeight * 180))
     return { latitude, longitude }
   }
 
@@ -210,6 +217,7 @@ export function NexoraHeliosSurfaceExplorer({
             style={{ transform: `translate3d(${offset.x}px,${offset.y}px,0) scale(${zoom})` }}
           >
             <img
+              ref={imageRef}
               src={dataset.imageUrl}
               alt={`${body.name} · ${dataset.dataset}`}
               draggable={false}
