@@ -330,3 +330,78 @@ export function makeHeliosRingTexture(uranus = false) {
     }
   })
 }
+
+
+function grayscaleTexture(width: number, height: number, paint: (data: Uint8ClampedArray) => void) {
+  return canvasTexture(width, height, paint)
+}
+
+export function makeHeliosBumpTexture(id: HeliosBodyId) {
+  const width = 512
+  const height = 256
+  const seedByBody: Partial<Record<HeliosBodyId, number>> = {
+    mercury: 111,
+    earth: 712,
+    mars: 441,
+    moon: 778,
+  }
+  const seed = seedByBody[id]
+  if (!seed) return null
+
+  return grayscaleTexture(width, height, (data) => {
+    const broad = grid(seed)
+    const detail = grid(seed + 19)
+    for (let y = 0; y < height; y += 1) {
+      const latitude = Math.abs((y / (height - 1) - 0.5) * 2)
+      for (let x = 0; x < width; x += 1) {
+        const u = x / width
+        const v = y / height
+        const large = fbm(broad, 256, u * 13, v * 6.5, 6)
+        const fine = fbm(detail, 256, u * 34, v * 17, 4)
+        let value = large * 0.68 + fine * 0.32
+
+        if (id === 'earth') {
+          const land = fbm(broad, 256, u * 12.5, v * 6.2, 6)
+          value = land > 0.535
+            ? 0.5 + (value - 0.5) * 0.9
+            : 0.46 + (value - 0.5) * 0.08
+          if (latitude > 0.78) value = 0.5 + (value - 0.5) * 0.18
+        }
+
+        if (id === 'mars') {
+          const crater = fbm(detail, 256, u * 26, v * 13, 5)
+          value -= Math.max(0, crater - 0.7) * 0.45
+        }
+
+        if (id === 'mercury' || id === 'moon') {
+          const crater = fbm(detail, 256, u * 42, v * 21, 5)
+          value -= Math.max(0, crater - 0.66) * 0.62
+        }
+
+        const shade = clamp(value) * 255
+        put(data, y * width + x, [shade, shade, shade])
+      }
+    }
+  })
+}
+
+export function makeHeliosSunDetailTexture() {
+  return canvasTexture(768, 384, (data) => {
+    const granulation = grid(303)
+    const magnetic = grid(911)
+    for (let y = 0; y < 384; y += 1) {
+      for (let x = 0; x < 768; x += 1) {
+        const u = x / 768
+        const v = y / 384
+        const fine = fbm(granulation, 256, u * 38, v * 19, 6)
+        const broad = fbm(magnetic, 256, u * 10, v * 5, 5)
+        const bright = clamp(0.45 + fine * 0.6 + broad * 0.22)
+        let color = mix([255, 238, 172], [255, 188, 72], bright)
+        const spotNoise = fbm(magnetic, 256, u * 26, v * 13, 4)
+        const spot = clamp((spotNoise - 0.79) * 7.5)
+        color = mix(color, [114, 57, 28], spot * 0.82)
+        put(data, y * 768 + x, color)
+      }
+    }
+  })
+}
