@@ -62,6 +62,16 @@ assert.match(experience, /travelSpeed/, 'Phase 2 independent travel speed missin
 assert.match(experience, /runtime\.travelSeconds \+= step \* travelSpeed/, 'Phase 2 travel speed must integrate continuously')
 assert.doesNotMatch(experience, /Math\.sin\(time \* 0\.045\)/, 'Legacy decorative system wobble must not remain in Phase 2')
 
+assert.match(experience, /type HeliosApproachLevel = 'orbit' \| 'close' \| 'inspect'/, 'Phase 3 multi-stage approach levels missing')
+assert.match(experience, /function bodyApproachDistance/, 'Phase 3 body-aware approach distances missing')
+assert.match(experience, /function bodyMinimumCameraDistance/, 'Phase 3 surface collision guard missing')
+assert.match(experience, /cameraFov\(mode, approachLevel\)/, 'Phase 3 adaptive camera FOV missing')
+assert.match(experience, /near: 0\.025/, 'Phase 3 close camera clipping plane missing')
+assert.match(experience, /approachLevel === 'inspect'/, 'Phase 3 inspection camera behavior missing')
+assert.match(experience, /onApproachChange/, 'Phase 3 approach controls missing')
+assert.match(copy, /approachInspect: 'Inspección'/, 'Phase 3 Spanish inspection copy missing')
+assert.match(copy, /approachInspect: 'Inspection'/, 'Phase 3 English inspection copy missing')
+
 const migratedSource = [page, experience, model, textures, copy].join('\n').toLowerCase()
 assert.doesNotMatch(migratedSource, /grok|xai|__grok/, 'Nexora Helios must not include Grok/xAI branding or platform references')
 assert.doesNotMatch(experience, /dangerouslySetInnerHTML|\beval\s*\(/, 'Nexora Helios must not inject raw HTML or evaluate arbitrary code')
