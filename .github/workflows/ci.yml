@@ -59,6 +59,9 @@ jobs:
       - name: Phase B4 capability-aware command execution smoke
         run: node scripts/phase-b4-capability-execution-smoke.mjs
 
+      - name: Phase B5 immutable RequestContext smoke
+        run: node scripts/phase-b5-request-context-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 

@@ -3,31 +3,32 @@ import {
   type CapabilityName,
   type NormalizedMessage,
   type PlatformAdapter,
-  type PlatformId,
 } from '@ghostnexora/platform-contracts'
 import type {
   BotCommand,
   CommandContext,
   LegacyCompatibleCommandContext,
   NeutralBotCommand,
+  RequestContext,
 } from '../types.js'
 import type { SettingsStore } from './settings.js'
-import type { LocaleCode, TranslationValues } from '../i18n/types.js'
+import type { TranslationValues } from '../i18n/types.js'
+import { assertRequestContextBinding } from './request-context.js'
 
 export type SharedCommandContextInput = {
-  platform: PlatformId
+  request: RequestContext
   adapter: PlatformAdapter
   normalizedMessage: NormalizedMessage
+  /**
+   * Optional transport reply target. null explicitly disables quoting/replying
+   * when the request is an interaction/event rather than a chat message.
+   */
+  replyToMessageId?: string | null
   commandName: string
   args: string[]
   prefix: string
   settings: SettingsStore
-  locale: LocaleCode
   t: (key: string, values?: TranslationValues) => string
-  isOwner: boolean
-  isBotStaff: boolean
-  isSubbotOwner?: boolean
-  instanceId?: number
   instanceOwnerJid?: string
 }
 
@@ -45,23 +46,40 @@ export type SharedCommandExecutionResult =
 
 export function createNeutralCommandContext(input: SharedCommandContextInput): CommandContext {
   const {
-    platform,
+    request,
     adapter,
     normalizedMessage,
+    replyToMessageId,
     commandName,
     args,
     prefix,
     settings,
-    locale,
     t,
-    isOwner,
-    isBotStaff,
-    isSubbotOwner = false,
-    instanceId,
     instanceOwnerJid,
   } = input
-  const chatId = normalizedMessage.chatId
-  const currentReplyTo = normalizedMessage.messageId || undefined
+  assertRequestContextBinding(request, {
+    platform: adapter.id,
+    botInstanceId: adapter.botInstanceId,
+    chatId: normalizedMessage.chatId,
+    userId: normalizedMessage.senderId,
+    messageId: normalizedMessage.messageId,
+  })
+  const {
+    platform,
+    locale,
+    instanceId,
+    permissions,
+  } = request
+  const {
+    isOwner,
+    isStaff: isBotStaff,
+    isGroup,
+    isInstanceOwner: isSubbotOwner,
+  } = permissions
+  const chatId = request.chatId
+  const currentReplyTo = replyToMessageId === null
+    ? undefined
+    : ((replyToMessageId ?? normalizedMessage.messageId) || undefined)
   const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
     ...options,
     replyTo: options?.replyTo ?? currentReplyTo,
@@ -99,12 +117,13 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   }
 
   return {
+    request,
     platform,
     adapter,
     normalizedMessage,
     chatId,
-    sender: normalizedMessage.senderId,
-    pushName: normalizedMessage.pushName ?? normalizedMessage.senderId,
+    sender: request.userId,
+    pushName: normalizedMessage.pushName ?? request.userId,
     commandName,
     args,
     argText: args.join(' '),
@@ -114,7 +133,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
     t,
     isOwner,
     isBotStaff,
-    isGroup: normalizedMessage.isGroup,
+    isGroup,
     isSubbotOwner,
     instanceId,
     instanceOwnerJid,
@@ -160,6 +179,28 @@ export class SharedCommandEngine {
   ): Promise<SharedCommandExecutionResult> {
     const command = typeof commandOrToken === 'string' ? this.resolve(commandOrToken) : commandOrToken
     if (!command) return { executed: false, reason: 'not_found' }
+
+    assertRequestContextBinding(context.request, {
+      platform: context.adapter.id,
+      botInstanceId: context.adapter.botInstanceId,
+      chatId: context.normalizedMessage.chatId,
+      userId: context.normalizedMessage.senderId,
+      messageId: context.normalizedMessage.messageId,
+    })
+    const requestPermissions = context.request.permissions
+    if (
+      context.platform !== context.request.platform
+      || context.chatId !== context.request.chatId
+      || context.sender !== context.request.userId
+      || context.locale !== context.request.locale
+      || context.isOwner !== requestPermissions.isOwner
+      || context.isBotStaff !== requestPermissions.isStaff
+      || context.isGroup !== requestPermissions.isGroup
+      || context.isSubbotOwner !== requestPermissions.isInstanceOwner
+    ) {
+      throw new Error('CommandContext diverged from immutable RequestContext.')
+    }
+
     if (!options.allowLegacy && !this.isNeutral(command)) {
       return { executed: false, reason: 'legacy_only', command }
     }
@@ -181,10 +222,12 @@ export class SharedCommandEngine {
         throw new Error(context.t('router.staffOnly'))
       }
       if (command.groupOnly && !context.isGroup) throw new Error(context.t('router.groupOnly'))
-      if (command.adminOnly && !context.isOwner && !context.isBotStaff && !context.isSubbotOwner && !options.isGroupAdmin) {
+      const isGroupAdmin = options.isGroupAdmin ?? requestPermissions.isGroupAdmin
+      const botIsGroupAdmin = options.botIsGroupAdmin ?? requestPermissions.isBotGroupAdmin
+      if (command.adminOnly && !context.isOwner && !context.isBotStaff && !context.isSubbotOwner && !isGroupAdmin) {
         throw new Error(context.t('router.adminOnly'))
       }
-      if (command.botAdminOnly && context.isGroup && !options.botIsGroupAdmin) {
+      if (command.botAdminOnly && context.isGroup && !botIsGroupAdmin) {
         throw new Error(context.t('router.botAdminOnly'))
       }
     }

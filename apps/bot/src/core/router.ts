@@ -1,6 +1,6 @@
 import { jidNormalizedUser, type GroupParticipant, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
-import type { BotCommand, LegacyCompatibleCommandContext } from '../types.js'
+import type { BotCommand, LegacyCompatibleCommandContext, RequestContext } from '../types.js'
 import { digitsFromJid, getMessageText, getSender, getSenderCandidates } from '../utils/message.js'
 import { logger } from '../utils/logger.js'
 import { community } from '../services/community.js'
@@ -16,6 +16,7 @@ import { createLocalizedSocket } from '../services/localized-socket.js'
 import { createWhatsAppAdapter, whatsappBotInstanceId } from '../platform/whatsapp/adapter.js'
 import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 import { SharedCommandEngine } from './shared-command-engine.js'
+import { createRequestContext } from './request-context.js'
 import { sharedNeutralCommands } from '../commands/shared-neutral.js'
 
 function normalizeJid(value?: string | null) {
@@ -167,6 +168,7 @@ export class CommandRouter {
     }
 
     let senderIsGroupAdmin = false
+    let botIsGroupAdmin = false
     if (isGroup && groupControlsV9.get(chatId).restrictedMode && !isOwner && !isBotStaff && !isSubbotOwner) {
       const metadata = await socket.groupMetadata(chatId).catch(() => null)
       const senderParticipant = metadata?.participants.find((participant) => participantMatches(participant, senderCandidates))
@@ -215,6 +217,7 @@ export class CommandRouter {
 
     if (isGroup && !community.getGroupSettings(chatId).botEnabled && !isBotStaff && !isSubbotOwner && !disabledGroupBootstrapCommands.has(command.name)) return false
 
+    let requestContext: RequestContext | undefined
     try {
       await react('⚡').catch(() => undefined)
       const filtersStarted = performance.now()
@@ -257,14 +260,14 @@ export class CommandRouter {
         const botParticipant = metadata.participants.find((participant) => participantMatches(participant, botCandidates))
         senderIsGroupAdmin = senderIsGroupAdmin || Boolean(senderParticipant?.admin)
         const senderIsAdmin = senderIsGroupAdmin || isBotStaff || isSubbotOwner
-        const botIsAdmin = Boolean(botParticipant?.admin)
+        botIsGroupAdmin = Boolean(botParticipant?.admin)
         if (command.adminOnly && !senderIsAdmin) {
           finishFilters()
           await reply(t('router.adminOnly'))
           await react('🚫').catch(() => undefined)
           return true
         }
-        if (command.botAdminOnly && !botIsAdmin) {
+        if (command.botAdminOnly && !botIsGroupAdmin) {
           finishFilters()
           await reply(t('router.botAdminOnly'))
           await react('🚫').catch(() => undefined)
@@ -322,7 +325,26 @@ export class CommandRouter {
       }
       finishFilters()
 
+      requestContext = createRequestContext({
+        platform: 'whatsapp',
+        botInstanceId,
+        instanceId: this.options.instanceId,
+        chatId,
+        userId: sender,
+        locale,
+        messageId: normalizedMessage.messageId,
+        permissions: {
+          isOwner,
+          isStaff: isBotStaff,
+          isGroup,
+          isGroupAdmin: senderIsGroupAdmin,
+          isBotGroupAdmin: botIsGroupAdmin,
+          isInstanceOwner: isSubbotOwner,
+        },
+      })
+
       const context: LegacyCompatibleCommandContext = {
+        request: requestContext,
         platform: 'whatsapp',
         adapter,
         normalizedMessage,
@@ -359,7 +381,12 @@ export class CommandRouter {
         markCommandCooldown('whatsapp', command.name, sender)
       }
       try {
-        await this.engine.execute(command, context, { allowLegacy: true, enforceMetadata: false })
+        await this.engine.execute(command, context, {
+          allowLegacy: true,
+          enforceMetadata: false,
+          isGroupAdmin: requestContext.permissions.isGroupAdmin,
+          botIsGroupAdmin: requestContext.permissions.isBotGroupAdmin,
+        })
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
         performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
@@ -374,7 +401,13 @@ export class CommandRouter {
       await react('✅').catch(() => undefined)
       return true
     } catch (error) {
-      logger.error({ error, command: command.name, chatId, instanceId: this.options.instanceId }, 'command failed')
+      logger.error({
+        error,
+        command: command.name,
+        chatId,
+        instanceId: this.options.instanceId,
+        correlationId: requestContext?.correlationId,
+      }, 'command failed')
       const publicError = publicCommandError(command.name, error, locale)
       await reply(t('router.commandError', { prefix, command: command.name, error: publicError })).catch(() => undefined)
       await react('❌').catch(() => undefined)

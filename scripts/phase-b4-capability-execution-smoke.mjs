@@ -9,6 +9,7 @@ import {
   createNeutralCommandContext,
   SharedCommandEngine,
 } from '../apps/bot/dist/core/shared-command-engine.js'
+import { createRequestContext } from '../apps/bot/dist/core/request-context.js'
 
 const deliveries = []
 let sequence = 0
@@ -52,18 +53,33 @@ const t = (key, values = {}) => key === 'router.capabilityUnavailable'
   : key
 
 function context(commandName) {
-  return createNeutralCommandContext({
+  const message = { ...normalizedMessage, text: `/${commandName}` }
+  const request = createRequestContext({
     platform: 'discord',
+    botInstanceId: adapter.botInstanceId,
+    chatId: message.chatId,
+    userId: message.senderId,
+    locale: 'es',
+    messageId: message.messageId,
+    correlationId: `b4-${commandName}`,
+    permissions: {
+      isOwner: true,
+      isStaff: true,
+      isGroup: true,
+      isGroupAdmin: false,
+      isBotGroupAdmin: false,
+      isInstanceOwner: false,
+    },
+  })
+  return createNeutralCommandContext({
+    request,
     adapter,
-    normalizedMessage: { ...normalizedMessage, text: `/${commandName}` },
+    normalizedMessage: message,
     commandName,
     args: [],
     prefix: '/',
     settings: {},
-    locale: 'es',
     t,
-    isOwner: true,
-    isBotStaff: true,
   })
 }
 

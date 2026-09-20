@@ -28,7 +28,11 @@ assert.match(shared, /command\.name !== 'menu'/, 'B2 must keep help/menu native 
 
 assert.match(whatsapp, /new SharedCommandEngine\(commands, sharedNeutralCommands\)/, 'WhatsApp must resolve commands through the B2 engine')
 assert.match(whatsapp, /this\.engine\.resolve\(typedName\)/, 'WhatsApp lookup must use the B2 engine')
-assert.match(whatsapp, /this\.engine\.execute\(command, context, \{ allowLegacy: true, enforceMetadata: false \}\)/, 'WhatsApp execution must pass through the B2 engine while preserving V1 compatibility')
+assert.match(
+  whatsapp,
+  /this\.engine\.execute\(command, context, \{\s*allowLegacy: true,\s*enforceMetadata: false,\s*isGroupAdmin: requestContext\.permissions\.isGroupAdmin,\s*botIsGroupAdmin: requestContext\.permissions\.isBotGroupAdmin,\s*\}\)/,
+  'WhatsApp execution must pass through the B2 engine while preserving V1 compatibility',
+)
 
 assert.match(discord, /sharedCommandEngine = new SharedCommandEngine\(sharedNeutralCommands, sharedNeutralCommands\)/, 'Discord shared engine missing')
 assert.match(discord, /createNeutralCommandContext\(/, 'Discord must build the shared neutral context')
