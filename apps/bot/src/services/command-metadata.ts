@@ -40,7 +40,6 @@ type NativePlatformCommand = {
   permissions?: Partial<CommandPermissionMetadata>
   requiredCapabilities?: readonly CapabilityName[]
   discoverable?: boolean
-  slashTokens?: readonly string[]
 }
 
 const emptyPermissions = (): CommandPermissionMetadata => ({
@@ -59,14 +58,12 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     category: 'general',
     description: 'Muestra los comandos disponibles en Discord.',
     descriptionKey: 'discord.command.help',
-    slashTokens: ['start', 'help', 'menu'],
   },
   {
     name: 'ping',
     category: 'general',
     description: 'Comprueba latencia y disponibilidad.',
     descriptionKey: 'discord.command.ping',
-    slashTokens: ['ping'],
   },
   {
     name: 'info',
@@ -74,7 +71,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     category: 'general',
     description: 'Información del bot y del runtime de Discord.',
     descriptionKey: 'discord.command.info',
-    slashTokens: ['info', 'version'],
   },
   {
     name: 'language',
@@ -84,7 +80,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     descriptionKey: 'discord.command.language',
     usage: 'language [value]',
     arguments: [{ name: 'value', description: 'Idioma, alcance o estado.', descriptionKey: 'discord.command.language.value', required: false, maxLength: 100 }],
-    slashTokens: ['language'],
   },
   {
     name: 'vk',
@@ -95,7 +90,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     usage: 'vk <url>',
     arguments: [{ name: 'url', description: 'URL pública de VK.', descriptionKey: 'discord.command.vk.url', required: true, maxLength: 1900 }],
     requiredCapabilities: ['files'],
-    slashTokens: ['vk'],
   },
   {
     name: 'apkmirror',
@@ -105,7 +99,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     descriptionKey: 'discord.command.apkmirror',
     usage: 'apkmirror <query>',
     arguments: [{ name: 'query', description: 'Aplicación a buscar.', descriptionKey: 'discord.command.query', required: true, maxLength: 200 }],
-    slashTokens: ['apkmirror'],
   },
   {
     name: 'apkmirrordl',
@@ -125,7 +118,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     descriptionKey: 'discord.command.apkpure',
     usage: 'apkpure <query>',
     arguments: [{ name: 'query', description: 'Aplicación o paquete a buscar.', descriptionKey: 'discord.command.query', required: true, maxLength: 200 }],
-    slashTokens: ['apkpure'],
   },
   {
     name: 'apkpuredl',
@@ -144,7 +136,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     description: 'Muestra el estado de los providers de descarga.',
     descriptionKey: 'discord.command.providerhealth',
     permissions: { staffOnly: true },
-    slashTokens: ['providerhealth'],
   },
   {
     name: 'discordstatus',
@@ -153,7 +144,6 @@ const discordNativeCommands: readonly NativePlatformCommand[] = [
     description: 'Muestra el estado operativo del runtime Discord.',
     descriptionKey: 'discord.command.status',
     permissions: { ownerOnly: true },
-    slashTokens: ['discordstatus'],
   },
 ]
 
@@ -480,8 +470,4 @@ export function commandMetadataVisibleTo(
   ) return false
   if (metadata.permissions.groupOnly && input.isGroup === false) return false
   return true
-}
-
-export function discordSlashCommandTokens() {
-  return discordNativeCommands.flatMap((command) => command.slashTokens ?? [])
 }

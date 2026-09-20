@@ -472,7 +472,7 @@ Cierre B5:
 
 # FASE C — Paridad Discord y Telegram
 
-Estado: PENDIENTE
+Estado: EN PROGRESO
 
 ## Objetivo
 
@@ -480,7 +480,7 @@ Eliminar routers mantenidos manualmente cuando sea posible y generar la experien
 
 ## C1. Slash commands de Discord generados automáticamente
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Generar discordApplicationCommands desde el catálogo central.
 
@@ -491,6 +491,29 @@ Ejemplo conceptual:
 - Telegram: /spotify Imagine Dragons
 
 No mantener manualmente tres definiciones si la función es la misma.
+
+Implementación C1 en validación:
+
+- `discordApplicationCommands` se genera directamente desde `platformCommandMetadata('discord')`;
+- se retiró el inventario manual `slashTokens`;
+- nombre, aliases, descripción, localizaciones ES/EN, argumentos, `required` y `max_length` salen de metadata central;
+- `discoverable: false` evita publicar comandos internos sin impedir que sigan siendo routables;
+- los comandos nativos todavía no migrados siguen entrando por el mismo catálogo como fallback;
+- la generación detecta colisiones entre nombres y aliases;
+- los message commands de Discord, aliases, `SharedCommandEngine`, RequestContext B5 y correlation IDs permanecen intactos;
+- gate dedicado: `scripts/phase-c1-discord-slash-metadata-smoke.mjs`;
+- documentación: `docs/v2/PHASE_C1.md`.
+
+Validación C1:
+
+- CI principal #3128: success;
+- Typecheck y Build: success;
+- regresiones B1, B2, B3, B4 y B5: success;
+- smoke C1: success;
+- V2 Discord Phase 5: success;
+- PR de cierre: #87 `feat: complete Phase C1 metadata-driven Discord slash commands`.
+
+Siguiente subfase: C2 — Aliases centralizados.
 
 ## C2. Aliases centralizados
 

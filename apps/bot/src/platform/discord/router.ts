@@ -20,7 +20,6 @@ import { discordCommandAliases } from '../../services/command-platform-support.j
 import {
   commandMetadataForPlatformToken,
   commandMetadataVisibleTo,
-  discordSlashCommandTokens,
   platformCommandMetadata,
 } from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
@@ -63,23 +62,48 @@ function localizedSlashDescription(value: string, key?: string) {
   }
 }
 
-export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = discordSlashCommandTokens()
-  .flatMap((token): DiscordApplicationCommandDefinition[] => {
-    const metadata = commandMetadataForPlatformToken('discord', token)
-    if (!metadata) return []
-    const options = metadata.arguments.map((argument) => ({
-      type: 3 as const,
-      name: argument.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32),
-      ...localizedSlashDescription(argument.description || argument.name, argument.descriptionKey),
-      required: argument.required === true,
-      ...(argument.maxLength ? { max_length: argument.maxLength } : {}),
-    }))
-    return [{
-      name: token,
-      ...localizedSlashDescription(metadata.description, metadata.descriptionKey),
-      ...(options.length ? { options } : {}),
-    }]
-  })
+export function buildDiscordApplicationCommands(): DiscordApplicationCommandDefinition[] {
+  const definitions = new Map<string, { canonical: string; definition: DiscordApplicationCommandDefinition }>()
+
+  for (const metadata of platformCommandMetadata('discord')) {
+    if (!metadata.discoverable) continue
+
+    // Canonical names and aliases are both derived from the central catalog. This
+    // preserves existing native slash aliases while avoiding a Discord-only list.
+    for (const token of [metadata.name, ...metadata.aliases]) {
+      const name = token.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32)
+      if (!name) continue
+
+      const previous = definitions.get(name)
+      if (previous && previous.canonical !== metadata.name) {
+        throw new Error(`Discord slash command collision: /${name} belongs to both ${previous.canonical} and ${metadata.name}`)
+      }
+
+      const options = metadata.arguments.map((argument) => ({
+        type: 3 as const,
+        name: argument.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 32),
+        ...localizedSlashDescription(argument.description || argument.name, argument.descriptionKey),
+        required: argument.required === true,
+        ...(argument.maxLength ? { max_length: argument.maxLength } : {}),
+      }))
+
+      definitions.set(name, {
+        canonical: metadata.name,
+        definition: {
+          name,
+          ...localizedSlashDescription(metadata.description, metadata.descriptionKey),
+          ...(options.length ? { options } : {}),
+        },
+      })
+    }
+  }
+
+  return [...definitions.values()]
+    .map(({ definition }) => definition)
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+export const discordApplicationCommands: DiscordApplicationCommandDefinition[] = buildDiscordApplicationCommands()
 
 type Invocation = {
   command: string
