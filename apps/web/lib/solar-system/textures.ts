@@ -123,11 +123,11 @@ function paintVenus(data: Uint8ClampedArray, w: number, h: number): void {
 function paintEarth(data: Uint8ClampedArray, w: number, h: number): void {
   const n = makeGrid(7);
   const n2 = makeGrid(19);
-  const ocean: RGB = [28, 72, 128];
-  const oceanDeep: RGB = [14, 42, 86];
-  const grass: RGB = [62, 118, 64];
-  const desert: RGB = [186, 156, 96];
-  const ice: RGB = [236, 240, 246];
+  const ocean: RGB = [18, 86, 164];
+  const oceanDeep: RGB = [5, 31, 92];
+  const grass: RGB = [48, 126, 66];
+  const desert: RGB = [199, 158, 82];
+  const ice: RGB = [242, 249, 255];
   const mountain: RGB = [122, 118, 108];
   for (let y = 0; y < h; y++) {
     const lat = (y / (h - 1) - 0.5) * 2;
@@ -169,7 +169,7 @@ function paintMars(data: Uint8ClampedArray, w: number, h: number): void {
     for (let x = 0; x < w; x++) {
       const e = fbm(n, 256, (x / w) * 14, (y / h) * 7, 6);
       const d = fbm(n2, 256, (x / w) * 6, (y / h) * 3, 3);
-      let rgb = mixRgb([118, 52, 32], [196, 118, 72], e);
+      let rgb = mixRgb([112, 38, 24], [214, 102, 54], e);
       rgb = mixRgb(rgb, [92, 48, 34], clamp(d - 0.4));
       const ice = clamp((Math.abs(lat) - 0.78) / 0.22);
       rgb = mixRgb(rgb, [232, 236, 240], ice);
@@ -325,10 +325,10 @@ export function makePlanetTexture(id: BodyId): THREE.CanvasTexture {
         paintSaturn(data, w, h);
         break;
       case "uranus":
-        paintIceGiant(data, w, h, [132, 196, 198], [176, 222, 224], 88);
+        paintIceGiant(data, w, h, [84, 186, 198], [160, 226, 230], 88);
         break;
       case "neptune":
-        paintIceGiant(data, w, h, [46, 86, 176], [96, 148, 220], 99, true);
+        paintIceGiant(data, w, h, [28, 66, 184], [62, 128, 238], 99, true);
         break;
       case "sun":
         paintSun(data, w, h);
