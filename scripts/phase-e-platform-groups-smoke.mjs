@@ -21,7 +21,7 @@ const subbotPage = read('apps/web/app/subbot/page.tsx')
 assert.match(roadmap, /Fase E \| Dashboard Web V2 \| TERMINADO/, 'Phase E must remain completed')
 assert.match(roadmap, /Fase B \| Núcleo multiplataforma compartido \| TERMINADO/, 'Phase B must remain completed after B5 closure')
 assert.match(roadmap, /Fase F \| Observabilidad, métricas y operación \| PENDIENTE/, 'Phase F must remain pending')
-assert.match(roadmap, /Fase C \| Paridad Discord y Telegram \| POSPUESTO/, 'Phase C must remain postponed')
+assert.match(roadmap, /Fase C \\| Paridad Discord y Telegram \\| EN PROGRESO/, 'Phase C must remain in progress while C1-C6 are being implemented')
 assert.match(roadmap, /Fase D \| Runtime y entrega WhatsApp \| POSPUESTO/, 'Phase D must remain postponed')
 
 assert.match(registry, /CREATE TABLE IF NOT EXISTS ops_platform_groups/, 'cross-platform group registry table missing')
