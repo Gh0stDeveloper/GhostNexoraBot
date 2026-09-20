@@ -427,7 +427,7 @@ Cierre B4:
 
 ## B5. RequestContext inmutable
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 Evitar estado mutable compartido durante procesamiento concurrente.
 
@@ -442,7 +442,7 @@ El contexto por mensaje debe contener de forma inmutable:
 - message ID;
 - correlation o request ID.
 
-Implementación B5 en validación:
+Implementación B5:
 
 - nuevos tipos `RequestContext` y `RequestPermissionSnapshot` de solo lectura;
 - `createRequestContext()` congela el snapshot y permisos con `Object.freeze`;
@@ -457,6 +457,16 @@ Implementación B5 en validación:
 - B5 no modifica `WhatsAppAdapter.activeUserId`: esa migración permanece en D1;
 - documentación: `docs/v2/PHASE_B5.md`;
 - gate dedicado: `scripts/phase-b5-request-context-smoke.mjs`.
+
+Cierre B5:
+
+- `RequestContext` y `RequestPermissionSnapshot` quedan congelados por request;
+- aislamiento concurrente validado entre chats, usuarios y locales distintos;
+- bindings cruzados request/adapter/mensaje se rechazan antes del handler;
+- WhatsApp, Discord y Telegram crean snapshots independientes;
+- correlation ID queda disponible en el borde de comando y logs de error; la propagación end-to-end continúa reservada para F4;
+- B1–B5, Typecheck, Build, Termux y CI principal pasan en verde sobre el HEAD de implementación `087d09f8c041ad42e532bca8fdf1515341b7f9ca`;
+- PR de cierre: #86 `feat: complete Phase B5 immutable RequestContext`.
 
 ---
 
@@ -1556,11 +1566,12 @@ Estas tareas están incluidas dentro de las fases anteriores:
 |---|---|---|---|---|
 | 2026-09-18 | Plan general | Se crea este roadmap de próximas integraciones | TERMINADO | — |
 | 2026-09-18 | Fase A | Login, roles, sesiones, Passkeys, TOTP y seguridad Web | TERMINADO | PR #75 · c01c0ee61726fd4325a6fc60bd62108a880684e4 |
-| 2026-09-19 | Fase B | Núcleo multiplataforma · B1–B4 completadas | EN PROGRESO | PR #83 · PR #85 |
+| 2026-09-19 | Fase B | Núcleo multiplataforma · B1–B5 completadas | TERMINADO | PR #83 · PR #85 · PR #86 |
 | 2026-09-19 | Fase B1 | CommandContext neutral y frontera legacy WhatsApp | TERMINADO | 0f4d48dc1cf4120fd1a1b7169a8bdedb16f35c52 |
 | 2026-09-19 | Fase B2 | Shared Command Engine para WhatsApp/Discord/Telegram | TERMINADO | 95bac21414c2b4f5f6256763b196dc7031037e54 |
 | 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 |
 | 2026-09-19 | Fase B4 | Capability-aware command execution | TERMINADO | PR #85 |
+| 2026-09-19 | Fase B5 | RequestContext inmutable y aislamiento concurrente | TERMINADO | PR #86 |
 | — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
@@ -1579,15 +1590,17 @@ Estas tareas están incluidas dentro de las fases anteriores:
 
 # Próximo paso
 
-**FASE B está EN PROGRESO con B1, B2, B3 y B4 terminadas.**
+**FASE B está TERMINADA con B1, B2, B3, B4 y B5 completadas.**
 
-El siguiente trabajo acordado es **B5 · RequestContext inmutable**.
+Las fases todavía pendientes del roadmap son:
 
-B5 debe aislar el contexto de cada mensaje para evitar estado mutable compartido durante procesamiento concurrente e incluir plataforma, instancia, chat, usuario, locale, permisos, message ID y correlation/request ID.
+- **FASE C · Paridad Discord y Telegram** — C1 a C6;
+- **FASE D · Runtime y entrega WhatsApp** — D1 a D6;
+- **FASE F · Observabilidad, métricas y operación** — F1 a F6.
 
-No iniciar B5 automáticamente sin indicación del usuario.
+Por orden del roadmap, el siguiente bloque sería **C1 · Slash commands de Discord generados automáticamente**, cuando el usuario indique retomar la Fase C.
 
-Las fases C y D permanecen pospuestas. La Fase F sigue pendiente para cuando corresponda retomarla.
+No iniciar C, D o F automáticamente sin indicación del usuario.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
@@ -1607,4 +1620,4 @@ Resultados principales de Fase A:
 - panel privado de seguridad;
 - CI, typecheck, build y smoke de Fase A en verde.
 
-No iniciar la Fase C hasta dejar la Fase B validada y registrada aquí como TERMINADO.
+La Fase B ya quedó validada y registrada como TERMINADO; C, D y F continúan pendientes.

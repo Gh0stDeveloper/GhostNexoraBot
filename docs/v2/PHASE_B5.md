@@ -1,6 +1,6 @@
 # Fase B5 — RequestContext inmutable
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -76,3 +76,16 @@ La propagación end-to-end por todos los subsistemas/telemetría sigue perteneci
 - aislamiento de dos ejecuciones concurrentes;
 - integración WhatsApp/Discord/Telegram;
 - correlation ID presente en logs de los tres routers.
+
+
+## Cierre validado
+
+- El snapshot raíz y permisos son inmutables en runtime mediante `Object.freeze`.
+- El engine verifica que request, adapter y mensaje normalizado pertenezcan a la misma ejecución.
+- Dos ejecuciones concurrentes conservan chat, usuario, locale, permisos y correlation ID propios.
+- WhatsApp, Discord y Telegram usan un snapshot independiente por comando.
+- El correlation ID aparece en logs de error de los tres routers.
+- `activeUserId` de WhatsApp no se modifica aquí y continúa explícitamente en D1.
+- La propagación completa de tracing hacia providers/media/outbox continúa en F4.
+- CI principal y gate B5 pasaron en verde sobre `087d09f8c041ad42e532bca8fdf1515341b7f9ca`.
+- PR de cierre: #86.
