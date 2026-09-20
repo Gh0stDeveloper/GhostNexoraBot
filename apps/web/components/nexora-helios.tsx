@@ -851,50 +851,72 @@ function bodyFocusDistance(id: HeliosBodyId) {
   return Math.max(body.visualRadius * 7.8, 5.6)
 }
 
-function CameraRig({ selectedId }: { selectedId: HeliosBodyId | null }) {
+function CameraRig({
+  selectedId,
+  mode,
+}: {
+  selectedId: HeliosBodyId | null
+  mode: HeliosCameraMode
+}) {
   const controls = useRef<any>(null)
-  const previous = useRef<HeliosBodyId | null | undefined>(undefined)
+  const previous = useRef('')
   const arriving = useRef(false)
   const destination = useRef(new THREE.Vector3())
   const goal = useRef(new THREE.Vector3())
   const direction = useRef(new THREE.Vector3())
   const shift = useRef(new THREE.Vector3())
+  const focusDistance = useRef(1)
   const { camera } = useThree()
 
   useEffect(() => {
-    if (previous.current === selectedId) return
-    previous.current = selectedId
+    const key = `${mode}:${selectedId ?? 'none'}`
+    if (previous.current === key) return
+    previous.current = key
+
+    if (mode === 'free') {
+      arriving.current = false
+      return
+    }
+
     arriving.current = true
-    const position = selectedId ? runtime.positions[selectedId] : null
+    const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+    const system = runtime.systemPosition
+    const position = focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
-    if (selectedId) {
+    if (focusId) {
       const currentTarget = controls.current?.target ?? destination.current
       direction.current.copy(camera.position).sub(currentTarget)
       if (direction.current.lengthSq() < 1e-6) direction.current.set(0.55, 0.36, 0.76)
       direction.current.normalize()
-      goal.current.copy(destination.current).addScaledVector(direction.current, bodyFocusDistance(selectedId))
+      focusDistance.current = bodyFocusDistance(focusId)
+      goal.current.copy(destination.current).addScaledVector(direction.current, focusDistance.current)
     } else {
-      destination.current.set(0, 0, 0)
-      goal.current.copy(OVERVIEW)
+      direction.current.copy(OVERVIEW).normalize()
+      focusDistance.current = OVERVIEW.length()
+      goal.current.copy(destination.current).add(OVERVIEW)
     }
-  }, [camera, selectedId])
+  }, [camera, mode, selectedId])
 
   useFrame((_, delta) => {
     const controlsInstance = controls.current
     if (!controlsInstance) return
-    const position = selectedId ? runtime.positions[selectedId] : null
+
+    if (mode === 'free') {
+      controlsInstance.update()
+      return
+    }
+
+    const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+    const system = runtime.systemPosition
+    const position = focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
     if (arriving.current) {
-      if (selectedId) {
-        direction.current.copy(goal.current).sub(controlsInstance.target)
-        const distance = Math.max(direction.current.length(), 0.01)
-        direction.current.normalize()
-        goal.current.copy(destination.current).addScaledVector(direction.current, distance)
+      if (focusId) {
+        goal.current.copy(destination.current).addScaledVector(direction.current, focusDistance.current)
       } else {
-        destination.current.set(0, 0, 0)
-        goal.current.copy(OVERVIEW)
+        goal.current.copy(destination.current).add(OVERVIEW)
       }
 
       const amount = 1 - Math.exp(-3.2 * Math.min(delta, 0.1))
@@ -907,7 +929,7 @@ function CameraRig({ selectedId }: { selectedId: HeliosBodyId | null }) {
       ) {
         arriving.current = false
       }
-    } else if (selectedId && position) {
+    } else {
       shift.current.copy(destination.current).sub(controlsInstance.target)
       camera.position.add(shift.current)
       controlsInstance.target.copy(destination.current)
@@ -921,7 +943,7 @@ function CameraRig({ selectedId }: { selectedId: HeliosBodyId | null }) {
     enableDamping
     dampingFactor={0.075}
     minDistance={1.45}
-    maxDistance={460}
+    maxDistance={520}
     enablePan
     makeDefault
     zoomSpeed={0.88}
@@ -932,6 +954,8 @@ function CameraRig({ selectedId }: { selectedId: HeliosBodyId | null }) {
 function SolarScene({
   paused,
   speed,
+  travelSpeed,
+  cameraMode,
   selectedId,
   showOrbits,
   showTrails,
@@ -941,6 +965,8 @@ function SolarScene({
 }: {
   paused: boolean
   speed: number
+  travelSpeed: number
+  cameraMode: HeliosCameraMode
   selectedId: HeliosBodyId | null
   showOrbits: boolean
   showTrails: boolean
@@ -961,10 +987,10 @@ function SolarScene({
     <MilkyWayBand/>
     <GalacticStarFlow enabled={galacticMotion}/>
 
-    <RuntimeSync paused={paused} speed={speed}/>
-    <CameraRig selectedId={selectedId}/>
+    <RuntimeSync paused={paused} orbitalSpeed={speed} galacticMotion={galacticMotion}/>
+    <CameraRig selectedId={selectedId} mode={cameraMode}/>
 
-    <SystemMotion enabled={galacticMotion}>
+    <SystemMotion enabled={galacticMotion} travelSpeed={travelSpeed}>
       <Sun
         selected={selectedId === 'sun'}
         paused={paused}
@@ -982,9 +1008,15 @@ function SolarScene({
         onHover={onHover}
       />)}
       <OrbitPaths show={showOrbits}/>
-      <Trails show={showTrails}/>
       <AsteroidBelt/>
     </SystemMotion>
+
+    <WorldTrails
+      show={showTrails}
+      orbitalSpeed={speed}
+      travelSpeed={travelSpeed}
+      galacticMotion={galacticMotion}
+    />
   </>
 }
 
