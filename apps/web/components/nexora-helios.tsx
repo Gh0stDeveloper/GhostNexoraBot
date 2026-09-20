@@ -1351,6 +1351,7 @@ function Hud({
   speed,
   travelSpeed,
   cameraMode,
+  approachLevel,
   selectedId,
   showLabels,
   showOrbits,
@@ -1364,6 +1365,7 @@ function Hud({
   setShowTrails,
   setGalacticMotion,
   onSelectBody,
+  onApproachChange,
   onSystemView,
   onSunView,
   onFreeView,
@@ -1373,6 +1375,7 @@ function Hud({
   speed: number
   travelSpeed: number
   cameraMode: HeliosCameraMode
+  approachLevel: HeliosApproachLevel
   selectedId: HeliosBodyId | null
   showLabels: boolean
   showOrbits: boolean
@@ -1386,6 +1389,7 @@ function Hud({
   setShowTrails: (value: boolean) => void
   setGalacticMotion: (value: boolean) => void
   onSelectBody: (id: HeliosBodyId) => void
+  onApproachChange: (level: HeliosApproachLevel) => void
   onSystemView: () => void
   onSunView: () => void
   onFreeView: () => void
@@ -1612,7 +1616,7 @@ function Hud({
       locale={locale}
       id={selectedId}
       approachLevel={approachLevel}
-      onApproachChange={changeApproach}
+      onApproachChange={onApproachChange}
       onClose={onSystemView}
     /> : null}
   </div>
@@ -1690,7 +1694,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [selectedId])
 
   return <div className="relative h-[calc(100dvh-4rem)] min-h-[620px] w-full overflow-hidden bg-[#02040a] lg:h-dvh">
     <SolarCanvas
@@ -1713,6 +1717,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       speed={speed}
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
+      approachLevel={approachLevel}
       selectedId={selectedId}
       showLabels={showLabels}
       showOrbits={showOrbits}
@@ -1726,6 +1731,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       setShowTrails={setShowTrails}
       setGalacticMotion={setGalacticMotion}
       onSelectBody={selectBody}
+      onApproachChange={changeApproach}
       onSystemView={showSystem}
       onSunView={showSun}
       onFreeView={showFree}
