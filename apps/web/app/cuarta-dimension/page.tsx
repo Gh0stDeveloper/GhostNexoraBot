@@ -14,124 +14,20 @@ import {
 import { UnifiedNavigation, type UnifiedNavItem } from '../../components/unified-navigation'
 import { FourthDimensionExplorer } from '../../components/fourth-dimension-explorer'
 import { getWebLocale } from '../../lib/i18n-server'
+import { fourthDimensionPageCopy } from '../../lib/fourth-dimension-i18n'
 
-export const metadata: Metadata = {
-  title: 'Cuarta Dimensión | Ghost Nexora Bot',
-  description: 'Explorador interactivo de geometría 4D, teseractos, proyecciones y espaciotiempo dentro de Ghost Nexora Bot.',
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getWebLocale()
+  const t = fourthDimensionPageCopy[locale]
+  return {
+    title: t.metaTitle,
+    description: t.metaDescription,
+  }
 }
-
-const copy = {
-  es: {
-    brand: 'Laboratorio científico',
-    navAria: 'Navegación de la cuarta dimensión',
-    close: 'Cerrar navegación',
-    back: 'Volver al inicio',
-    nav: {
-      overview: 'Introducción',
-      concept: 'Concepto',
-      explorer: 'Explorador 4D',
-      journey: 'Viaje dimensional',
-      physics: 'Física',
-      history: 'Historia',
-    },
-    eyebrow: 'NEXORA LABS / CUARTA DIMENSIÓN',
-    titleBefore: 'Explora lo que existe ',
-    titleAccent: 'más allá de 3D.',
-    intro: 'Una reconstrucción en Next.js, TypeScript y Tailwind del laboratorio original: geometría tetradimensional, proyecciones, rotaciones y una introducción visual al espaciotiempo.',
-    migrated: 'Migrado a React + TypeScript',
-    interactive: 'Canvas interactivo',
-    responsive: 'Responsive',
-    explore: 'Abrir explorador',
-    conceptEyebrow: 'FUNDAMENTOS',
-    conceptTitle: '¿Qué es la cuarta dimensión?',
-    conceptIntro: 'En matemáticas, una cuarta dimensión espacial extiende el espacio con una coordenada adicional. En relatividad, espacio y tiempo se describen juntos mediante un espaciotiempo de cuatro dimensiones.',
-    conceptCards: [
-      ['Definición básica', 'Una extensión conceptual de las tres dimensiones espaciales que experimentamos: largo, ancho y alto. Un punto 4D puede representarse con coordenadas (x, y, z, w).'],
-      ['Percepción humana', 'No percibimos directamente una dimensión espacial adicional. Para estudiarla usamos analogías, cortes y proyecciones, del mismo modo que un objeto 3D puede proyectarse sobre una superficie 2D.'],
-      ['Analogías', 'Un ser limitado a un plano 2D solo observaría secciones cambiantes de un objeto 3D que atravesara su mundo. La misma idea ayuda a razonar sobre cortes 3D de objetos 4D.'],
-    ],
-    explorerEyebrow: 'GEOMETRÍA 4D',
-    explorerTitle: 'Teseracto interactivo',
-    explorerIntro: 'Rota una proyección de un hipercubo y modifica su componente W. El teseracto es el análogo 4D del cubo.',
-    journeyEyebrow: 'VIAJE DIMENSIONAL',
-    journeyTitle: 'Del punto al hiperespacio',
-    journeyIntro: 'Recorre la progresión conceptual 0D → 1D → 2D → 3D → 4D y observa qué propiedad geométrica se añade en cada paso.',
-    physicsEyebrow: 'FÍSICA',
-    physicsTitle: 'La cuarta dimensión en física',
-    physicsCards: [
-      ['Espaciotiempo', 'La relatividad especial y general describen los eventos mediante coordenadas espaciales y temporales. El tiempo no funciona exactamente como una dimensión espacial, pero forma parte de la geometría tetradimensional del espaciotiempo.'],
-      ['Dimensiones extra', 'Modelos como Kaluza–Klein y distintas formulaciones de teoría de cuerdas estudian dimensiones adicionales. Son marcos teóricos y no equivalen a una observación directa de una cuarta dimensión espacial macroscópica.'],
-      ['Proyecciones', 'Las visualizaciones de objetos 4D en una pantalla requieren reducir dimensiones: primero 4D → 3D y finalmente 3D → 2D. La imagen conserva estructura, pero no toda la información del objeto original.'],
-    ],
-    historyEyebrow: 'HISTORIA',
-    historyTitle: 'Ideas que ampliaron la geometría',
-    history: [
-      ['1843', 'Cuaterniones de Hamilton', 'William Rowan Hamilton desarrolla los cuaterniones, un sistema algebraico de cuatro componentes.'],
-      ['1884', 'Planilandia', 'Edwin A. Abbott publica una obra que usa mundos de distintas dimensiones como herramienta conceptual.'],
-      ['1905–1915', 'Relatividad', 'La relatividad especial y general consolidan la descripción geométrica del espaciotiempo.'],
-      ['1919–1921', 'Kaluza–Klein', 'Se explora una dimensión adicional para relacionar geometría, gravedad y electromagnetismo.'],
-      ['1984', 'Supercuerdas', 'La primera revolución de supercuerdas renueva el interés por teorías con dimensiones adicionales.'],
-    ],
-    footer: 'Sección científica experimental de Ghost Nexora Bot.',
-  },
-  en: {
-    brand: 'Scientific laboratory',
-    navAria: 'Fourth dimension navigation',
-    close: 'Close navigation',
-    back: 'Back home',
-    nav: {
-      overview: 'Introduction',
-      concept: 'Concept',
-      explorer: '4D explorer',
-      journey: 'Dimensional journey',
-      physics: 'Physics',
-      history: 'History',
-    },
-    eyebrow: 'NEXORA LABS / FOURTH DIMENSION',
-    titleBefore: 'Explore what lies ',
-    titleAccent: 'beyond 3D.',
-    intro: 'A Next.js, TypeScript and Tailwind reconstruction of the original laboratory: four-dimensional geometry, projections, rotations and a visual introduction to spacetime.',
-    migrated: 'Migrated to React + TypeScript',
-    interactive: 'Interactive canvas',
-    responsive: 'Responsive',
-    explore: 'Open explorer',
-    conceptEyebrow: 'FOUNDATIONS',
-    conceptTitle: 'What is the fourth dimension?',
-    conceptIntro: 'In mathematics, a fourth spatial dimension extends space with one additional coordinate. In relativity, space and time are described together using four-dimensional spacetime.',
-    conceptCards: [
-      ['Basic definition', 'A conceptual extension of the three spatial dimensions we experience: length, width and height. A 4D point can be represented with coordinates (x, y, z, w).'],
-      ['Human perception', 'We do not directly perceive an additional spatial dimension. We study it using analogies, slices and projections, just as a 3D object can be projected onto a 2D surface.'],
-      ['Analogies', 'A being confined to a 2D plane would only observe changing slices of a 3D object passing through its world. The same idea helps us reason about 3D slices of 4D objects.'],
-    ],
-    explorerEyebrow: '4D GEOMETRY',
-    explorerTitle: 'Interactive tesseract',
-    explorerIntro: 'Rotate a hypercube projection and modify its W component. The tesseract is the 4D analogue of a cube.',
-    journeyEyebrow: 'DIMENSIONAL JOURNEY',
-    journeyTitle: 'From a point to hyperspace',
-    journeyIntro: 'Move through the conceptual progression 0D → 1D → 2D → 3D → 4D and see which geometric property is added at each step.',
-    physicsEyebrow: 'PHYSICS',
-    physicsTitle: 'The fourth dimension in physics',
-    physicsCards: [
-      ['Spacetime', 'Special and general relativity describe events with spatial and temporal coordinates. Time does not behave exactly like a spatial dimension, but it is part of the four-dimensional geometry of spacetime.'],
-      ['Extra dimensions', 'Frameworks such as Kaluza–Klein theory and several formulations of string theory study additional dimensions. They are theoretical models, not direct observations of a macroscopic fourth spatial dimension.'],
-      ['Projections', 'Visualizing 4D objects on a screen requires dimensional reduction: first 4D → 3D and then 3D → 2D. The image preserves structure, but not all information from the original object.'],
-    ],
-    historyEyebrow: 'HISTORY',
-    historyTitle: 'Ideas that expanded geometry',
-    history: [
-      ['1843', 'Hamilton quaternions', 'William Rowan Hamilton develops quaternions, an algebraic system with four components.'],
-      ['1884', 'Flatland', 'Edwin A. Abbott publishes a work that uses worlds of different dimensions as a conceptual tool.'],
-      ['1905–1915', 'Relativity', 'Special and general relativity consolidate the geometric description of spacetime.'],
-      ['1919–1921', 'Kaluza–Klein', 'An additional dimension is explored to relate geometry, gravity and electromagnetism.'],
-      ['1984', 'Superstrings', 'The first superstring revolution renews interest in theories with additional dimensions.'],
-    ],
-    footer: 'Experimental science section of Ghost Nexora Bot.',
-  },
-} as const
 
 export default async function FourthDimensionPage() {
   const locale = await getWebLocale()
-  const t = copy[locale]
+  const t = fourthDimensionPageCopy[locale]
   const navigation: UnifiedNavItem[] = [
     { id: 'home', label: t.nav.overview, href: '#inicio', icon: 'home', active: true },
     { id: 'concept', label: t.nav.concept, href: '#concepto', icon: 'modules' },
