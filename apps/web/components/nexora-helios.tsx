@@ -15,6 +15,8 @@ import {
   Spline,
   SunMedium,
   X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
 import { AdaptiveDpr, Line, OrbitControls, Sparkles, Stars } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -52,6 +54,7 @@ import {
 
 type RuntimePosition = { x: number; y: number; z: number }
 type HeliosCameraMode = 'system' | 'sun' | 'body' | 'free'
+type HeliosApproachLevel = 'orbit' | 'close' | 'inspect'
 
 const runtime = {
   days: heliosDaysSinceJ2000(),
@@ -59,6 +62,7 @@ const runtime = {
   camera: null as THREE.Camera | null,
   size: { width: 1, height: 1 },
   systemPosition: { x: 0, y: 0, z: 0 } as RuntimePosition,
+  cameraDistance: 0,
   positions: {} as Partial<Record<HeliosBodyId, RuntimePosition>>,
 }
 
@@ -844,19 +848,50 @@ function RuntimeSync({
   return null
 }
 
-function bodyFocusDistance(id: HeliosBodyId) {
-  if (id === 'sun') return 15
+function bodyApproachDistance(id: HeliosBodyId, level: HeliosApproachLevel) {
   const body = HELIOS_BODY_BY_ID[id]
-  if (id === 'jupiter' || id === 'saturn') return body.visualRadius * 6.6
-  return Math.max(body.visualRadius * 7.8, 5.6)
+  if (level === 'orbit') {
+    if (id === 'sun') return 15
+    if (id === 'jupiter' || id === 'saturn') return body.visualRadius * 6.6
+    return Math.max(body.visualRadius * 7.8, 5.6)
+  }
+
+  if (id === 'sun') return level === 'close' ? HELIOS_SUN.visualRadius * 3.1 : HELIOS_SUN.visualRadius * 1.85
+
+  if (body.rings) {
+    const ringEdge = body.visualRadius * body.rings.outer
+    return level === 'close' ? ringEdge * 1.85 : ringEdge * 1.18
+  }
+
+  if (level === 'close') {
+    return Math.max(body.visualRadius * 3.05, body.visualRadius + 0.82)
+  }
+
+  return Math.max(body.visualRadius * 1.38, body.visualRadius + 0.11)
+}
+
+function bodyMinimumCameraDistance(id: HeliosBodyId) {
+  const body = HELIOS_BODY_BY_ID[id]
+  if (id === 'sun') return HELIOS_SUN.visualRadius * 1.6
+  if (body.rings) return body.visualRadius * body.rings.outer * 1.08
+  return Math.max(body.visualRadius * 1.16, body.visualRadius + 0.065)
+}
+
+function cameraFov(mode: HeliosCameraMode, level: HeliosApproachLevel) {
+  if (mode === 'system' || mode === 'free') return 42
+  if (level === 'inspect') return 27
+  if (level === 'close') return 33
+  return 40
 }
 
 function CameraRig({
   selectedId,
   mode,
+  approachLevel,
 }: {
   selectedId: HeliosBodyId | null
   mode: HeliosCameraMode
+  approachLevel: HeliosApproachLevel
 }) {
   const controls = useRef<any>(null)
   const previous = useRef('')
@@ -869,7 +904,7 @@ function CameraRig({
   const { camera } = useThree()
 
   useEffect(() => {
-    const key = `${mode}:${selectedId ?? 'none'}`
+    const key = `${mode}:${selectedId ?? 'none'}:${approachLevel}`
     if (previous.current === key) return
     previous.current = key
 
@@ -889,20 +924,28 @@ function CameraRig({
       direction.current.copy(camera.position).sub(currentTarget)
       if (direction.current.lengthSq() < 1e-6) direction.current.set(0.55, 0.36, 0.76)
       direction.current.normalize()
-      focusDistance.current = bodyFocusDistance(focusId)
+      focusDistance.current = bodyApproachDistance(focusId, approachLevel)
       goal.current.copy(destination.current).addScaledVector(direction.current, focusDistance.current)
     } else {
       direction.current.copy(OVERVIEW).normalize()
       focusDistance.current = OVERVIEW.length()
       goal.current.copy(destination.current).add(OVERVIEW)
     }
-  }, [camera, mode, selectedId])
+  }, [approachLevel, camera, mode, selectedId])
 
   useFrame((_, delta) => {
     const controlsInstance = controls.current
     if (!controlsInstance) return
 
+    const targetFov = cameraFov(mode, approachLevel)
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const amount = 1 - Math.exp(-4 * Math.min(delta, 0.1))
+      camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, amount)
+      camera.updateProjectionMatrix()
+    }
+
     if (mode === 'free') {
+      runtime.cameraDistance = camera.position.distanceTo(controlsInstance.target)
       controlsInstance.update()
       return
     }
@@ -912,6 +955,10 @@ function CameraRig({
     const position = focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
+    if (focusId) {
+      focusDistance.current = bodyApproachDistance(focusId, approachLevel)
+    }
+
     if (arriving.current) {
       if (focusId) {
         goal.current.copy(destination.current).addScaledVector(direction.current, focusDistance.current)
@@ -919,13 +966,15 @@ function CameraRig({
         goal.current.copy(destination.current).add(OVERVIEW)
       }
 
-      const amount = 1 - Math.exp(-3.2 * Math.min(delta, 0.1))
+      const distance = camera.position.distanceTo(goal.current)
+      const flightRate = distance > 80 ? 1.9 : distance > 20 ? 2.45 : 3.35
+      const amount = 1 - Math.exp(-flightRate * Math.min(delta, 0.1))
       controlsInstance.target.lerp(destination.current, amount)
       camera.position.lerp(goal.current, amount)
 
       if (
-        controlsInstance.target.distanceTo(destination.current) < 0.08 &&
-        camera.position.distanceTo(goal.current) < 0.2
+        controlsInstance.target.distanceTo(destination.current) < 0.045 &&
+        camera.position.distanceTo(goal.current) < 0.11
       ) {
         arriving.current = false
       }
@@ -935,19 +984,23 @@ function CameraRig({
       controlsInstance.target.copy(destination.current)
     }
 
+    runtime.cameraDistance = camera.position.distanceTo(controlsInstance.target)
     controlsInstance.update()
   })
+
+  const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+  const minDistance = focusId ? bodyMinimumCameraDistance(focusId) : 1.45
 
   return <OrbitControls
     ref={controls}
     enableDamping
     dampingFactor={0.075}
-    minDistance={1.45}
+    minDistance={minDistance}
     maxDistance={520}
-    enablePan
+    enablePan={approachLevel === 'orbit' || mode === 'free' || mode === 'system'}
     makeDefault
-    zoomSpeed={0.88}
-    rotateSpeed={0.74}
+    zoomSpeed={approachLevel === 'inspect' ? 0.48 : 0.82}
+    rotateSpeed={approachLevel === 'inspect' ? 0.48 : 0.7}
   />
 }
 
@@ -956,6 +1009,7 @@ function SolarScene({
   speed,
   travelSpeed,
   cameraMode,
+  approachLevel,
   selectedId,
   showOrbits,
   showTrails,
@@ -967,6 +1021,7 @@ function SolarScene({
   speed: number
   travelSpeed: number
   cameraMode: HeliosCameraMode
+  approachLevel: HeliosApproachLevel
   selectedId: HeliosBodyId | null
   showOrbits: boolean
   showTrails: boolean
@@ -988,7 +1043,7 @@ function SolarScene({
     <GalacticStarFlow enabled={galacticMotion}/>
 
     <RuntimeSync paused={paused} orbitalSpeed={speed} travelSpeed={travelSpeed} galacticMotion={galacticMotion}/>
-    <CameraRig selectedId={selectedId} mode={cameraMode}/>
+    <CameraRig selectedId={selectedId} mode={cameraMode} approachLevel={approachLevel}/>
 
     <SystemMotion enabled={galacticMotion}>
       <Sun
@@ -1023,7 +1078,7 @@ function SolarScene({
 function SolarCanvas(props: Parameters<typeof SolarScene>[0]) {
   return <Canvas
     className="absolute inset-0 touch-none"
-    camera={{ position: [36, 58, 188], fov: 42, near: 0.12, far: 3000 }}
+    camera={{ position: [36, 58, 188], fov: 42, near: 0.025, far: 3000 }}
     dpr={[1, 1.8]}
     gl={{
       antialias: true,
@@ -1182,10 +1237,14 @@ function Toggle({
 function BodyInfo({
   locale,
   id,
+  approachLevel,
+  onApproachChange,
   onClose,
 }: {
   locale: NexoraHeliosLocale
   id: HeliosBodyId
+  approachLevel: HeliosApproachLevel
+  onApproachChange: (level: HeliosApproachLevel) => void
   onClose: () => void
 }) {
   const copy = nexoraHeliosCopy[locale]
@@ -1233,6 +1292,50 @@ function BodyInfo({
     </div>
 
     <p className="mt-3 text-sm leading-6 text-zinc-300">{bodyCopy.blurb}</p>
+
+    <div className="mt-4 rounded-xl border border-white/[.08] bg-white/[.035] p-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-500">{copy.controls.approach}</p>
+        <span className="text-[9px] font-bold uppercase tracking-[.1em] text-cyan-300/80">{copy.controls.cameraFlight}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
+        {([
+          ['orbit', copy.controls.approachOrbit],
+          ['close', copy.controls.approachClose],
+          ['inspect', copy.controls.approachInspect],
+        ] as const).map(([level, label]) => <button
+          key={level}
+          type="button"
+          aria-pressed={approachLevel === level}
+          onClick={() => onApproachChange(level)}
+          className={approachLevel === level
+            ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+            : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400 hover:text-white'}
+        >
+          {label}
+        </button>)}
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        <button
+          type="button"
+          disabled={approachLevel === 'orbit'}
+          onClick={() => onApproachChange(approachLevel === 'inspect' ? 'close' : 'orbit')}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-white/[.08] px-2 py-2 text-[10px] font-bold text-zinc-300 disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <ZoomOut className="size-3.5"/>{copy.controls.approachFarther}
+        </button>
+        <button
+          type="button"
+          disabled={approachLevel === 'inspect'}
+          onClick={() => onApproachChange(approachLevel === 'orbit' ? 'close' : 'inspect')}
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-cyan-300/15 bg-cyan-400/[.06] px-2 py-2 text-[10px] font-bold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-30"
+        >
+          <ZoomIn className="size-3.5"/>{copy.controls.approachCloser}
+        </button>
+      </div>
+      {approachLevel === 'inspect' ? <p className="mt-2 text-[10px] leading-4 text-zinc-500">{copy.controls.closeViewNote}</p> : null}
+    </div>
+
     <dl className="mt-4 space-y-2">
       {rows.map(([key, value]) => <div key={key} className="flex items-baseline justify-between gap-4 border-t border-white/[.07] pt-2">
         <dt className="text-[11px] text-zinc-500">{key}</dt>
@@ -1248,6 +1351,7 @@ function Hud({
   speed,
   travelSpeed,
   cameraMode,
+  approachLevel,
   selectedId,
   showLabels,
   showOrbits,
@@ -1261,6 +1365,7 @@ function Hud({
   setShowTrails,
   setGalacticMotion,
   onSelectBody,
+  onApproachChange,
   onSystemView,
   onSunView,
   onFreeView,
@@ -1270,6 +1375,7 @@ function Hud({
   speed: number
   travelSpeed: number
   cameraMode: HeliosCameraMode
+  approachLevel: HeliosApproachLevel
   selectedId: HeliosBodyId | null
   showLabels: boolean
   showOrbits: boolean
@@ -1283,6 +1389,7 @@ function Hud({
   setShowTrails: (value: boolean) => void
   setGalacticMotion: (value: boolean) => void
   onSelectBody: (id: HeliosBodyId) => void
+  onApproachChange: (level: HeliosApproachLevel) => void
   onSystemView: () => void
   onSunView: () => void
   onFreeView: () => void
@@ -1505,7 +1612,13 @@ function Hud({
       <p className="mx-auto mt-2 hidden max-w-6xl text-center text-[10px] font-medium tracking-wide text-zinc-500 md:block">{copy.controls.instructions}</p>
     </nav>
 
-    {selectedId ? <BodyInfo locale={locale} id={selectedId} onClose={onSystemView}/> : null}
+    {selectedId ? <BodyInfo
+      locale={locale}
+      id={selectedId}
+      approachLevel={approachLevel}
+      onApproachChange={onApproachChange}
+      onClose={onSystemView}
+    /> : null}
   </div>
 }
 
@@ -1514,6 +1627,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   const [speed, setSpeed] = useState(SPEED_DEFAULT)
   const [travelSpeed, setTravelSpeed] = useState(TRAVEL_SPEED_DEFAULT)
   const [cameraMode, setCameraMode] = useState<HeliosCameraMode>('system')
+  const [approachLevel, setApproachLevel] = useState<HeliosApproachLevel>('orbit')
   const [selectedId, setSelectedId] = useState<HeliosBodyId | null>(null)
   const [hoveredId, setHoveredId] = useState<HeliosBodyId | null>(null)
   const [showLabels, setShowLabels] = useState(true)
@@ -1523,21 +1637,31 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
   const selectBody = (id: HeliosBodyId) => {
     setSelectedId(id)
+    setApproachLevel('orbit')
     setCameraMode(id === 'sun' ? 'sun' : 'body')
+  }
+
+  const changeApproach = (level: HeliosApproachLevel) => {
+    if (!selectedId) return
+    setApproachLevel(level)
+    setCameraMode(selectedId === 'sun' ? 'sun' : 'body')
   }
 
   const showSystem = () => {
     setSelectedId(null)
+    setApproachLevel('orbit')
     setCameraMode('system')
   }
 
   const showSun = () => {
     setSelectedId('sun')
+    setApproachLevel('orbit')
     setCameraMode('sun')
   }
 
   const showFree = () => {
     setSelectedId(null)
+    setApproachLevel('orbit')
     setCameraMode('free')
   }
 
@@ -1557,6 +1681,10 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       } else if (event.key >= '1' && event.key <= '8') {
         setSelectedId(HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null)
         setCameraMode('body')
+      } else if (event.key === ']' && selectedId) {
+        setApproachLevel((value) => value === 'orbit' ? 'close' : 'inspect')
+      } else if (event.key === '[' && selectedId) {
+        setApproachLevel((value) => value === 'inspect' ? 'close' : 'orbit')
       } else if (event.key === '+' || event.key === '=') {
         setSpeed((value) => Math.min(SPEED_MAX, value * 1.6))
       } else if (event.key === '-' || event.key === '_') {
@@ -1566,7 +1694,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [selectedId])
 
   return <div className="relative h-[calc(100dvh-4rem)] min-h-[620px] w-full overflow-hidden bg-[#02040a] lg:h-dvh">
     <SolarCanvas
@@ -1574,6 +1702,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       speed={speed}
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
+      approachLevel={approachLevel}
       selectedId={selectedId}
       showOrbits={showOrbits}
       showTrails={showTrails}
@@ -1588,6 +1717,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       speed={speed}
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
+      approachLevel={approachLevel}
       selectedId={selectedId}
       showLabels={showLabels}
       showOrbits={showOrbits}
@@ -1601,6 +1731,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       setShowTrails={setShowTrails}
       setGalacticMotion={setGalacticMotion}
       onSelectBody={selectBody}
+      onApproachChange={changeApproach}
       onSystemView={showSystem}
       onSunView={showSun}
       onFreeView={showFree}
