@@ -2013,7 +2013,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
         const nextId = HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null
         setSelectedId(nextId)
         if (nextId && explorerId) {
-          setExplorerId(nextId)
+          setExplorerId(nextId as PlanetExplorerId)
           setApproachLevel('close')
         } else {
           setApproachLevel('orbit')
