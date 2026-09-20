@@ -55,6 +55,7 @@ import {
 type RuntimePosition = { x: number; y: number; z: number }
 type HeliosCameraMode = 'system' | 'sun' | 'body' | 'free'
 type HeliosApproachLevel = 'orbit' | 'close' | 'inspect'
+type PlanetExplorerId = Exclude<HeliosBodyId, 'sun'>
 
 const runtime = {
   days: heliosDaysSinceJ2000(),
@@ -193,6 +194,177 @@ function SunCorona({ radius }: { radius: number }) {
       fragmentShader={HELIOS_SUN_CORONA_FRAGMENT_SHADER}
     />
   </mesh>
+}
+
+function ExplorerGuides({
+  body,
+  showAxis,
+  showGrid,
+}: {
+  body: HeliosBody
+  showAxis: boolean
+  showGrid: boolean
+}) {
+  const equator = useMemo(() => {
+    const points: [number, number, number][] = []
+    const radius = body.visualRadius * 1.08
+    for (let index = 0; index <= 96; index += 1) {
+      const angle = index / 96 * Math.PI * 2
+      points.push([Math.cos(angle) * radius, 0, Math.sin(angle) * radius])
+    }
+    return points
+  }, [body.visualRadius])
+
+  const meridians = useMemo(() => {
+    const lines: [number, number, number][][] = []
+    const radius = body.visualRadius * 1.082
+    for (let meridian = 0; meridian < 4; meridian += 1) {
+      const rotation = meridian / 4 * Math.PI
+      const points: [number, number, number][] = []
+      for (let index = 0; index <= 96; index += 1) {
+        const angle = index / 96 * Math.PI * 2
+        const x = Math.cos(angle) * radius
+        const y = Math.sin(angle) * radius
+        points.push([
+          x * Math.cos(rotation),
+          y,
+          x * Math.sin(rotation),
+        ])
+      }
+      lines.push(points)
+    }
+    return lines
+  }, [body.visualRadius])
+
+  return <group>
+    {showAxis ? <Line
+      points={[
+        [0, -body.visualRadius * 1.75, 0],
+        [0, body.visualRadius * 1.75, 0],
+      ]}
+      color="#f8fafc"
+      lineWidth={1.1}
+      transparent
+      opacity={0.62}
+    /> : null}
+    {showGrid ? <>
+      <Line points={equator} color={body.color} lineWidth={0.85} transparent opacity={0.5}/>
+      {meridians.map((points, index) => <Line
+        key={index}
+        points={points}
+        color={body.color}
+        lineWidth={0.7}
+        transparent
+        opacity={0.26}
+      />)}
+    </> : null}
+  </group>
+}
+
+function ExplorerLighting({ id }: { id: PlanetExplorerId }) {
+  const light = useRef<THREE.DirectionalLight>(null)
+  const earth = HELIOS_BODY_BY_ID.earth
+
+  useFrame(() => {
+    if (!light.current) return
+    const body = HELIOS_BODY_BY_ID[id]
+    const orbit = id === 'moon' ? earth.orbit : body.orbit
+    if (!orbit) return
+    const [x, y, z] = heliosPosition(orbit, runtime.days)
+    worldVector.set(-x, -y, -z)
+    if (worldVector.lengthSq() < 1e-6) worldVector.set(1, 0.2, 0.5)
+    worldVector.normalize().multiplyScalar(18)
+    light.current.position.copy(worldVector)
+  })
+
+  return <>
+    <ambientLight intensity={0.16} color="#9fb9e8"/>
+    <directionalLight ref={light} intensity={3.8} color="#fff2d0"/>
+    <hemisphereLight args={['#91b9ff', '#150b05', 0.14]}/>
+  </>
+}
+
+function PlanetExplorerStage({
+  id,
+  paused,
+  autoRotate,
+  showAxis,
+  showGrid,
+}: {
+  id: PlanetExplorerId
+  paused: boolean
+  autoRotate: boolean
+  showAxis: boolean
+  showGrid: boolean
+}) {
+  const body = HELIOS_BODY_BY_ID[id]
+  const spin = useRef<THREE.Group>(null)
+  const mapFactory = useMemo(() => () => makeHeliosTexture(body.id), [body.id])
+  const cloudFactory = useMemo(() => () => body.id === 'earth' ? makeHeliosCloudTexture() : null, [body.id])
+  const bumpFactory = useMemo(() => () => makeHeliosBumpTexture(body.id), [body.id])
+  const ringFactory = useMemo(() => () => body.rings ? makeHeliosRingTexture(body.id === 'uranus') : null, [body.id, body.rings])
+  const map = useDeferredTexture(mapFactory)
+  const cloudMap = useDeferredTexture(cloudFactory)
+  const bumpMap = useDeferredTexture(bumpFactory)
+  const ringMap = useDeferredTexture(ringFactory)
+  const tilt = body.obliquity * Math.PI / 180
+  const spinDirection = body.rotationDays < 0 ? -1 : 1
+
+  useFrame((_, delta) => {
+    if (!spin.current || paused || !autoRotate) return
+    spin.current.rotation.y += delta * 0.13 * spinDirection
+  })
+
+  return <group rotation={[0, 0, tilt]}>
+    <ExplorerLighting id={id}/>
+    <group ref={spin}>
+      <mesh>
+        <sphereGeometry args={[body.visualRadius, 96, 96]}/>
+        <meshStandardMaterial
+          map={map}
+          bumpMap={bumpMap ?? undefined}
+          bumpScale={body.id === 'earth' ? 0.038 : body.id === 'mars' ? 0.06 : 0.07}
+          color={map ? '#ffffff' : body.color}
+          roughness={body.roughness}
+          metalness={body.metalness}
+        />
+      </mesh>
+
+      {body.id === 'earth' && cloudMap ? <mesh>
+        <sphereGeometry args={[body.visualRadius * 1.02, 96, 96]}/>
+        <meshStandardMaterial
+          map={cloudMap}
+          transparent
+          depthWrite={false}
+          roughness={0.94}
+          metalness={0}
+        />
+      </mesh> : null}
+    </group>
+
+    {body.atmosphere ? <Atmosphere
+      radius={body.visualRadius}
+      color={body.atmosphere}
+      scale={body.id === 'venus' ? 1.055 : 1.08}
+      intensity={body.id === 'earth' ? 0.92 : 0.68}
+    /> : null}
+
+    {body.rings && ringMap ? <mesh rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[body.visualRadius * body.rings.inner, body.visualRadius * body.rings.outer, 192]}/>
+      <meshStandardMaterial
+        map={ringMap}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={body.rings.opacity}
+        alphaTest={0.018}
+        depthWrite={false}
+        roughness={0.62}
+        metalness={0.035}
+      />
+    </mesh> : null}
+
+    <ExplorerGuides body={body} showAxis={showAxis} showGrid={showGrid}/>
+  </group>
 }
 
 function FocusRing({ radius, color }: { radius: number; color: string }) {
@@ -888,10 +1060,12 @@ function CameraRig({
   selectedId,
   mode,
   approachLevel,
+  explorerId,
 }: {
   selectedId: HeliosBodyId | null
   mode: HeliosCameraMode
   approachLevel: HeliosApproachLevel
+  explorerId: PlanetExplorerId | null
 }) {
   const controls = useRef<any>(null)
   const previous = useRef('')
@@ -904,7 +1078,7 @@ function CameraRig({
   const { camera } = useThree()
 
   useEffect(() => {
-    const key = `${mode}:${selectedId ?? 'none'}:${approachLevel}`
+    const key = `${mode}:${selectedId ?? 'none'}:${approachLevel}:${explorerId ?? 'system'}`
     if (previous.current === key) return
     previous.current = key
 
@@ -914,9 +1088,9 @@ function CameraRig({
     }
 
     arriving.current = true
-    const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+    const focusId = explorerId ?? (mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null)
     const system = runtime.systemPosition
-    const position = focusId ? runtime.positions[focusId] : system
+    const position = explorerId ? null : focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
     if (focusId) {
@@ -931,7 +1105,7 @@ function CameraRig({
       focusDistance.current = OVERVIEW.length()
       goal.current.copy(destination.current).add(OVERVIEW)
     }
-  }, [approachLevel, camera, mode, selectedId])
+  }, [approachLevel, camera, explorerId, mode, selectedId])
 
   useFrame((_, delta) => {
     const controlsInstance = controls.current
@@ -950,9 +1124,9 @@ function CameraRig({
       return
     }
 
-    const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+    const focusId = explorerId ?? (mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null)
     const system = runtime.systemPosition
-    const position = focusId ? runtime.positions[focusId] : system
+    const position = explorerId ? null : focusId ? runtime.positions[focusId] : system
     destination.current.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0)
 
     if (focusId) {
@@ -988,7 +1162,7 @@ function CameraRig({
     controlsInstance.update()
   })
 
-  const focusId = mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null
+  const focusId = explorerId ?? (mode === 'sun' ? 'sun' : mode === 'body' ? selectedId : null)
   const minDistance = focusId ? bodyMinimumCameraDistance(focusId) : 1.45
 
   return <OrbitControls
@@ -997,7 +1171,7 @@ function CameraRig({
     dampingFactor={0.075}
     minDistance={minDistance}
     maxDistance={520}
-    enablePan={approachLevel === 'orbit' || mode === 'free' || mode === 'system'}
+    enablePan={!explorerId && (approachLevel === 'orbit' || mode === 'free' || mode === 'system')}
     makeDefault
     zoomSpeed={approachLevel === 'inspect' ? 0.48 : 0.82}
     rotateSpeed={approachLevel === 'inspect' ? 0.48 : 0.7}
@@ -1010,6 +1184,10 @@ function SolarScene({
   travelSpeed,
   cameraMode,
   approachLevel,
+  explorerId,
+  explorerAutoRotate,
+  explorerAxis,
+  explorerGrid,
   selectedId,
   showOrbits,
   showTrails,
@@ -1022,6 +1200,10 @@ function SolarScene({
   travelSpeed: number
   cameraMode: HeliosCameraMode
   approachLevel: HeliosApproachLevel
+  explorerId: PlanetExplorerId | null
+  explorerAutoRotate: boolean
+  explorerAxis: boolean
+  explorerGrid: boolean
   selectedId: HeliosBodyId | null
   showOrbits: boolean
   showTrails: boolean
@@ -1040,11 +1222,23 @@ function SolarScene({
     <Sparkles count={520} scale={[760, 470, 760]} size={1.7} speed={0.07} color="#91d9ff" opacity={0.3}/>
     <Sparkles count={290} scale={[700, 410, 700]} size={1.35} speed={0.045} color="#ffd6a0" opacity={0.22}/>
     <MilkyWayBand/>
-    <GalacticStarFlow enabled={galacticMotion}/>
+    <GalacticStarFlow enabled={galacticMotion && !explorerId}/>
 
     <RuntimeSync paused={paused} orbitalSpeed={speed} travelSpeed={travelSpeed} galacticMotion={galacticMotion}/>
-    <CameraRig selectedId={selectedId} mode={cameraMode} approachLevel={approachLevel}/>
+    <CameraRig
+      selectedId={selectedId}
+      mode={cameraMode}
+      approachLevel={approachLevel}
+      explorerId={explorerId}
+    />
 
+    {explorerId ? <PlanetExplorerStage
+      id={explorerId}
+      paused={paused}
+      autoRotate={explorerAutoRotate}
+      showAxis={explorerAxis}
+      showGrid={explorerGrid}
+    /> : <>
     <SystemMotion enabled={galacticMotion}>
       <Sun
         selected={selectedId === 'sun'}
@@ -1072,6 +1266,7 @@ function SolarScene({
       travelSpeed={travelSpeed}
       galacticMotion={galacticMotion}
     />
+    </>}
   </>
 }
 
@@ -1238,13 +1433,31 @@ function BodyInfo({
   locale,
   id,
   approachLevel,
+  explorerActive,
+  explorerAutoRotate,
+  explorerAxis,
+  explorerGrid,
   onApproachChange,
+  onEnterExplorer,
+  onExitExplorer,
+  onExplorerAutoRotateChange,
+  onExplorerAxisChange,
+  onExplorerGridChange,
   onClose,
 }: {
   locale: NexoraHeliosLocale
   id: HeliosBodyId
   approachLevel: HeliosApproachLevel
+  explorerActive: boolean
+  explorerAutoRotate: boolean
+  explorerAxis: boolean
+  explorerGrid: boolean
   onApproachChange: (level: HeliosApproachLevel) => void
+  onEnterExplorer: () => void
+  onExitExplorer: () => void
+  onExplorerAutoRotateChange: (value: boolean) => void
+  onExplorerAxisChange: (value: boolean) => void
+  onExplorerGridChange: (value: boolean) => void
   onClose: () => void
 }) {
   const copy = nexoraHeliosCopy[locale]
@@ -1292,6 +1505,62 @@ function BodyInfo({
     </div>
 
     <p className="mt-3 text-sm leading-6 text-zinc-300">{bodyCopy.blurb}</p>
+
+    {id !== 'sun' ? <div className={explorerActive
+      ? 'mt-4 rounded-xl border border-cyan-300/20 bg-cyan-400/[.06] p-3'
+      : 'mt-4 rounded-xl border border-white/[.08] bg-white/[.035] p-3'}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[.13em] text-cyan-200/80">{copy.controls.planetExplorer}</p>
+          <p className="mt-1 text-[10px] leading-4 text-zinc-500">{explorerActive ? copy.controls.explorerHint : copy.controls.explorerSurfaceNext}</p>
+        </div>
+        <button
+          type="button"
+          onClick={explorerActive ? onExitExplorer : onEnterExplorer}
+          className={explorerActive
+            ? 'shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-[9px] font-black text-zinc-200 hover:bg-white/[.06]'
+            : 'shrink-0 rounded-lg bg-cyan-100 px-2.5 py-2 text-[9px] font-black text-black'}
+        >
+          {explorerActive ? copy.controls.exitPlanetExplorer : copy.controls.enterPlanetExplorer}
+        </button>
+      </div>
+
+      {explorerActive ? <>
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            aria-pressed={explorerAutoRotate}
+            onClick={() => onExplorerAutoRotateChange(!explorerAutoRotate)}
+            className={explorerAutoRotate
+              ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400'}
+          >
+            {copy.controls.explorerAutoRotate}
+          </button>
+          <button
+            type="button"
+            aria-pressed={explorerAxis}
+            onClick={() => onExplorerAxisChange(!explorerAxis)}
+            className={explorerAxis
+              ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400'}
+          >
+            {copy.controls.explorerAxis}
+          </button>
+          <button
+            type="button"
+            aria-pressed={explorerGrid}
+            onClick={() => onExplorerGridChange(!explorerGrid)}
+            className={explorerGrid
+              ? 'rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400'}
+          >
+            {copy.controls.explorerGrid}
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] leading-4 text-zinc-500">{copy.controls.explorerSurfaceNext}</p>
+      </> : null}
+    </div> : null}
 
     <div className="mt-4 rounded-xl border border-white/[.08] bg-white/[.035] p-2.5">
       <div className="flex items-center justify-between gap-3">
@@ -1352,6 +1621,10 @@ function Hud({
   travelSpeed,
   cameraMode,
   approachLevel,
+  explorerId,
+  explorerAutoRotate,
+  explorerAxis,
+  explorerGrid,
   selectedId,
   showLabels,
   showOrbits,
@@ -1366,6 +1639,11 @@ function Hud({
   setGalacticMotion,
   onSelectBody,
   onApproachChange,
+  onEnterExplorer,
+  onExitExplorer,
+  onExplorerAutoRotateChange,
+  onExplorerAxisChange,
+  onExplorerGridChange,
   onSystemView,
   onSunView,
   onFreeView,
@@ -1376,6 +1654,10 @@ function Hud({
   travelSpeed: number
   cameraMode: HeliosCameraMode
   approachLevel: HeliosApproachLevel
+  explorerId: PlanetExplorerId | null
+  explorerAutoRotate: boolean
+  explorerAxis: boolean
+  explorerGrid: boolean
   selectedId: HeliosBodyId | null
   showLabels: boolean
   showOrbits: boolean
@@ -1390,6 +1672,11 @@ function Hud({
   setGalacticMotion: (value: boolean) => void
   onSelectBody: (id: HeliosBodyId) => void
   onApproachChange: (level: HeliosApproachLevel) => void
+  onEnterExplorer: () => void
+  onExitExplorer: () => void
+  onExplorerAutoRotateChange: (value: boolean) => void
+  onExplorerAxisChange: (value: boolean) => void
+  onExplorerGridChange: (value: boolean) => void
   onSystemView: () => void
   onSunView: () => void
   onFreeView: () => void
@@ -1431,7 +1718,7 @@ function Hud({
           <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[.15em] text-orange-200/70">{copy.subtitle}</p>
           <p className="mt-1 text-[9px] font-bold uppercase tracking-[.12em] text-cyan-200/60">{copy.controls.motionFrame}</p>
         </div>
-        <div className="hidden gap-1.5 xl:flex">
+        {!explorerId ? <div className="hidden gap-1.5 xl:flex">
           <Toggle pressed={showOrbits} label={copy.controls.orbits} onClick={() => setShowOrbits(!showOrbits)}>
             <Spline className="size-4"/>
           </Toggle>
@@ -1447,7 +1734,7 @@ function Hud({
           <Toggle pressed={cameraMode === 'system'} label={copy.controls.cameraSystem} onClick={onSystemView}>
             <Crosshair className="size-4"/>
           </Toggle>
-        </div>
+        </div> : <div className="hidden rounded-xl border border-cyan-300/15 bg-cyan-400/[.06] px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] text-cyan-100 xl:block">{copy.controls.explorerActive}</div>}
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-black/55 p-3 backdrop-blur-xl md:w-[20rem]">
@@ -1573,7 +1860,7 @@ function Hud({
       </div>
     </header>
 
-    <div className="pointer-events-auto absolute bottom-[4.1rem] left-3 flex gap-1.5 xl:hidden">
+    {!explorerId ? <div className="pointer-events-auto absolute bottom-[4.1rem] left-3 flex gap-1.5 xl:hidden">
       <Toggle pressed={showOrbits} label={copy.controls.orbits} onClick={() => setShowOrbits(!showOrbits)}>
         <Spline className="size-4"/>
       </Toggle>
@@ -1589,7 +1876,7 @@ function Hud({
       <Toggle pressed={cameraMode === 'system'} label={copy.controls.cameraSystem} onClick={onSystemView}>
         <Crosshair className="size-4"/>
       </Toggle>
-    </div>
+    </div> : null}
 
     <nav className="pointer-events-auto absolute bottom-2 left-0 right-0 px-3 md:bottom-4 md:px-5">
       <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1599,7 +1886,11 @@ function Hud({
           return <button
             key={id}
             type="button"
-            onClick={() => active ? onSystemView() : onSelectBody(id)}
+            onClick={() => {
+              if (active && explorerId) return
+              if (active) onSystemView()
+              else onSelectBody(id)
+            }}
             className={active
               ? 'flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-xs font-black text-black shadow-lg'
               : 'flex h-10 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3.5 text-xs font-bold text-zinc-300 backdrop-blur-xl hover:bg-white/10'}
@@ -1616,7 +1907,16 @@ function Hud({
       locale={locale}
       id={selectedId}
       approachLevel={approachLevel}
+      explorerActive={explorerId === selectedId}
+      explorerAutoRotate={explorerAutoRotate}
+      explorerAxis={explorerAxis}
+      explorerGrid={explorerGrid}
       onApproachChange={onApproachChange}
+      onEnterExplorer={onEnterExplorer}
+      onExitExplorer={onExitExplorer}
+      onExplorerAutoRotateChange={onExplorerAutoRotateChange}
+      onExplorerAxisChange={onExplorerAxisChange}
+      onExplorerGridChange={onExplorerGridChange}
       onClose={onSystemView}
     /> : null}
   </div>
@@ -1628,6 +1928,10 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   const [travelSpeed, setTravelSpeed] = useState(TRAVEL_SPEED_DEFAULT)
   const [cameraMode, setCameraMode] = useState<HeliosCameraMode>('system')
   const [approachLevel, setApproachLevel] = useState<HeliosApproachLevel>('orbit')
+  const [explorerId, setExplorerId] = useState<PlanetExplorerId | null>(null)
+  const [explorerAutoRotate, setExplorerAutoRotate] = useState(true)
+  const [explorerAxis, setExplorerAxis] = useState(false)
+  const [explorerGrid, setExplorerGrid] = useState(false)
   const [selectedId, setSelectedId] = useState<HeliosBodyId | null>(null)
   const [hoveredId, setHoveredId] = useState<HeliosBodyId | null>(null)
   const [showLabels, setShowLabels] = useState(true)
@@ -1636,9 +1940,25 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   const [galacticMotion, setGalacticMotion] = useState(true)
 
   const selectBody = (id: HeliosBodyId) => {
+    const keepExplorer = Boolean(explorerId) && id !== 'sun'
     setSelectedId(id)
-    setApproachLevel('orbit')
+    setApproachLevel(keepExplorer ? 'close' : 'orbit')
+    setExplorerId(keepExplorer ? id as PlanetExplorerId : null)
     setCameraMode(id === 'sun' ? 'sun' : 'body')
+  }
+
+  const enterExplorer = () => {
+    if (!selectedId || selectedId === 'sun') return
+    setExplorerId(selectedId)
+    setApproachLevel('close')
+    setCameraMode('body')
+  }
+
+  const exitExplorer = () => {
+    if (!explorerId) return
+    setExplorerId(null)
+    setApproachLevel('orbit')
+    setCameraMode('body')
   }
 
   const changeApproach = (level: HeliosApproachLevel) => {
@@ -1648,18 +1968,21 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
   }
 
   const showSystem = () => {
+    setExplorerId(null)
     setSelectedId(null)
     setApproachLevel('orbit')
     setCameraMode('system')
   }
 
   const showSun = () => {
+    setExplorerId(null)
     setSelectedId('sun')
     setApproachLevel('orbit')
     setCameraMode('sun')
   }
 
   const showFree = () => {
+    setExplorerId(null)
     setSelectedId(null)
     setApproachLevel('orbit')
     setCameraMode('free')
@@ -1673,13 +1996,28 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
         event.preventDefault()
         setPaused((value) => !value)
       } else if (event.code === 'Escape') {
-        setSelectedId(null)
-        setCameraMode('system')
+        if (explorerId) {
+          setExplorerId(null)
+          setApproachLevel('orbit')
+          setCameraMode('body')
+        } else {
+          setSelectedId(null)
+          setCameraMode('system')
+        }
       } else if (event.key === '0') {
+        setExplorerId(null)
         setSelectedId('sun')
+        setApproachLevel('orbit')
         setCameraMode('sun')
       } else if (event.key >= '1' && event.key <= '8') {
-        setSelectedId(HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null)
+        const nextId = HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null
+        setSelectedId(nextId)
+        if (nextId && explorerId) {
+          setExplorerId(nextId as PlanetExplorerId)
+          setApproachLevel('close')
+        } else {
+          setApproachLevel('orbit')
+        }
         setCameraMode('body')
       } else if (event.key === ']' && selectedId) {
         setApproachLevel((value) => value === 'orbit' ? 'close' : 'inspect')
@@ -1694,7 +2032,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selectedId])
+  }, [explorerId, selectedId])
 
   return <div className="relative h-[calc(100dvh-4rem)] min-h-[620px] w-full overflow-hidden bg-[#02040a] lg:h-dvh">
     <SolarCanvas
@@ -1703,6 +2041,10 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
       approachLevel={approachLevel}
+      explorerId={explorerId}
+      explorerAutoRotate={explorerAutoRotate}
+      explorerAxis={explorerAxis}
+      explorerGrid={explorerGrid}
       selectedId={selectedId}
       showOrbits={showOrbits}
       showTrails={showTrails}
@@ -1710,7 +2052,7 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       onSelect={selectBody}
       onHover={setHoveredId}
     />
-    <PlanetLabels locale={locale} visible={showLabels} selectedId={selectedId} hoveredId={hoveredId}/>
+    <PlanetLabels locale={locale} visible={showLabels && !explorerId} selectedId={selectedId} hoveredId={hoveredId}/>
     <Hud
       locale={locale}
       paused={paused}
@@ -1718,6 +2060,10 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       travelSpeed={travelSpeed}
       cameraMode={cameraMode}
       approachLevel={approachLevel}
+      explorerId={explorerId}
+      explorerAutoRotate={explorerAutoRotate}
+      explorerAxis={explorerAxis}
+      explorerGrid={explorerGrid}
       selectedId={selectedId}
       showLabels={showLabels}
       showOrbits={showOrbits}
@@ -1732,6 +2078,11 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       setGalacticMotion={setGalacticMotion}
       onSelectBody={selectBody}
       onApproachChange={changeApproach}
+      onEnterExplorer={enterExplorer}
+      onExitExplorer={exitExplorer}
+      onExplorerAutoRotateChange={setExplorerAutoRotate}
+      onExplorerAxisChange={setExplorerAxis}
+      onExplorerGridChange={setExplorerGrid}
       onSystemView={showSystem}
       onSunView={showSun}
       onFreeView={showFree}
