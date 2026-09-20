@@ -11,7 +11,7 @@ function check(name, condition, detail = '') {
   assert.ok(condition, `${name}${detail ? `: ${detail}` : ''}`)
 }
 
-const [router, adapter, localizedSocket, interactive, language, telegram, discord, discordTypes, webServer, webProvider, webCatalog] = await Promise.all([
+const [router, adapter, localizedSocket, interactive, language, telegram, discordRouter, discordApplicationCommands, discordTypes, webServer, webProvider, webCatalog] = await Promise.all([
   read('apps/bot/src/core/router.ts'),
   read('apps/bot/src/platform/whatsapp/adapter.ts'),
   read('apps/bot/src/platform/whatsapp/localized-socket.ts'),
@@ -19,6 +19,7 @@ const [router, adapter, localizedSocket, interactive, language, telegram, discor
   read('apps/bot/src/commands/language.ts'),
   read('apps/bot/src/platform/telegram/router.ts'),
   read('apps/bot/src/platform/discord/router.ts'),
+  read('apps/bot/src/platform/discord/application-commands.ts'),
   read('apps/bot/src/platform/discord/types.ts'),
   read('apps/web/lib/i18n-server.ts'),
   read('apps/web/components/i18n-provider.tsx'),
@@ -37,11 +38,11 @@ check('WhatsApp language command uses namespaced preferences', /setPlatformLocal
 check('Telegram uses platform locale resolver', /resolvePlatformLocale/.test(telegram))
 check('Telegram consumes language_code', /language_code/.test(telegram))
 check('Telegram exposes language command', /['"]language['"]/.test(telegram) && /setPlatformLocale/.test(telegram))
-check('Discord uses platform locale resolver', /resolvePlatformLocale/.test(discord))
-check('Discord consumes interaction locale', /clientLocale/.test(discord) && /interaction\.locale/.test(discord))
+check('Discord uses platform locale resolver', /resolvePlatformLocale/.test(discordRouter))
+check('Discord consumes interaction locale', /clientLocale/.test(discordRouter) && /interaction\.locale/.test(discordRouter))
 check('Discord supports guild_locale', /guild_locale/.test(discordTypes))
-check('Discord application commands localize descriptions', /description_localizations/.test(discord) && /en-US/.test(discord))
-check('Discord exposes language command', /['"]language['"]/.test(discord) && /setPlatformLocale/.test(discord))
+check('Discord application commands localize descriptions', /description_localizations/.test(discordApplicationCommands) && /en-US/.test(discordApplicationCommands) && /es-419/.test(discordApplicationCommands))
+check('Discord exposes language command', /['"]language['"]/.test(discordRouter) && /setPlatformLocale/.test(discordRouter))
 
 check('Web detects Accept-Language', /accept-language/i.test(webServer))
 check('Web persists locale cookie', /gnb_locale/.test(webServer) && /gnb_locale/.test(webProvider))
