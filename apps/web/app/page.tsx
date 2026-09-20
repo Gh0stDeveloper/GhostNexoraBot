@@ -114,6 +114,7 @@ export default async function Home() {
     { id: 'operation', label: t('home.nav.operation'), href: '#funcionamiento', icon: 'flow' },
     { id: 'architecture', label: t('home.nav.architecture'), href: '#arquitectura', icon: 'activity' },
     { id: 'modules', label: t('home.nav.modules'), href: '#modulos', icon: 'modules' },
+    { id: 'fourth-dimension', label: locale === 'en' ? 'Fourth dimension' : 'Cuarta dimensión', href: '/cuarta-dimension', icon: 'activity' },
     { id: 'security', label: t('home.nav.security'), href: '#seguridad', icon: 'security' },
   ]
 
