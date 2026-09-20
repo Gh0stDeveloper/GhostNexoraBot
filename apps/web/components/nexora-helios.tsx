@@ -1246,6 +1246,8 @@ function Hud({
   locale,
   paused,
   speed,
+  travelSpeed,
+  cameraMode,
   selectedId,
   showLabels,
   showOrbits,
@@ -1253,15 +1255,21 @@ function Hud({
   galacticMotion,
   setPaused,
   setSpeed,
-  setSelectedId,
+  setTravelSpeed,
   setShowLabels,
   setShowOrbits,
   setShowTrails,
   setGalacticMotion,
+  onSelectBody,
+  onSystemView,
+  onSunView,
+  onFreeView,
 }: {
   locale: NexoraHeliosLocale
   paused: boolean
   speed: number
+  travelSpeed: number
+  cameraMode: HeliosCameraMode
   selectedId: HeliosBodyId | null
   showLabels: boolean
   showOrbits: boolean
@@ -1269,11 +1277,15 @@ function Hud({
   galacticMotion: boolean
   setPaused: (value: boolean) => void
   setSpeed: (value: number) => void
-  setSelectedId: (value: HeliosBodyId | null) => void
+  setTravelSpeed: (value: number) => void
   setShowLabels: (value: boolean) => void
   setShowOrbits: (value: boolean) => void
   setShowTrails: (value: boolean) => void
   setGalacticMotion: (value: boolean) => void
+  onSelectBody: (id: HeliosBodyId) => void
+  onSystemView: () => void
+  onSunView: () => void
+  onFreeView: () => void
 }) {
   const copy = nexoraHeliosCopy[locale]
   const [days, setDays] = useState(runtime.days)
@@ -1298,18 +1310,25 @@ function Hud({
     [copy.controls.decadePerSecond, 3652],
   ] as const
 
+  const travelPresets = [
+    [copy.controls.travelSlow, 0.5],
+    [copy.controls.travelNormal, 1],
+    [copy.controls.travelFast, 2.5],
+  ] as const
+
   return <div className="pointer-events-none absolute inset-0 z-20">
     <header className="pointer-events-auto absolute left-3 right-3 top-3 flex flex-col gap-2 md:left-5 md:right-5 md:top-5 md:flex-row md:items-start md:justify-between">
       <div className="flex max-w-[21rem] items-start gap-2">
         <div className="rounded-2xl border border-orange-300/15 bg-black/50 px-4 py-3 shadow-[0_0_32px_rgba(255,154,55,.08)] backdrop-blur-xl">
           <p className="text-xl font-black tracking-[-.03em] text-white md:text-2xl">{copy.title}</p>
           <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[.15em] text-orange-200/70">{copy.subtitle}</p>
+          <p className="mt-1 text-[9px] font-bold uppercase tracking-[.12em] text-cyan-200/60">{copy.controls.motionFrame}</p>
         </div>
         <div className="hidden gap-1.5 xl:flex">
           <Toggle pressed={showOrbits} label={copy.controls.orbits} onClick={() => setShowOrbits(!showOrbits)}>
             <Spline className="size-4"/>
           </Toggle>
-          <Toggle pressed={showTrails} label={copy.controls.trails} onClick={() => setShowTrails(!showTrails)}>
+          <Toggle pressed={showTrails} label={copy.controls.worldTrails} onClick={() => setShowTrails(!showTrails)}>
             <SparklesIcon className="size-4"/>
           </Toggle>
           <Toggle pressed={showLabels} label={copy.controls.labels} onClick={() => setShowLabels(!showLabels)}>
@@ -1318,13 +1337,13 @@ function Hud({
           <Toggle pressed={galacticMotion} label={copy.controls.galacticMotion} onClick={() => setGalacticMotion(!galacticMotion)}>
             <Orbit className="size-4"/>
           </Toggle>
-          <Toggle pressed={selectedId === null} label={copy.controls.overview} onClick={() => setSelectedId(null)}>
+          <Toggle pressed={cameraMode === 'system'} label={copy.controls.cameraSystem} onClick={onSystemView}>
             <Crosshair className="size-4"/>
           </Toggle>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-black/55 p-3 backdrop-blur-xl md:w-[19rem]">
+      <div className="rounded-2xl border border-white/10 bg-black/55 p-3 backdrop-blur-xl md:w-[20rem]">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -1343,11 +1362,45 @@ function Hud({
             aria-label={copy.controls.reset}
             onClick={() => {
               runtime.days = heliosDaysSinceJ2000()
+              runtime.travelSeconds = 0
               setDays(runtime.days)
             }}
             className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-400 hover:text-white"
           >
             <RotateCcw className="size-4"/>
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            aria-pressed={cameraMode === 'system'}
+            onClick={onSystemView}
+            className={cameraMode === 'system'
+              ? 'flex items-center justify-center gap-1 rounded-lg bg-white px-2 py-2 text-[9px] font-black text-black'
+              : 'flex items-center justify-center gap-1 rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400 hover:text-white'}
+          >
+            <Move3D className="size-3.5"/>{copy.controls.cameraSystem}
+          </button>
+          <button
+            type="button"
+            aria-pressed={cameraMode === 'sun'}
+            onClick={onSunView}
+            className={cameraMode === 'sun'
+              ? 'flex items-center justify-center gap-1 rounded-lg bg-orange-100 px-2 py-2 text-[9px] font-black text-black'
+              : 'flex items-center justify-center gap-1 rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400 hover:text-white'}
+          >
+            <SunMedium className="size-3.5"/>{copy.controls.cameraSun}
+          </button>
+          <button
+            type="button"
+            aria-pressed={cameraMode === 'free'}
+            onClick={onFreeView}
+            className={cameraMode === 'free'
+              ? 'flex items-center justify-center gap-1 rounded-lg bg-cyan-100 px-2 py-2 text-[9px] font-black text-black'
+              : 'flex items-center justify-center gap-1 rounded-lg border border-white/[.08] px-2 py-2 text-[9px] font-bold text-zinc-400 hover:text-white'}
+          >
+            <MousePointer2 className="size-3.5"/>{copy.controls.cameraFree}
           </button>
         </div>
 
@@ -1364,11 +1417,11 @@ function Hud({
             step={0.4}
             value={speedToSlider(speed)}
             onChange={(event) => setSpeed(sliderToSpeed(Number(event.target.value)))}
-            className="mt-3 w-full accent-cyan-400"
+            className="mt-2 w-full accent-cyan-400"
           />
         </label>
 
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="mt-1.5 flex flex-wrap gap-1">
           {presets.map(([label, value]) => <button
             key={value}
             type="button"
@@ -1380,6 +1433,36 @@ function Hud({
             {label}
           </button>)}
         </div>
+
+        <label className="mt-3 block">
+          <span className="flex justify-between gap-3 text-[10px] font-bold uppercase tracking-[.1em] text-zinc-500">
+            <span>{copy.controls.travelSpeed}</span>
+            <span className="font-mono text-orange-300">{formatNumber(locale, travelSpeed, 2)}×</span>
+          </span>
+          <input
+            aria-label={copy.controls.travelSpeed}
+            type="range"
+            min={TRAVEL_SPEED_MIN}
+            max={TRAVEL_SPEED_MAX}
+            step={0.05}
+            value={travelSpeed}
+            onChange={(event) => setTravelSpeed(Number(event.target.value))}
+            className="mt-2 w-full accent-orange-400"
+          />
+        </label>
+
+        <div className="mt-1.5 flex gap-1">
+          {travelPresets.map(([label, value]) => <button
+            key={value}
+            type="button"
+            onClick={() => setTravelSpeed(value)}
+            className={Math.abs(travelSpeed - value) < 0.06
+              ? 'flex-1 rounded-full bg-orange-100 px-2 py-1 text-[9px] font-black text-black'
+              : 'flex-1 rounded-full border border-white/[.07] px-2 py-1 text-[9px] font-bold text-zinc-500 hover:text-white'}
+          >
+            {label}
+          </button>)}
+        </div>
       </div>
     </header>
 
@@ -1387,7 +1470,7 @@ function Hud({
       <Toggle pressed={showOrbits} label={copy.controls.orbits} onClick={() => setShowOrbits(!showOrbits)}>
         <Spline className="size-4"/>
       </Toggle>
-      <Toggle pressed={showTrails} label={copy.controls.trails} onClick={() => setShowTrails(!showTrails)}>
+      <Toggle pressed={showTrails} label={copy.controls.worldTrails} onClick={() => setShowTrails(!showTrails)}>
         <SparklesIcon className="size-4"/>
       </Toggle>
       <Toggle pressed={showLabels} label={copy.controls.labels} onClick={() => setShowLabels(!showLabels)}>
@@ -1395,6 +1478,9 @@ function Hud({
       </Toggle>
       <Toggle pressed={galacticMotion} label={copy.controls.galacticMotion} onClick={() => setGalacticMotion(!galacticMotion)}>
         <Orbit className="size-4"/>
+      </Toggle>
+      <Toggle pressed={cameraMode === 'system'} label={copy.controls.cameraSystem} onClick={onSystemView}>
+        <Crosshair className="size-4"/>
       </Toggle>
     </div>
 
@@ -1406,7 +1492,7 @@ function Hud({
           return <button
             key={id}
             type="button"
-            onClick={() => setSelectedId(active ? null : id)}
+            onClick={() => active ? onSystemView() : onSelectBody(id)}
             className={active
               ? 'flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-xs font-black text-black shadow-lg'
               : 'flex h-10 shrink-0 items-center gap-2 rounded-full border border-white/10 bg-black/55 px-3.5 text-xs font-bold text-zinc-300 backdrop-blur-xl hover:bg-white/10'}
@@ -1419,19 +1505,41 @@ function Hud({
       <p className="mx-auto mt-2 hidden max-w-6xl text-center text-[10px] font-medium tracking-wide text-zinc-500 md:block">{copy.controls.instructions}</p>
     </nav>
 
-    {selectedId ? <BodyInfo locale={locale} id={selectedId} onClose={() => setSelectedId(null)}/> : null}
+    {selectedId ? <BodyInfo locale={locale} id={selectedId} onClose={onSystemView}/> : null}
   </div>
 }
 
 export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale }) {
   const [paused, setPaused] = useState(false)
   const [speed, setSpeed] = useState(SPEED_DEFAULT)
+  const [travelSpeed, setTravelSpeed] = useState(TRAVEL_SPEED_DEFAULT)
+  const [cameraMode, setCameraMode] = useState<HeliosCameraMode>('system')
   const [selectedId, setSelectedId] = useState<HeliosBodyId | null>(null)
   const [hoveredId, setHoveredId] = useState<HeliosBodyId | null>(null)
   const [showLabels, setShowLabels] = useState(true)
   const [showOrbits, setShowOrbits] = useState(true)
   const [showTrails, setShowTrails] = useState(true)
   const [galacticMotion, setGalacticMotion] = useState(true)
+
+  const selectBody = (id: HeliosBodyId) => {
+    setSelectedId(id)
+    setCameraMode(id === 'sun' ? 'sun' : 'body')
+  }
+
+  const showSystem = () => {
+    setSelectedId(null)
+    setCameraMode('system')
+  }
+
+  const showSun = () => {
+    setSelectedId('sun')
+    setCameraMode('sun')
+  }
+
+  const showFree = () => {
+    setSelectedId(null)
+    setCameraMode('free')
+  }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1442,10 +1550,13 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
         setPaused((value) => !value)
       } else if (event.code === 'Escape') {
         setSelectedId(null)
+        setCameraMode('system')
       } else if (event.key === '0') {
         setSelectedId('sun')
+        setCameraMode('sun')
       } else if (event.key >= '1' && event.key <= '8') {
         setSelectedId(HELIOS_PLANETS[Number(event.key) - 1]?.id ?? null)
+        setCameraMode('body')
       } else if (event.key === '+' || event.key === '=') {
         setSpeed((value) => Math.min(SPEED_MAX, value * 1.6))
       } else if (event.key === '-' || event.key === '_') {
@@ -1461,11 +1572,13 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
     <SolarCanvas
       paused={paused}
       speed={speed}
+      travelSpeed={travelSpeed}
+      cameraMode={cameraMode}
       selectedId={selectedId}
       showOrbits={showOrbits}
       showTrails={showTrails}
       galacticMotion={galacticMotion}
-      onSelect={setSelectedId}
+      onSelect={selectBody}
       onHover={setHoveredId}
     />
     <PlanetLabels locale={locale} visible={showLabels} selectedId={selectedId} hoveredId={hoveredId}/>
@@ -1473,6 +1586,8 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       locale={locale}
       paused={paused}
       speed={speed}
+      travelSpeed={travelSpeed}
+      cameraMode={cameraMode}
       selectedId={selectedId}
       showLabels={showLabels}
       showOrbits={showOrbits}
@@ -1480,11 +1595,15 @@ export function NexoraHeliosExperience({ locale }: { locale: NexoraHeliosLocale 
       galacticMotion={galacticMotion}
       setPaused={setPaused}
       setSpeed={setSpeed}
-      setSelectedId={setSelectedId}
+      setTravelSpeed={setTravelSpeed}
       setShowLabels={setShowLabels}
       setShowOrbits={setShowOrbits}
       setShowTrails={setShowTrails}
       setGalacticMotion={setGalacticMotion}
+      onSelectBody={selectBody}
+      onSystemView={showSystem}
+      onSunView={showSun}
+      onFreeView={showFree}
     />
   </div>
 }
