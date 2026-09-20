@@ -55,6 +55,7 @@ import {
 type RuntimePosition = { x: number; y: number; z: number }
 type HeliosCameraMode = 'system' | 'sun' | 'body' | 'free'
 type HeliosApproachLevel = 'orbit' | 'close' | 'inspect'
+type PlanetExplorerId = Exclude<HeliosBodyId, 'sun'>
 
 const runtime = {
   days: heliosDaysSinceJ2000(),
@@ -193,6 +194,177 @@ function SunCorona({ radius }: { radius: number }) {
       fragmentShader={HELIOS_SUN_CORONA_FRAGMENT_SHADER}
     />
   </mesh>
+}
+
+function ExplorerGuides({
+  body,
+  showAxis,
+  showGrid,
+}: {
+  body: HeliosBody
+  showAxis: boolean
+  showGrid: boolean
+}) {
+  const equator = useMemo(() => {
+    const points: [number, number, number][] = []
+    const radius = body.visualRadius * 1.08
+    for (let index = 0; index <= 96; index += 1) {
+      const angle = index / 96 * Math.PI * 2
+      points.push([Math.cos(angle) * radius, 0, Math.sin(angle) * radius])
+    }
+    return points
+  }, [body.visualRadius])
+
+  const meridians = useMemo(() => {
+    const lines: [number, number, number][][] = []
+    const radius = body.visualRadius * 1.082
+    for (let meridian = 0; meridian < 4; meridian += 1) {
+      const rotation = meridian / 4 * Math.PI
+      const points: [number, number, number][] = []
+      for (let index = 0; index <= 96; index += 1) {
+        const angle = index / 96 * Math.PI * 2
+        const x = Math.cos(angle) * radius
+        const y = Math.sin(angle) * radius
+        points.push([
+          x * Math.cos(rotation),
+          y,
+          x * Math.sin(rotation),
+        ])
+      }
+      lines.push(points)
+    }
+    return lines
+  }, [body.visualRadius])
+
+  return <group>
+    {showAxis ? <Line
+      points={[
+        [0, -body.visualRadius * 1.75, 0],
+        [0, body.visualRadius * 1.75, 0],
+      ]}
+      color="#f8fafc"
+      lineWidth={1.1}
+      transparent
+      opacity={0.62}
+    /> : null}
+    {showGrid ? <>
+      <Line points={equator} color={body.color} lineWidth={0.85} transparent opacity={0.5}/>
+      {meridians.map((points, index) => <Line
+        key={index}
+        points={points}
+        color={body.color}
+        lineWidth={0.7}
+        transparent
+        opacity={0.26}
+      />)}
+    </> : null}
+  </group>
+}
+
+function ExplorerLighting({ id }: { id: PlanetExplorerId }) {
+  const light = useRef<THREE.DirectionalLight>(null)
+  const earth = HELIOS_BODY_BY_ID.earth
+
+  useFrame(() => {
+    if (!light.current) return
+    const body = HELIOS_BODY_BY_ID[id]
+    const orbit = id === 'moon' ? earth.orbit : body.orbit
+    if (!orbit) return
+    const [x, y, z] = heliosPosition(orbit, runtime.days)
+    worldVector.set(-x, -y, -z)
+    if (worldVector.lengthSq() < 1e-6) worldVector.set(1, 0.2, 0.5)
+    worldVector.normalize().multiplyScalar(18)
+    light.current.position.copy(worldVector)
+  })
+
+  return <>
+    <ambientLight intensity={0.16} color="#9fb9e8"/>
+    <directionalLight ref={light} intensity={3.8} color="#fff2d0"/>
+    <hemisphereLight args={['#91b9ff', '#150b05', 0.14]}/>
+  </>
+}
+
+function PlanetExplorerStage({
+  id,
+  paused,
+  autoRotate,
+  showAxis,
+  showGrid,
+}: {
+  id: PlanetExplorerId
+  paused: boolean
+  autoRotate: boolean
+  showAxis: boolean
+  showGrid: boolean
+}) {
+  const body = HELIOS_BODY_BY_ID[id]
+  const spin = useRef<THREE.Group>(null)
+  const mapFactory = useMemo(() => () => makeHeliosTexture(body.id), [body.id])
+  const cloudFactory = useMemo(() => () => body.id === 'earth' ? makeHeliosCloudTexture() : null, [body.id])
+  const bumpFactory = useMemo(() => () => makeHeliosBumpTexture(body.id), [body.id])
+  const ringFactory = useMemo(() => () => body.rings ? makeHeliosRingTexture(body.id === 'uranus') : null, [body.id, body.rings])
+  const map = useDeferredTexture(mapFactory)
+  const cloudMap = useDeferredTexture(cloudFactory)
+  const bumpMap = useDeferredTexture(bumpFactory)
+  const ringMap = useDeferredTexture(ringFactory)
+  const tilt = body.obliquity * Math.PI / 180
+  const spinDirection = body.rotationDays < 0 ? -1 : 1
+
+  useFrame((_, delta) => {
+    if (!spin.current || paused || !autoRotate) return
+    spin.current.rotation.y += delta * 0.13 * spinDirection
+  })
+
+  return <group rotation={[0, 0, tilt]}>
+    <ExplorerLighting id={id}/>
+    <group ref={spin}>
+      <mesh>
+        <sphereGeometry args={[body.visualRadius, 96, 96]}/>
+        <meshStandardMaterial
+          map={map}
+          bumpMap={bumpMap ?? undefined}
+          bumpScale={body.id === 'earth' ? 0.038 : body.id === 'mars' ? 0.06 : 0.07}
+          color={map ? '#ffffff' : body.color}
+          roughness={body.roughness}
+          metalness={body.metalness}
+        />
+      </mesh>
+
+      {body.id === 'earth' && cloudMap ? <mesh>
+        <sphereGeometry args={[body.visualRadius * 1.02, 96, 96]}/>
+        <meshStandardMaterial
+          map={cloudMap}
+          transparent
+          depthWrite={false}
+          roughness={0.94}
+          metalness={0}
+        />
+      </mesh> : null}
+    </group>
+
+    {body.atmosphere ? <Atmosphere
+      radius={body.visualRadius}
+      color={body.atmosphere}
+      scale={body.id === 'venus' ? 1.055 : 1.08}
+      intensity={body.id === 'earth' ? 0.92 : 0.68}
+    /> : null}
+
+    {body.rings && ringMap ? <mesh rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[body.visualRadius * body.rings.inner, body.visualRadius * body.rings.outer, 192]}/>
+      <meshStandardMaterial
+        map={ringMap}
+        side={THREE.DoubleSide}
+        transparent
+        opacity={body.rings.opacity}
+        alphaTest={0.018}
+        depthWrite={false}
+        roughness={0.62}
+        metalness={0.035}
+      />
+    </mesh> : null}
+
+    <ExplorerGuides body={body} showAxis={showAxis} showGrid={showGrid}/>
+  </group>
 }
 
 function FocusRing({ radius, color }: { radius: number; color: string }) {
