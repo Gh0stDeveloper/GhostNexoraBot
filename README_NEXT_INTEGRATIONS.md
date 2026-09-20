@@ -42,11 +42,11 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase A | Login y seguridad Web | TERMINADO |
 | Fase E | Dashboard Web V2 | TERMINADO |
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
-| Fase B | Núcleo multiplataforma compartido | EN PROGRESO |
+| Fase B | Núcleo multiplataforma compartido | TERMINADO |
 | Fase C | Paridad Discord y Telegram | POSPUESTO |
 | Fase D | Runtime y entrega WhatsApp | POSPUESTO |
 
-Orden actualizado por decisión de proyecto: Fase E quedó terminada y se reanudó Fase B empezando por B1. Fase F permanece pendiente; las fases C y D continúan pospuestas hasta que corresponda retomarlas.
+Orden actualizado por decisión de proyecto: Fase E y Fase B quedaron terminadas. Fase F permanece pendiente; las fases C y D continúan pospuestas hasta que corresponda retomarlas.
 
 ---
 
