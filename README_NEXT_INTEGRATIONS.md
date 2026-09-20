@@ -43,10 +43,10 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase E | Dashboard Web V2 | TERMINADO |
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
 | Fase B | Núcleo multiplataforma compartido | TERMINADO |
-| Fase C | Paridad Discord y Telegram | POSPUESTO |
+| Fase C | Paridad Discord y Telegram | EN PROGRESO |
 | Fase D | Runtime y entrega WhatsApp | POSPUESTO |
 
-Orden actualizado por decisión de proyecto: Fase E y Fase B quedaron terminadas. Fase F permanece pendiente; las fases C y D continúan pospuestas hasta que corresponda retomarlas.
+Orden actualizado por decisión de proyecto: Fase E y Fase B quedaron terminadas. Fase F permanece pendiente; la Fase C está en progreso desde C1; la Fase D continúa pospuesta.
 
 ---
 
@@ -480,7 +480,7 @@ Eliminar routers mantenidos manualmente cuando sea posible y generar la experien
 
 ## C1. Slash commands de Discord generados automáticamente
 
-Estado: PENDIENTE
+Estado: EN VALIDACIÓN
 
 Generar discordApplicationCommands desde el catálogo central.
 
@@ -491,6 +491,21 @@ Ejemplo conceptual:
 - Telegram: /spotify Imagine Dragons
 
 No mantener manualmente tres definiciones si la función es la misma.
+
+Implementación C1 en validación:
+
+- `discordApplicationCommands` se genera desde `platformCommandMetadata('discord')`;
+- se eliminó el registro manual `slashTokens`;
+- nombres, aliases, descripciones localizadas, options, `required` y `max_length` salen de metadata central;
+- comandos no `discoverable` no se registran como slash commands;
+- C1 detecta colisiones y límites inválidos antes de sincronizar con Discord;
+- comandos nativos aún no migrados conservan compatibilidad mediante metadata central + fallback del router;
+- Discord message commands, SharedCommandEngine y RequestContext B5 permanecen intactos;
+- smoke dedicado: `scripts/phase-c1-discord-slash-smoke.mjs`;
+- gate C1 añadido a GitHub Actions después de las regresiones B1–B5;
+- documentación: `docs/v2/PHASE_C1.md`.
+
+C1 solo se marcará TERMINADO cuando el PR complete CI en verde.
 
 ## C2. Aliases centralizados
 
