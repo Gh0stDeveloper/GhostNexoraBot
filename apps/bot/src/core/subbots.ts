@@ -189,7 +189,7 @@ class SubbotManager {
         BOT_NAME: customization.longName,
         PREFIX: '.',
         OWNER_NUMBERS: '',
-        AUTO_REACT: 'true',
+        AUTO_REACT: 'false',
         ADULT_PRIVATE_ENABLED: 'false',
         WELCOME_IMAGE_URL: '',
         TELEGRAM_BOT_TOKEN: '',
