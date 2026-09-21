@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ExternalLink,
   LocateFixed,
+  Mountain,
   Minus,
   Plus,
   RotateCcw,
@@ -20,6 +21,8 @@ import {
   type HeliosSurfaceProjection,
 } from '../lib/nexora-helios-surface-data'
 import { nexoraHeliosCopy, type NexoraHeliosLocale } from '../lib/nexora-helios-i18n'
+import { hasHeliosTerrainRegions } from '../lib/nexora-helios-terrain-data'
+import { NexoraHeliosTerrainExplorer } from './nexora-helios-terrain-explorer'
 
 const MIN_ZOOM = 1
 const MAX_ZOOM = 6
@@ -75,6 +78,8 @@ export function NexoraHeliosSurfaceExplorer({
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState<Point>({ x: 0, y: 0 })
   const [imageError, setImageError] = useState(false)
+  const [terrainOpen, setTerrainOpen] = useState(false)
+  const terrainAvailable = hasHeliosTerrainRegions(id)
 
   const clampOffset = (next: Point, scale = zoom) => {
     const rect = viewportRef.current?.getBoundingClientRect()
@@ -307,16 +312,33 @@ export function NexoraHeliosSurfaceExplorer({
           <p className="mt-1 text-[10px] leading-5 text-zinc-400">{dataset.credit}</p>
         </div>
 
+        {terrainAvailable ? <button
+          type="button"
+          onClick={() => setTerrainOpen(true)}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-100 px-3 py-2.5 text-xs font-black text-black hover:bg-white"
+        >
+          <Mountain className="size-4"/>
+          {surface.openTerrain3d}
+        </button> : null}
+
         <a
           href={dataset.sourceUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-black hover:bg-zinc-200"
+          className={terrainAvailable
+            ? 'mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-xs font-bold text-zinc-200 hover:bg-white/[.05]'
+            : 'mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-black hover:bg-zinc-200'}
         >
           {surface.officialSource}
           <ExternalLink className="size-3.5"/>
         </a>
       </aside>
     </div>
+
+    {terrainOpen ? <NexoraHeliosTerrainExplorer
+      locale={locale}
+      id={id}
+      onClose={() => setTerrainOpen(false)}
+    /> : null}
   </section>
 }
