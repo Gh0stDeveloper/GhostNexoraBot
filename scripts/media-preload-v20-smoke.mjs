@@ -42,14 +42,15 @@ try {
   assert.match(interactive, /carouselMessage:/, 'native carousel payload must be present in the centralized transport')
   assert.match(interactive, /native carousel relay failed; sending text fallback/, 'carousel transport must retain a safe text fallback')
 
-  // externalAdReply remains available for welcome/goodbye/shop, but the menu was
-  // intentionally restored to the single full interactive card that works across
-  // the user's current WhatsApp clients.
+  // externalAdReply remains available for welcome/goodbye/shop. The menu now
+  // uses the reviewed classic location-header transport, with a Native Flow
+  // fallback inside the centralized WhatsApp interactive layer.
   assert.match(richPreview, /externalAdReply/, 'rich preview service must remain available for other surfaces')
   assert.match(richPreview, /renderLargerThumbnail: true/, 'rich preview must request the large thumbnail layout')
   assert.doesNotMatch(menu, /sendRichLinkPreview/, 'menu must not use the broken externalAdReply layout')
-  assert.match(menu, /sendInteractiveCard/, 'menu must use the original full interactive card')
-  assert.match(menu, /body,\s*\n\s*imageUrl: visual\.imageUrl/, 'menu card must include the complete body and selected waifu/avatar')
+  assert.match(menu, /sendClassicLocationMenu/, 'menu must use the reviewed classic location-header transport')
+  assert.match(menu, /body,\s*\n\s*footer: 'Ghost Nexora Bot',\s*\n\s*thumbnailUrl: visual\.imageUrl/, 'menu location card must include the complete body and selected waifu/avatar thumbnail')
+  assert.match(menu, /mentionedJids: \[ctx\.sender\]/, 'menu location header must preserve the invoking user mention context')
 
   // Registry ordering: the safe/general Valley layer is present first; canonical
   // .edit and the explicitly scoped V22 PoC layer override only their special
