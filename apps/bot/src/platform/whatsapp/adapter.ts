@@ -295,8 +295,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
     })
   }
 
-  async setTyping(_chatId: string, _active: boolean): Promise<void> {
-    // WhatsApp typing presence is intentionally disabled to reduce auxiliary traffic.
+  async setTyping(chatId: string, active: boolean): Promise<void> {
+    await this.socket.sendPresenceUpdate(active ? 'composing' : 'paused', chatId)
   }
 
   async react(chatId: string, messageId: string, reaction: string): Promise<void> {
