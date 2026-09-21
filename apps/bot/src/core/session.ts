@@ -13,6 +13,7 @@ import { canSendToChatJid } from '../services/private-chat-policy.js'
 import { startRuntimeDiagnostics } from '../services/runtime-diagnostics.js'
 import { registerSecurityPocSocket } from '../services/security-poc-scope.js'
 import { silentWaLogger } from '../utils/logger.js'
+import { observeWhatsAppError, whatsappScopeFromEnv } from '../services/whatsapp-rate-guard.js'
 
 export async function createSocket(sessionDir = config.sessionDir): Promise<{ socket: WASocket; saveCreds: () => Promise<void> }> {
   await mkdir(sessionDir, { recursive: true })
@@ -52,6 +53,9 @@ export async function createSocket(sessionDir = config.sessionDir): Promise<{ so
     const started = performance.now()
     try {
       return await rawSendMessage(jid, content, options)
+    } catch (error) {
+      observeWhatsAppError(whatsappScopeFromEnv(), error, 'sendMessage')
+      throw error
     } finally {
       performanceAudit.recordStage('07', performance.now() - started)
     }

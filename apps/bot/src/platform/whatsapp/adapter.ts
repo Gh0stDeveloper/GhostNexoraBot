@@ -15,6 +15,7 @@ import { config } from '../../config.js'
 import { resolveChatLocale } from '../../i18n/index.js'
 import { getContextInfo, getMessageText, unwrapMessage } from '../../utils/message.js'
 import { createLocalizedSocket } from '../../services/localized-socket.js'
+import { sendWhatsAppReactionWithBackoff } from '../../services/whatsapp-rate-guard.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from './interactive.js'
 
 export const WHATSAPP_CAPABILITIES = createPlatformCapabilities({
@@ -301,7 +302,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
   async react(chatId: string, messageId: string, reaction: string): Promise<void> {
     const remembered = this.messageCache.get(messageId)
     const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
-    await this.localizedSocket(chatId).sendMessage(chatId, { react: { text: reaction, key } } as never)
+    await sendWhatsAppReactionWithBackoff(this.socket, chatId, key, reaction, this.botInstanceId)
   }
 }
 

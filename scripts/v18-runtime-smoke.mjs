@@ -33,6 +33,23 @@ try {
   assert.equal(gate.shouldHandle('append', message('append-old', now - 10 * 60_000), now), false, 'historical append must not execute')
   assert.equal(gate.shouldHandle('history', message('history-1'), now), false)
 
+  const { settings } = await import('../apps/bot/dist/core/settings.js')
+  await settings.init()
+  assert.equal(settings.humanReactionsEnabled, false, 'human reactions must default to disabled')
+
+  const {
+    isWhatsAppRateOverlimit,
+    noteWhatsAppRateOverlimit,
+    whatsappAuxiliaryAllowed,
+    whatsappRateGuardStatus,
+  } = await import('../apps/bot/dist/services/whatsapp-rate-guard.js')
+  assert.equal(isWhatsAppRateOverlimit(new Error('rate-overlimit')), true)
+  assert.equal(isWhatsAppRateOverlimit(new Error('Too Many Requests (429)')), true)
+  const testScope = 'smoke-rate-guard'
+  noteWhatsAppRateOverlimit(testScope, new Error('429 rate limit'), 'smoke')
+  assert.equal(whatsappAuxiliaryAllowed(testScope), false, 'auxiliary traffic must pause after rate-overlimit')
+  assert.equal(whatsappRateGuardStatus(testScope).limited, true)
+
   const { economy } = await import('../apps/bot/dist/services/economy.js')
   const { observeGroupActivity } = await import('../apps/bot/dist/services/progression-v4.js')
   const {
@@ -97,6 +114,34 @@ try {
   assert.equal(premiumStickersV18.packs()[0]?.packName, 'Reacciones')
   assert.equal(Number(premiumStickersV18.packs()[0]?.lottieCount), 1)
 
+  const secondSticker = {
+    ...lottieMessage.message.lottieStickerMessage.message.stickerMessage,
+    directPath: '/v/t62.15575-24/test-2.enc',
+    url: 'https://mmg.whatsapp.net/v/t62.15575-24/test-2.enc?mms3=true',
+    fileSha256: Buffer.from('lottie-file-sha-2'),
+    fileEncSha256: Buffer.from('lottie-file-enc-sha-2'),
+  }
+  const packMessage = {
+    key: { id: 'PACK-INPUT', remoteJid: group, participant: low },
+    message: {
+      stickerPackMessage: {
+        name: 'Premium Completo',
+        publisher: 'Ghost Developer',
+        stickers: [
+          { stickerMessage: lottieMessage.message.lottieStickerMessage.message.stickerMessage },
+          { lottieStickerMessage: { message: { stickerMessage: secondSticker } } },
+        ],
+      },
+    },
+  }
+  const extractedPack = premiumStickersV18.extractPack(packMessage)
+  assert.equal(extractedPack?.stickers.length, 2, 'must extract every transferable premium sticker in stickerPackMessage')
+  const importedPack = premiumStickersV18.addPackFromMessage(packMessage, low)
+  assert.equal(importedPack.packName, 'Premium Completo')
+  assert.equal(importedPack.imported, 2)
+  const storedPack = premiumStickersV18.packs().find((item) => item.packName === 'Premium Completo')
+  assert.equal(Number(storedPack?.lottieCount), 2, 'complete premium pack must persist all Lottie members')
+
   const relays = []
   const fakeSocket = {
     user: { id: '5215552999999:1@s.whatsapp.net' },
@@ -118,6 +163,22 @@ try {
   assert.ok(latest('lottiesticker'), '.lottiesticker must be registered')
   assert.equal(latest('botsticker')?.subbotOwnerAllowed, true, 'subbot owner must be allowed to manage instance stickers')
   assert.equal(latest('lottiesticker')?.subbotOwnerAllowed, true)
+  assert.equal(latest('reaccioneshumanas')?.ownerOnly, true, 'human reaction toggle must be owner-only')
+
+  const whatsappAdapterSource = readFileSync(new URL('../apps/bot/src/platform/whatsapp/adapter.ts', import.meta.url), 'utf8')
+  assert.ok(whatsappAdapterSource.includes('typing: true'), 'WhatsApp typing capability contract must remain compatible')
+  assert.ok(whatsappAdapterSource.includes("sendPresenceUpdate(active ? 'composing' : 'paused', chatId)"), 'WhatsApp adapter contract must preserve explicit setTyping support')
+  assert.ok(whatsappAdapterSource.includes('sendWhatsAppReactionWithBackoff'), 'command reactions must use the rate-overlimit guard')
+  const typingSource = readFileSync(new URL('../apps/bot/src/core/typing.ts', import.meta.url), 'utf8')
+  assert.ok(typingSource.includes("adapter.id === 'whatsapp'"), 'WhatsApp typing timer must be disabled before scheduling presence updates')
+  const routerTypingSource = readFileSync(new URL('../apps/bot/src/core/router.ts', import.meta.url), 'utf8')
+  assert.ok(routerTypingSource.includes('WhatsApp command execution intentionally suppresses presence traffic'), 'legacy WhatsApp command context must suppress typing traffic')
+  const sharedEngineSource = readFileSync(new URL('../apps/bot/src/core/shared-command-engine.ts', import.meta.url), 'utf8')
+  assert.ok(sharedEngineSource.includes("adapter.id === 'whatsapp'"), 'neutral WhatsApp command context must suppress typing traffic')
+
+  const humanBehaviorSource = readFileSync(new URL('../apps/bot/src/services/human-behavior-v8.ts', import.meta.url), 'utf8')
+  assert.ok(humanBehaviorSource.includes('settings.humanReactionsEnabled'), 'human reactions must use runtime toggle')
+  assert.ok(!humanBehaviorSource.includes('!config.autoReact'), 'stickers/replies must not be coupled to AUTO_REACT')
 
   const balanceSource = readFileSync(new URL('../apps/bot/src/commands/economy-ui-v18.ts', import.meta.url), 'utf8')
   assert.ok(balanceSource.includes("text: '🏦 Banco'"))

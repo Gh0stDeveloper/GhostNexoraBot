@@ -97,6 +97,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   const sendUi: CommandContext['sendUi'] = (ui, options) =>
     adapter.sendUi(chatId, ui, withCurrentReply(options))
   const setTyping: CommandContext['setTyping'] = async (active) => {
+    if (adapter.id === 'whatsapp') return
     if (adapter.capabilities.typing && adapter.setTyping) await adapter.setTyping(chatId, active)
   }
   const editMessage: CommandContext['editMessage'] = async (messageId, text) => {

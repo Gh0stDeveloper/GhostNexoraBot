@@ -22,7 +22,7 @@ const schema = z.object({
   BOT_NAME: z.string().min(1).default('Ghost Nexora Bot'),
   PREFIX: z.string().min(1).max(4).default('.'),
   OWNER_NUMBERS: z.string().default(''),
-  AUTO_REACT: z.string().default('true'),
+  AUTO_REACT: z.string().default('false'),
   MAX_DOWNLOAD_MB: z.coerce.number().int().min(5).max(1950).default(1900),
   SESSION_DIR: z.string().default('./data/session'),
   DATA_DIR: z.string().default('./data'),

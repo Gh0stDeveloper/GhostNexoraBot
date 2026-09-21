@@ -50,4 +50,56 @@ export const automaticResponseCommands: BotCommand[] = [
       throw new Error(`Uso: ${ctx.prefix}autorespuestas on|off|status`)
     },
   },
+  {
+    name: 'reaccioneshumanas',
+    aliases: ['humanreact', 'autoreact', 'reaccionesauto'],
+    category: 'general',
+    ownerOnly: true,
+    description: 'Activa o desactiva las reacciones humanas/contextuales. Por defecto están desactivadas.',
+    usage: 'reaccioneshumanas <on|off|status>',
+    async handler(ctx) {
+      const action = (ctx.args[0] ?? 'status').toLowerCase()
+
+      if (['on', 'activar', 'enable', 'encender'].includes(action)) {
+        await ctx.settings.setHumanReactionsEnabled(true)
+        await ctx.reply([
+          '🟢 *REACCIONES HUMANAS ACTIVADAS*',
+          '━━━━━━━━━━━━━━',
+          'El bot podrá reaccionar de forma contextual a mensajes normales.',
+          '',
+          'Las reacciones de estado de comandos (⚡/✅/❌/🚫) son independientes.',
+          'Los stickers también son independientes.',
+        ].join('\n'))
+        return
+      }
+
+      if (['off', 'desactivar', 'disable', 'apagar'].includes(action)) {
+        await ctx.settings.setHumanReactionsEnabled(false)
+        await ctx.reply([
+          '🔴 *REACCIONES HUMANAS DESACTIVADAS*',
+          '━━━━━━━━━━━━━━',
+          'El bot no reaccionará automáticamente a mensajes normales.',
+          '',
+          'Las reacciones de estado de comandos y los stickers siguen funcionando.',
+        ].join('\n'))
+        return
+      }
+
+      if (['status', 'estado'].includes(action)) {
+        await ctx.reply([
+          '⚙️ *REACCIONES HUMANAS*',
+          '━━━━━━━━━━━━━━',
+          `Estado: *${ctx.settings.humanReactionsEnabled ? 'ACTIVADAS' : 'DESACTIVADAS'}*`,
+          'Predeterminado: *DESACTIVADAS*',
+          'Comandos: ⚡/✅/❌/🚫 independientes.',
+          'Stickers: independientes.',
+          '',
+          `Uso: ${ctx.prefix}reaccioneshumanas on|off|status`,
+        ].join('\n'))
+        return
+      }
+
+      throw new Error(`Uso: ${ctx.prefix}reaccioneshumanas on|off|status`)
+    },
+  },
 ]
