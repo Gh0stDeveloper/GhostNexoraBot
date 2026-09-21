@@ -178,6 +178,135 @@ async function sendStandardCard(
   }
 }
 
+export type ClassicLocationMenuButton = {
+  id: string
+  text: string
+}
+
+export type ClassicLocationMenuInput = {
+  name: string
+  address: string
+  body: string
+  footer?: string
+  thumbnailUrl?: string
+  mentionedJids?: string[]
+  buttons: ClassicLocationMenuButton[]
+}
+
+async function locationJpegThumbnail(source?: string) {
+  if (!source) return undefined
+  try {
+    const media = await preloadWhatsAppMedia(source, {
+      maxBytes: 8 * 1024 * 1024,
+      timeoutMs: 8_000,
+      label: 'classic-location-menu-thumbnail',
+    })
+    if (!Buffer.isBuffer(media)) return undefined
+
+    try {
+      const { default: sharp } = await import('sharp')
+      return await sharp(media, { animated: false })
+        .rotate()
+        .resize(320, 180, { fit: 'cover', withoutEnlargement: true })
+        .jpeg({ quality: 72, mozjpeg: true })
+        .toBuffer()
+    } catch (error) {
+      logger.warn({ error }, 'classic location menu thumbnail conversion failed; continuing without thumbnail')
+      return undefined
+    }
+  } catch (error) {
+    logger.warn({ error }, 'classic location menu thumbnail preload failed; continuing without thumbnail')
+    return undefined
+  }
+}
+
+/**
+ * Menú clásico de WhatsApp con locationMessage como cabecera visual.
+ *
+ * Se mantiene deliberadamente aislado a este transporte revisado. El resto de
+ * la UI continúa usando InteractiveMessage/Native Flow. Si WhatsApp rechaza
+ * el envelope clásico se vuelve al card moderno con botones quick-reply.
+ */
+export async function sendClassicLocationMenu(
+  socket: WASocket,
+  chatId: string,
+  quoted: WAMessage | undefined,
+  input: ClassicLocationMenuInput,
+): Promise<string> {
+  const locale = interactiveLocale(socket, chatId)
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
+
+  const body = localizeLegacyText(input.body, locale)
+  const footer = localizeLegacyText(input.footer ?? 'Ghost Nexora Bot', locale)
+  const name = localizeLegacyText(input.name, locale).slice(0, 80)
+  const address = localizeLegacyText(input.address, locale).slice(0, 120)
+  const buttons = input.buttons.slice(0, 3).map((button) => ({
+    buttonId: button.id,
+    buttonText: { displayText: localizeLegacyText(button.text, locale).slice(0, 20) },
+    type: 1,
+  }))
+  const jpegThumbnail = await locationJpegThumbnail(input.thumbnailUrl)
+  const mentionedJid = [...new Set(input.mentionedJids ?? [])].filter(Boolean)
+
+  const locationMessage = proto.Message.LocationMessage.fromObject({
+    degreesLatitude: 0,
+    degreesLongitude: 0,
+    name,
+    address,
+    ...(jpegThumbnail ? { jpegThumbnail } : {}),
+    ...(mentionedJid.length ? {
+      contextInfo: {
+        mentionedJid,
+        groupMentions: [],
+        statusAttributions: [],
+      },
+    } : {}),
+  })
+
+  const message = generateWAMessageFromContent(chatId, {
+    buttonsMessage: proto.Message.ButtonsMessage.fromObject({
+      buttons,
+      locationMessage,
+      contentText: body,
+      footerText: footer,
+      headerType: 6,
+    }),
+  }, { ...(quoted ? { quoted } : {}), userJid })
+
+  const generatedId = message.key.id
+  if (!generatedId) throw new Error('WhatsApp classic location menu ID was not generated.')
+
+  try {
+    await withTimeout(
+      socket.relayMessage(chatId, message.message!, { messageId: generatedId }),
+      25_000,
+      'classic location menu relay',
+    )
+    logger.info({
+      chatId,
+      messageId: generatedId,
+      uiMode: 'classic-location-buttons',
+      buttons: buttons.length,
+      thumbnail: Boolean(jpegThumbnail),
+    }, 'classic WhatsApp location menu relay completed')
+    return generatedId
+  } catch (error) {
+    logger.warn({ error, chatId }, 'classic WhatsApp location menu failed; falling back to native-flow card')
+    return sendInteractiveCard(socket, chatId, quoted, {
+      title: name,
+      body,
+      footer,
+      imageUrl: input.thumbnailUrl,
+      buttons: input.buttons.slice(0, 3).map((button) => ({
+        type: 'reply' as const,
+        text: button.text,
+        id: button.id,
+      })),
+    })
+  }
+}
+
 /**
  * Transporte estable para tarjetas de WhatsApp.
  *
