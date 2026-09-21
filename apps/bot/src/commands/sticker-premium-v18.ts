@@ -16,8 +16,26 @@ function regularRows() {
 
 async function addSticker(ctx: LegacyCompatibleCommandContext, packName?: string) {
   const premium = premiumStickersV18.extract(ctx.message)
+  const premiumPack = premiumStickersV18.extractPack(ctx.message)
   const rawStart = packName ? 2 : 1
   const meta = descriptor(ctx.args.slice(rawStart).join(' '))
+
+  if (packName && premiumPack?.stickers.length) {
+    const result = premiumStickersV18.addPackFromMessage(ctx.message, ctx.sender, {
+      packName,
+      label: meta.label,
+      triggers: meta.triggers,
+    })
+    await ctx.reply([
+      `✅ *PACK PREMIUM AÑADIDO*`,
+      `📦 Pack: *${result.packName}*`,
+      result.publisher ? `✍️ Publisher: *${result.publisher}*` : '',
+      `🎭 Stickers importados: *${result.imported}*`,
+      '',
+      'Se importaron todos los miembros Lottie/premium que WhatsApp incluyó dentro del mensaje de pack.',
+    ].filter(Boolean).join('\n'))
+    return { kind: 'pack' as const, ids: result.ids }
+  }
 
   if (premium) {
     const row = premiumStickersV18.addFromMessage(ctx.message, ctx.sender, {
@@ -74,6 +92,7 @@ async function listLibrary(ctx: LegacyCompatibleCommandContext) {
     '',
     `Añadir suelto: *${ctx.prefix}botsticker add etiqueta | palabra,frase*`,
     `Añadir a pack: *${ctx.prefix}botsticker packadd <pack> | etiqueta | palabra,frase*`,
+    `Importar pack premium completo: *${ctx.prefix}botsticker packimport <pack>* respondiendo al mensaje del pack.`,
     `Enviar pack: *${ctx.prefix}botsticker packsend <pack>*`,
     `Probar Lottie: *${ctx.prefix}lottiesticker* respondiendo al sticker.`,
     `Eliminar: *${ctx.prefix}botsticker remove W12* o *L12*`,
@@ -94,6 +113,18 @@ async function botStickerV18(ctx: LegacyCompatibleCommandContext) {
     const packName = String(ctx.args[1] ?? '').trim()
     if (!packName) throw new Error(`Uso: ${ctx.prefix}botsticker packadd <pack> | etiqueta | triggers`)
     await addSticker(ctx, packName)
+    return
+  }
+  if (action === 'packimport') {
+    const packName = ctx.args.slice(1).join(' ').trim()
+    if (!packName) throw new Error(`Uso: ${ctx.prefix}botsticker packimport <pack>`)
+    const result = premiumStickersV18.addPackFromMessage(ctx.message, ctx.sender, { packName })
+    await ctx.reply([
+      '✅ *PACK PREMIUM IMPORTADO*',
+      `📦 Pack: *${result.packName}*`,
+      result.publisher ? `✍️ Publisher: *${result.publisher}*` : '',
+      `🎭 Stickers guardados: *${result.imported}*`,
+    ].filter(Boolean).join('\n'))
     return
   }
   if (action === 'packsend') {
@@ -117,7 +148,7 @@ async function botStickerV18(ctx: LegacyCompatibleCommandContext) {
     await ctx.reply(`✅ Sticker *${match[1] || 'W'}${id}* eliminado.`)
     return
   }
-  throw new Error(`Usa ${ctx.prefix}botsticker add, packadd, packsend, packs, list o remove.`)
+  throw new Error(`Usa ${ctx.prefix}botsticker add, packadd, packimport, packsend, packs, list o remove.`)
 }
 
 async function lottieStickerCommand(ctx: LegacyCompatibleCommandContext) {
@@ -135,7 +166,7 @@ export const stickerPremiumV18Commands: BotCommand[] = [
     staffOnly: true,
     subbotOwnerAllowed: true,
     description: 'Administra stickers WebP, Lottie/premium y packs de la instancia.',
-    usage: 'botsticker add|packadd|packsend|packs|list|remove',
+    usage: 'botsticker add|packadd|packimport|packsend|packs|list|remove',
     handler: botStickerV18,
   },
   {
