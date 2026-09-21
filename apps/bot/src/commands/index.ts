@@ -100,6 +100,7 @@ import { groupInactivityV18Commands } from './group-inactivity-v18.js'
 import { stickerPremiumV18Commands } from './sticker-premium-v18.js'
 import { economyUiV18Commands } from './economy-ui-v18.js'
 import { automaticResponseCommands } from './automatic-responses.js'
+import { humanReactionCommands } from './human-reactions.js'
 import { happyModV19Commands } from './happymod-v19.js'
 import { commandSearchCommands } from './command-search.js'
 
@@ -255,6 +256,7 @@ export const commands: BotCommand[] = [
   ...stickerPremiumV18Commands,
   ...economyUiV18Commands,
   ...automaticResponseCommands,
+  ...humanReactionCommands,
   ...happyModV19Commands,
   ...commandSearchCommands,
 ]
