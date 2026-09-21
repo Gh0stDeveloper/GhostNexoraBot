@@ -266,8 +266,9 @@ export const premiumStickersV18 = {
     const triggers = [...new Set((options.triggers ?? []).map(normalizeTrigger).filter(Boolean))]
     const ids: number[] = []
 
-    const insert = db.transaction((stickers: LooseSticker[]) => {
-      for (const sticker of stickers) {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const sticker of extracted.stickers) {
         const payload = serializeSticker(sticker)
         const digest = fingerprint(payload)
         db.prepare(`INSERT INTO global_premium_stickers(fingerprint, payload_json, label, triggers, pack_name, created_by, created_at)
@@ -289,8 +290,11 @@ export const premiumStickersV18 = {
           VALUES(?, 'lottie', ?, ?)`).run(packName, row.id, now())
         ids.push(row.id)
       }
-    })
-    insert(extracted.stickers)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
 
     return {
       packName,
