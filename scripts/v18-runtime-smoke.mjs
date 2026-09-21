@@ -167,10 +167,14 @@ try {
 
   const whatsappAdapterSource = readFileSync(new URL('../apps/bot/src/platform/whatsapp/adapter.ts', import.meta.url), 'utf8')
   assert.ok(whatsappAdapterSource.includes('typing: true'), 'WhatsApp typing capability contract must remain compatible')
-  assert.ok(whatsappAdapterSource.includes('WhatsApp typing presence is intentionally disabled'), 'WhatsApp adapter setTyping must remain network-silent')
+  assert.ok(whatsappAdapterSource.includes("sendPresenceUpdate(active ? 'composing' : 'paused', chatId)"), 'WhatsApp adapter contract must preserve explicit setTyping support')
   assert.ok(whatsappAdapterSource.includes('sendWhatsAppReactionWithBackoff'), 'command reactions must use the rate-overlimit guard')
   const typingSource = readFileSync(new URL('../apps/bot/src/core/typing.ts', import.meta.url), 'utf8')
   assert.ok(typingSource.includes("adapter.id === 'whatsapp'"), 'WhatsApp typing timer must be disabled before scheduling presence updates')
+  const routerTypingSource = readFileSync(new URL('../apps/bot/src/core/router.ts', import.meta.url), 'utf8')
+  assert.ok(routerTypingSource.includes('WhatsApp command execution intentionally suppresses presence traffic'), 'legacy WhatsApp command context must suppress typing traffic')
+  const sharedEngineSource = readFileSync(new URL('../apps/bot/src/core/shared-command-engine.ts', import.meta.url), 'utf8')
+  assert.ok(sharedEngineSource.includes("adapter.id === 'whatsapp'"), 'neutral WhatsApp command context must suppress typing traffic')
 
   const humanBehaviorSource = readFileSync(new URL('../apps/bot/src/services/human-behavior-v8.ts', import.meta.url), 'utf8')
   assert.ok(humanBehaviorSource.includes('settings.humanReactionsEnabled'), 'human reactions must use runtime toggle')
