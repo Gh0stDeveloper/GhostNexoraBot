@@ -22,7 +22,7 @@ try {
 
   assert.equal(WHATSAPP_CAPABILITIES.editMessage, true)
   assert.equal(WHATSAPP_CAPABILITIES.reactions, true)
-  assert.equal(WHATSAPP_CAPABILITIES.typing, true)
+  assert.equal(WHATSAPP_CAPABILITIES.typing, false)
   assert.equal(WHATSAPP_CAPABILITIES.buttons, true)
   assert.equal(WHATSAPP_CAPABILITIES.carousel, true)
   assert.equal(WHATSAPP_CAPABILITIES.files, true)
@@ -126,10 +126,7 @@ try {
 
   await adapter.setTyping(incoming.key.remoteJid, true)
   await adapter.setTyping(incoming.key.remoteJid, false)
-  assert.deepEqual(presenceCalls, [
-    { value: 'composing', jid: incoming.key.remoteJid },
-    { value: 'paused', jid: incoming.key.remoteJid },
-  ])
+  assert.deepEqual(presenceCalls, [])
 
   const router = await read('apps/bot/src/core/router.ts')
   const types = await read('apps/bot/src/types.ts')
@@ -165,8 +162,10 @@ try {
   assert.match(edit, /isPocChatAllowed\(ctx\.chatId\)/)
   assert.doesNotMatch(edit, /WhatsAppAdapter|ctx\.adapter/)
 
+  const typing = await read('apps/bot/src/core/typing.ts')
   assert.match(main, /startTypingIndicator\(transport, chatId\)/)
-  assert.doesNotMatch(main, /function startTypingIndicator\(socket:/)
+  assert.match(typing, /return \(\) => undefined/)
+  assert.doesNotMatch(typing, /setInterval|setTyping\(/)
 
   console.log('[V2 PHASE 1] OK — WhatsApp adapter preserves V1 compatibility and native carousel transport while exposing normalized APIs.')
 } finally {
