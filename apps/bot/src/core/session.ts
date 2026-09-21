@@ -13,6 +13,7 @@ import { canSendToChatJid } from '../services/private-chat-policy.js'
 import { startRuntimeDiagnostics } from '../services/runtime-diagnostics.js'
 import { registerSecurityPocSocket } from '../services/security-poc-scope.js'
 import { silentWaLogger } from '../utils/logger.js'
+import { isWhatsAppRateOverlimit, noteWhatsAppRateOverlimit } from '../services/whatsapp-rate-limit.js'
 
 export async function createSocket(sessionDir = config.sessionDir): Promise<{ socket: WASocket; saveCreds: () => Promise<void> }> {
   await mkdir(sessionDir, { recursive: true })
@@ -52,6 +53,11 @@ export async function createSocket(sessionDir = config.sessionDir): Promise<{ so
     const started = performance.now()
     try {
       return await rawSendMessage(jid, content, options)
+    } catch (error) {
+      if (isWhatsAppRateOverlimit(error)) {
+        noteWhatsAppRateOverlimit(socket.user?.id ?? sessionDir, 'sendMessage', error)
+      }
+      throw error
     } finally {
       performanceAudit.recordStage('07', performance.now() - started)
     }

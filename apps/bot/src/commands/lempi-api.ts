@@ -459,7 +459,6 @@ export const lempiApiCommands: BotCommand[] = [
     usage: 'deepseek <pregunta>',
     async handler(ctx) {
       const prompt = requireQuery(ctx, `Uso: ${ctx.prefix}deepseek <pregunta>`)
-      await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const response = await askLempiDeepSeek(prompt)
       await sendFormattedText(ctx, response)
     },

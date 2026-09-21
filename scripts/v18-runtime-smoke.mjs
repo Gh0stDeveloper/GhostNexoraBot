@@ -97,6 +97,48 @@ try {
   assert.equal(premiumStickersV18.packs()[0]?.packName, 'Reacciones')
   assert.equal(Number(premiumStickersV18.packs()[0]?.lottieCount), 1)
 
+  const packMessage = {
+    key: { id: 'LOTTIE-PACK', remoteJid: group, participant: low },
+    message: {
+      stickerPackMessage: {
+        name: 'Pack Completo',
+        publisher: 'Ghost Tester',
+        stickers: [
+          {
+            stickerMessage: {
+              url: 'https://mmg.whatsapp.net/v/t62.15575-24/pack-1.enc?mms3=true',
+              fileSha256: Buffer.from('pack-file-sha-1'),
+              fileEncSha256: Buffer.from('pack-file-enc-sha-1'),
+              mediaKey: Buffer.from('11234567890123456789012345678901'),
+              mimetype: 'application/was',
+              directPath: '/v/t62.15575-24/pack-1.enc',
+              isLottie: true,
+              premium: 1,
+            },
+          },
+          {
+            stickerMessage: {
+              url: 'https://mmg.whatsapp.net/v/t62.15575-24/pack-2.enc?mms3=true',
+              fileSha256: Buffer.from('pack-file-sha-2'),
+              fileEncSha256: Buffer.from('pack-file-enc-sha-2'),
+              mediaKey: Buffer.from('21234567890123456789012345678901'),
+              mimetype: 'application/was',
+              directPath: '/v/t62.15575-24/pack-2.enc',
+              isLottie: true,
+              premium: 1,
+            },
+          },
+        ],
+      },
+    },
+  }
+  const extractedPack = premiumStickersV18.extractPack(packMessage)
+  assert.equal(extractedPack?.stickers.length, 2, 'must extract every premium sticker supplied by a stickerPackMessage')
+  const importedPack = premiumStickersV18.addPackFromMessage(packMessage, low, { packName: 'Pack Completo' })
+  assert.equal(importedPack.imported, 2)
+  const fullPack = premiumStickersV18.packs().find((item) => item.packName === 'Pack Completo')
+  assert.equal(Number(fullPack?.lottieCount), 2)
+
   const relays = []
   const fakeSocket = {
     user: { id: '5215552999999:1@s.whatsapp.net' },
@@ -110,12 +152,21 @@ try {
   assert.ok(relays[0].content.lottieStickerMessage, 'generated relay must preserve lottieStickerMessage envelope')
   assert.ok(relays[0].content.lottieStickerMessage?.message?.stickerMessage, 'generated relay must contain nested stickerMessage')
 
+  const { settings } = await import('../apps/bot/dist/core/settings.js')
+  await settings.init()
+  assert.equal(settings.humanReactionsEnabled, false, 'human reactions must initialize disabled')
+  await settings.setHumanReactionsEnabled(true)
+  assert.equal(settings.humanReactionsEnabled, true)
+  await settings.setHumanReactionsEnabled(false)
+  assert.equal(settings.humanReactionsEnabled, false)
+
   const { commands } = await import('../apps/bot/dist/commands/index.js')
   const latest = (name) => [...commands].reverse().find((command) => command.name === name)
   assert.ok(latest('inactividad'), '.inactividad must be registered')
   assert.ok(latest('inactivos'), '.inactivos V18 must be registered')
   assert.ok(latest('expulsarinactivos'), '.expulsarinactivos V18 must be registered')
   assert.ok(latest('lottiesticker'), '.lottiesticker must be registered')
+  assert.ok(latest('botsticker')?.usage?.includes('packimport'), '.botsticker must expose complete premium pack import')
   assert.equal(latest('botsticker')?.subbotOwnerAllowed, true, 'subbot owner must be allowed to manage instance stickers')
   assert.equal(latest('lottiesticker')?.subbotOwnerAllowed, true)
 

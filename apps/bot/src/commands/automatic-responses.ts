@@ -11,6 +11,44 @@ export const automaticResponseCommands: BotCommand[] = [
     async handler(ctx) {
       const action = (ctx.args[0] ?? 'status').toLowerCase()
 
+      if (['reacciones', 'reaccion', 'react', 'reactions'].includes(action)) {
+        const reactionAction = (ctx.args[1] ?? 'status').toLowerCase()
+        if (['on', 'activar', 'enable', 'encender'].includes(reactionAction)) {
+          await ctx.settings.setHumanReactionsEnabled(true)
+          await ctx.reply([
+            '🟢 *REACCIONES HUMANAS ACTIVADAS*',
+            '━━━━━━━━━━━━━━',
+            'El bot podrá reaccionar ocasionalmente a mensajes normales.',
+            'Las reacciones de estado de comandos ⚡/✅/🚫/❌ son independientes.',
+            '',
+            'Para apagar: ' + ctx.prefix + 'autorespuestas reacciones off',
+          ].join('\n'))
+          return
+        }
+        if (['off', 'desactivar', 'disable', 'apagar'].includes(reactionAction)) {
+          await ctx.settings.setHumanReactionsEnabled(false)
+          await ctx.reply([
+            '🔴 *REACCIONES HUMANAS DESACTIVADAS*',
+            '━━━━━━━━━━━━━━',
+            'El bot ya no reaccionará automáticamente a mensajes normales.',
+            'Los stickers automáticos y las reacciones de estado de comandos conservan su funcionamiento.',
+          ].join('\n'))
+          return
+        }
+        if (['status', 'estado'].includes(reactionAction)) {
+          await ctx.reply([
+            '⚙️ *REACCIONES HUMANAS*',
+            '━━━━━━━━━━━━━━',
+            'Estado: *' + (ctx.settings.humanReactionsEnabled ? 'ACTIVADAS' : 'DESACTIVADAS') + '*',
+            'Predeterminado seguro: *DESACTIVADAS*',
+            '',
+            'Uso: ' + ctx.prefix + 'autorespuestas reacciones on|off|status',
+          ].join('\n'))
+          return
+        }
+        throw new Error('Uso: ' + ctx.prefix + 'autorespuestas reacciones on|off|status')
+      }
+
       if (['on', 'activar', 'enable', 'encender'].includes(action)) {
         await ctx.settings.setAutomaticResponsesEnabled(true)
         await ctx.reply([

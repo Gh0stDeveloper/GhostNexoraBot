@@ -1,10 +1,10 @@
 import type { WAMessage, WASocket } from 'baileys'
-import { config } from '../config.js'
 import { settings } from '../core/settings.js'
 import { getMessageText } from '../utils/message.js'
 import { maybeSendHumanSticker } from './human-stickers.js'
 import { premiumStickersV18 } from './premium-stickers-v18.js'
 import { HUMAN_RULES, pickHumanReply } from './human-responses-v8.js'
+import { tryWhatsAppAuxiliaryAction } from './whatsapp-rate-limit.js'
 
 const REPLY_CHANCE = 0.20
 const DIRECT_REPLY_CHANCE = 0.55
@@ -36,8 +36,11 @@ async function maybeReactToMessage(socket: WASocket, message: WAMessage, text: s
   const chance = matched ? MATCHED_REACTION_CHANCE : GENERAL_REACTION_CHANCE
   if (Math.random() > chance) return false
   const emoji = pickReaction(text)
-  await socket.sendMessage(message.key.remoteJid!, { react: { text: emoji, key: message.key } }).catch(() => undefined)
-  return true
+  return tryWhatsAppAuxiliaryAction(
+    socket.user?.id ?? 'whatsapp-main',
+    'human-reaction',
+    () => socket.sendMessage(message.key.remoteJid!, { react: { text: emoji, key: message.key } }),
+  )
 }
 
 async function maybeConfiguredSticker(socket: WASocket, message: WAMessage) {
@@ -48,12 +51,14 @@ async function maybeConfiguredSticker(socket: WASocket, message: WAMessage) {
 }
 
 export async function maybeHumanInteraction(socket: WASocket, message: WAMessage) {
-  if (!config.autoReact || message.key.fromMe || !message.key.remoteJid) return false
+  if (message.key.fromMe || !message.key.remoteJid) return false
   const text = getMessageText(message).trim()
-  if (!text || text.startsWith(config.defaultPrefix)) return maybeConfiguredSticker(socket, message)
+  if (!text || text.startsWith(settings.prefix)) return maybeConfiguredSticker(socket, message)
 
   const matches = matchingRules(text)
-  const reacted = await maybeReactToMessage(socket, message, text, matches.length > 0)
+  const reacted = settings.humanReactionsEnabled
+    ? await maybeReactToMessage(socket, message, text, matches.length > 0)
+    : false
 
   if (settings.automaticResponsesEnabled && matches.length) {
     const rule = matches[Math.floor(Math.random() * matches.length)]!

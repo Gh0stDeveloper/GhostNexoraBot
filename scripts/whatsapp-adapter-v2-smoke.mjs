@@ -22,7 +22,7 @@ try {
 
   assert.equal(WHATSAPP_CAPABILITIES.editMessage, true)
   assert.equal(WHATSAPP_CAPABILITIES.reactions, true)
-  assert.equal(WHATSAPP_CAPABILITIES.typing, true)
+  assert.equal(WHATSAPP_CAPABILITIES.typing, false)
   assert.equal(WHATSAPP_CAPABILITIES.buttons, true)
   assert.equal(WHATSAPP_CAPABILITIES.carousel, true)
   assert.equal(WHATSAPP_CAPABILITIES.files, true)
@@ -63,9 +63,14 @@ try {
   const sentCalls = []
   const presenceCalls = []
   let nextId = 0
+  let failReactionWithRateLimit = false
   const socket = {
     user: { id: '5215551111111:1@s.whatsapp.net' },
     async sendMessage(jid, content, options) {
+      if (content?.react && failReactionWithRateLimit) {
+        failReactionWithRateLimit = false
+        throw new Error('rate-overlimit')
+      }
       nextId += 1
       const sent = {
         key: { remoteJid: jid, fromMe: true, id: `out-${nextId}` },
@@ -124,12 +129,15 @@ try {
   assert.equal(sentCalls[4].content.react.text, '⚡')
   assert.deepEqual(sentCalls[4].content.react.key, incoming.key)
 
+  const reactionCallsBeforeThrottle = sentCalls.length
+  failReactionWithRateLimit = true
+  await adapter.react(incoming.key.remoteJid, incoming.key.id, '✅')
+  await adapter.react(incoming.key.remoteJid, incoming.key.id, '❌')
+  assert.equal(sentCalls.length, reactionCallsBeforeThrottle, 'rate-overlimit must pause follow-up command reactions instead of retrying')
+
   await adapter.setTyping(incoming.key.remoteJid, true)
   await adapter.setTyping(incoming.key.remoteJid, false)
-  assert.deepEqual(presenceCalls, [
-    { value: 'composing', jid: incoming.key.remoteJid },
-    { value: 'paused', jid: incoming.key.remoteJid },
-  ])
+  assert.deepEqual(presenceCalls, [])
 
   const router = await read('apps/bot/src/core/router.ts')
   const types = await read('apps/bot/src/types.ts')
@@ -165,8 +173,10 @@ try {
   assert.match(edit, /isPocChatAllowed\(ctx\.chatId\)/)
   assert.doesNotMatch(edit, /WhatsAppAdapter|ctx\.adapter/)
 
+  const typing = await read('apps/bot/src/core/typing.ts')
   assert.match(main, /startTypingIndicator\(transport, chatId\)/)
-  assert.doesNotMatch(main, /function startTypingIndicator\(socket:/)
+  assert.match(typing, /return \(\) => undefined/)
+  assert.doesNotMatch(typing, /setInterval|setTyping\(/)
 
   console.log('[V2 PHASE 1] OK — WhatsApp adapter preserves V1 compatibility and native carousel transport while exposing normalized APIs.')
 } finally {

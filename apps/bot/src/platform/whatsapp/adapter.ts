@@ -15,12 +15,13 @@ import { config } from '../../config.js'
 import { resolveChatLocale } from '../../i18n/index.js'
 import { getContextInfo, getMessageText, unwrapMessage } from '../../utils/message.js'
 import { createLocalizedSocket } from '../../services/localized-socket.js'
+import { tryWhatsAppAuxiliaryAction } from '../../services/whatsapp-rate-limit.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from './interactive.js'
 
 export const WHATSAPP_CAPABILITIES = createPlatformCapabilities({
   editMessage: true,
   reactions: true,
-  typing: true,
+  typing: false,
   buttons: true,
   carousel: true,
   embeds: false,
@@ -294,14 +295,19 @@ export class WhatsAppAdapter implements PlatformAdapter {
     })
   }
 
-  async setTyping(chatId: string, active: boolean): Promise<void> {
-    await this.socket.sendPresenceUpdate(active ? 'composing' : 'paused', chatId)
+  async setTyping(_chatId: string, _active: boolean): Promise<void> {
+    // WhatsApp presence traffic is intentionally disabled. Commands keep their
+    // message-status reactions, but no longer emit repeated "composing" events.
   }
 
   async react(chatId: string, messageId: string, reaction: string): Promise<void> {
     const remembered = this.messageCache.get(messageId)
     const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
-    await this.localizedSocket(chatId).sendMessage(chatId, { react: { text: reaction, key } } as never)
+    await tryWhatsAppAuxiliaryAction(
+      this.socket.user?.id ?? this.botInstanceId,
+      'command-reaction',
+      () => this.localizedSocket(chatId).sendMessage(chatId, { react: { text: reaction, key } } as never),
+    )
   }
 }
 
