@@ -55,7 +55,7 @@ async function maybeConfiguredSticker(socket: WASocket, message: WAMessage) {
 export async function maybeHumanInteraction(socket: WASocket, message: WAMessage) {
   if (message.key.fromMe || !message.key.remoteJid) return false
   const text = getMessageText(message).trim()
-  if (!text || text.startsWith(config.defaultPrefix)) return maybeConfiguredSticker(socket, message)
+  if (!text || text.startsWith(settings.prefix)) return maybeConfiguredSticker(socket, message)
 
   const matches = matchingRules(text)
   const reacted = settings.humanReactionsEnabled
