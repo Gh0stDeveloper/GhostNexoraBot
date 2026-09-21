@@ -154,6 +154,61 @@ export function extractPremiumSticker(message: WAMessage): LooseSticker | null {
   return null
 }
 
+type ExtractedPremiumPack = {
+  name?: string
+  publisher?: string
+  stickers: LooseSticker[]
+}
+
+function premiumStickerCandidate(value: unknown): LooseSticker | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, any>
+  const candidates = [
+    item.stickerMessage,
+    item.sticker,
+    item.message?.stickerMessage,
+    item.data?.stickerMessage,
+    item.data?.sticker,
+    item,
+  ].filter(Boolean) as LooseSticker[]
+
+  for (const sticker of candidates) {
+    const lottie = Boolean(sticker.isLottie) || sticker.mimetype === 'application/was' || Number(sticker.premium ?? 0) > 0
+    if (lottie && (sticker.directPath || sticker.url) && sticker.mediaKey) return sticker
+  }
+  return null
+}
+
+export function extractPremiumStickerPack(message: WAMessage): ExtractedPremiumPack | null {
+  for (const root of rootCandidates(message)) {
+    const loose = root as Record<string, any>
+    const unwrapped = unwrapMessage(root as never) as Record<string, any> | undefined
+    const packCandidates = [
+      loose?.stickerPackMessage,
+      loose?.stickerPack,
+      loose?.message?.stickerPackMessage,
+      loose?.message?.stickerPack,
+      unwrapped?.stickerPackMessage,
+      unwrapped?.stickerPack,
+    ].filter(Boolean) as Array<Record<string, any>>
+
+    for (const pack of packCandidates) {
+      const rawMembers = [
+        ...(Array.isArray(pack.stickers) ? pack.stickers : []),
+        ...(Array.isArray(pack.stickerPack?.stickers) ? pack.stickerPack.stickers : []),
+      ]
+      const stickers = rawMembers.map(premiumStickerCandidate).filter((item): item is LooseSticker => Boolean(item))
+      if (!stickers.length) continue
+      return {
+        name: String(pack.name ?? pack.stickerPackName ?? '').trim() || undefined,
+        publisher: String(pack.publisher ?? pack.stickerPackPublisher ?? '').trim() || undefined,
+        stickers,
+      }
+    }
+  }
+  return null
+}
+
 function fingerprint(payload: SerializedPremiumSticker) {
   const stable = payload.fileSha256 || payload.fileEncSha256 || payload.directPath || JSON.stringify(payload)
   return createHash('sha256').update(stable).digest('hex')
@@ -201,6 +256,49 @@ export async function relayPremiumSticker(
 export const premiumStickersV18 = {
   normalizeTrigger,
   extract: extractPremiumSticker,
+  extractPack: extractPremiumStickerPack,
+
+  addPackFromMessage(message: WAMessage, createdBy: string, options: { packName?: string; label?: string; triggers?: string[] } = {}) {
+    const extracted = extractPremiumStickerPack(message)
+    if (!extracted?.stickers.length) throw new Error('Responde a un mensaje de pack premium/Lottie que incluya sus stickers.')
+    const packName = normalizePack(options.packName || extracted.name)
+    if (!packName) throw new Error('No pude determinar el nombre del pack. Indícalo manualmente.')
+    const triggers = [...new Set((options.triggers ?? []).map(normalizeTrigger).filter(Boolean))]
+    const ids: number[] = []
+
+    const insert = db.transaction((stickers: LooseSticker[]) => {
+      for (const sticker of stickers) {
+        const payload = serializeSticker(sticker)
+        const digest = fingerprint(payload)
+        db.prepare(`INSERT INTO global_premium_stickers(fingerprint, payload_json, label, triggers, pack_name, created_by, created_at)
+          VALUES(?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(fingerprint) DO UPDATE SET payload_json = excluded.payload_json, label = COALESCE(excluded.label, global_premium_stickers.label),
+            triggers = CASE WHEN excluded.triggers IS NOT NULL AND excluded.triggers != '' THEN excluded.triggers ELSE global_premium_stickers.triggers END,
+            pack_name = excluded.pack_name`)
+          .run(
+            digest,
+            JSON.stringify(payload),
+            options.label?.trim().slice(0, 80) || null,
+            triggers.join('|') || null,
+            packName,
+            createdBy,
+            now(),
+          )
+        const row = db.prepare('SELECT id FROM global_premium_stickers WHERE fingerprint = ?').get(digest) as { id: number }
+        db.prepare(`INSERT OR IGNORE INTO global_sticker_pack_members(pack_name, sticker_kind, sticker_id, created_at)
+          VALUES(?, 'lottie', ?, ?)`).run(packName, row.id, now())
+        ids.push(row.id)
+      }
+    })
+    insert(extracted.stickers)
+
+    return {
+      packName,
+      publisher: extracted.publisher,
+      imported: ids.length,
+      ids,
+    }
+  },
 
   addFromMessage(message: WAMessage, createdBy: string, options: { packName?: string; label?: string; triggers?: string[] } = {}) {
     const sticker = extractPremiumSticker(message)
