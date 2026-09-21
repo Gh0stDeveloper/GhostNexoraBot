@@ -13,6 +13,8 @@ const textures = read('apps/web/lib/nexora-helios-textures.ts')
 const copy = read('apps/web/lib/nexora-helios-i18n.ts')
 const surfaceExplorer = read('apps/web/components/nexora-helios-surface-explorer.tsx')
 const surfaceData = read('apps/web/lib/nexora-helios-surface-data.ts')
+const terrainExplorer = read('apps/web/components/nexora-helios-terrain-explorer.tsx')
+const terrainData = read('apps/web/lib/nexora-helios-terrain-data.ts')
 
 for (const dependency of ['@react-three/fiber', '@react-three/drei', 'three']) {
   assert.ok(webPackage.includes(`"${dependency}"`), `Missing 3D dependency ${dependency}`)
@@ -115,7 +117,23 @@ assert.match(copy, /open: 'Abrir superficie'/, 'Phase 5 Spanish Surface Explorer
 assert.match(copy, /open: 'Open surface'/, 'Phase 5 English Surface Explorer copy missing')
 assert.match(copy, /noSolidSurface/, 'Phase 5 gas\/ice giant surface boundary copy missing')
 
-const migratedSource = [page, experience, model, textures, copy, surfaceExplorer, surfaceData].join('\n').toLowerCase()
+assert.match(terrainData, /NASA Solar System Treks|nasa-trek/, 'Phase 6 NASA Trek terrain provider missing')
+assert.match(terrainData, /USGS 3D Elevation Program|usgs-3dep/, 'Phase 6 USGS 3DEP terrain provider missing')
+for (const region of ['mars-olympus-mons', 'mars-gale-crater', 'mars-valles-marineris', 'moon-tycho', 'mercury-caloris', 'venus-maxwell', 'earth-usgs-3dep']) {
+  assert.match(terrainData, new RegExp(`id: '${region}'`), `Phase 6 terrain preset missing ${region}`)
+}
+assert.match(terrainData, /trek\.nasa\.gov/, 'Phase 6 official NASA Trek URLs missing')
+assert.match(terrainData, /apps\.nationalmap\.gov\/viewer/, 'Phase 6 official USGS 3D viewer URL missing')
+assert.match(terrainExplorer, /export function NexoraHeliosTerrainExplorer/, 'Phase 6 Terrain 3D Explorer component missing')
+assert.match(terrainExplorer, /<iframe/, 'Phase 6 embedded official 3D viewer missing')
+assert.match(terrainExplorer, /allowFullScreen/, 'Phase 6 full-screen terrain support missing')
+assert.match(terrainExplorer, /region\.viewerUrl/, 'Phase 6 terrain region navigation missing')
+assert.match(surfaceExplorer, /NexoraHeliosTerrainExplorer/, 'Phase 6 Surface Explorer integration missing')
+assert.match(surfaceExplorer, /hasHeliosTerrainRegions/, 'Phase 6 terrain capability guard missing')
+assert.match(copy, /openTerrain3d: 'Abrir terreno 3D'/, 'Phase 6 Spanish terrain copy missing')
+assert.match(copy, /openTerrain3d: 'Open 3D terrain'/, 'Phase 6 English terrain copy missing')
+
+const migratedSource = [page, experience, model, textures, copy, surfaceExplorer, surfaceData, terrainExplorer, terrainData].join('\n').toLowerCase()
 assert.doesNotMatch(migratedSource, /grok|xai|__grok/, 'Nexora Helios must not include Grok/xAI branding or platform references')
 assert.doesNotMatch(experience, /dangerouslySetInnerHTML|\beval\s*\(/, 'Nexora Helios must not inject raw HTML or evaluate arbitrary code')
 
