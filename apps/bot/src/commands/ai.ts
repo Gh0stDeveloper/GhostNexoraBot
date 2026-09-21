@@ -91,7 +91,6 @@ export const aiCommands: BotCommand[] = [
         )
       }
       const prompt = requirePrompt(ctx.argText)
-      await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const result = await askAI(
         [
           { role: 'system', content: systemPrompt(ctx) },
@@ -120,7 +119,6 @@ export const aiCommands: BotCommand[] = [
         )
       }
       const query = requirePrompt(ctx.argText)
-      await ctx.socket.sendPresenceUpdate('composing', ctx.chatId).catch(() => undefined)
       const sources = await researchSources(query)
       if (!sources.length) throw new Error('No pude obtener fuentes públicas para investigar ese tema.')
 
