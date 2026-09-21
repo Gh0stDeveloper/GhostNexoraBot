@@ -30,6 +30,12 @@ db.exec(`
 
 type LooseSticker = Record<string, unknown>
 
+type ExtractedPremiumPack = {
+  packName: string | null
+  publisher: string | null
+  stickers: LooseSticker[]
+}
+
 type SerializedPremiumSticker = {
   url?: string
   fileSha256?: string
@@ -135,6 +141,55 @@ function rootCandidates(message: WAMessage) {
   return roots.filter(Boolean)
 }
 
+function usablePremiumSticker(candidate: unknown): LooseSticker | null {
+  if (!candidate || typeof candidate !== 'object') return null
+  const loose = candidate as Record<string, any>
+  const sticker = (
+    loose?.lottieStickerMessage?.message?.stickerMessage
+    ?? loose?.lottieStickerMessage?.stickerMessage
+    ?? loose?.message?.stickerMessage
+    ?? loose?.stickerMessage
+    ?? loose?.sticker
+    ?? loose
+  ) as LooseSticker
+  const lottie = Boolean(sticker.isLottie)
+    || sticker.mimetype === 'application/was'
+    || Number(sticker.premium ?? 0) > 0
+  if (!lottie || !(sticker.directPath || sticker.url) || !sticker.mediaKey) return null
+  return sticker
+}
+
+export function extractPremiumStickerPack(message: WAMessage): ExtractedPremiumPack | null {
+  for (const root of rootCandidates(message)) {
+    const loose = root as Record<string, any>
+    const unwrapped = unwrapMessage(root as never) as Record<string, any> | undefined
+    const packs = [
+      loose?.stickerPackMessage,
+      loose?.stickerPack,
+      unwrapped?.stickerPackMessage,
+      unwrapped?.stickerPack,
+    ].filter(Boolean) as Array<Record<string, any>>
+
+    for (const pack of packs) {
+      const rawItems = [
+        ...(Array.isArray(pack.stickers) ? pack.stickers : []),
+        ...(Array.isArray(pack.stickerMessages) ? pack.stickerMessages : []),
+        ...(Array.isArray(pack.items) ? pack.items : []),
+      ]
+      const stickers = rawItems
+        .map((item) => usablePremiumSticker(item))
+        .filter((item): item is LooseSticker => Boolean(item))
+      if (!stickers.length) continue
+      return {
+        packName: normalizePack(pack.name ?? pack.packName ?? pack.title),
+        publisher: normalizePack(pack.publisher ?? pack.author ?? pack.creator),
+        stickers,
+      }
+    }
+  }
+  return null
+}
+
 export function extractPremiumSticker(message: WAMessage): LooseSticker | null {
   for (const root of rootCandidates(message)) {
     const loose = root as Record<string, any>
@@ -198,30 +253,56 @@ export async function relayPremiumSticker(
   return messageId
 }
 
+function storePremiumSticker(
+  sticker: LooseSticker,
+  createdBy: string,
+  options: { packName?: string; label?: string; triggers?: string[] } = {},
+) {
+  const payload = serializeSticker(sticker)
+  const digest = fingerprint(payload)
+  const packName = normalizePack(options.packName)
+  const triggers = [...new Set((options.triggers ?? []).map(normalizeTrigger).filter(Boolean))]
+  db.prepare(`INSERT INTO global_premium_stickers(fingerprint, payload_json, label, triggers, pack_name, created_by, created_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(fingerprint) DO UPDATE SET payload_json = excluded.payload_json, label = COALESCE(excluded.label, global_premium_stickers.label),
+      triggers = CASE WHEN excluded.triggers IS NOT NULL THEN excluded.triggers ELSE global_premium_stickers.triggers END,
+      pack_name = COALESCE(excluded.pack_name, global_premium_stickers.pack_name)`)
+    .run(digest, JSON.stringify(payload), options.label?.trim().slice(0, 80) || null, triggers.join('|') || null, packName, createdBy, now())
+  const row = db.prepare(`SELECT id, label, triggers, pack_name AS packName FROM global_premium_stickers WHERE fingerprint = ?`).get(digest) as {
+    id: number; label?: string | null; triggers?: string | null; packName?: string | null
+  }
+  if (packName) {
+    db.prepare(`INSERT OR IGNORE INTO global_sticker_pack_members(pack_name, sticker_kind, sticker_id, created_at)
+      VALUES(?, 'lottie', ?, ?)`).run(packName, row.id, now())
+  }
+  return row
+}
+
 export const premiumStickersV18 = {
   normalizeTrigger,
   extract: extractPremiumSticker,
+  extractPack: extractPremiumStickerPack,
 
   addFromMessage(message: WAMessage, createdBy: string, options: { packName?: string; label?: string; triggers?: string[] } = {}) {
     const sticker = extractPremiumSticker(message)
     if (!sticker) throw new Error('Responde a un sticker Lottie/premium válido de WhatsApp.')
-    const payload = serializeSticker(sticker)
-    const digest = fingerprint(payload)
-    const packName = normalizePack(options.packName)
-    const triggers = [...new Set((options.triggers ?? []).map(normalizeTrigger).filter(Boolean))]
-    db.prepare(`INSERT INTO global_premium_stickers(fingerprint, payload_json, label, triggers, pack_name, created_by, created_at)
-      VALUES(?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(fingerprint) DO UPDATE SET payload_json = excluded.payload_json, label = excluded.label,
-        triggers = excluded.triggers, pack_name = COALESCE(excluded.pack_name, global_premium_stickers.pack_name)`)
-      .run(digest, JSON.stringify(payload), options.label?.trim().slice(0, 80) || null, triggers.join('|') || null, packName, createdBy, now())
-    const row = db.prepare(`SELECT id, label, triggers, pack_name AS packName FROM global_premium_stickers WHERE fingerprint = ?`).get(digest) as {
-      id: number; label?: string | null; triggers?: string | null; packName?: string | null
+    return storePremiumSticker(sticker, createdBy, options)
+  },
+
+  addPackFromMessage(message: WAMessage, createdBy: string, options: { packName?: string; labelPrefix?: string } = {}) {
+    const pack = extractPremiumStickerPack(message)
+    if (!pack) throw new Error('Responde a un mensaje de pack premium/Lottie que incluya los stickers del pack.')
+    const packName = normalizePack(options.packName ?? pack.packName ?? pack.publisher ?? 'Premium Pack')!
+    const rows = pack.stickers.slice(0, 100).map((sticker, index) => storePremiumSticker(sticker, createdBy, {
+      packName,
+      label: options.labelPrefix ? `${options.labelPrefix} ${index + 1}` : undefined,
+    }))
+    return {
+      packName,
+      publisher: pack.publisher,
+      imported: rows.length,
+      ids: rows.map((row) => row.id),
     }
-    if (packName) {
-      db.prepare(`INSERT OR IGNORE INTO global_sticker_pack_members(pack_name, sticker_kind, sticker_id, created_at)
-        VALUES(?, 'lottie', ?, ?)`).run(packName, row.id, now())
-    }
-    return row
   },
 
   list(limit = 100) {
