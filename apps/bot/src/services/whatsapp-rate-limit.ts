@@ -6,6 +6,7 @@ type ScopeState = {
 }
 
 const scopes = new Map<string, ScopeState>()
+const notedErrors = new WeakSet<object>()
 
 function errorText(error: unknown) {
   if (error instanceof Error) {
@@ -38,6 +39,10 @@ export function whatsappRateLimitRemainingMs(scope: string) {
 }
 
 export function noteWhatsAppRateOverlimit(scope: string, operation: string, error: unknown) {
+  if (error && typeof error === 'object') {
+    if (notedErrors.has(error)) return whatsappRateLimitRemainingMs(scope)
+    notedErrors.add(error)
+  }
   const previous = scopes.get(scope)
   const hits = Math.min(6, (previous?.hits ?? 0) + 1)
   const backoffMs = Math.min(5 * 60_000, 15_000 * (2 ** (hits - 1)))
