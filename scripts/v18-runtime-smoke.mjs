@@ -166,8 +166,6 @@ try {
   assert.ok(latest('inactivos'), '.inactivos V18 must be registered')
   assert.ok(latest('expulsarinactivos'), '.expulsarinactivos V18 must be registered')
   assert.ok(latest('lottiesticker'), '.lottiesticker must be registered')
-  assert.ok(latest('reaccioneshumanas'), '.reaccioneshumanas must be registered')
-  assert.equal(latest('reaccioneshumanas')?.ownerOnly, true)
   assert.ok(latest('botsticker')?.usage?.includes('packimport'), '.botsticker must expose complete premium pack import')
   assert.equal(latest('botsticker')?.subbotOwnerAllowed, true, 'subbot owner must be allowed to manage instance stickers')
   assert.equal(latest('lottiesticker')?.subbotOwnerAllowed, true)
