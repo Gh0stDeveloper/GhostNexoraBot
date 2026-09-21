@@ -150,8 +150,8 @@ export class CommandRouter {
       adapter.sendMedia(chatId, media, withCurrentReply(options))
     const sendUi: LegacyCompatibleCommandContext['sendUi'] = (ui, options) =>
       adapter.sendUi(chatId, ui, withCurrentReply(options))
-    const setTyping: LegacyCompatibleCommandContext['setTyping'] = async (active) => {
-      if (adapter.setTyping) await adapter.setTyping(chatId, active)
+    const setTyping: LegacyCompatibleCommandContext['setTyping'] = async (_active) => {
+      // WhatsApp command execution intentionally suppresses presence traffic.
     }
     const editMessage: LegacyCompatibleCommandContext['editMessage'] = async (messageId, value) => {
       if (!adapter.editMessage) throw new Error(`La plataforma ${adapter.id} no soporta edición de mensajes.`)
