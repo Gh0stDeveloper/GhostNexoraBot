@@ -21,7 +21,7 @@ import { sendCarousel, sendInteractiveCard, type InteractiveButton } from './int
 export const WHATSAPP_CAPABILITIES = createPlatformCapabilities({
   editMessage: true,
   reactions: true,
-  typing: false,
+  typing: true,
   buttons: true,
   carousel: true,
   embeds: false,
