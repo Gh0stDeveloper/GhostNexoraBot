@@ -6,6 +6,8 @@ import { getContextInfo } from '../utils/message.js'
 import { conversationMemory } from './conversation-memory.js'
 import { contextualAnswer } from './llm-contextual-answer.js'
 import { resolveChatLocale } from '../i18n/index.js'
+import { settings } from '../core/settings.js'
+import { sendWhatsAppReactionWithBackoff, whatsappScopeFromEnv } from './whatsapp-rate-guard.js'
 
 type State = {
   chats: Record<string, boolean>
@@ -37,7 +39,7 @@ const DEFAULT: State = {
   antispamEnabled: true,
   cooldownMs: 2800,
   cooldownEnabled: true,
-  reactions: true,
+  reactions: false,
   slangEnabled: true,
 }
 
@@ -56,7 +58,7 @@ function load(): State {
       antispamEnabled: parsed.antispamEnabled !== false,
       cooldownMs: typeof parsed.cooldownMs === 'number' ? parsed.cooldownMs : DEFAULT.cooldownMs,
       cooldownEnabled: parsed.cooldownEnabled !== false,
-      reactions: parsed.reactions !== false,
+      reactions: typeof parsed.reactions === 'boolean' ? parsed.reactions : DEFAULT.reactions,
       slangEnabled: parsed.slangEnabled !== false,
     }
   } catch {
@@ -337,16 +339,16 @@ export const llmFreeChat = {
 
   async maybeReact(socket: WASocket, message: WAMessage, userText: string, answer: string) {
     const state = load()
-    if (!state.reactions) return
+    if (!settings.humanReactionsEnabled || !state.reactions) return
     const emoji = pickReaction(userText, answer)
-    if (!emoji || !message.key) return
-    try {
-      await socket.sendMessage(message.key.remoteJid!, {
-        react: { text: emoji, key: message.key },
-      })
-    } catch {
-      // ignore
-    }
+    if (!emoji || !message.key.remoteJid) return
+    await sendWhatsAppReactionWithBackoff(
+      socket,
+      message.key.remoteJid,
+      message.key,
+      emoji,
+      whatsappScopeFromEnv(),
+    ).catch(() => false)
   },
 
   statusLine() {
