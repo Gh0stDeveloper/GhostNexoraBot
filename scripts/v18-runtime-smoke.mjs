@@ -166,8 +166,11 @@ try {
   assert.equal(latest('reaccioneshumanas')?.ownerOnly, true, 'human reaction toggle must be owner-only')
 
   const whatsappAdapterSource = readFileSync(new URL('../apps/bot/src/platform/whatsapp/adapter.ts', import.meta.url), 'utf8')
-  assert.ok(whatsappAdapterSource.includes('typing: false'), 'WhatsApp typing capability must stay disabled')
+  assert.ok(whatsappAdapterSource.includes('typing: true'), 'WhatsApp typing capability contract must remain compatible')
+  assert.ok(whatsappAdapterSource.includes('WhatsApp typing presence is intentionally disabled'), 'WhatsApp adapter setTyping must remain network-silent')
   assert.ok(whatsappAdapterSource.includes('sendWhatsAppReactionWithBackoff'), 'command reactions must use the rate-overlimit guard')
+  const typingSource = readFileSync(new URL('../apps/bot/src/core/typing.ts', import.meta.url), 'utf8')
+  assert.ok(typingSource.includes("adapter.id === 'whatsapp'"), 'WhatsApp typing timer must be disabled before scheduling presence updates')
 
   const humanBehaviorSource = readFileSync(new URL('../apps/bot/src/services/human-behavior-v8.ts', import.meta.url), 'utf8')
   assert.ok(humanBehaviorSource.includes('settings.humanReactionsEnabled'), 'human reactions must use runtime toggle')
