@@ -63,9 +63,14 @@ try {
   const sentCalls = []
   const presenceCalls = []
   let nextId = 0
+  let failReactionWithRateLimit = false
   const socket = {
     user: { id: '5215551111111:1@s.whatsapp.net' },
     async sendMessage(jid, content, options) {
+      if (content?.react && failReactionWithRateLimit) {
+        failReactionWithRateLimit = false
+        throw new Error('rate-overlimit')
+      }
       nextId += 1
       const sent = {
         key: { remoteJid: jid, fromMe: true, id: `out-${nextId}` },
@@ -123,6 +128,12 @@ try {
   await adapter.react(incoming.key.remoteJid, incoming.key.id, '⚡')
   assert.equal(sentCalls[4].content.react.text, '⚡')
   assert.deepEqual(sentCalls[4].content.react.key, incoming.key)
+
+  const reactionCallsBeforeThrottle = sentCalls.length
+  failReactionWithRateLimit = true
+  await adapter.react(incoming.key.remoteJid, incoming.key.id, '✅')
+  await adapter.react(incoming.key.remoteJid, incoming.key.id, '❌')
+  assert.equal(sentCalls.length, reactionCallsBeforeThrottle, 'rate-overlimit must pause follow-up command reactions instead of retrying')
 
   await adapter.setTyping(incoming.key.remoteJid, true)
   await adapter.setTyping(incoming.key.remoteJid, false)
