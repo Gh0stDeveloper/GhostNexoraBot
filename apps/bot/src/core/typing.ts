@@ -1,6 +1,9 @@
 import type { PlatformAdapter } from '@ghostnexora/platform-contracts'
 
 export function startTypingIndicator(adapter: PlatformAdapter, chatId: string, intervalMs = 4_500) {
+  // WhatsApp keeps the capability in the shared contract, but presence traffic is
+  // deliberately disabled at runtime to avoid periodic auxiliary events.
+  if (adapter.id === 'whatsapp') return () => undefined
   if (!adapter.capabilities.typing || !adapter.setTyping) return () => undefined
 
   void adapter.setTyping(chatId, true).catch(() => undefined)
