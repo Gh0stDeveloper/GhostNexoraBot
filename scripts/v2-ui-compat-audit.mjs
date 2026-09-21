@@ -25,6 +25,12 @@ const allowedRawRelays = new Set([
   'apps/bot/src/commands/valley-compat-v21.ts',
 ])
 
+/** Only the reviewed WhatsApp interactive transport may emit the classic
+ *  buttonsMessage + locationMessage (headerType 6) envelope used by the menu. */
+const allowedLegacyInteractiveEnvelopes = new Set([
+  'apps/bot/src/platform/whatsapp/interactive.ts',
+])
+
 const nativeCarouselTransport = 'apps/bot/src/platform/whatsapp/interactive.ts'
 
 async function walk(dir) {
@@ -52,6 +58,7 @@ for (const absolute of files) {
   const metrics = {
     normalizedUi: count(source, /ctx\.adapter\.sendUi\s*\(/g),
     legacyCards: count(source, /sendInteractiveCard\s*\(/g),
+    locationHeaderCards: count(source, /sendLocationHeaderCard\s*\(/g),
     legacyCarousels: count(source, /sendCarousel\s*\(/g),
     htmlRich: count(source, /sendAiHtmlMessage\s*\(/g),
     codeRich: count(source, /sendRichAiCodeMessage\s*\(/g),
@@ -65,8 +72,8 @@ for (const absolute of files) {
   if (/\b(?:carouselMessage|CarouselMessage)\b/.test(source) && file !== nativeCarouselTransport) {
     violations.push({ file, rule: 'native-carousel-boundary', detail: `Native carousel payloads are only allowed inside ${nativeCarouselTransport}.` })
   }
-  if (/\b(?:buttonsMessage|templateMessage|listMessage)\b/.test(source)) {
-    violations.push({ file, rule: 'legacy-interactive-envelope', detail: 'Legacy buttons/template/list payload detected.' })
+  if (/\b(?:buttonsMessage|templateMessage|listMessage)\b/.test(source) && !allowedLegacyInteractiveEnvelopes.has(file)) {
+    violations.push({ file, rule: 'legacy-interactive-envelope', detail: 'Legacy buttons/template/list payload detected outside the reviewed interactive transport.' })
   }
   if (/generateWAMessageFromContent\s*\(/.test(source) && !allowedMessageGenerators.has(file)) {
     violations.push({ file, rule: 'raw-message-generator-boundary', detail: 'Raw WhatsApp message generation is outside the reviewed transport allowlist.' })
@@ -77,7 +84,7 @@ for (const absolute of files) {
 }
 
 const totals = rows.reduce((acc, row) => {
-  for (const key of ['normalizedUi', 'legacyCards', 'legacyCarousels', 'htmlRich', 'codeRich', 'richPreview', 'rawGenerator', 'rawRelay']) {
+  for (const key of ['normalizedUi', 'legacyCards', 'locationHeaderCards', 'legacyCarousels', 'htmlRich', 'codeRich', 'richPreview', 'rawGenerator', 'rawRelay']) {
     acc[key] = (acc[key] ?? 0) + row[key]
   }
   return acc
@@ -93,10 +100,12 @@ const report = {
     nativeCarouselTransport,
     maxCarouselCards: 8,
     maxButtonsPerCarouselCard: 2,
+    locationHeaderTransport: nativeCarouselTransport,
     htmlTransport: 'shared_view_compatible_rich_response',
   },
   allowedMessageGenerators: [...allowedMessageGenerators].sort(),
   allowedRawRelays: [...allowedRawRelays].sort(),
+  allowedLegacyInteractiveEnvelopes: [...allowedLegacyInteractiveEnvelopes].sort(),
   totals,
   routes: rows.sort((a, b) => a.file.localeCompare(b.file)),
   violations,
@@ -106,7 +115,7 @@ await mkdir(path.dirname(outputPath), { recursive: true })
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
 
 console.log(`[V2 UI AUDIT] routes=${rows.length}`)
-console.log(`[V2 UI AUDIT] normalizedUi=${totals.normalizedUi ?? 0} legacyCards=${totals.legacyCards ?? 0} legacyCarousels=${totals.legacyCarousels ?? 0}`)
+console.log(`[V2 UI AUDIT] normalizedUi=${totals.normalizedUi ?? 0} legacyCards=${totals.legacyCards ?? 0} locationHeaderCards=${totals.locationHeaderCards ?? 0} legacyCarousels=${totals.legacyCarousels ?? 0}`)
 console.log(`[V2 UI AUDIT] rawGenerator=${totals.rawGenerator ?? 0} rawRelay=${totals.rawRelay ?? 0}`)
 console.log(`[V2 UI AUDIT] violations=${violations.length}`)
 console.log(`[V2 UI AUDIT] report=${path.relative(root, outputPath)}`)
