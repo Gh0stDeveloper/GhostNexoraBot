@@ -245,7 +245,7 @@ Variables importantes:
 BOT_NAME=Ghost Nexora Bot
 PREFIX=.
 OWNER_NUMBERS=521234567890
-AUTO_REACT=true
+AUTO_REACT=false
 MAX_DOWNLOAD_MB=1900
 SESSION_DIR=/var/lib/ghost-nexora-bot/session
 DATA_DIR=/var/lib/ghost-nexora-bot/data
