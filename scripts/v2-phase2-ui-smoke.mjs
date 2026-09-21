@@ -101,6 +101,29 @@ try {
     footer: 'Ghost Nexora',
   })
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /Informativo/)
+  const beforeClassicMenu = relayed.length
+  await interactive.sendClassicLocationMenu(socket, chatId, undefined, {
+    name: 'Ghost Nexora Bot',
+    address: 'Versión: 2.0.0',
+    body: 'Menú clásico con cabecera de ubicación',
+    footer: 'Ghost Nexora Bot',
+    mentionedJids: ['5215551111111@s.whatsapp.net'],
+    buttons: [
+      { text: 'Ping', id: '.ping' },
+      { text: 'Perfil', id: '.profile' },
+      { text: 'Tienda', id: '.shop' },
+    ],
+  })
+  assert.equal(relayed.length, beforeClassicMenu + 1, 'classic location menu must use one reviewed raw relay')
+  const classicMenuRelay = JSON.stringify(relayed.at(-1).content)
+  assert.match(classicMenuRelay, /buttonsMessage/)
+  assert.match(classicMenuRelay, /locationMessage/)
+  assert.match(classicMenuRelay, /Ghost Nexora Bot/)
+  assert.match(classicMenuRelay, /Versión: 2\.0\.0/)
+  assert.match(classicMenuRelay, /\.ping/)
+  assert.match(classicMenuRelay, /\.profile/)
+  assert.match(classicMenuRelay, /\.shop/)
+
 
   const relayCount = relayed.length
   await interactive.sendInteractiveCard(socket, chatId, undefined, {
@@ -133,11 +156,18 @@ try {
   const gameSource = await read('apps/bot/src/services/ai-html.ts')
   const browserSource = await read('apps/bot/src/commands/navegador.ts')
   const editSource = await read('apps/bot/src/commands/edit.ts')
+  const menuSource = await read('apps/bot/src/commands/menu-v5.ts')
 
   assert.match(interactiveSource, /carouselMessage/)
   assert.match(interactiveSource, /CarouselMessage/)
   assert.match(interactiveSource, /native WhatsApp carousel relay completed/)
   assert.match(interactiveSource, /maxButtonsPerCarouselCard/)
+  assert.match(interactiveSource, /sendClassicLocationMenu/)
+  assert.match(interactiveSource, /buttonsMessage/)
+  assert.match(interactiveSource, /locationMessage/)
+  assert.match(interactiveSource, /headerType: 6/)
+  assert.match(menuSource, /sendClassicLocationMenu/)
+  assert.match(menuSource, /mentionedJids: \[ctx\.sender\]/)
   assert.match(compatSource, /nativeCarousel: true/)
   assert.match(compatSource, /mode: 'native-carousel'/)
 
@@ -155,7 +185,7 @@ try {
   assert.match(editSource, /executeValleyInvisibleMessageIdCollision/)
   assert.doesNotMatch(editSource, /ui-compat|planCarousel|relayWhatsAppRichResponse/)
 
-  console.log('[V2 PHASE 2] OK — WhatsApp native carousels are restored while .view/game rich transport remains isolated.')
+  console.log('[V2 PHASE 2] OK — native carousels and the reviewed classic location-menu transport coexist while .view/game rich transport remains isolated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }
