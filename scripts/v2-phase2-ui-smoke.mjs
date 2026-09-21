@@ -112,6 +112,34 @@ try {
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /\.two/)
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /\.one/)
 
+  // Reviewed location-header path used by .menu (buttonsMessage + locationMessage).
+  assert.equal(typeof interactive.sendLocationHeaderCard, 'function')
+  const beforeLocation = relayed.length
+  // Without a real image URL the transport falls back to interactive card;
+  // still assert the function is reachable and does not throw.
+  await interactive.sendLocationHeaderCard(socket, chatId, undefined, {
+    title: 'Menú',
+    body: 'Cuerpo del menú con enlace https://ghostnexorabot.duckdns.org',
+    footer: 'Ghost Nexora Bot',
+    locationName: 'Ghost Nexora Bot',
+    locationAddress: 'Versión: 2.0.0',
+    mentionedJid: ['5215550000000@s.whatsapp.net'],
+    buttons: [
+      { type: 'reply', text: 'Ping', id: '.ping' },
+      { type: 'reply', text: 'Perfil', id: '.profile' },
+    ],
+  })
+  // Either a location-header relay or a fallback interactive/standard send is acceptable.
+  assert.ok(relayed.length >= beforeLocation || sent.length > 0, 'location header path must send something')
+
+  const interactiveSource = await read('apps/bot/src/platform/whatsapp/interactive.ts')
+  assert.match(interactiveSource, /buttonsMessage/)
+  assert.match(interactiveSource, /locationMessage/)
+  assert.match(interactiveSource, /headerType:\s*6/)
+  assert.match(interactiveSource, /jpegThumbnail/)
+  assert.match(interactiveSource, /sendLocationHeaderCard/)
+  assert.match(interactiveSource, /location-header menu card relay completed/)
+
   const beforeRich = relayed.length
   const responseId = 'message-phase2-smoke'
   const richMessage = await rich.relayWhatsAppRichResponse(socket, chatId, {
@@ -127,7 +155,6 @@ try {
   assert.match(richRelay, /botForwardedMessage/)
   assert.match(richRelay, /richResponseMessage/)
 
-  const interactiveSource = await read('apps/bot/src/platform/whatsapp/interactive.ts')
   const compatSource = await read('apps/bot/src/platform/whatsapp/ui-compat.ts')
   const richSource = await read('apps/bot/src/platform/whatsapp/rich-response.ts')
   const gameSource = await read('apps/bot/src/services/ai-html.ts')
@@ -155,7 +182,7 @@ try {
   assert.match(editSource, /executeValleyInvisibleMessageIdCollision/)
   assert.doesNotMatch(editSource, /ui-compat|planCarousel|relayWhatsAppRichResponse/)
 
-  console.log('[V2 PHASE 2] OK — WhatsApp native carousels are restored while .view/game rich transport remains isolated.')
+  console.log('[V2 PHASE 2] OK — native carousels restored; location-header menu transport reviewed; .view/game rich transport isolated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

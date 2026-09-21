@@ -141,6 +141,70 @@ async function imageMessageFromUrl(socket: WASocket, imageUrl?: string) {
   }
 }
 
+/**
+ * Prepares a JPEG thumbnail buffer suitable for locationMessage.jpegThumbnail.
+ * Uses sharp when available (optional dependency) to keep the payload small;
+ * otherwise falls back to the raw image buffer when it is already compact.
+ */
+async function jpegThumbnailFromUrl(imageUrl?: string): Promise<Buffer | undefined> {
+  if (!imageUrl) return undefined
+  try {
+    const media = await preloadWhatsAppMedia(imageUrl, {
+      maxBytes: 8 * 1024 * 1024,
+      timeoutMs: 8_000,
+      label: 'location-thumbnail',
+    })
+    const buffer = Buffer.isBuffer(media) ? media : undefined
+    if (!buffer) return undefined
+
+    try {
+      const sharpModule = await import('sharp').catch(() => null)
+      if (sharpModule?.default) {
+        return await sharpModule.default(buffer)
+          .resize(320, 320, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 72, progressive: true })
+          .toBuffer()
+      }
+    } catch (error) {
+      logger.warn({ error }, 'sharp thumbnail resize failed; using raw buffer when possible')
+    }
+
+    // WhatsApp accepts reasonably small JPEG buffers as jpegThumbnail.
+    if (buffer.byteLength <= 100_000) return buffer
+    logger.warn({ size: buffer.byteLength }, 'image too large for jpegThumbnail without sharp; skipping thumbnail')
+    return undefined
+  } catch (error) {
+    logger.warn({ error }, 'location thumbnail preload failed')
+    return undefined
+  }
+}
+
+function legacyButtonsFromInteractive(buttons: InteractiveButton[]) {
+  return buttons.slice(0, 3).map((button, index) => {
+    if (button.type === 'reply') {
+      return {
+        buttonId: button.id,
+        buttonText: { displayText: button.text },
+        type: 1,
+      }
+    }
+    if (button.type === 'url') {
+      // Legacy buttonsMessage has limited URL support; encode as reply id that the
+      // router can still recognise, while keeping display text.
+      return {
+        buttonId: button.url,
+        buttonText: { displayText: button.text },
+        type: 1,
+      }
+    }
+    return {
+      buttonId: `select_${index}`,
+      buttonText: { displayText: button.text },
+      type: 1,
+    }
+  })
+}
+
 async function sendTextFallback(
   socket: WASocket,
   chatId: string,
@@ -175,6 +239,107 @@ async function sendStandardCard(
   } catch (error) {
     logger.warn({ error, chatId }, 'standard card image failed; sending text only')
     return sendTextFallback(socket, chatId, quoted, text)
+  }
+}
+
+/**
+ * Sends the menu (or similar long card) using the classic buttonsMessage +
+ * locationMessage header so the bot image is delivered as jpegThumbnail.
+ *
+ * Structure matches the requested payload:
+ *   locationMessage { degreesLatitude/Longitude: 0, name, address, jpegThumbnail, contextInfo }
+ *   headerType: 6
+ *
+ * The website URL already rendered inside the menu body remains the primary
+ * redirect target for users. Falls back to sendInteractiveCard when the
+ * thumbnail cannot be prepared.
+ */
+export async function sendLocationHeaderCard(
+  socket: WASocket,
+  chatId: string,
+  quoted: WAMessage | undefined,
+  input: {
+    title: string
+    body: string
+    footer?: string
+    imageUrl?: string
+    locationName: string
+    locationAddress: string
+    buttons?: InteractiveButton[]
+    mentionedJid?: string[]
+  },
+): Promise<string> {
+  const locale = interactiveLocale(socket, chatId)
+  const userJid = socket.user?.id
+  if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
+
+  const body = localizeLegacyText(input.body, locale)
+  const footer = localizeLegacyText(input.footer ?? 'Ghost Nexora Bot', locale)
+  const buttons = (input.buttons ?? []).map((button) => localizedButton(button, locale))
+  const thumbnail = await jpegThumbnailFromUrl(input.imageUrl)
+
+  if (!thumbnail) {
+    logger.info({ chatId }, 'location header thumbnail unavailable; falling back to interactive card')
+    return sendInteractiveCard(socket, chatId, quoted, {
+      title: input.title,
+      body: input.body,
+      footer: input.footer,
+      imageUrl: input.imageUrl,
+      buttons: input.buttons,
+    })
+  }
+
+  const legacyButtons = legacyButtonsFromInteractive(buttons)
+  const mentioned = (input.mentionedJid ?? []).filter(Boolean)
+
+  const message = generateWAMessageFromContent(
+    chatId,
+    {
+      buttonsMessage: {
+        contentText: body,
+        footerText: footer,
+        headerType: 6,
+        locationMessage: {
+          degreesLatitude: 0,
+          degreesLongitude: 0,
+          name: input.locationName.slice(0, 100),
+          address: input.locationAddress.slice(0, 140),
+          jpegThumbnail: thumbnail,
+          contextInfo: {
+            mentionedJid: mentioned,
+            groupMentions: [],
+            statusAttributions: [],
+          },
+        },
+        buttons: legacyButtons,
+      },
+    },
+    { ...(quoted ? { quoted } : {}), userJid },
+  )
+
+  const generatedId = message.key.id
+  if (!generatedId) throw new Error('WhatsApp location-header message ID was not generated.')
+
+  try {
+    await withTimeout(
+      socket.relayMessage(chatId, message.message!, { messageId: generatedId }),
+      25_000,
+      'location header card relay',
+    )
+    logger.info(
+      { chatId, messageId: generatedId, uiMode: 'location-header', thumbnailBytes: thumbnail.byteLength },
+      'location-header menu card relay completed',
+    )
+    return generatedId
+  } catch (error) {
+    logger.warn({ error, chatId }, 'location-header relay failed; falling back to interactive card')
+    return sendInteractiveCard(socket, chatId, quoted, {
+      title: input.title,
+      body: input.body,
+      footer: input.footer,
+      imageUrl: input.imageUrl,
+      buttons: input.buttons,
+    })
   }
 }
 

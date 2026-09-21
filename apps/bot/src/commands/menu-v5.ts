@@ -5,7 +5,7 @@ import { COIN_NAME, COIN_SYMBOL } from '../services/economy.js'
 import { professionsV2 } from '../services/professions-v2.js'
 import { isPrivateChatApproved } from '../services/private-chat-policy.js'
 import { effectiveCommandMetadata } from '../services/menu-registry.js'
-import { sendInteractiveCard, type InteractiveButton } from '../services/interactive.js'
+import { sendInteractiveCard, sendLocationHeaderCard, type InteractiveButton } from '../services/interactive.js'
 import { isGroupAdministrator } from '../utils/target.js'
 import { getCurrentBotVisualStyle, resolveBotVisualStyleAsset } from '../services/bot-styles-v13.js'
 import { isGroupCommandCategoryAllowed } from '../services/group-command-policy.js'
@@ -269,7 +269,10 @@ async function menu(ctx: LegacyCompatibleCommandContext) {
     '*Ghost Nexora Bot*',
   ].filter(Boolean).join('\n')
 
-  await sendInteractiveCard(ctx.socket, ctx.chatId, ctx.message, {
+  const locationName = visual.style.id === 'default' ? 'Ghost Nexora Bot' : visual.displayName
+  const locationAddress = `Versión: ${BOT_VERSION}`
+
+  await sendLocationHeaderCard(ctx.socket, ctx.chatId, ctx.message, {
     title: ctx.t('menu.title', {
       icon: visual.style.id === 'default' ? '👻' : visual.style.icon,
       name: visual.style.id === 'default' ? 'Ghost Nexora Bot' : visual.displayName,
@@ -277,6 +280,9 @@ async function menu(ctx: LegacyCompatibleCommandContext) {
     body,
     imageUrl: visual.imageUrl,
     footer: 'Ghost Nexora Bot',
+    locationName,
+    locationAddress,
+    mentionedJid: ctx.sender ? [ctx.sender] : [],
     buttons: [
       { type: 'url', text: ctx.t('menu.button.channel'), url: config.officialChannelUrl },
       { type: 'reply', text: ctx.t('menu.button.profile'), id: `${ctx.prefix}profile` },
