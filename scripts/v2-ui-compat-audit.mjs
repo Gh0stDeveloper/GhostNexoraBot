@@ -26,6 +26,7 @@ const allowedRawRelays = new Set([
 ])
 
 const nativeCarouselTransport = 'apps/bot/src/platform/whatsapp/interactive.ts'
+const classicButtonsTransport = nativeCarouselTransport
 
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true })
@@ -65,8 +66,11 @@ for (const absolute of files) {
   if (/\b(?:carouselMessage|CarouselMessage)\b/.test(source) && file !== nativeCarouselTransport) {
     violations.push({ file, rule: 'native-carousel-boundary', detail: `Native carousel payloads are only allowed inside ${nativeCarouselTransport}.` })
   }
-  if (/\b(?:buttonsMessage|templateMessage|listMessage)\b/.test(source)) {
-    violations.push({ file, rule: 'legacy-interactive-envelope', detail: 'Legacy buttons/template/list payload detected.' })
+  if (/\bbuttonsMessage\b/.test(source) && file !== classicButtonsTransport) {
+    violations.push({ file, rule: 'classic-buttons-boundary', detail: `Classic buttonsMessage is only allowed inside ${classicButtonsTransport} for the reviewed location-menu transport.` })
+  }
+  if (/\b(?:templateMessage|listMessage)\b/.test(source)) {
+    violations.push({ file, rule: 'legacy-interactive-envelope', detail: 'Legacy template/list payload detected.' })
   }
   if (/generateWAMessageFromContent\s*\(/.test(source) && !allowedMessageGenerators.has(file)) {
     violations.push({ file, rule: 'raw-message-generator-boundary', detail: 'Raw WhatsApp message generation is outside the reviewed transport allowlist.' })
@@ -91,6 +95,8 @@ const report = {
   stablePolicy: {
     nativeCarousel: true,
     nativeCarouselTransport,
+    classicLocationMenu: true,
+    classicButtonsTransport,
     maxCarouselCards: 8,
     maxButtonsPerCarouselCard: 2,
     htmlTransport: 'shared_view_compatible_rich_response',
