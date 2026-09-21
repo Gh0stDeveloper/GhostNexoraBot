@@ -304,7 +304,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const remembered = this.messageCache.get(messageId)
     const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
     await tryWhatsAppAuxiliaryAction(
-      this.botInstanceId,
+      this.socket.user?.id ?? this.botInstanceId,
       'command-reaction',
       () => this.localizedSocket(chatId).sendMessage(chatId, { react: { text: reaction, key } } as never),
     )
