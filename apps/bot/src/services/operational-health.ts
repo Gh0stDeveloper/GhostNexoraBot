@@ -3,7 +3,7 @@ import { statfs } from 'node:fs/promises'
 import { config } from '../config.js'
 import { setOpsAlert, pruneResolvedAlerts } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
-import { readAdapterMetrics, readQueueMetrics } from './ops-observability-metrics.js'
+import { readAdapterMetrics, readQueueMetrics, recentAdapterRateLimitCount } from './ops-observability-metrics.js'
 import { readPlatformRuntimeRegistry } from './platform-runtime-registry.js'
 import { readProviderHealth } from './provider-health.js'
 import { recordGroupedError } from './error-groups.js'
@@ -14,10 +14,14 @@ let timer: NodeJS.Timeout | undefined
 let checking = false
 
 function recentFailedJobs(type: string) {
-  const row = opsDb.prepare(`SELECT COUNT(*) AS count FROM ops_jobs
-    WHERE instance_key = ? AND job_type = ? AND status = 'failed' AND updated_at >= ?`)
-    .get(opsInstanceKey(), type, Date.now() - RECENT_JOB_WINDOW_MS) as { count?: number } | undefined
-  return Number(row?.count ?? 0)
+  try {
+    const row = opsDb.prepare(`SELECT COUNT(*) AS count FROM ops_jobs
+      WHERE instance_key = ? AND job_type = ? AND status = 'failed' AND updated_at >= ?`)
+      .get(opsInstanceKey(), type, Date.now() - RECENT_JOB_WINDOW_MS) as { count?: number } | undefined
+    return Number(row?.count ?? 0)
+  } catch {
+    return 0
+  }
 }
 
 function recentDbLocked() {
@@ -77,7 +81,7 @@ export async function evaluateOperationalHealth() {
       severity: (discord?.reconnects ?? 0) >= 10 ? 'critical' : 'warning',
       title: 'Discord Gateway reconnecting repeatedly',
       detail: discord ? `${discord.reconnects} reconnects · state=${discord.state}` : null,
-      active: Boolean(discord && discord.reconnects >= 5 && Date.now() - discord.updatedAt < 15 * 60_000),
+      active: Boolean(discord && discord.state === 'reconnecting' && discord.reconnects >= 5),
       instanceKey,
     })
 
@@ -92,22 +96,27 @@ export async function evaluateOperationalHealth() {
       })
     }
 
-    const totalRateLimits = adapters.reduce((sum, row) => sum + row.rateLimits, 0)
+    const recentRateLimits = recentAdapterRateLimitCount(instanceKey, 10 * 60_000)
     setOpsAlert({
       key: 'platform:rate-limits',
-      severity: totalRateLimits >= 50 ? 'critical' : 'warning',
+      severity: recentRateLimits >= 25 ? 'critical' : 'warning',
       title: 'Platform rate limits detected',
-      detail: `${totalRateLimits} accumulated 429/rate-limit events`,
-      active: totalRateLimits >= 10,
+      detail: `${recentRateLimits} rate-limit events in the last 10 minutes`,
+      active: recentRateLimits >= 5,
       instanceKey,
     })
 
-    const saturated = queues.filter((row) => row.saturation >= 5 || row.maxWaitMs >= 5_000)
+    const saturationCutoff = Date.now() - 10 * 60_000
+    const saturated = queues.filter((row) =>
+      row.currentDepth >= 3 ||
+      row.lastWaitMs >= 5_000 ||
+      (row.lastSaturatedAt >= saturationCutoff && row.maxDepth >= 2),
+    )
     setOpsAlert({
       key: 'runtime:queue-saturation',
       severity: saturated.some((row) => row.maxWaitMs >= 15_000) ? 'critical' : 'warning',
       title: 'Execution queue saturation detected',
-      detail: saturated.slice(0, 5).map((row) => `${row.dimensionType}:${row.dimensionId} wait=${Math.round(row.maxWaitMs)}ms sat=${row.saturation}`).join(' · '),
+      detail: saturated.slice(0, 5).map((row) => `${row.dimensionType}:${row.dimensionId} depth=${row.currentDepth} wait=${Math.round(row.lastWaitMs)}ms`).join(' · '),
       active: saturated.length > 0,
       instanceKey,
     })
