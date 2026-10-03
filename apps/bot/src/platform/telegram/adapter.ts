@@ -159,7 +159,7 @@ export class TelegramAdapter implements PlatformAdapter {
     return withPreparedMedia(media, {
       platform: 'Telegram',
       maxBytes: MAX_UPLOAD_BYTES,
-      mode: 'direct',
+      mode: media.source.kind === 'url' ? 'materialize' : 'direct',
       retries: 2,
     }, async (prepared) => {
       const normalized = prepared.media
