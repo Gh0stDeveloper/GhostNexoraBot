@@ -64,7 +64,7 @@ Cada update de comando crea un snapshot usando el mensaje normalizado y los perm
 
 B5 introduce el ID dentro del contexto y lo añade a los logs de error de comando.
 
-La propagación end-to-end por todos los subsistemas/telemetría sigue perteneciendo a **F4**.
+La propagación end-to-end quedó completada posteriormente en **F4** mediante contexto asíncrono y correlation ID compartido.
 
 ## Validación
 
@@ -86,6 +86,6 @@ La propagación end-to-end por todos los subsistemas/telemetría sigue perteneci
 - WhatsApp, Discord y Telegram usan un snapshot independiente por comando.
 - El correlation ID aparece en logs de error de los tres routers.
 - B5 dejó `activeUserId` como deuda explícita; D1 la cerró posteriormente mediante `DeliveryContext`.
-- La propagación completa de tracing hacia providers/media/outbox continúa en F4.
+- F4 completó posteriormente la propagación de tracing hacia providers, media, outbox y adapters.
 - CI principal y gate B5 pasaron en verde sobre `087d09f8c041ad42e532bca8fdf1515341b7f9ca`.
 - PR de cierre: #86.
