@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { jidNormalizedUser, type GroupParticipant, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
 import type { BotCommand, LegacyCompatibleCommandContext, RequestContext } from '../types.js'
@@ -127,7 +128,13 @@ export class CommandRouter {
     const prefix = settings.prefix
     const botInstanceId = whatsappBotInstanceId(this.options.instanceId)
     const locale = resolveChatLocale(chatId, sender, botInstanceId)
-    const localizedSocket = createLocalizedSocket(socket, locale, { contextChatId: chatId, botInstanceId })
+    const correlationId = randomUUID()
+    const localizedSocket = createLocalizedSocket(socket, locale, {
+      contextChatId: chatId,
+      botInstanceId,
+      useOutbox: true,
+      correlationId,
+    })
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
     const pushName = message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser'))
 
@@ -141,7 +148,7 @@ export class CommandRouter {
     performanceAudit.recordStage('03', performance.now() - stateStarted)
 
     const currentReplyTo = normalizedMessage.messageId || undefined
-    const delivery = { userId: sender, locale }
+    const delivery = { userId: sender, locale, correlationId }
     const withCurrentReply = <T extends { replyTo?: string; delivery?: unknown }>(options?: T) => ({
       ...options,
       replyTo: options?.replyTo ?? currentReplyTo,
@@ -337,6 +344,7 @@ export class CommandRouter {
         userId: sender,
         locale,
         messageId: normalizedMessage.messageId,
+        correlationId,
         permissions: {
           isOwner,
           isStaff: isBotStaff,
