@@ -61,6 +61,8 @@ export async function deliverWithOutbox<T>(input: {
   correlationId?: string
   instanceKey?: string
   maxAttempts?: number
+  /** Test/controlled override. Production callers use the default 1s -> 3s -> 10s policy. */
+  backoffMs?: readonly number[]
 }, operation: () => Promise<T>): Promise<T> {
   const instanceKey = input.instanceKey ?? opsInstanceKey()
   const id = newId()
@@ -105,7 +107,8 @@ export async function deliverWithOutbox<T>(input: {
           WHERE id = ? AND instance_key = ?`).run(message, Date.now(), id, instanceKey)
         break
       }
-      const wait = BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)]!
+      const backoff = input.backoffMs?.length ? input.backoffMs : BACKOFF_MS
+      const wait = Math.max(0, Math.min(60_000, Math.trunc(backoff[Math.min(attempt - 1, backoff.length - 1)] ?? 0)))
       const nextAt = Date.now() + wait
       opsDb.prepare(`UPDATE delivery_outbox
         SET status = 'retry', last_error = ?, next_attempt_at = ?, updated_at = ?
