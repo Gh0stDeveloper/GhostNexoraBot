@@ -125,10 +125,9 @@ export class ExecutionQueueManager {
     const lane = this.laneSemaphore(laneName)
     if (lane) semaphores.push(lane)
 
-    const saturated = semaphores.some((semaphore) => {
-      const stats = semaphore.stats()
-      return stats.active >= stats.limit || stats.waiting > 0
-    })
+    const initialStats = semaphores.map((semaphore) => semaphore.stats())
+    const saturated = initialStats.some((stats) => stats.active >= stats.limit || stats.waiting > 0)
+    const depth = initialStats.reduce((sum, stats) => sum + stats.waiting, 0) + (saturated ? 1 : 0)
     const queuedAt = performance.now()
     const releases: Array<() => void> = []
     let recorded = false
@@ -153,6 +152,7 @@ export class ExecutionQueueManager {
           executionMs: performance.now() - executionStarted,
           failed,
           saturated,
+          depth,
         })
       }
     } catch (error) {
@@ -166,6 +166,7 @@ export class ExecutionQueueManager {
           executionMs: 0,
           failed: true,
           saturated: true,
+          depth: Math.max(1, depth),
         })
       }
       throw error
