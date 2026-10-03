@@ -27,6 +27,9 @@ import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
 import { createRequestContext } from '../../core/request-context.js'
+import { executionLaneForCommand, executionQueues } from '../../services/execution-queues.js'
+import { withTraceContext } from '../../services/trace-context.js'
+import { recordGroupedError } from '../../services/error-groups.js'
 import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import { telegramOwner, telegramStaff } from './config.js'
 import type { TelegramAdapter } from './adapter.js'
@@ -318,6 +321,19 @@ export class TelegramCommandRouter {
         }
       : undefined
     try {
+      return await withTraceContext({
+        correlationId: request.correlationId,
+        platform: 'telegram',
+        botInstanceId: this.adapter.botInstanceId,
+        command: parsed.command,
+      }, () => executionQueues.run({
+        chatId: normalized.chatId,
+        userId,
+        isGroup: message.chat.type !== 'private',
+        lane: executionLaneForCommand({ name: parsed.command, category }),
+        platform: 'telegram',
+        command: parsed.command,
+      }, async () => {
       if (sharedCommand) {
         const args = parsed.argText.trim() ? parsed.argText.trim().split(/\\s+/) : []
         const context = createNeutralCommandContext({
@@ -350,7 +366,13 @@ export class TelegramCommandRouter {
       }
       try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, true, undefined, auditIdentity) } catch {}
       return true
+      }))
     } catch (error) {
+      recordGroupedError(error, {
+        platform: 'telegram',
+        command: parsed.command,
+        correlationId: request.correlationId,
+      })
       try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, false, undefined, auditIdentity) } catch {}
       logger.warn({
         error,
