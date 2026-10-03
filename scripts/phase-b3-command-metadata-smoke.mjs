@@ -42,13 +42,13 @@ assert.match(menu, /effectiveCommandMetadata\(\)/, 'WhatsApp menu must consume B
 assert.match(search, /effectiveCommandMetadata\(\)/, 'Command search/help must consume B3 metadata')
 
 assert.match(discord, /buildDiscordApplicationCommands\(\)/, 'Discord slash definitions must be generated from B3 metadata')
-assert.match(discord, /platformCommandMetadata\('discord'\)/, 'Discord slash/help surfaces must be generated from B3 metadata')
+assert.match(discord, /platformCommandMetadata\('discord'\)/, 'Discord slash definitions must be generated from B3 metadata')
 assert.doesNotMatch(metadata, /slashTokens/, 'B3 metadata must not regain a Discord-only slash token inventory after C1')
 assert.match(discord, /description_localizations/, 'Discord slash descriptions must preserve localized metadata')
 assert.match(discord, /'en-US'/, 'Discord slash descriptions must expose English localization')
-assert.match(discord, /metadata\.descriptionKey \? translate\(locale, metadata\.descriptionKey\)/, 'Discord help must localize B3 descriptions')
-assert.match(telegram, /platformCommandMetadata\('telegram'\)/, 'Telegram help must be generated from B3 metadata')
-assert.match(telegram, /metadata\.descriptionKey \? translate\(locale, metadata\.descriptionKey\)/, 'Telegram help must localize B3 descriptions')
+assert.match(discord, /platformCommandHelpCatalog\('discord', visibility\)/, 'Discord help must be generated from the central B3/C3 help catalog')
+assert.match(telegram, /platformCommandHelpCatalog\('telegram', visibility\)/, 'Telegram help must be generated from the central B3/C3 help catalog')
+assert.match(metadata, /descriptionKey: metadata\.descriptionKey/, 'Central help catalog must preserve localized description keys')
 
 for (const column of ['aliases_json', 'usage', 'arguments_json', 'permissions_json', 'capabilities_json']) {
   assert.ok(audit.includes(column), `Operations command catalog does not persist B3 field: ${column}`)
