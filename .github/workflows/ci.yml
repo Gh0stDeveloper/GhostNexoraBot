@@ -65,6 +65,9 @@ jobs:
       - name: Phase C1 metadata-driven Discord slash commands smoke
         run: node scripts/phase-c1-discord-slash-metadata-smoke.mjs
 
+      - name: Phase C2-C6 Discord and Telegram parity smoke
+        run: node scripts/phase-c-parity-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 
