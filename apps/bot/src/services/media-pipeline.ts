@@ -5,6 +5,9 @@ import { pipeline } from 'node:stream/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { NormalizedMediaKind, OutgoingMedia, OutgoingMediaSource } from '@ghostnexora/platform-contracts'
+import { recordGroupedError } from './error-groups.js'
+import { currentCorrelationId } from './trace-context.js'
+import { recordOpsRuntimeLog } from './ops-runtime-log.js'
 
 export type MediaPipelineMode = 'direct' | 'stream' | 'materialize'
 
@@ -200,10 +203,20 @@ export async function withPreparedMedia<T>(
   options: MediaPipelineOptions,
   operation: (prepared: MediaPipelinePrepared) => Promise<T>,
 ) {
-  const prepared = await prepareOutgoingMedia(media, options)
+  const correlationId = currentCorrelationId()
+  const started = performance.now()
   try {
-    return await operation(prepared)
-  } finally {
-    await prepared.cleanup()
+    const prepared = await prepareOutgoingMedia(media, options)
+    try {
+      const result = await operation(prepared)
+      recordOpsRuntimeLog('debug', 'media-pipeline', `media_ok · platform=${options.platform} · kind=${media.kind} · latency=${Math.round(performance.now() - started)}ms · correlation=${correlationId ?? 'none'}`, undefined, 'download')
+      return result
+    } finally {
+      await prepared.cleanup()
+    }
+  } catch (error) {
+    recordGroupedError(error, { platform: options.platform.toLowerCase(), correlationId })
+    recordOpsRuntimeLog('error', 'media-pipeline', `media_failed · platform=${options.platform} · kind=${media.kind} · correlation=${correlationId ?? 'none'}`, undefined, 'download')
+    throw error
   }
 }
