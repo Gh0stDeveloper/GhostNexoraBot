@@ -1,5 +1,8 @@
 import { randomBytes } from 'node:crypto'
 import { opsDb, opsInstanceKey } from './ops-database.js'
+import { currentCorrelationId } from './trace-context.js'
+import { recordGroupedError } from './error-groups.js'
+import { recordAdapterRetry } from './ops-observability-metrics.js'
 
 export type DeliveryOutboxStatus = 'pending' | 'sending' | 'sent' | 'retry' | 'failed'
 
@@ -65,6 +68,7 @@ export async function deliverWithOutbox<T>(input: {
   backoffMs?: readonly number[]
 }, operation: () => Promise<T>): Promise<T> {
   const instanceKey = input.instanceKey ?? opsInstanceKey()
+  const correlationId = input.correlationId ?? currentCorrelationId()
   const id = newId()
   const now = Date.now()
   const maxAttempts = Math.max(1, Math.min(4, Math.trunc(input.maxAttempts ?? 4)))
@@ -79,7 +83,7 @@ export async function deliverWithOutbox<T>(input: {
       safe(input.chatId, 180),
       safe(input.kind, 40),
       safe(input.label || input.kind, 120),
-      input.correlationId ? safe(input.correlationId, 180) : null,
+      correlationId ? safe(correlationId, 180) : null,
       now,
       now,
     )
@@ -107,6 +111,9 @@ export async function deliverWithOutbox<T>(input: {
           WHERE id = ? AND instance_key = ?`).run(message, Date.now(), id, instanceKey)
         break
       }
+      if (input.platform === 'whatsapp' || input.platform === 'discord' || input.platform === 'telegram') {
+        recordAdapterRetry(input.platform)
+      }
       const backoff = input.backoffMs?.length ? input.backoffMs : BACKOFF_MS
       const wait = Math.max(0, Math.min(60_000, Math.trunc(backoff[Math.min(attempt - 1, backoff.length - 1)] ?? 0)))
       const nextAt = Date.now() + wait
@@ -116,7 +123,13 @@ export async function deliverWithOutbox<T>(input: {
       await delay(wait)
     }
   }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'delivery_failed'))
+  const terminal = lastError instanceof Error ? lastError : new Error(String(lastError ?? 'delivery_failed'))
+  recordGroupedError(terminal, {
+    platform: input.platform,
+    correlationId,
+    instanceKey,
+  })
+  throw terminal
 }
 
 export function deliveryOutboxSnapshot(instanceKey = opsInstanceKey()) {
