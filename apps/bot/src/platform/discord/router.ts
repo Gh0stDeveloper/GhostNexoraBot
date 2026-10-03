@@ -16,11 +16,11 @@ import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore 
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
-import { discordCommandAliases } from '../../services/command-platform-support.js'
 import {
   commandMetadataForPlatformToken,
-  commandMetadataVisibleTo,
+  platformCommandHelpCatalog,
   platformCommandMetadata,
+  resolvePlatformCommandToken,
 } from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
@@ -40,7 +40,6 @@ import type {
   DiscordUser,
 } from './types.js'
 
-const aliases = discordCommandAliases
 const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
 
 function slashDescription(value: string) {
@@ -147,7 +146,7 @@ function splitCommand(raw: string) {
   const name = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).toLowerCase()
   return {
     rawName: name,
-    command: aliases.get(name) ?? sharedCommandEngine.resolve(name)?.name,
+    command: resolvePlatformCommandToken('discord', name),
     argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(),
   }
 }
@@ -225,12 +224,14 @@ export class DiscordCommandRouter {
       isStaff: discordStaff(invocation.user.id),
       isGroup: Boolean(invocation.guildId),
     }
-    const items = platformCommandMetadata('discord')
-      .filter((metadata) => commandMetadataVisibleTo(metadata, visibility))
+    const items = platformCommandHelpCatalog('discord', visibility)
       .map((metadata) => ({
         id: metadata.name,
-        title: `/${metadata.usage || metadata.name}`,
-        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+        title: `/${metadata.usage}`,
+        description: [
+          metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+          metadata.aliases.length ? `Aliases: ${metadata.aliases.map((alias) => `/${alias}`).join(', ')}` : '',
+        ].filter(Boolean).join('\n'),
         action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
       }))
     const ui: NormalizedUi = {
@@ -544,7 +545,7 @@ export class DiscordCommandRouter {
 
     if (interaction.type === 2) {
       const data = interaction.data as DiscordApplicationCommandData
-      const command = aliases.get(data.name.toLowerCase()) ?? sharedCommandEngine.resolve(data.name)?.name
+      const command = resolvePlatformCommandToken('discord', data.name)
       if (!command) return false
       return this.execute({
         command,
