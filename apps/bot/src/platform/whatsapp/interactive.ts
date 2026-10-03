@@ -189,8 +189,9 @@ export async function sendInteractiveCard(
   socket: WASocket,
   chatId: string,
   quoted: WAMessage | undefined,
-  input: { title: string; body: string; footer?: string; imageUrl?: string; buttons?: InteractiveButton[] },
+  input: { title: string; body: string; footer?: string; imageUrl?: string; buttons?: InteractiveButton[]; fallbackToText?: boolean },
 ): Promise<string> {
+  const fallbackToText = input.fallbackToText !== false
   const locale = interactiveLocale(socket, chatId)
   const userJid = socket.user?.id
   if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
@@ -214,6 +215,7 @@ export async function sendInteractiveCard(
   }
 
   if (plan.mode === 'text-fallback') {
+    if (!fallbackToText) throw new Error(`whatsapp_card_requires_fallback:${plan.reason || 'unsupported'}`)
     const messageId = await sendTextFallback(socket, chatId, quoted, cardFallbackText({
       title,
       body,
@@ -256,6 +258,7 @@ export async function sendInteractiveCard(
     logger.info({ chatId, messageId: generatedId, uiMode: plan.mode, relayNodes: additionalNodes.map((node) => node.tag) }, 'interactive card relay completed')
     return generatedId
   } catch (error) {
+    if (!fallbackToText) throw error
     logger.warn({ error, chatId }, 'interactive card relay failed; sending actionable text fallback')
     return (await sendTextFallback(socket, chatId, quoted, cardFallbackText({
       title,
@@ -279,8 +282,9 @@ export async function sendCarousel(
   socket: WASocket,
   chatId: string,
   quoted: WAMessage | undefined,
-  input: { title: string; body?: string; footer?: string; cards: CarouselCard[] },
+  input: { title: string; body?: string; footer?: string; cards: CarouselCard[]; fallbackToText?: boolean },
 ): Promise<string> {
+  const fallbackToText = input.fallbackToText !== false
   const locale = interactiveLocale(socket, chatId)
   const userJid = socket.user?.id
   if (!userJid) throw new Error(translate(locale, 'interactive.authRequired'))
@@ -300,6 +304,7 @@ export async function sendCarousel(
 
   const sourceCards = localizedInput.cards.slice(0, WHATSAPP_STABLE_UI_POLICY.maxCards)
   if (!sourceCards.length) {
+    if (!fallbackToText) throw new Error('whatsapp_carousel_requires_fallback:empty')
     const messageId = await sendTextFallback(socket, chatId, quoted, carouselFallbackText({
       title: localizedInput.title,
       body: localizedInput.body,
@@ -377,10 +382,12 @@ export async function sendCarousel(
         body: translate(locale, 'interactive.navigation.more'),
         footer: localizedInput.footer ?? 'Ghost Nexora Bot',
         buttons: overflowButtons,
+        fallbackToText,
       })
     }
     return generatedId
   } catch (error) {
+    if (!fallbackToText) throw error
     logger.warn({ error, chatId, cards: cards.length }, 'native carousel relay failed; sending text fallback')
     return (await sendTextFallback(socket, chatId, quoted, carouselFallbackText({
       title: localizedInput.title,
