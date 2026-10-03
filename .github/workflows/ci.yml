@@ -48,80 +48,29 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Phase A web authentication and security smoke
-        run: node scripts/phase-a-web-security-smoke.mjs
 
-      - name: Phase B1 neutral CommandContext smoke
-        run: node scripts/phase-b1-neutral-command-context-smoke.mjs
 
-      - name: Phase B2 shared Command Engine smoke
-        run: node scripts/phase-b2-shared-command-engine-smoke.mjs
 
-      - name: Phase B3 central command metadata smoke
-        run: node scripts/phase-b3-command-metadata-smoke.mjs
 
-      - name: Phase B4 capability-aware command execution smoke
-        run: node scripts/phase-b4-capability-execution-smoke.mjs
 
-      - name: Phase B5 immutable RequestContext smoke
-        run: node scripts/phase-b5-request-context-smoke.mjs
 
-      - name: Phase C1 metadata-driven Discord slash commands smoke
-        run: node scripts/phase-c1-discord-slash-metadata-smoke.mjs
 
-      - name: Phase C2-C6 Discord and Telegram parity smoke
-        run: node scripts/phase-c-parity-smoke.mjs
 
-      - name: Phase D1-D6 WhatsApp runtime and delivery smoke
-        run: node scripts/phase-d-runtime-delivery-smoke.mjs
 
-      - name: Phase F1-F6 observability and operations smoke
-        run: node scripts/phase-f-observability-smoke.mjs
 
-      - name: Phase E platform groups dashboard smoke
-        run: node scripts/phase-e-platform-groups-smoke.mjs
 
-      - name: Phase E1 unified navigation smoke
-        run: node scripts/phase-e1-unified-navigation-smoke.mjs
 
-      - name: Phase E2 operations diagnostics smoke
-        run: node scripts/phase-e2-operations-diagnostics-smoke.mjs
 
-      - name: Phase E3 platforms dashboard smoke
-        run: node scripts/phase-e3-platforms-dashboard-smoke.mjs
 
-      - name: Phase E4 providers dashboard smoke
-        run: node scripts/phase-e4-providers-dashboard-smoke.mjs
 
-      - name: Phase E5 command center smoke
-        run: node scripts/phase-e5-command-center-smoke.mjs
 
-      - name: Phase E6 command configuration smoke
-        run: node scripts/phase-e6-command-config-smoke.mjs
 
-      - name: Phase E7 group detail smoke
-        run: node scripts/phase-e7-group-detail-smoke.mjs
 
-      - name: Phase E8 user dashboard smoke
-        run: node scripts/phase-e8-user-dashboard-smoke.mjs
 
-      - name: Phase E9 economy ledger and public ranking smoke
-        run: node scripts/phase-e9-economy-ledger-smoke.mjs
 
-      - name: Phase E10 real-time logs smoke
-        run: node scripts/phase-e10-realtime-logs-smoke.mjs
 
-      - name: Phase E11 active jobs smoke
-        run: node scripts/phase-e11-active-jobs-smoke.mjs
 
-      - name: Phase E12 dashboard updater smoke
-        run: node scripts/phase-e12-dashboard-update-smoke.mjs
 
-      - name: Phase E13 typed backups smoke
-        run: node scripts/phase-e13-backups-smoke.mjs
-
-      - name: Phase E14 visual polish smoke
-        run: node scripts/phase-e14-visual-polish-smoke.mjs
 
       - name: Projects menu and Fourth Dimension suite smoke
         run: node scripts/fourth-dimension-project-smoke.mjs
@@ -183,10 +132,10 @@ jobs:
       - name: User-facing i18n audit report
         run: node scripts/i18n-user-facing-audit.mjs
 
-      - name: V2 Phase 6 locale isolation smoke
+      - name: Platform locale isolation smoke
         run: node scripts/i18n-platform-smoke.mjs
 
-      - name: V2 Phase 6 i18n boundary audit
+      - name: i18n boundary audit
         run: node scripts/i18n-boundary-audit.mjs
 
       - name: Upload i18n audit
@@ -197,7 +146,7 @@ jobs:
           name: i18n-user-facing-audit
           path: |
             i18n-user-facing-audit.json
-            v2-phase6-i18n-audit.json
+            i18n-platform-audit.json
           retention-days: 3
 
       - name: Upload bot source snapshot

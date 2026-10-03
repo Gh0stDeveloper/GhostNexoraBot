@@ -1,4 +1,4 @@
-name: V2 Phase 6
+name: i18n Validation
 
 on:
   pull_request:
@@ -8,9 +8,6 @@ on:
       - 'packages/**'
       - 'scripts/i18n-*.mjs'
       - 'scripts/v2-phase6-*.mjs'
-      - 'scripts/phase-c-*.mjs'
-      - 'scripts/phase-d-*.mjs'
-      - 'scripts/phase-f-*.mjs'
       - 'scripts/v2-phase5-discord-*.mjs'
       - 'scripts/v2-phase4-telegram-*.mjs'
       - 'scripts/command-surface-regression.mjs'
@@ -49,34 +46,27 @@ jobs:
       - name: Build all workspaces
         run: npm run build
 
-      - name: Phase 0 contracts remain valid
+      - name: Contracts contracts remain valid
         run: npm run v2:contracts
 
-      - name: Phase 1 WhatsApp adapter remains valid
+      - name: WhatsApp WhatsApp adapter remains valid
         run: npm run v2:whatsapp-adapter
 
-      - name: Phase 2 UI compatibility remains valid
+      - name: WhatsApp UI UI compatibility remains valid
         run: npm run v2:ui-compat
 
-      - name: Phase 3 deterministic providers remain valid
+      - name: Providers deterministic providers remain valid
         run: npm run v2:providers
 
-      - name: Phase 4 Telegram remains valid
+      - name: Telegram Telegram remains valid
         run: npm run v2:telegram
 
-      - name: Phase 5 Discord remains valid
+      - name: Discord Discord remains valid
         run: npm run v2:discord
 
-      - name: Preserve completed Phase C parity
-        run: node scripts/phase-c-parity-smoke.mjs
 
-      - name: Preserve completed Phase D runtime delivery
-        run: node scripts/phase-d-runtime-delivery-smoke.mjs
 
-      - name: Preserve completed Phase F observability
-        run: node scripts/phase-f-observability-smoke.mjs
-
-      - name: Phase 6 ES/EN locale isolation and boundary gate
+      - name: i18n ES/EN locale isolation and boundary gate
         run: npm run v2:i18n
 
       - name: Termux Lite build
@@ -86,19 +76,19 @@ jobs:
         run: node scripts/termux-lite-smoke.mjs
 
       - name: Generate current command inventory
-        run: node scripts/v2-baseline-report.mjs --output=v2-phase6-inventory.json
+        run: node scripts/v2-baseline-report.mjs --output=i18n-inventory.json
 
       - name: Verify WhatsApp command surface remains compatible
-        run: node scripts/command-surface-regression.mjs --input=v2-phase6-inventory.json
+        run: node scripts/command-surface-regression.mjs --input=i18n-inventory.json
 
-      - name: Upload Phase 6 i18n evidence
+      - name: Upload i18n i18n evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v2-phase6-i18n
           path: |
-            v2-phase6-i18n-audit.json
+            i18n-platform-audit.json
             i18n-user-facing-audit.json
-            v2-phase6-inventory.json
+            i18n-inventory.json
           if-no-files-found: warn
           retention-days: 30

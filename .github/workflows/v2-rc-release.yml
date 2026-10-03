@@ -1,9 +1,6 @@
 name: V2 Release Candidate
 
 on:
-  push:
-    branches:
-      - 'feat/v2-phase-8-production-release'
     paths:
       - '.github/workflows/v2-rc-release.yml'
       - 'apps/**'
@@ -35,7 +32,7 @@ jobs:
         with:
           node-version: 24
       - run: npm install
-      - name: Recheck Phase 8 release invariants
+      - name: Recheck Release release invariants
         run: npm run v2:release-gate
       - name: Generate CycloneDX SBOM and candidate metadata
         shell: bash
@@ -300,13 +297,13 @@ jobs:
           cat > release-notes.md <<EOF
           # Ghost Nexora Bot ${tag}
 
-          Phase 8 release candidate built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
+          Release release candidate built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
 
           This is a **prerelease**, not the final production v2.0.0 release, and it does not merge anything into \`main\`.
 
           Included: signed/verified Android APK, signed/verified Windows NSIS installer, Linux DEB/AppImage with verified GPG signature, public verification certificates/keys, CycloneDX SBOM and exact candidate metadata.
 
-          Private RC signing keys are generated only inside GitHub-hosted runners and destroyed when the jobs end. Final \`v2.0.0\` remains gated by permanent protected signing identities, staging rollback evidence and the real >=72-hour soak in \`docs/v2/PHASE_8.md\`.
+          Private RC signing keys are generated only inside GitHub-hosted runners and destroyed when the jobs end. Final \`v2.0.0\` remains gated by permanent protected signing identities, staging rollback evidence and the real >=72-hour soak in \`docs/v2/RELEASE_2_0.md\`.
           EOF
           mapfile -d '' assets < <(find release-assets -type f -print0 | sort -z)
           test "${#assets[@]}" -gt 0

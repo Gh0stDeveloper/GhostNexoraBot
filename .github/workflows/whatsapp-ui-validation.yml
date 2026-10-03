@@ -1,20 +1,19 @@
-name: V2 Phase 1
+name: WhatsApp UI Validation
 
 on:
   pull_request:
     paths:
       - 'apps/bot/**'
       - 'packages/**'
+      - 'scripts/whatsapp-ui-smoke.mjs'
+      - 'scripts/v2-ui-compat-audit.mjs'
       - 'scripts/whatsapp-adapter-v2-smoke.mjs'
-      - 'scripts/phase-d-*.mjs'
-      - 'scripts/phase-f-*.mjs'
       - 'scripts/command-regression.mjs'
       - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
-      - 'scripts/v2-inventory-worker.mjs'
       - 'docs/v2/**'
       - 'package.json'
-      - '.github/workflows/v2-phase1.yml'
+      - '.github/workflows/v2-phase2.yml'
   workflow_dispatch:
 
 concurrency:
@@ -25,9 +24,9 @@ permissions:
   contents: read
 
 jobs:
-  whatsapp-adapter:
+  ui-compatibility:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,33 +45,37 @@ jobs:
       - name: Build all workspaces
         run: npm run build
 
-      - name: Phase 0 contracts remain valid
+      - name: Contracts contracts remain valid
         run: npm run v2:contracts
 
-      - name: WhatsApp adapter contract smoke
+      - name: WhatsApp WhatsApp adapter remains valid
         run: npm run v2:whatsapp-adapter
 
-      - name: Preserve completed Phase D runtime delivery
-        run: node scripts/phase-d-runtime-delivery-smoke.mjs
+      - name: WhatsApp UI compatibility smoke and source audit
+        run: npm run v2:ui-compat
 
-      - name: Preserve completed Phase F observability
-        run: node scripts/phase-f-observability-smoke.mjs
-
-      - name: Termux Lite build through shared contracts
+      - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
 
       - name: Termux Lite profile smoke
         run: node scripts/termux-lite-smoke.mjs
 
       - name: Generate current command inventory
-        run: node scripts/v2-baseline-report.mjs --output=v2-phase1-inventory.json
+        run: node scripts/v2-baseline-report.mjs --output=whatsapp-ui-inventory.json
 
-      - name: Verify frozen V1 surface plus approved Phase 3 delta
-        run: node scripts/command-surface-regression.mjs --input=v2-phase1-inventory.json
+      - name: Verify frozen V1 surface plus approved Providers delta
+        run: node scripts/command-surface-regression.mjs --input=whatsapp-ui-inventory.json
 
-      - name: Upload Phase 1 inventory
+      - name: Upload WhatsApp UI UI audit
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase1-inventory
-          path: v2-phase1-inventory.json
+          name: v2-phase2-ui-audit
+          path: artifacts/v2-phase2-ui-audit.json
+          retention-days: 30
+
+      - name: Upload WhatsApp UI command inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-phase2-inventory
+          path: whatsapp-ui-inventory.json
           retention-days: 30

@@ -1,4 +1,4 @@
-name: V2 Phase 3
+name: Providers Validation
 
 on:
   pull_request:
@@ -50,16 +50,16 @@ jobs:
       - name: Build all workspaces
         run: npm run build
 
-      - name: Phase 0 contracts remain valid
+      - name: Contracts contracts remain valid
         run: npm run v2:contracts
 
-      - name: Phase 1 WhatsApp adapter remains valid
+      - name: WhatsApp WhatsApp adapter remains valid
         run: npm run v2:whatsapp-adapter
 
-      - name: Phase 2 UI compatibility remains valid
+      - name: WhatsApp UI UI compatibility remains valid
         run: npm run v2:ui-compat
 
-      - name: Phase 3 provider contracts, redirect transport and lease smokes
+      - name: Providers provider contracts, redirect transport and lease smokes
         run: npm run v2:providers
 
       - name: Termux Lite build
@@ -69,10 +69,10 @@ jobs:
         run: node scripts/termux-lite-smoke.mjs
 
       - name: Generate current command inventory
-        run: node scripts/v2-baseline-report.mjs --output=v2-phase3-inventory.json
+        run: node scripts/v2-baseline-report.mjs --output=providers-inventory.json
 
-      - name: Verify frozen V1 surface plus approved Phase 3 delta
-        run: node scripts/command-surface-regression.mjs --input=v2-phase3-inventory.json
+      - name: Verify frozen V1 surface plus approved Providers delta
+        run: node scripts/command-surface-regression.mjs --input=providers-inventory.json
 
       - name: Live endpoint and signed-download contract gate
         run: >-
@@ -81,7 +81,7 @@ jobs:
           --output=artifacts/v2-phase3-live-provider-audit.json
           --gate-output=artifacts/v2-phase3-live-provider-gate.json
 
-      - name: Upload Phase 3 live audit
+      - name: Upload Providers live audit
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -92,11 +92,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Upload Phase 3 command inventory
+      - name: Upload Providers command inventory
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v2-phase3-inventory
-          path: v2-phase3-inventory.json
+          path: providers-inventory.json
           if-no-files-found: warn
           retention-days: 30

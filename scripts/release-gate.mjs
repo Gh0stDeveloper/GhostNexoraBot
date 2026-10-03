@@ -34,10 +34,10 @@ const cargo = read('apps/desktop/src-tauri/Cargo.toml');
 const updater = read('scripts/release-update.sh');
 const rollback = read('scripts/release-rollback.sh');
 const state = read('scripts/release-state.sh');
-const stateSmoke = read('scripts/v2-phase8-release-state-smoke.sh');
+const stateSmoke = read('scripts/release-state-smoke.sh');
 const releaseWorkflow = read('.github/workflows/v2-release.yml');
-const phase8Workflow = read('.github/workflows/v2-phase8.yml');
-const phase8Doc = read('docs/v2/PHASE_8.md');
+const validationWorkflow = read('.github/workflows/release-validation.yml');
+
 const releaseDoc = read('docs/v2/RELEASE_2_0.md');
 
 check(rootPackage.version === expectedVersion, `root package version is ${expectedVersion}`);
@@ -64,7 +64,7 @@ check(state.includes('chmod 0700'), 'release snapshots are private by default');
 check(/for rel in data session sessions db sqlite downloads/.test(state), 'snapshot covers VPS data, sessions, databases and downloads');
 check(stateSmoke.includes('nexora-economy.sqlite'), 'snapshot smoke exercises VPS database state');
 check(stateSmoke.includes('release_state_restore_persistent'), 'snapshot smoke exercises restore path');
-check(phase8Workflow.includes('v2-phase8-release-state-smoke.sh'), 'Phase 8 CI runs snapshot/restore smoke');
+check(validationWorkflow.includes('v2-phase8-release-state-smoke.sh'), 'release validation runs snapshot/restore smoke');
 check(releaseWorkflow.includes('attest-build-provenance'), 'release workflow generates build provenance');
 check(releaseWorkflow.includes('npm sbom --sbom-format cyclonedx'), 'release workflow generates CycloneDX SBOM');
 check(releaseWorkflow.includes('WINDOWS_CERTIFICATE_BASE64'), 'Windows Authenticode signing requires a certificate secret');
@@ -73,8 +73,8 @@ check(releaseWorkflow.includes('GPG_PRIVATE_KEY'), 'Linux checksum signing requi
 check(releaseWorkflow.includes('gpg --verify'), 'Linux checksum signature is verified');
 check(releaseWorkflow.includes('GHOST_NEXORA_ANDROID_KEYSTORE_BASE64'), 'Android signing requires a keystore secret');
 check(releaseWorkflow.includes('apksigner') && releaseWorkflow.includes('verify'), 'Android APK signature is verified');
-check(phase8Workflow.includes('v2:release-gate'), 'Phase 8 CI executes the production release gate');
-check(phase8Doc.includes('72'), 'Phase 8 documentation records the 72h soak requirement');
+check(validationWorkflow.includes('v2:release-gate'), 'release validation executes the production release gate');
+check(releaseDoc.includes('72'), 'release documentation records the 72h soak requirement');
 check(releaseDoc.includes('2.0.0'), '2.0.0 release notes exist');
 
 if (mode === 'release') {
@@ -104,18 +104,17 @@ if (mode === 'release') {
 }
 
 const report = {
-  phase: 8,
   version: expectedVersion,
   mode,
   generatedAt: new Date().toISOString(),
   passed: errors.length === 0,
   checks,
 };
-fs.writeFileSync(path.join(root, 'v2-phase8-release-gate.json'), `${JSON.stringify(report, null, 2)}\n`);
+fs.writeFileSync(path.join(root, 'release-gate.json'), `${JSON.stringify(report, null, 2)}\n`);
 
 for (const item of checks) console.log(`${item.ok ? 'PASS' : 'FAIL'} ${item.label}`);
 if (errors.length) {
-  console.error(`\nPhase 8 release gate failed with ${errors.length} unmet requirement(s).`);
+  console.error(`\nRelease gate failed with ${errors.length} unmet requirement(s).`);
   process.exit(1);
 }
-console.log('\nPhase 8 release gate passed.');
+console.log('\nRelease gate passed.');

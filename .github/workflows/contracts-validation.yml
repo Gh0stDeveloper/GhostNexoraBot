@@ -1,4 +1,4 @@
-name: V2 Phase 0
+name: Contracts Validation
 
 on:
   push:

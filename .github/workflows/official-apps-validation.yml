@@ -1,9 +1,6 @@
-name: V2 Phase 7
+name: Official Apps Validation
 
 on:
-  push:
-    branches:
-      - 'feat/v2-phase-7-official-apps'
   pull_request:
     paths:
       - 'apps/bot/**'
@@ -46,38 +43,38 @@ jobs:
         run: npm run typecheck
       - name: Build all workspaces
         run: npm run build
-      - name: Phase 0 contracts
+      - name: Contracts contracts
         run: npm run v2:contracts
-      - name: Phase 1 WhatsApp
+      - name: WhatsApp WhatsApp
         run: npm run v2:whatsapp-adapter
-      - name: Phase 2 UI
+      - name: WhatsApp UI UI
         run: npm run v2:ui-compat
-      - name: Phase 3 providers
+      - name: Providers providers
         run: npm run v2:providers
-      - name: Phase 4 Telegram
+      - name: Telegram Telegram
         run: npm run v2:telegram
-      - name: Phase 5 Discord
+      - name: Discord Discord
         run: npm run v2:discord
-      - name: Phase 6 i18n
+      - name: i18n i18n
         run: npm run v2:i18n
-      - name: Phase 7 Control API and app boundary
+      - name: Official Apps Control API and app boundary
         run: npm run v2:official-apps
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
       - name: Termux Lite smoke
         run: node scripts/termux-lite-smoke.mjs
       - name: Generate command inventory
-        run: node scripts/v2-baseline-report.mjs --output=v2-phase7-inventory.json
+        run: node scripts/v2-baseline-report.mjs --output=official-apps-inventory.json
       - name: Preserve WhatsApp command surface
-        run: node scripts/command-surface-regression.mjs --input=v2-phase7-inventory.json
-      - name: Upload Phase 7 evidence
+        run: node scripts/command-surface-regression.mjs --input=official-apps-inventory.json
+      - name: Upload Official Apps evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v2-phase7-evidence
           path: |
-            v2-phase7-inventory.json
-            v2-phase6-i18n-audit.json
+            official-apps-inventory.json
+            i18n-platform-audit.json
             i18n-user-facing-audit.json
           if-no-files-found: warn
           retention-days: 30

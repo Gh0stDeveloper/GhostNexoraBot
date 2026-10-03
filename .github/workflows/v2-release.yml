@@ -6,7 +6,7 @@ on:
       release_ref:
         description: 'Exact candidate branch/tag/SHA that completed soak'
         required: true
-        default: 'feat/v2-phase-8-production-release'
+        default: 'main'
         type: string
       release_tag:
         description: 'Release tag to publish after all gates pass'
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: v2-production-gate
-          path: v2-phase8-release-gate.json
+          path: release-gate.json
           if-no-files-found: error
           retention-days: 90
 
