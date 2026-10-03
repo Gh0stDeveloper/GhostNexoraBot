@@ -10,6 +10,7 @@ on:
       - 'scripts/v2-phase6-*.mjs'
       - 'scripts/phase-c-*.mjs'
       - 'scripts/phase-d-*.mjs'
+      - 'scripts/phase-f-*.mjs'
       - 'scripts/v2-phase5-discord-*.mjs'
       - 'scripts/v2-phase4-telegram-*.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
@@ -67,6 +68,9 @@ jobs:
 
       - name: Preserve completed Phase D runtime delivery
         run: node scripts/phase-d-runtime-delivery-smoke.mjs
+
+      - name: Preserve completed Phase F observability
+        run: node scripts/phase-f-observability-smoke.mjs
 
       - name: Phase 6 ES/EN locale isolation and boundary gate
         run: npm run v2:i18n
