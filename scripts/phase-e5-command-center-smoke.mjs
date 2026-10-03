@@ -81,8 +81,8 @@ try {
   assert.match(roadmap, /## E5\. Centro de comandos[\s\S]*Estado: TERMINADO/, 'E5 roadmap must be completed')
   assert.match(serviceSource, /DISCORD_COMMAND_ALIAS_ENTRIES/, 'Discord support catalog missing')
   assert.match(serviceSource, /TELEGRAM_COMMAND_ALIAS_ENTRIES/, 'Telegram support catalog missing')
-  assert.match(discordSource, /discordCommandAliases/, 'Discord router must consume the shared parity catalog')
-  assert.match(telegramSource, /telegramCommandAliases/, 'Telegram router must consume the shared parity catalog')
+  assert.match(discordSource, /resolvePlatformCommandToken\('discord'/, 'Discord router must consume the central parity resolver')
+  assert.match(telegramSource, /resolvePlatformCommandToken\('telegram'/, 'Telegram router must consume the central parity resolver')
   assert.match(discordSource, /recordRuntimeCommand/, 'Discord command executions must feed E5 metrics')
   assert.match(telegramSource, /recordRuntimeCommand/, 'Telegram command executions must feed E5 metrics')
 
