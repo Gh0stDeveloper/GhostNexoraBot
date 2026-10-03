@@ -1,4 +1,5 @@
 import http from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { Boom } from '@hapi/boom'
 import { DisconnectReason, type WASocket } from 'baileys'
 import type { PairStartRequest } from '@ghostnexora/control-api-contracts'
@@ -43,6 +44,9 @@ import { withTimeout } from './utils/timeout.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
 import { startBrowserProxy } from './services/browser-proxy.js'
 import { executionQueues } from './services/execution-queues.js'
+import { withTraceContext } from './services/trace-context.js'
+import { startOperationalHealthMonitor } from './services/operational-health.js'
+import { recordGroupedError } from './services/error-groups.js'
 
 installAtomicWalletBridge()
 
@@ -258,7 +262,14 @@ async function routeMessage(
   const text = getMessageText(message).trim()
   const pushName = (message as { pushName?: string }).pushName || 'Usuario'
   const queueUserId = resolveStoredIdentity(getSender(message))
-  const queueScope = { chatId, userId: queueUserId, isGroup: chatId.endsWith('@g.us'), lane: 'ai' as const }
+  const queueScope = {
+    chatId,
+    userId: queueUserId,
+    isGroup: chatId.endsWith('@g.us'),
+    lane: 'ai' as const,
+    platform: 'whatsapp',
+    provider: 'ollama',
+  }
 
   if (!message.key.fromMe) {
     observeGroupActivity(
@@ -320,6 +331,7 @@ async function routeMessage(
             }
           }
         } catch (error) {
+          recordGroupedError(error, { platform: 'whatsapp', provider: 'ollama' })
           logger.warn({ error, chatId }, 'audio free-chat failed')
         } finally {
           stopTyping()
@@ -346,6 +358,7 @@ async function routeMessage(
         })
         await llmFreeChat.maybeReact(socket, message, text, response)
       } catch (error) {
+        recordGroupedError(error, { platform: 'whatsapp', provider: 'ollama' })
         logger.warn({ error, chatId }, 'llm free-chat response failed')
       } finally {
         stopTyping()
@@ -372,6 +385,7 @@ async function routeMessage(
           quoted: message,
         })
       } catch (error) {
+        recordGroupedError(error, { platform: 'whatsapp', provider: 'ollama' })
         logger.warn({ error, chatId }, 'auto-chat response failed')
       } finally {
         stopTyping()
@@ -425,8 +439,19 @@ async function connect() {
       whatsappMessageWindow.push(stamp)
       whatsappMessagesPerMinute()
       const chatId = message.key.remoteJid
-      void withTimeout(routeMessage(socket, message, router), config.botMessageTimeoutMs, 'routeMessage ' + chatId)
-        .catch((error) => logger.error({ error, chatId }, 'mensaje colgado o falló'))
+      const messageCorrelationId = randomUUID()
+      void withTimeout(
+        withTraceContext({
+          correlationId: messageCorrelationId,
+          platform: 'whatsapp',
+          botInstanceId: 'main',
+        }, () => routeMessage(socket, message, router)),
+        config.botMessageTimeoutMs,
+        'routeMessage ' + chatId,
+      ).catch((error) => {
+        recordGroupedError(error, { platform: 'whatsapp', correlationId: messageCorrelationId })
+        logger.error({ error, chatId, correlationId: messageCorrelationId }, 'mensaje colgado o falló')
+      })
     }
   })
 
@@ -496,6 +521,7 @@ startTempCleanup()
 startHealthServer()
 startBrowserProxy()
 startAutomationScheduler(() => mainSocket)
+startOperationalHealthMonitor()
 void startTelegramBridge().then((enabled) => {
   if (enabled) logger.info('Telegram bridge started')
 }).catch((error) => logger.warn({ error }, 'Telegram bridge not started'))
@@ -517,5 +543,11 @@ await connect().catch((error) => {
 
 process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))
-process.on('unhandledRejection', (error) => logger.error({ error }, 'unhandled rejection'))
-process.on('uncaughtException', (error) => logger.fatal({ error }, 'uncaught exception'))
+process.on('unhandledRejection', (error) => {
+  recordGroupedError(error)
+  logger.error({ error }, 'unhandled rejection')
+})
+process.on('uncaughtException', (error) => {
+  recordGroupedError(error)
+  logger.fatal({ error }, 'uncaught exception')
+})
