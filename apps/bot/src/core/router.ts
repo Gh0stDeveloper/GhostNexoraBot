@@ -398,6 +398,8 @@ export class CommandRouter {
           userId: sender,
           isGroup,
           lane: executionLaneForCommand(command),
+          platform: 'whatsapp',
+          command: command.name,
         }, () => this.engine.execute(command, context, {
           allowLegacy: true,
           enforceMetadata: false,
