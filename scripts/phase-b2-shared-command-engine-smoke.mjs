@@ -30,19 +30,19 @@ assert.match(whatsapp, /new SharedCommandEngine\(commands, sharedNeutralCommands
 assert.match(whatsapp, /this\.engine\.resolve\(typedName\)/, 'WhatsApp lookup must use the B2 engine')
 assert.match(
   whatsapp,
-  /this\.engine\.execute\(command, context, \{\s*allowLegacy: true,\s*enforceMetadata: false,\s*isGroupAdmin: requestContext\.permissions\.isGroupAdmin,\s*botIsGroupAdmin: requestContext\.permissions\.isBotGroupAdmin,\s*\}\)/,
+  /this\.engine\.execute\(command, context, \{\s*allowLegacy: true,\s*enforceMetadata: false,\s*isGroupAdmin: requestContext!?\.permissions\.isGroupAdmin,\s*botIsGroupAdmin: requestContext!?\.permissions\.isBotGroupAdmin,\s*\}\)/,
   'WhatsApp execution must pass through the B2 engine while preserving V1 compatibility',
 )
 
 assert.match(discord, /sharedCommandEngine = new SharedCommandEngine\(sharedNeutralCommands, sharedNeutralCommands\)/, 'Discord shared engine missing')
 assert.match(discord, /createNeutralCommandContext\(/, 'Discord must build the shared neutral context')
 assert.match(discord, /sharedCommandEngine\.execute\(sharedCommand, context, \{ enforceMetadata: true \}\)/, 'Discord neutral commands must execute through B2 engine')
-assert.match(discord, /aliases\.get\(name\) \?\? sharedCommandEngine\.resolve\(name\)\?\.name/, 'Discord parser must accept shared command aliases')
+assert.match(discord, /resolvePlatformCommandToken\('discord', name\)/, 'Discord parser must resolve shared aliases through central command metadata')
 
 assert.match(telegram, /sharedCommandEngine = new SharedCommandEngine\(sharedNeutralCommands, sharedNeutralCommands\)/, 'Telegram shared engine missing')
 assert.match(telegram, /createNeutralCommandContext\(/, 'Telegram must build the shared neutral context')
 assert.match(telegram, /sharedCommandEngine\.execute\(sharedCommand, context, \{ enforceMetadata: true \}\)/, 'Telegram neutral commands must execute through B2 engine')
-assert.match(telegram, /aliases\.get\(rawName\.toLowerCase\(\)\) \?\? sharedCommandEngine\.resolve\(rawName\)\?\.name/, 'Telegram parser must accept shared command aliases')
+assert.match(telegram, /resolvePlatformCommandToken\('telegram', rawName\)/, 'Telegram parser must resolve shared aliases through central command metadata')
 
 assert.match(support, /command-metadata\.js/, 'command parity support must project the central metadata registry')
 assert.match(metadata, /sharedNeutralCommands/, 'B3 metadata must preserve B2 shared command parity')

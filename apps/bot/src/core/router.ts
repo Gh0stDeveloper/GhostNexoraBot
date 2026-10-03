@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { jidNormalizedUser, type GroupParticipant, type WAMessage, type WASocket } from 'baileys'
 import { config } from '../config.js'
 import type { BotCommand, LegacyCompatibleCommandContext, RequestContext } from '../types.js'
@@ -18,6 +19,9 @@ import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 import { SharedCommandEngine } from './shared-command-engine.js'
 import { createRequestContext } from './request-context.js'
 import { sharedNeutralCommands } from '../commands/shared-neutral.js'
+import { executionLaneForCommand, executionQueues } from '../services/execution-queues.js'
+import { currentCorrelationId, withTraceContext } from '../services/trace-context.js'
+import { recordGroupedError } from '../services/error-groups.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -126,7 +130,13 @@ export class CommandRouter {
     const prefix = settings.prefix
     const botInstanceId = whatsappBotInstanceId(this.options.instanceId)
     const locale = resolveChatLocale(chatId, sender, botInstanceId)
-    const localizedSocket = createLocalizedSocket(socket, locale, { contextChatId: chatId, botInstanceId })
+    const correlationId = currentCorrelationId() ?? randomUUID()
+    const localizedSocket = createLocalizedSocket(socket, locale, {
+      contextChatId: chatId,
+      botInstanceId,
+      useOutbox: true,
+      correlationId,
+    })
     const t = (key: string, values: Record<string, string | number | boolean | null | undefined> = {}) => translate(locale, key, values)
     const pushName = message.pushName ?? (message.key.fromMe ? 'Owner' : t('router.defaultUser'))
 
@@ -140,9 +150,11 @@ export class CommandRouter {
     performanceAudit.recordStage('03', performance.now() - stateStarted)
 
     const currentReplyTo = normalizedMessage.messageId || undefined
-    const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
+    const delivery = { userId: sender, locale, correlationId }
+    const withCurrentReply = <T extends { replyTo?: string; delivery?: unknown }>(options?: T) => ({
       ...options,
       replyTo: options?.replyTo ?? currentReplyTo,
+      delivery: options?.delivery ?? delivery,
     })
     const sendText: LegacyCompatibleCommandContext['sendText'] = (value, options) =>
       adapter.sendText(chatId, value, withCurrentReply(options))
@@ -155,7 +167,7 @@ export class CommandRouter {
     }
     const editMessage: LegacyCompatibleCommandContext['editMessage'] = async (messageId, value) => {
       if (!adapter.editMessage) throw new Error(`La plataforma ${adapter.id} no soporta edición de mensajes.`)
-      await adapter.editMessage(chatId, messageId, value)
+      await adapter.editMessage(chatId, messageId, value, delivery)
     }
     const reply = async (replyText: string) => {
       const sent = await sendText(replyText)
@@ -164,7 +176,7 @@ export class CommandRouter {
     const react = async (emoji: string) => {
       const messageId = normalizedMessage.messageId
       if (!messageId || !adapter.react) return undefined
-      return adapter.react(chatId, messageId, emoji)
+      return adapter.react(chatId, messageId, emoji, delivery)
     }
 
     let senderIsGroupAdmin = false
@@ -195,6 +207,7 @@ export class CommandRouter {
         await adapter.sendText(chatId, messageText, {
           replyTo: message.key.id ?? undefined,
           mentions: [result.proposerJid, result.targetJid],
+          delivery,
         })
         await react(result.accepted ? '💞' : '💔').catch(() => undefined)
         return true
@@ -333,6 +346,7 @@ export class CommandRouter {
         userId: sender,
         locale,
         messageId: normalizedMessage.messageId,
+        correlationId,
         permissions: {
           isOwner,
           isStaff: isBotStaff,
@@ -381,12 +395,24 @@ export class CommandRouter {
         markCommandCooldown('whatsapp', command.name, sender)
       }
       try {
-        await this.engine.execute(command, context, {
+        await executionQueues.run({
+          chatId,
+          userId: sender,
+          isGroup,
+          lane: executionLaneForCommand(command),
+          platform: 'whatsapp',
+          command: command.name,
+        }, () => withTraceContext({
+          correlationId: requestContext!.correlationId,
+          platform: 'whatsapp',
+          botInstanceId,
+          command: command.name,
+        }, () => this.engine.execute(command, context, {
           allowLegacy: true,
           enforceMetadata: false,
-          isGroupAdmin: requestContext.permissions.isGroupAdmin,
-          botIsGroupAdmin: requestContext.permissions.isBotGroupAdmin,
-        })
+          isGroupAdmin: requestContext!.permissions.isGroupAdmin,
+          botIsGroupAdmin: requestContext!.permissions.isBotGroupAdmin,
+        })))
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
         performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
@@ -401,6 +427,11 @@ export class CommandRouter {
       await react('✅').catch(() => undefined)
       return true
     } catch (error) {
+      recordGroupedError(error, {
+        platform: 'whatsapp',
+        command: command.name,
+        correlationId: requestContext?.correlationId ?? correlationId,
+      })
       logger.error({
         error,
         command: command.name,

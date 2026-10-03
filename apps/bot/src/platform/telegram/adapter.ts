@@ -9,6 +9,8 @@ import {
   type SentMessage,
   type UiAction,
 } from '@ghostnexora/platform-contracts'
+import { withPreparedMedia } from '../../services/media-pipeline.js'
+import { trackedAdapterOperation } from '../../services/ops-observability-metrics.js'
 import { TelegramBotApiClient, type TelegramMediaInput } from './client.js'
 import type { TelegramInlineButton, TelegramMessage } from './types.js'
 
@@ -144,63 +146,79 @@ export class TelegramAdapter implements PlatformAdapter {
   }
 
   async sendText(chatId: string, text: string, options?: SendOptions): Promise<SentMessage> {
-    let last: TelegramMessage | undefined
-    const parts = chunks(text || ' ')
-    for (let index = 0; index < parts.length; index += 1) {
-      last = await this.client.sendMessage(chatId, parts[index], index === 0 ? replyMarkupOptions(options) : {})
-      this.rememberKind(chatId, last.message_id, 'text')
-    }
-    if (!last) throw new Error('Telegram no devolvió mensaje al enviar texto.')
-    return sent(last)
+    return trackedAdapterOperation('telegram', 'send', async () => {
+      let last: TelegramMessage | undefined
+      const parts = chunks(text || ' ')
+      for (let index = 0; index < parts.length; index += 1) {
+        last = await this.client.sendMessage(chatId, parts[index], index === 0 ? replyMarkupOptions(options) : {})
+        this.rememberKind(chatId, last.message_id, 'text')
+      }
+      if (!last) throw new Error('Telegram no devolvió mensaje al enviar texto.')
+      return sent(last)
+    })
   }
 
   async sendMedia(chatId: string, media: OutgoingMedia, options?: SendOptions): Promise<SentMessage> {
-    const input = mediaInput(media)
-    const extra: Record<string, unknown> = {
-      ...replyMarkupOptions(options),
-      ...(media.caption ? { caption: media.caption.slice(0, 1024) } : {}),
-    }
-    let message: TelegramMessage
-    if (media.kind === 'image') message = await this.client.sendMedia('sendPhoto', chatId, 'photo', input, extra)
-    else if (media.kind === 'video') message = await this.client.sendMedia('sendVideo', chatId, 'video', input, extra)
-    else if (media.kind === 'audio') message = await this.client.sendMedia('sendAudio', chatId, 'audio', input, { ...extra, ...(media.fileName ? { title: media.fileName } : {}) })
-    else if (media.kind === 'sticker') message = await this.client.sendMedia('sendSticker', chatId, 'sticker', input, replyMarkupOptions(options))
-    else message = await this.client.sendMedia('sendDocument', chatId, 'document', input, { ...extra, ...(media.fileName ? { disable_content_type_detection: false } : {}) })
-    this.rememberKind(chatId, message.message_id, 'media')
-    return sent(message)
+    return withPreparedMedia(media, {
+      platform: 'Telegram',
+      maxBytes: MAX_UPLOAD_BYTES,
+      mode: media.source.kind === 'url' ? 'materialize' : 'direct',
+      retries: 2,
+    }, async (prepared) => trackedAdapterOperation('telegram', 'media', async () => {
+      const normalized = prepared.media
+      const input = mediaInput(normalized)
+      const extra: Record<string, unknown> = {
+        ...replyMarkupOptions(options),
+        ...(normalized.caption ? { caption: normalized.caption.slice(0, 1024) } : {}),
+      }
+      let message: TelegramMessage
+      if (normalized.kind === 'image') message = await this.client.sendMedia('sendPhoto', chatId, 'photo', input, extra)
+      else if (normalized.kind === 'video') message = await this.client.sendMedia('sendVideo', chatId, 'video', input, extra)
+      else if (normalized.kind === 'audio') message = await this.client.sendMedia('sendAudio', chatId, 'audio', input, { ...extra, ...(normalized.fileName ? { title: normalized.fileName } : {}) })
+      else if (normalized.kind === 'sticker') message = await this.client.sendMedia('sendSticker', chatId, 'sticker', input, replyMarkupOptions(options))
+      else message = await this.client.sendMedia('sendDocument', chatId, 'document', input, { ...extra, ...(normalized.fileName ? { disable_content_type_detection: false } : {}) })
+      this.rememberKind(chatId, message.message_id, 'media')
+      return sent(message)
+    }, { uploadBytes: prepared.size }))
   }
 
   async sendUi(chatId: string, ui: NormalizedUi, options?: SendOptions): Promise<SentMessage> {
-    const text = normalizedUiToText(ui) || 'Ghost Nexora Bot'
-    const keyboard = this.keyboard(ui)
-    const parts = chunks(text)
-    let last: TelegramMessage | undefined
-    for (let index = 0; index < parts.length; index += 1) {
-      last = await this.client.sendMessage(chatId, parts[index], {
-        ...(index === 0 ? replyMarkupOptions(options) : {}),
-        ...(index === parts.length - 1 && keyboard ? { reply_markup: keyboard } : {}),
-      })
-      this.rememberKind(chatId, last.message_id, 'text')
-    }
-    if (!last) throw new Error('Telegram no devolvió mensaje para UI.')
-    return sent(last)
+    return trackedAdapterOperation('telegram', 'ui', async () => {
+      const text = normalizedUiToText(ui) || 'Ghost Nexora Bot'
+      const keyboard = this.keyboard(ui)
+      const parts = chunks(text)
+      let last: TelegramMessage | undefined
+      for (let index = 0; index < parts.length; index += 1) {
+        last = await this.client.sendMessage(chatId, parts[index], {
+          ...(index === 0 ? replyMarkupOptions(options) : {}),
+          ...(index === parts.length - 1 && keyboard ? { reply_markup: keyboard } : {}),
+        })
+        this.rememberKind(chatId, last.message_id, 'text')
+      }
+      if (!last) throw new Error('Telegram no devolvió mensaje para UI.')
+      return sent(last)
+    })
   }
 
   async editMessage(chatId: string, messageId: string, text: string) {
-    const id = Number(messageId)
-    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('messageId Telegram inválido.')
-    const kind = this.sentKinds.get(`${chatId}:${id}`)
-    if (kind === 'media') await this.client.editMessageCaption(chatId, id, text.slice(0, 1024))
-    else await this.client.editMessageText(chatId, id, text.slice(0, TELEGRAM_TEXT_LIMIT))
+    await trackedAdapterOperation('telegram', 'edit', async () => {
+      const id = Number(messageId)
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('messageId Telegram inválido.')
+      const kind = this.sentKinds.get(`${chatId}:${id}`)
+      if (kind === 'media') await this.client.editMessageCaption(chatId, id, text.slice(0, 1024))
+      else await this.client.editMessageText(chatId, id, text.slice(0, TELEGRAM_TEXT_LIMIT))
+    })
   }
 
   async setTyping(chatId: string, active: boolean) {
-    if (active) await this.client.sendChatAction(chatId, 'typing')
+    if (active) await trackedAdapterOperation('telegram', 'typing', () => this.client.sendChatAction(chatId, 'typing'))
   }
 
   async react(chatId: string, messageId: string, reaction: string) {
-    const id = Number(messageId)
-    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('messageId Telegram inválido.')
-    await this.client.setMessageReaction(chatId, id, reaction)
+    await trackedAdapterOperation('telegram', 'reaction', async () => {
+      const id = Number(messageId)
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('messageId Telegram inválido.')
+      await this.client.setMessageReaction(chatId, id, reaction)
+    })
   }
 }

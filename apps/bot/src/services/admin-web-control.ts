@@ -1,5 +1,6 @@
 import type { WASocket } from 'baileys'
 import { subbotManager } from '../core/subbots.js'
+import { createWhatsAppAdapter } from '../platform/whatsapp/adapter.js'
 import {
   createOperationalBackup,
   prepareOperationalRestore,
@@ -89,11 +90,12 @@ async function broadcast(socket: WASocket | null, body: Record<string, unknown>)
   if (!message || message.length > 5000) throw new Error('El anuncio debe contener entre 1 y 5000 caracteres.')
   const participating = await socket.groupFetchAllParticipating()
   const groups = Object.keys(participating).filter((jid) => jid.endsWith('@g.us'))
+  const adapter = createWhatsAppAdapter(socket)
   let sent = 0
   let failed = 0
   for (const groupJid of groups) {
     try {
-      await socket.sendMessage(groupJid, { text: message })
+      await adapter.sendText(groupJid, message, { delivery: { correlationId: `web-broadcast-${Date.now()}` } })
       sent += 1
     } catch {
       failed += 1

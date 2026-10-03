@@ -103,9 +103,16 @@ export interface OutgoingMedia {
   caption?: string
 }
 
+export interface DeliveryContext {
+  userId?: string
+  locale?: string
+  correlationId?: string
+}
+
 export interface SendOptions {
   replyTo?: string
   mentions?: string[]
+  delivery?: DeliveryContext
 }
 
 export interface SentMessage {
@@ -125,9 +132,9 @@ export interface PlatformAdapter {
   sendText(chatId: string, text: string, options?: SendOptions): Promise<SentMessage>
   sendMedia(chatId: string, media: OutgoingMedia, options?: SendOptions): Promise<SentMessage>
   sendUi(chatId: string, ui: NormalizedUi, options?: SendOptions): Promise<SentMessage>
-  editMessage?(chatId: string, messageId: string, text: string): Promise<void>
+  editMessage?(chatId: string, messageId: string, text: string, delivery?: DeliveryContext): Promise<void>
   setTyping?(chatId: string, active: boolean): Promise<void>
-  react?(chatId: string, messageId: string, reaction: string): Promise<void>
+  react?(chatId: string, messageId: string, reaction: string, delivery?: DeliveryContext): Promise<void>
 }
 
 const DEFAULT_CAPABILITIES: PlatformCapabilities = {

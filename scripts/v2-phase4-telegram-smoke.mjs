@@ -4,6 +4,16 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
+// Configure the native Telegram runtime before importing adapter/runtime modules.
+// Phase F adapter telemetry imports ops/config transitively, so late env mutation
+// would leave telegramConfig.token frozen as empty in this smoke process.
+const runtimeDir = await mkdtemp(path.join(os.tmpdir(), 'ghost-nexora-tg-phase4-'))
+const runtimeStateFile = path.join(runtimeDir, 'state.json')
+process.env.TELEGRAM_BOT_TOKEN = '123456:PHASE4_TEST_TOKEN'
+process.env.TELEGRAM_PLATFORM_STATE_FILE = runtimeStateFile
+process.env.TELEGRAM_POLL_TIMEOUT_SECONDS = '5'
+process.env.TELEGRAM_RECONNECT_DELAY_MS = '1000'
+
 const { TelegramAdapter } = await import('../apps/bot/dist/platform/telegram/adapter.js')
 const { normalizeTelegramMessage, telegramFileId } = await import('../apps/bot/dist/platform/telegram/normalize.js')
 
@@ -80,12 +90,25 @@ const textMessage = await adapter.sendText('123', 'editable')
 await adapter.editMessage('123', textMessage.messageId, 'edited')
 assert.ok(fake.calls.some((call) => call[0] === 'editMessageText' && String(call[2]) === textMessage.messageId))
 
-const mediaMessage = await adapter.sendMedia('123', {
-  kind: 'image',
-  source: { kind: 'url', value: 'https://example.com/image.jpg' },
-  mimeType: 'image/jpeg',
-  caption: 'image',
-})
+const mediaFetch = globalThis.fetch
+globalThis.fetch = async (input) => {
+  assert.equal(String(input), 'https://example.com/image.jpg')
+  return new Response(new Uint8Array([1, 2, 3, 4]), {
+    status: 200,
+    headers: { 'content-type': 'image/jpeg', 'content-length': '4' },
+  })
+}
+let mediaMessage
+try {
+  mediaMessage = await adapter.sendMedia('123', {
+    kind: 'image',
+    source: { kind: 'url', value: 'https://example.com/image.jpg' },
+    mimeType: 'image/jpeg',
+    caption: 'image',
+  })
+} finally {
+  globalThis.fetch = mediaFetch
+}
 await adapter.editMessage('123', mediaMessage.messageId, 'new caption')
 assert.ok(fake.calls.some((call) => call[0] === 'editMessageCaption' && String(call[2]) === mediaMessage.messageId))
 
@@ -95,14 +118,7 @@ assert.equal(fake.calls.filter((call) => call[0] === 'sendChatAction').length, 1
 await adapter.react('123', '42', '👍')
 assert.ok(fake.calls.some((call) => call[0] === 'setMessageReaction' && call[3] === '👍'))
 
-// Runtime completo sin red: configura el entorno antes de importar runtime/config.
-const runtimeDir = await mkdtemp(path.join(os.tmpdir(), 'ghost-nexora-tg-phase4-'))
-const runtimeStateFile = path.join(runtimeDir, 'state.json')
-process.env.TELEGRAM_BOT_TOKEN = '123456:PHASE4_TEST_TOKEN'
-process.env.TELEGRAM_PLATFORM_STATE_FILE = runtimeStateFile
-process.env.TELEGRAM_POLL_TIMEOUT_SECONDS = '5'
-process.env.TELEGRAM_RECONNECT_DELAY_MS = '1000'
-
+// Runtime completo sin red: el entorno ya fue fijado antes de importar módulos con config.
 const realFetch = globalThis.fetch
 const apiCalls = []
 let updatePolls = 0

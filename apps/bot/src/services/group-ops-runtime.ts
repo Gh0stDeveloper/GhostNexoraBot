@@ -9,6 +9,9 @@ import { economy } from './economy.js'
 import { community } from './community.js'
 import { groupControlsV9 } from './group-controls-v9.js'
 import { getGroupCommandPolicy, setGroupCategoryOverride } from './group-command-policy.js'
+import { createWhatsAppAdapter } from '../platform/whatsapp/adapter.js'
+import { recordPlatformRuntimeEvent, updatePlatformRuntime } from './platform-runtime-registry.js'
+import { recordGroupedError } from './error-groups.js'
 
 const instanceKey = opsInstanceKey()
 let currentSocket: WASocket | null = null
@@ -348,6 +351,18 @@ function touchRuntime(input: {
       lastGroupSyncError,
       now,
     )
+  updatePlatformRuntime('whatsapp', {
+    state: connected ? 'running' : registered ? 'reconnecting' : 'disconnected',
+    groupCount,
+    lastEventAt: now,
+    lastError: lastGroupSyncError,
+    details: {
+      registered,
+      groupSyncAt: lastGroupSyncAt,
+      groupSyncAttemptAt: lastGroupSyncAttemptAt,
+    },
+    instanceKey,
+  })
 }
 
 function markSocketLive(socket: WASocket) {
@@ -612,6 +627,7 @@ async function syncGroups(connectionProbe = false) {
   const socket = currentSocket
   if (!socket || syncing || !socket.authState.creds.registered || (!connectionOpen && !connectionProbe)) return
   syncing = true
+  const syncStarted = performance.now()
   lastSyncAttemptAt = Date.now()
   touchRuntime({ lastGroupSyncAttemptAt: lastSyncAttemptAt })
 
@@ -690,12 +706,29 @@ async function syncGroups(connectionProbe = false) {
       lastGroupSyncError: null,
       groupCount: currentGroupCount(),
     })
+    updatePlatformRuntime('whatsapp', {
+      state: 'running',
+      latencyMs: performance.now() - syncStarted,
+      groupCount: currentGroupCount(),
+      lastEventAt: stamp,
+      lastError: null,
+      instanceKey,
+    })
     void refreshGroupPictures()
     recordOpsRuntimeLog('info', 'groups', `Group registry synchronized: ${count} groups`, instanceKey)
     setOpsAlert({ key: 'whatsapp:group-sync', severity: 'warning', title: 'WhatsApp group sync failed', active: false, instanceKey })
   } catch (error) {
     const detail = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500)
     touchRuntime({ lastGroupSyncAttemptAt: lastSyncAttemptAt, lastGroupSyncError: detail })
+    updatePlatformRuntime('whatsapp', {
+      state: connectionOpen ? 'degraded' : 'reconnecting',
+      latencyMs: performance.now() - syncStarted,
+      groupCount: currentGroupCount(),
+      lastEventAt: Date.now(),
+      lastError: detail,
+      instanceKey,
+    })
+    recordGroupedError(error, { platform: 'whatsapp', instanceKey })
     logger.debug({ error, instanceKey, connectionProbe }, 'ops group registry sync skipped')
     if (!connectionProbe) {
       setOpsAlert({
@@ -784,7 +817,11 @@ async function processOneRequest() {
       }
       const text = String(payload.message ?? '').trim().slice(0, 2000)
       if (!text) throw new Error('El anuncio del grupo está vacío.')
-      await currentSocket.sendMessage(groupJid, { text })
+      const subbotMatch = /^subbot:(\d+)$/.exec(instanceKey)
+      const adapter = createWhatsAppAdapter(currentSocket, subbotMatch?.[1] ? Number(subbotMatch[1]) : undefined)
+      await adapter.sendText(groupJid, text, {
+        delivery: { correlationId: `group-ops-${request.id}` },
+      })
     } else {
       throw new Error('Acción de grupo no soportada.')
     }
@@ -861,6 +898,13 @@ export function registerOpsSocket(socket: WASocket) {
       void syncOneGroup(jid)
     }
     if (observed) touchRuntime({ groupCount: currentGroupCount() })
+    updatePlatformRuntime('whatsapp', {
+      state: 'running',
+      eventDelta: messages.length,
+      groupCount: currentGroupCount(),
+      lastEventAt: Date.now(),
+      instanceKey,
+    })
     markSocketLive(socket)
   })
 
@@ -911,6 +955,12 @@ export function registerOpsSocket(socket: WASocket) {
       lastHydrationSweepAt = 0
       emptyFullSyncStreak = 0
       touchRuntime({ connected: true, registered: true, jid: socket.user?.id ?? null, connectedAt: Date.now() })
+      recordPlatformRuntimeEvent('whatsapp', {
+        state: 'running',
+        groupCount: currentGroupCount(),
+        error: null,
+        instanceKey,
+      })
       recordOpsRuntimeLog('info', 'whatsapp', 'WhatsApp transport connected', instanceKey)
       setOpsAlert({ key: 'whatsapp:connection', severity: 'critical', title: 'WhatsApp transport disconnected', active: false, instanceKey })
       void syncGroups()
@@ -921,6 +971,12 @@ export function registerOpsSocket(socket: WASocket) {
     } else if (connection === 'close') {
       connectionOpen = false
       touchRuntime({ connected: false, registered: Boolean(socket.authState.creds.registered), jid: socket.user?.id ?? null })
+      recordPlatformRuntimeEvent('whatsapp', {
+        state: 'reconnecting',
+        groupCount: currentGroupCount(),
+        reconnect: true,
+        instanceKey,
+      })
       recordOpsRuntimeLog('info', 'whatsapp', 'WhatsApp transport reconnecting; transient disconnect grace period started', instanceKey)
       schedulePersistentDisconnectAlert()
       if (currentSocket === socket) currentSocket = null

@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { recordAdapterRetry } from '../../services/ops-observability-metrics.js'
+import { recordPlatformRuntimeEvent } from '../../services/platform-runtime-registry.js'
 import type {
   TelegramApiResponse,
   TelegramBotIdentity,
@@ -60,6 +62,12 @@ export class TelegramBotApiClient {
 
     const retryAfter = Number(payload?.parameters?.retry_after ?? 0)
     if (retry429 && (response.status === 429 || payload?.error_code === 429) && retryAfter > 0 && retryAfter <= 30) {
+      recordAdapterRetry('telegram', { rateLimited: true })
+      recordPlatformRuntimeEvent('telegram', {
+        state: 'running',
+        rateLimited: true,
+        details: { method },
+      })
       await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000))
       return this.call<T>(method, body, timeoutMs, false)
     }

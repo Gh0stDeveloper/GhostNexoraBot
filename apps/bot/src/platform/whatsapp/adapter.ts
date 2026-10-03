@@ -2,6 +2,7 @@ import type { WAMessage, WASocket } from 'baileys'
 import {
   createPlatformCapabilities,
   normalizedUiToText,
+  type DeliveryContext,
   type NormalizedMedia,
   type NormalizedMessage,
   type NormalizedUi,
@@ -12,10 +13,18 @@ import {
   type UiAction,
 } from '@ghostnexora/platform-contracts'
 import { config } from '../../config.js'
-import { resolveChatLocale } from '../../i18n/index.js'
+import { resolveChatLocale, type LocaleCode } from '../../i18n/index.js'
+import { isSupportedLocale } from '../../i18n/types.js'
+import { deliverWithOutbox } from '../../services/delivery-outbox.js'
+import { withPreparedMedia, type MediaPipelinePrepared } from '../../services/media-pipeline.js'
 import { getContextInfo, getMessageText, unwrapMessage } from '../../utils/message.js'
+import { logger } from '../../utils/logger.js'
 import { createLocalizedSocket } from '../../services/localized-socket.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from './interactive.js'
+import { whatsappMessageCache } from './message-cache.js'
+import { whatsappOpsInstanceKey } from './instance.js'
+import { whatsappUiFallbackChain } from './ui-fallback.js'
+import { trackedAdapterOperation } from '../../services/ops-observability-metrics.js'
 
 export const WHATSAPP_CAPABILITIES = createPlatformCapabilities({
   editMessage: true,
@@ -117,9 +126,9 @@ export function normalizeWhatsAppMessage(
   }
 }
 
-function outgoingSource(media: OutgoingMedia): Buffer | { url: string } {
-  if (media.source.kind === 'bytes') return Buffer.from(media.source.value)
-  return { url: media.source.value }
+function outgoingSource(prepared: MediaPipelinePrepared): Buffer | { url: string } {
+  if (prepared.source.kind === 'bytes') return Buffer.from(prepared.source.value)
+  return { url: prepared.source.value }
 }
 
 function actionButton(action: UiAction): InteractiveButton {
@@ -136,13 +145,14 @@ function requireMessageId(sent: WAMessage | undefined, operation: string) {
 export class WhatsAppAdapter implements PlatformAdapter {
   readonly id = 'whatsapp' as const
   readonly capabilities = WHATSAPP_CAPABILITIES
-  private readonly messageCache = new Map<string, WAMessage>()
-  private activeUserId?: string
+  private readonly messageCache
 
   constructor(
     private readonly socket: WASocket,
     readonly botInstanceId: string,
-  ) {}
+  ) {
+    this.messageCache = whatsappMessageCache(botInstanceId)
+  }
 
   /**
    * Phase 1 wraps an already-connected Baileys socket. Lifecycle ownership stays
@@ -152,30 +162,27 @@ export class WhatsAppAdapter implements PlatformAdapter {
   async stop(): Promise<void> {}
 
   rememberMessage(message: WAMessage) {
-    const id = message.key.id
-    if (!id) return
-    this.messageCache.set(id, message)
-    while (this.messageCache.size > 64) {
-      const oldest = this.messageCache.keys().next().value as string | undefined
-      if (!oldest) break
-      this.messageCache.delete(oldest)
-    }
+    const chatId = message.key.remoteJid
+    if (!chatId) return
+    this.messageCache.set(chatId, message)
   }
 
   normalizeMessage(message: WAMessage, overrides: NormalizeOverrides = {}) {
     this.rememberMessage(message)
-    const normalized = normalizeWhatsAppMessage(message, this.botInstanceId, overrides)
-    this.activeUserId = normalized.senderId
-    return normalized
+    return normalizeWhatsAppMessage(message, this.botInstanceId, overrides)
   }
 
-  private quotedMessage(replyTo?: string) {
-    return replyTo ? this.messageCache.get(replyTo) : undefined
+  private quotedMessage(chatId: string, replyTo?: string) {
+    return replyTo ? this.messageCache.get(chatId, replyTo) : undefined
   }
 
-  private localizedSocket(chatId: string) {
-    const locale = resolveChatLocale(chatId, this.activeUserId, this.botInstanceId)
-    return createLocalizedSocket(this.socket, locale, {
+  private deliveryLocale(chatId: string, delivery?: DeliveryContext): LocaleCode {
+    if (delivery?.locale && isSupportedLocale(delivery.locale)) return delivery.locale
+    return resolveChatLocale(chatId, delivery?.userId, this.botInstanceId)
+  }
+
+  private localizedSocket(chatId: string, delivery?: DeliveryContext) {
+    return createLocalizedSocket(this.socket, this.deliveryLocale(chatId, delivery), {
       contextChatId: chatId,
       botInstanceId: this.botInstanceId,
     })
@@ -186,9 +193,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
     return sent
   }
 
-  async sendText(chatId: string, text: string, options: SendOptions = {}): Promise<SentMessage> {
-    const quoted = this.quotedMessage(options.replyTo)
-    const sent = this.rememberSent(await this.localizedSocket(chatId).sendMessage(
+  private async sendTextDirect(chatId: string, text: string, options: SendOptions = {}): Promise<SentMessage> {
+    const quoted = this.quotedMessage(chatId, options.replyTo)
+    const sent = this.rememberSent(await this.localizedSocket(chatId, options.delivery).sendMessage(
       chatId,
       { text, ...(options.mentions?.length ? { mentions: options.mentions } : {}) },
       quoted ? { quoted } : undefined,
@@ -201,42 +208,71 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
   }
 
-  async sendMedia(chatId: string, media: OutgoingMedia, options: SendOptions = {}): Promise<SentMessage> {
-    const source = outgoingSource(media)
-    const common = {
-      ...(media.caption ? { caption: media.caption } : {}),
-      ...(media.mimeType ? { mimetype: media.mimeType } : {}),
-      ...(media.fileName ? { fileName: media.fileName } : {}),
-      ...(options.mentions?.length ? { mentions: options.mentions } : {}),
-    }
-    const content = media.kind === 'image'
-      ? { image: source, ...common }
-      : media.kind === 'video'
-        ? { video: source, ...common }
-        : media.kind === 'audio'
-          ? { audio: source, ...common }
-          : media.kind === 'sticker'
-            ? { sticker: source }
-            : { document: source, ...common }
-
-    const quoted = this.quotedMessage(options.replyTo)
-    const sent = this.rememberSent(await this.localizedSocket(chatId).sendMessage(
-      chatId,
-      content as never,
-      quoted ? { quoted } : undefined,
-    ) as WAMessage | undefined)
-    return {
+  async sendText(chatId: string, text: string, options: SendOptions = {}): Promise<SentMessage> {
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    return trackedAdapterOperation('whatsapp', 'send', () => deliverWithOutbox({
       platform: this.id,
       chatId,
-      messageId: requireMessageId(sent, 'sendMedia'),
-      raw: sent,
-    }
+      kind: 'text',
+      label: 'whatsapp_text',
+      correlationId: options.delivery?.correlationId,
+      instanceKey,
+    }, () => this.sendTextDirect(chatId, text, options)), { instanceKey })
   }
 
-  async sendUi(chatId: string, ui: NormalizedUi, options: SendOptions = {}): Promise<SentMessage> {
-    if (ui.kind === 'text') return this.sendText(chatId, ui.text, options)
-    const quoted = this.quotedMessage(options.replyTo)
-    const localizedSocket = this.localizedSocket(chatId)
+  async sendMedia(chatId: string, media: OutgoingMedia, options: SendOptions = {}): Promise<SentMessage> {
+    return withPreparedMedia(media, {
+      platform: 'WhatsApp',
+      maxBytes: this.capabilities.maxUploadBytes,
+      mode: media.source.kind === 'url' ? 'materialize' : 'direct',
+      retries: 2,
+    }, (prepared) => {
+      const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+      return trackedAdapterOperation('whatsapp', 'media', () => deliverWithOutbox({
+      platform: this.id,
+      chatId,
+      kind: 'media',
+      label: `whatsapp_media_${media.kind}`,
+      correlationId: options.delivery?.correlationId,
+      instanceKey,
+    }, async () => {
+      const source = outgoingSource(prepared)
+      const common = {
+        ...(prepared.media.caption ? { caption: prepared.media.caption } : {}),
+        ...(prepared.mimeType ? { mimetype: prepared.mimeType } : {}),
+        ...(prepared.fileName ? { fileName: prepared.fileName } : {}),
+        ...(options.mentions?.length ? { mentions: options.mentions } : {}),
+      }
+      const content = media.kind === 'image'
+        ? { image: source, ...common }
+        : media.kind === 'video'
+          ? { video: source, ...common }
+          : media.kind === 'audio'
+            ? { audio: source, ...common }
+            : media.kind === 'sticker'
+              ? { sticker: source }
+              : { document: source, ...common }
+
+      const quoted = this.quotedMessage(chatId, options.replyTo)
+      const sent = this.rememberSent(await this.localizedSocket(chatId, options.delivery).sendMessage(
+        chatId,
+        content as never,
+        quoted ? { quoted } : undefined,
+      ) as WAMessage | undefined)
+      return {
+        platform: this.id,
+        chatId,
+        messageId: requireMessageId(sent, 'sendMedia'),
+        raw: sent,
+      }
+    }), { uploadBytes: prepared.size, instanceKey })
+    })
+  }
+
+  private async sendUiStage(chatId: string, ui: NormalizedUi, options: SendOptions): Promise<SentMessage> {
+    if (ui.kind === 'text') return this.sendTextDirect(chatId, ui.text, options)
+    const quoted = this.quotedMessage(chatId, options.replyTo)
+    const localizedSocket = this.localizedSocket(chatId, options.delivery)
 
     if (ui.kind === 'card') {
       const messageId = await sendInteractiveCard(localizedSocket, chatId, quoted, {
@@ -245,6 +281,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
         imageUrl: ui.imageUrl,
         footer: ui.footer,
         buttons: (ui.buttons ?? []).map(actionButton),
+        fallbackToText: false,
       })
       return { platform: this.id, chatId, messageId }
     }
@@ -259,6 +296,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
           footer: card.footer,
           buttons: (card.buttons ?? []).map(actionButton),
         })),
+        fallbackToText: false,
       })
       return { platform: this.id, chatId, messageId }
     }
@@ -280,28 +318,67 @@ export class WhatsAppAdapter implements PlatformAdapter {
             })),
           }],
         }],
+        fallbackToText: false,
       })
       return { platform: this.id, chatId, messageId }
     }
 
-    return this.sendText(chatId, normalizedUiToText(ui), options)
+    return this.sendTextDirect(chatId, normalizedUiToText(ui), options)
   }
 
-  async editMessage(chatId: string, messageId: string, text: string): Promise<void> {
-    await this.localizedSocket(chatId).sendMessage(chatId, {
-      text,
-      edit: { remoteJid: chatId, fromMe: true, id: messageId },
-    })
+  async sendUi(chatId: string, ui: NormalizedUi, options: SendOptions = {}): Promise<SentMessage> {
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    return trackedAdapterOperation('whatsapp', 'ui', () => deliverWithOutbox({
+      platform: this.id,
+      chatId,
+      kind: 'ui',
+      label: `whatsapp_ui_${ui.kind}`,
+      correlationId: options.delivery?.correlationId,
+      instanceKey,
+    }, async () => {
+      let lastError: unknown
+      for (const stage of whatsappUiFallbackChain(ui)) {
+        try {
+          return await this.sendUiStage(chatId, stage, options)
+        } catch (error) {
+          lastError = error
+          logger.warn({ error, chatId, from: ui.kind, fallback: stage.kind }, 'WhatsApp UI stage failed; trying lower capability fallback')
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error('WhatsApp UI delivery failed.')
+    }), { instanceKey })
+  }
+
+  async editMessage(chatId: string, messageId: string, text: string, delivery?: DeliveryContext): Promise<void> {
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    await trackedAdapterOperation('whatsapp', 'edit', () => deliverWithOutbox({
+      platform: this.id,
+      chatId,
+      kind: 'edit',
+      label: 'whatsapp_edit',
+      correlationId: delivery?.correlationId,
+      instanceKey,
+    }, async () => {
+      await this.localizedSocket(chatId, delivery).sendMessage(chatId, {
+        text,
+        edit: { remoteJid: chatId, fromMe: true, id: messageId },
+      })
+    }), { instanceKey })
   }
 
   async setTyping(chatId: string, active: boolean): Promise<void> {
-    await this.socket.sendPresenceUpdate(active ? 'composing' : 'paused', chatId)
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    await trackedAdapterOperation('whatsapp', 'typing', () =>
+      this.socket.sendPresenceUpdate(active ? 'composing' : 'paused', chatId), { instanceKey })
   }
 
-  async react(chatId: string, messageId: string, reaction: string): Promise<void> {
-    const remembered = this.messageCache.get(messageId)
-    const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
-    await this.localizedSocket(chatId).sendMessage(chatId, { react: { text: reaction, key } } as never)
+  async react(chatId: string, messageId: string, reaction: string, delivery?: DeliveryContext): Promise<void> {
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    await trackedAdapterOperation('whatsapp', 'reaction', async () => {
+      const remembered = this.messageCache.get(chatId, messageId)
+      const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
+      await this.localizedSocket(chatId, delivery).sendMessage(chatId, { react: { text: reaction, key } } as never)
+    }, { instanceKey })
   }
 }
 

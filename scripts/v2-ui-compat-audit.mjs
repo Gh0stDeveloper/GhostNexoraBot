@@ -15,6 +15,7 @@ const allowedMessageGenerators = new Set([
 ])
 
 const allowedRawRelays = new Set([
+  'apps/bot/src/platform/whatsapp/raw-relay-transport.ts',
   'apps/bot/src/platform/whatsapp/interactive.ts',
   'apps/bot/src/platform/whatsapp/rich-response.ts',
   'apps/bot/src/services/rich-code-message.ts',

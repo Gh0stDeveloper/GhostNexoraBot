@@ -41,12 +41,12 @@ Una fase solo se marca como TERMINADO cuando:
 |---|---|---|
 | Fase A | Login y seguridad Web | TERMINADO |
 | Fase E | Dashboard Web V2 | TERMINADO |
-| Fase F | Observabilidad, métricas y operación | PENDIENTE |
+| Fase F | Observabilidad, métricas y operación | TERMINADO |
 | Fase B | Núcleo multiplataforma compartido | TERMINADO |
-| Fase C | Paridad Discord y Telegram | POSPUESTO |
-| Fase D | Runtime y entrega WhatsApp | POSPUESTO |
+| Fase C | Paridad Discord y Telegram | TERMINADO |
+| Fase D | Runtime y entrega WhatsApp | TERMINADO |
 
-Orden actualizado por decisión de proyecto: Fase E y Fase B quedaron terminadas. Fase F permanece pendiente; las fases C y D continúan pospuestas hasta que corresponda retomarlas.
+Orden actualizado: Fases A, B, C, D, E y F quedaron implementadas en la rama de trabajo.
 
 ---
 
@@ -454,7 +454,7 @@ Implementación B5:
 - Discord separa reply `messageId` del `requestMessageId` de slash/components;
 - Telegram crea un snapshot por mensaje procesado;
 - logs de error de los tres routers incluyen el correlation ID del request;
-- B5 no modifica `WhatsAppAdapter.activeUserId`: esa migración permanece en D1;
+- B5 dejó `WhatsAppAdapter.activeUserId` como deuda para D1; D1 ya la eliminó usando contexto de entrega explícito;
 - documentación: `docs/v2/PHASE_B5.md`;
 - gate dedicado: `scripts/phase-b5-request-context-smoke.mjs`.
 
@@ -464,7 +464,7 @@ Cierre B5:
 - aislamiento concurrente validado entre chats, usuarios y locales distintos;
 - bindings cruzados request/adapter/mensaje se rechazan antes del handler;
 - WhatsApp, Discord y Telegram crean snapshots independientes;
-- correlation ID queda disponible en el borde de comando y logs de error; la propagación end-to-end continúa reservada para F4;
+- correlation ID quedó disponible inicialmente en el borde de comando; F4 completó después su propagación end-to-end hacia providers, media, outbox y adapters;
 - B1–B5, Typecheck, Build, Termux y CI principal pasan en verde sobre el HEAD de implementación `087d09f8c041ad42e532bca8fdf1515341b7f9ca`;
 - PR de cierre: #86 `feat: complete Phase B5 immutable RequestContext`.
 
@@ -472,7 +472,7 @@ Cierre B5:
 
 # FASE C — Paridad Discord y Telegram
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -517,13 +517,13 @@ Siguiente subfase: C2 — Aliases centralizados.
 
 ## C2. Aliases centralizados
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Eliminar mapas duplicados de aliases en routers de Discord y Telegram conforme se migren comandos.
 
 ## C3. Menús y ayuda generados desde metadata
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 La ayuda de cada plataforma debe salir del mismo registro:
 
@@ -538,7 +538,7 @@ La ayuda de cada plataforma debe salir del mismo registro:
 
 ## C4. Component IDs persistentes de Discord
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Actualmente los comandos largos de componentes pueden quedar asociados a un mapa RAM con TTL.
 
@@ -555,7 +555,7 @@ Los botones válidos deberían sobrevivir reinicios dentro de su TTL.
 
 ## C5. Media streaming en Discord
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Evitar cargar archivos remotos completos mediante arrayBuffer cuando no sea necesario.
 
@@ -567,7 +567,7 @@ Compartir el pipeline multimedia con las otras plataformas cuando sea viable.
 
 ## C6. Rate limiting Discord por buckets
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Evolucionar el control actual de 429 para considerar:
 
@@ -582,7 +582,7 @@ Evolucionar el control actual de 429 para considerar:
 
 # FASE D — Runtime y entrega WhatsApp
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -590,7 +590,7 @@ Mejorar concurrencia, estabilidad y tolerancia a cambios o fallos de WhatsApp y 
 
 ## D1. Eliminar activeUserId mutable del WhatsAppAdapter
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Actualmente el adapter mantiene un usuario activo para resolver locale.
 
@@ -602,9 +602,16 @@ Riesgo conceptual:
 
 Pasar el usuario y locale explícitamente en cada contexto de envío.
 
+Implementado:
+
+- `DeliveryContext` explícito en el contrato de plataforma;
+- `userId`, `locale` y `correlationId` propagados desde cada request;
+- `activeUserId` eliminado del adapter;
+- edición, reacciones y envíos usan el contexto correspondiente a la petición.
+
 ## D2. Caché de mensajes por chat con TTL y LRU
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Cambiar claves simples por chatId:messageId.
 
@@ -620,9 +627,11 @@ Objetivo inicial sugerido:
 - 500 a 1000 referencias;
 - TTL de 10 a 20 minutos.
 
+Implementado con 1000 referencias por instancia, TTL de 15 minutos, clave `chatId:messageId`, acceso LRU y limpieza automática.
+
 ## D3. Colas de ejecución
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Introducir límites de concurrencia.
 
@@ -636,9 +645,11 @@ Ejemplo inicial:
 
 Los valores finales se ajustarán con métricas reales.
 
+Implementado con límites iniciales global 20, grupo 3, usuario 2, downloads 4, IA 3 y subbots 3. Los comandos y los flujos de IA fuera de comandos pasan por estas colas.
+
 ## D4. Outbox fiable
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Pipeline objetivo:
 
@@ -663,9 +674,11 @@ Aplicar especialmente a:
 - mensajes costosos;
 - operaciones de subbots.
 
+Implementado con tabla persistente `delivery_outbox`, estados pending/sending/sent/retry/failed, correlation ID y backoff 1 s → 3 s → 10 s. Texto, media, UI y edición de WhatsApp usan el outbox; broadcasts del comando, Web y controles de grupo también pasan por el adapter.
+
 ## D5. Fallback automático de UI
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Cuando una interfaz avanzada no pueda enviarse:
 
@@ -673,9 +686,11 @@ Carousel → Card → List → Plain text.
 
 Esto evita que un cambio de WhatsApp o Baileys deje inutilizable un comando completo.
 
+Implementado mediante una cadena automática y determinista `Carousel → Card → List → Plain text`, conservando los fallbacks internos existentes de Native Flow.
+
 ## D6. MediaPipeline común
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Crear una capa compartida para:
 
@@ -687,6 +702,8 @@ Crear una capa compartida para:
 - cleanup;
 - retries;
 - transcodificación cuando aplique.
+
+Implementado en `media-pipeline.ts` con límites, streaming, materialización temporal segura, MIME/nombre, cleanup, retries y hook opcional de transcodificación. WhatsApp, Discord y Telegram consumen esta capa común.
 
 ---
 
@@ -1432,7 +1449,7 @@ Cierre:
 
 # FASE F — Observabilidad, métricas y operación
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -1440,7 +1457,7 @@ Tener visibilidad suficiente para saber por qué una función falla o se vuelve 
 
 ## F1. PlatformRuntimeRegistry
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Estado uniforme de todas las plataformas.
 
@@ -1461,9 +1478,11 @@ Telegram:
 - latency;
 - events.
 
+Implementado con `ops_platform_runtime`, registro por instancia y plataforma, estado/latencia/eventos/comunidades/reconexiones/rate limits/error sanitizado y metadata técnica acotada. WhatsApp, Discord y Telegram publican eventos reales de sus runtimes.
+
 ## F2. Métricas de colas
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Medir:
 
@@ -1482,9 +1501,11 @@ Separar por:
 - download;
 - IA.
 
+Implementado con `ops_queue_metrics`: profundidad actual/máxima, wait/exec time, fallos, retries y saturación; dimensiones por plataforma, command, provider y lane (`default`, `downloads`, `ai`, `subbots`). Providers registran además tiempo de ejecución bajo su propia dimensión.
+
 ## F3. Métricas de adapters
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Registrar:
 
@@ -1497,9 +1518,11 @@ Registrar:
 - latency;
 - rate limits.
 
+Implementado con `ops_adapter_metrics` para WhatsApp/Discord/Telegram y eventos recientes de rate limit. Texto, media, UI, edición, typing y reacciones reportan latencia/fallos; uploads acumulan bytes y los retries del outbox/429 quedan contabilizados por instancia.
+
 ## F4. Correlation IDs
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Cada mensaje y comando debe recibir un identificador de correlación que viaje por:
 
@@ -1507,9 +1530,11 @@ ingest → router → command → provider → media → outbox → adapter.
 
 Así se podrá reconstruir un fallo completo sin exponer datos sensibles.
 
+Implementado mediante `AsyncLocalStorage`: el correlation ID nace en ingest/request y se hereda por router, command, provider, MediaPipeline y outbox. Adapters y errores agrupados conservan la referencia operativa sin persistir contenido de conversaciones.
+
 ## F5. Alertas operativas
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Generar alertas cuando ocurra, por ejemplo:
 
@@ -1524,9 +1549,11 @@ Generar alertas cuando ocurra, por ejemplo:
 - disco bajo;
 - memoria alta.
 
+Implementado mediante un monitor periódico independiente del dashboard. Usa señales recientes para 429 y saturación, salud de providers, estado de plataformas, jobs FFmpeg/yt-dlp/download, errores DB locked, latencia de adapters, espacio de disco y memoria RSS; publica en el `ops_alerts` ya existente.
+
 ## F6. Error grouping
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Agrupar errores repetidos por fingerprint para evitar miles de entradas iguales.
 
@@ -1538,6 +1565,8 @@ Mostrar:
 - plataforma;
 - comando o provider;
 - muestra sanitizada.
+
+Implementado con `ops_error_groups` y fingerprint SHA-256 sobre error normalizado/sanitizado + plataforma/comando/provider. Conserva primera/última aparición, cantidad, scope, muestra sanitizada y último correlation ID. Diagnostics muestra estas agrupaciones sin contenido de mensajes.
 
 ---
 
@@ -1595,8 +1624,8 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 |
 | 2026-09-19 | Fase B4 | Capability-aware command execution | TERMINADO | PR #85 |
 | 2026-09-19 | Fase B5 | RequestContext inmutable y aislamiento concurrente | TERMINADO | PR #86 |
-| — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
-| — | Fase D | Runtime WhatsApp | PENDIENTE | — |
+| 2026-10-02 | Fase C | Paridad Discord y Telegram · C1–C6 completadas | TERMINADO | PR #105 |
+| 2026-10-02 | Fase D | Runtime y entrega WhatsApp · D1–D6 completadas | TERMINADO | PR #105 |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
 | 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
@@ -1607,23 +1636,17 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E12 | Actualizaciones seguras desde Dashboard con progreso y healthcheck | TERMINADO | 9bec819c28a04be010aa0f2e00d7e86ecf29b255 |
 | 2026-09-19 | Fase E13 | Backups tipados, verificación, dry-run y restore seguro | TERMINADO | ea5d6940c7246c0746570b8568b9170254c11ede |
 | 2026-09-19 | Fase E14 | Pulido visual, command palette, modales, toasts y responsive | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
-| — | Fase F | Observabilidad | PENDIENTE | — |
+| 2026-10-03 | Fase F | Observabilidad, métricas y operación · F1–F6 completadas | TERMINADO | PR #105 |
 
 ---
 
 # Próximo paso
 
-**FASE B está TERMINADA con B1, B2, B3, B4 y B5 completadas.**
+**FASE F está TERMINADA con F1–F6 completadas en la rama de trabajo.**
 
-Las fases todavía pendientes del roadmap son:
+Con esto, las fases A–F de este roadmap ya están implementadas. El siguiente paso es revisar la validación final del PR #105 y decidir cuándo integrarlo a `main`.
 
-- **FASE C · Paridad Discord y Telegram** — C1 a C6;
-- **FASE D · Runtime y entrega WhatsApp** — D1 a D6;
-- **FASE F · Observabilidad, métricas y operación** — F1 a F6.
-
-Por orden del roadmap, el siguiente bloque sería **C1 · Slash commands de Discord generados automáticamente**, cuando el usuario indique retomar la Fase C.
-
-No iniciar C, D o F automáticamente sin indicación del usuario.
+No fusionar automáticamente a `main` sin revisión/indicación.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
@@ -1643,4 +1666,4 @@ Resultados principales de Fase A:
 - panel privado de seguridad;
 - CI, typecheck, build y smoke de Fase A en verde.
 
-La Fase B ya quedó validada y registrada como TERMINADO; C, D y F continúan pendientes.
+Las Fases B, C, D y F ya quedaron implementadas y registradas como TERMINADO en la rama de trabajo.

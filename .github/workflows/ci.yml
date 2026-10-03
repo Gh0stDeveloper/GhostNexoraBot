@@ -5,6 +5,10 @@ on:
     branches: [main, "feature/**", "feat/**", "fix/**"]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -64,6 +68,15 @@ jobs:
 
       - name: Phase C1 metadata-driven Discord slash commands smoke
         run: node scripts/phase-c1-discord-slash-metadata-smoke.mjs
+
+      - name: Phase C2-C6 Discord and Telegram parity smoke
+        run: node scripts/phase-c-parity-smoke.mjs
+
+      - name: Phase D1-D6 WhatsApp runtime and delivery smoke
+        run: node scripts/phase-d-runtime-delivery-smoke.mjs
+
+      - name: Phase F1-F6 observability and operations smoke
+        run: node scripts/phase-f-observability-smoke.mjs
 
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs

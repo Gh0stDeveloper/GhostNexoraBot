@@ -364,6 +364,46 @@ function combinedPlatformAliasMap(platform: 'discord' | 'telegram') {
 export const discordCommandAliases = combinedPlatformAliasMap('discord')
 export const telegramCommandAliases = combinedPlatformAliasMap('telegram')
 
+export function resolvePlatformCommandToken(platform: PlatformId, token: string) {
+  const normalized = normalizeToken(token)
+  if (!normalized) return undefined
+  if (platform === 'discord') return discordCommandAliases.get(normalized)
+  if (platform === 'telegram') return telegramCommandAliases.get(normalized)
+  const metadata = platformCommandMetadata(platform).find((command) =>
+    command.name === normalized || command.aliases.includes(normalized),
+  )
+  return metadata?.name
+}
+
+export type PlatformCommandHelpEntry = {
+  name: string
+  aliases: string[]
+  category: CommandCategory
+  description: string
+  descriptionKey?: string
+  usage: string
+  arguments: CommandArgumentMetadata[]
+  requiredCapabilities: CapabilityName[]
+}
+
+export function platformCommandHelpCatalog(
+  platform: PlatformId,
+  visibility: { isOwner: boolean; isStaff: boolean; isSubbotOwner?: boolean; isGroup?: boolean },
+): PlatformCommandHelpEntry[] {
+  return platformCommandMetadata(platform)
+    .filter((metadata) => commandMetadataVisibleTo(metadata, visibility))
+    .map((metadata) => ({
+      name: metadata.name,
+      aliases: [...metadata.aliases],
+      category: metadata.category,
+      description: metadata.description,
+      ...(metadata.descriptionKey ? { descriptionKey: metadata.descriptionKey } : {}),
+      usage: metadata.usage || metadata.name,
+      arguments: metadata.arguments.map((argument) => ({ ...argument })),
+      requiredCapabilities: [...metadata.requiredCapabilities],
+    }))
+}
+
 export type CommandPlatformSupport = {
   whatsapp: boolean
   discord: boolean
@@ -447,12 +487,7 @@ export function platformCommandMetadata(platform: PlatformId): CommandMetadata[]
 
 export function commandMetadataForPlatformToken(platform: PlatformId, token: string) {
   const normalized = normalizeToken(token)
-  const aliases = platform === 'discord'
-    ? discordCommandAliases
-    : platform === 'telegram'
-      ? telegramCommandAliases
-      : new Map<string, string>()
-  const canonical = aliases.get(normalized) ?? normalized
+  const canonical = resolvePlatformCommandToken(platform, normalized) ?? normalized
   return platformCommandMetadata(platform).find((command) => command.name === canonical)
 }
 

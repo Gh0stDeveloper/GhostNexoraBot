@@ -17,24 +17,25 @@ import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore 
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
-import { telegramCommandAliases } from '../../services/command-platform-support.js'
 import {
   commandMetadataForPlatformToken,
-  commandMetadataVisibleTo,
-  platformCommandMetadata,
+  platformCommandHelpCatalog,
+  resolvePlatformCommandToken,
 } from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
 import { createRequestContext } from '../../core/request-context.js'
+import { executionLaneForCommand, executionQueues } from '../../services/execution-queues.js'
+import { withTraceContext } from '../../services/trace-context.js'
+import { recordGroupedError } from '../../services/error-groups.js'
 import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import { telegramOwner, telegramStaff } from './config.js'
 import type { TelegramAdapter } from './adapter.js'
 import { normalizeTelegramMessage } from './normalize.js'
 import type { TelegramMessage } from './types.js'
 
-const aliases = telegramCommandAliases
 const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
 
 function humanBytes(bytes: number) {
@@ -67,7 +68,7 @@ function parseCommand(text: string, botUsername?: string) {
   const head = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).slice(prefix.length)
   const [rawName, mention] = head.split('@', 2)
   if (mention && botUsername && mention.toLowerCase() !== botUsername.toLowerCase()) return undefined
-  const command = aliases.get(rawName.toLowerCase()) ?? sharedCommandEngine.resolve(rawName)?.name
+  const command = resolvePlatformCommandToken('telegram', rawName)
   if (!command) return { command: rawName.toLowerCase(), argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(), known: false }
   return { command, argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(), known: true }
 }
@@ -100,12 +101,14 @@ export class TelegramCommandRouter {
       isStaff: telegramStaff(userId),
       isGroup: message.chat.type !== 'private',
     }
-    const items = platformCommandMetadata('telegram')
-      .filter((metadata) => commandMetadataVisibleTo(metadata, visibility))
+    const items = platformCommandHelpCatalog('telegram', visibility)
       .map((metadata) => ({
         id: metadata.name,
-        title: `/${metadata.usage || metadata.name}`,
-        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+        title: `/${metadata.usage}`,
+        description: [
+          metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+          metadata.aliases.length ? `Aliases: ${metadata.aliases.map((alias) => `/${alias}`).join(', ')}` : '',
+        ].filter(Boolean).join('\n'),
         action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
       }))
     const ui: NormalizedUi = {
@@ -318,6 +321,19 @@ export class TelegramCommandRouter {
         }
       : undefined
     try {
+      return await withTraceContext({
+        correlationId: request.correlationId,
+        platform: 'telegram',
+        botInstanceId: this.adapter.botInstanceId,
+        command: parsed.command,
+      }, () => executionQueues.run({
+        chatId: normalized.chatId,
+        userId,
+        isGroup: message.chat.type !== 'private',
+        lane: executionLaneForCommand({ name: parsed.command, category }),
+        platform: 'telegram',
+        command: parsed.command,
+      }, async () => {
       if (sharedCommand) {
         const args = parsed.argText.trim() ? parsed.argText.trim().split(/\\s+/) : []
         const context = createNeutralCommandContext({
@@ -350,7 +366,13 @@ export class TelegramCommandRouter {
       }
       try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, true, undefined, auditIdentity) } catch {}
       return true
+      }))
     } catch (error) {
+      recordGroupedError(error, {
+        platform: 'telegram',
+        command: parsed.command,
+        correlationId: request.correlationId,
+      })
       try { performanceAudit.recordRuntimeCommand(parsed.command, performance.now() - auditStarted, false, undefined, auditIdentity) } catch {}
       logger.warn({
         error,

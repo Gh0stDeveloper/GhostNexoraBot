@@ -97,8 +97,9 @@ try {
   assert.match(routerSource, /contextChatId:\s*chatId/, 'WhatsApp localized socket must receive the active chat context')
 
   const adapterSource = await readFile(new URL('../apps/bot/dist/platform/whatsapp/adapter.js', import.meta.url), 'utf8')
-  assert.match(adapterSource, /activeUserId/, 'WhatsApp adapter must retain active sender locale context')
-  assert.match(adapterSource, /resolveChatLocale\(chatId, this\.activeUserId, this\.botInstanceId\)/, 'WhatsApp adapter must resolve sender + instance locale')
+  assert.doesNotMatch(adapterSource, /activeUserId/, 'D1 must remove mutable WhatsApp active sender state')
+  assert.match(adapterSource, /deliveryLocale\(chatId, delivery\)/, 'WhatsApp adapter must resolve locale from explicit delivery context')
+  assert.match(adapterSource, /resolveChatLocale\(chatId, delivery\?\.userId, this\.botInstanceId\)/, 'WhatsApp adapter must resolve sender + instance locale from the current delivery')
 
   const interactiveSource = await readFile(new URL('../apps/bot/dist/platform/whatsapp/interactive.js', import.meta.url), 'utf8')
   assert.match(interactiveSource, /localizedSocketContext/, 'WhatsApp interactive renderer must inherit socket locale context')

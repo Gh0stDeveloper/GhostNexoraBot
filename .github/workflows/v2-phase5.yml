@@ -6,6 +6,9 @@ on:
       - 'apps/bot/**'
       - 'packages/**'
       - 'scripts/v2-phase5-discord-*.mjs'
+      - 'scripts/phase-c-*.mjs'
+      - 'scripts/phase-d-*.mjs'
+      - 'scripts/phase-f-*.mjs'
       - 'scripts/v2-phase4-telegram-smoke.mjs'
       - 'scripts/v2-phase4-telegram-audit.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
@@ -15,6 +18,10 @@ on:
       - 'docs/v2/**'
       - '.github/workflows/v2-phase5.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -58,6 +65,15 @@ jobs:
 
       - name: Phase 5 Discord adapter, REST, Gateway and runtime
         run: npm run v2:discord
+
+      - name: Preserve completed Phase C parity
+        run: node scripts/phase-c-parity-smoke.mjs
+
+      - name: Preserve completed Phase D runtime delivery
+        run: node scripts/phase-d-runtime-delivery-smoke.mjs
+
+      - name: Preserve completed Phase F observability
+        run: node scripts/phase-f-observability-smoke.mjs
 
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
