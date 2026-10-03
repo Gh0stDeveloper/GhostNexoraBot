@@ -39,6 +39,21 @@ globalThis.fetch = async (input, init = {}) => {
       status: 200, headers: { 'content-type': 'application/json' },
     })
   }
+  if (url.endsWith('/channels/11/messages') && method === 'POST') {
+    assert.match(headers.get('content-type') || '', /^multipart\/form-data; boundary=----ghostnexora-/)
+    let streamed = 0
+    for await (const chunk of init.body) streamed += chunk.byteLength
+    assert.ok(streamed > 5, 'streaming multipart body must include payload and file bytes')
+    return new Response(JSON.stringify({ id: '101', channel_id: '11', author: { id: '900', username: 'bot', bot: true }, content: '', attachments: [] }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-ratelimit-bucket': 'messages-bucket',
+        'x-ratelimit-remaining': '0',
+        'x-ratelimit-reset-after': '0.001',
+      },
+    })
+  }
   if (url.includes('/interactions/700/token/callback') && method === 'POST') return new Response(null, { status: 204 })
   throw new Error(`unexpected request: ${method} ${url}`)
 }
@@ -67,9 +82,24 @@ const multipart = calls.find((call) => call.url.endsWith('/channels/10/messages'
 assert.ok(multipart)
 assert.equal(multipart.headers.has('content-type'), false, 'fetch must generate multipart boundary')
 
+await client.createMessageWithFileStream(
+  '11',
+  { attachments: [{ id: 0, filename: 'stream.bin' }] },
+  async () => (async function* () {
+    yield new Uint8Array([1, 2])
+    yield new Uint8Array([3, 4, 5])
+  })(),
+  'stream.bin',
+  'application/octet-stream',
+  1024,
+)
+const rateSnapshot = client.rateLimitSnapshot()
+assert.ok(rateSnapshot.routeMappings >= 1, 'C6 must learn Discord bucket ids from response headers')
+assert.ok(rateSnapshot.buckets.some((entry) => entry.scope.includes('messages-bucket')), 'C6 must track per-bucket reset windows')
+
 await client.interactionCallback('700', 'token', 5)
 const interaction = calls.find((call) => call.url.includes('/interactions/700/token/callback'))
 assert.ok(interaction)
 assert.equal(interaction.headers.get('authorization'), null)
 
-console.log('[V2 PHASE 5] OK — Discord REST v10 handles Bot auth, 429 retry_after, encoded reactions, command scope, multipart and unauthenticated callbacks.')
+console.log('[V2 PHASE 5] OK — Discord REST v10 handles auth, bucket/global rate limits, streaming multipart, reactions, command scope and callbacks.')
