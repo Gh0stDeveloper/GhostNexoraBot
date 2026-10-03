@@ -20,7 +20,7 @@ import { SharedCommandEngine } from './shared-command-engine.js'
 import { createRequestContext } from './request-context.js'
 import { sharedNeutralCommands } from '../commands/shared-neutral.js'
 import { executionLaneForCommand, executionQueues } from '../services/execution-queues.js'
-import { withTraceContext } from '../services/trace-context.js'
+import { currentCorrelationId, withTraceContext } from '../services/trace-context.js'
 import { recordGroupedError } from '../services/error-groups.js'
 
 function normalizeJid(value?: string | null) {
@@ -130,7 +130,7 @@ export class CommandRouter {
     const prefix = settings.prefix
     const botInstanceId = whatsappBotInstanceId(this.options.instanceId)
     const locale = resolveChatLocale(chatId, sender, botInstanceId)
-    const correlationId = randomUUID()
+    const correlationId = currentCorrelationId() ?? randomUUID()
     const localizedSocket = createLocalizedSocket(socket, locale, {
       contextChatId: chatId,
       botInstanceId,
