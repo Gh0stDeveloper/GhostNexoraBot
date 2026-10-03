@@ -1,5 +1,4 @@
 import { randomBytes } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
 import {
   createPlatformCapabilities,
   normalizedUiToText,
@@ -10,6 +9,8 @@ import {
   type SentMessage,
   type UiAction,
 } from '@ghostnexora/platform-contracts'
+import { outgoingMediaStreamSource } from '../../services/outgoing-media-stream.js'
+import { persistDiscordComponentRef, resolveDiscordComponentRef } from './component-store.js'
 import { DiscordRestClient } from './rest.js'
 import type { DiscordActionRow, DiscordCreateMessageBody, DiscordEmbed, DiscordMessage } from './types.js'
 
@@ -20,8 +21,6 @@ const DISCORD_CUSTOM_ID_LIMIT = 100
 // Create Message has a 25 MiB request ceiling. Keep 1 MiB for multipart metadata/overhead.
 const MAX_UPLOAD_BYTES = 24 * 1024 * 1024
 const COMPONENT_TTL_MS = 30 * 60_000
-
-type ComponentEntry = { command: string; expiresAt: number }
 
 function chunks(text: string, limit = DISCORD_TEXT_LIMIT) {
   if (text.length <= limit) return [text]
@@ -62,16 +61,6 @@ function baseBody(options?: SendOptions): DiscordCreateMessageBody {
 function fallbackFileName(media: OutgoingMedia) {
   const extension = media.kind === 'image' ? 'jpg' : media.kind === 'video' ? 'mp4' : media.kind === 'audio' ? 'mp3' : 'bin'
   return `ghost-nexora-${Date.now()}.${extension}`
-}
-
-async function loadMedia(media: OutgoingMedia) {
-  if (media.source.kind === 'bytes') return media.source.value
-  if (media.source.kind === 'path') return new Uint8Array(await readFile(media.source.value))
-  const response = await fetch(media.source.value, { signal: AbortSignal.timeout(120_000) })
-  if (!response.ok) throw new Error(`No se pudo descargar media para Discord (${response.status}).`)
-  const declared = Number(response.headers.get('content-length') || 0)
-  if (declared > MAX_UPLOAD_BYTES) throw new Error('El archivo remoto supera el límite seguro de subida de Discord.')
-  return new Uint8Array(await response.arrayBuffer())
 }
 
 function trim(value: string | undefined, limit: number) {
@@ -138,8 +127,6 @@ export class DiscordAdapter implements PlatformAdapter {
     maxUploadBytes: MAX_UPLOAD_BYTES,
   })
 
-  private readonly componentCommands = new Map<string, ComponentEntry>()
-
   constructor(
     readonly client: DiscordRestClient,
     botInstanceId = 'discord-main',
@@ -150,17 +137,11 @@ export class DiscordAdapter implements PlatformAdapter {
   async start() { await this.client.getGatewayBot() }
   async stop() {}
 
-  private pruneComponents() {
-    const now = Date.now()
-    for (const [key, value] of this.componentCommands) if (value.expiresAt <= now) this.componentCommands.delete(key)
-  }
-
   private componentId(command: string) {
-    this.pruneComponents()
     const direct = `gnb:cmd:${command}`
     if (Buffer.byteLength(direct, 'utf8') <= DISCORD_CUSTOM_ID_LIMIT) return direct
     const token = randomBytes(12).toString('base64url')
-    this.componentCommands.set(token, { command, expiresAt: Date.now() + COMPONENT_TTL_MS })
+    persistDiscordComponentRef(this.botInstanceId, token, command, COMPONENT_TTL_MS)
     return `gnb:ref:${token}`
   }
 
@@ -168,14 +149,7 @@ export class DiscordAdapter implements PlatformAdapter {
     if (!customId) return undefined
     if (customId.startsWith('gnb:cmd:')) return customId.slice('gnb:cmd:'.length)
     if (!customId.startsWith('gnb:ref:')) return undefined
-    this.pruneComponents()
-    const token = customId.slice('gnb:ref:'.length)
-    const value = this.componentCommands.get(token)
-    if (!value || value.expiresAt <= Date.now()) {
-      this.componentCommands.delete(token)
-      return undefined
-    }
-    return value.command
+    return resolveDiscordComponentRef(this.botInstanceId, customId.slice('gnb:ref:'.length))
   }
 
   private button(action: UiAction) {
@@ -249,16 +223,13 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   async sendMedia(chatId: string, media: OutgoingMedia, options?: SendOptions): Promise<SentMessage> {
-    const bytes = await loadMedia(media)
-    if (bytes.byteLength > MAX_UPLOAD_BYTES) {
-      throw new Error(`El archivo pesa ${bytes.byteLength} bytes y supera el límite seguro de Discord (${MAX_UPLOAD_BYTES}).`)
-    }
+    const source = await outgoingMediaStreamSource(media, MAX_UPLOAD_BYTES, 'Discord')
     const fileName = media.fileName || fallbackFileName(media)
-    const message = await this.client.createMessageWithFile(chatId, {
+    const message = await this.client.createMessageWithFileStream(chatId, {
       ...baseBody(options),
       ...(media.caption ? { content: trim(media.caption, DISCORD_TEXT_LIMIT) } : {}),
       attachments: [{ id: 0, filename: fileName }],
-    }, bytes, fileName, media.mimeType)
+    }, source.open, fileName, media.mimeType, MAX_UPLOAD_BYTES)
     return sent(message)
   }
 
