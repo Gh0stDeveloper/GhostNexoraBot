@@ -213,7 +213,7 @@ try {
   assert.match(uiSource, /whatsappUiFallbackChain/, 'D5 fallback planner missing')
   assert.match(adapter, /for \(const stage of whatsappUiFallbackChain\(ui\)\)/, 'D5 adapter fallback execution missing')
 
-  assert.match(mediaSource, /mode: MediaPipelineMode/, 'D6 MediaPipeline mode contract missing')
+  assert.match(mediaSource, /mode\?: MediaPipelineMode/, 'D6 MediaPipeline mode contract missing')
   assert.match(mediaSource, /openStream/, 'D6 streaming API missing')
   assert.match(mediaSource, /mkdtemp/, 'D6 temporary download support missing')
   assert.match(mediaSource, /cleanup/, 'D6 cleanup contract missing')
