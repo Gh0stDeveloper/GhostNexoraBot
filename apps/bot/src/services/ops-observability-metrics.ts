@@ -13,6 +13,9 @@ export type QueueMetricRecord = {
   failures: number
   retries: number
   saturation: number
+  currentDepth: number
+  maxDepth: number
+  lastSaturatedAt: number
   averageWaitMs: number
   maxWaitMs: number
   lastWaitMs: number
@@ -48,6 +51,9 @@ opsDb.exec(`
     failures INTEGER NOT NULL DEFAULT 0,
     retries INTEGER NOT NULL DEFAULT 0,
     saturation INTEGER NOT NULL DEFAULT 0,
+    current_depth INTEGER NOT NULL DEFAULT 0,
+    max_depth INTEGER NOT NULL DEFAULT 0,
+    last_saturated_at INTEGER NOT NULL DEFAULT 0,
     total_wait_ms REAL NOT NULL DEFAULT 0,
     max_wait_ms REAL NOT NULL DEFAULT 0,
     last_wait_ms REAL NOT NULL DEFAULT 0,
@@ -77,7 +83,23 @@ opsDb.exec(`
     updated_at INTEGER NOT NULL,
     PRIMARY KEY(instance_key, platform)
   );
+  CREATE TABLE IF NOT EXISTS ops_adapter_rate_limit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instance_key TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ops_adapter_rate_limits_instance_created
+    ON ops_adapter_rate_limit_events(instance_key, created_at DESC);
 `)
+
+function ensureColumn(table: string, column: string, definition: string) {
+  const columns = opsDb.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{ name?: string }>
+  if (!columns.some((row) => row.name === column)) opsDb.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+}
+ensureColumn('ops_queue_metrics', 'current_depth', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('ops_queue_metrics', 'max_depth', 'INTEGER NOT NULL DEFAULT 0')
+ensureColumn('ops_queue_metrics', 'last_saturated_at', 'INTEGER NOT NULL DEFAULT 0')
 
 function id(value: unknown, fallback = 'unknown') {
   return String(value ?? fallback).trim().toLowerCase().replace(/[^a-z0-9_.:-]+/g, '-').slice(0, 120) || fallback
@@ -95,22 +117,29 @@ function upsertQueue(dimensionType: QueueMetricDimension, dimensionId: string, i
   failed?: boolean
   retries?: number
   saturated?: boolean
+  depth?: number
   instanceKey?: string
 }) {
   const instanceKey = input.instanceKey ?? opsInstanceKey()
   const platform = id(input.platform, 'unknown')
   const waitMs = ms(input.waitMs)
   const executionMs = ms(input.executionMs)
+  const depth = Math.max(0, Math.trunc(input.depth ?? 0))
   const stamp = Date.now()
+  const saturatedAt = input.saturated ? stamp : 0
   opsDb.prepare(`INSERT INTO ops_queue_metrics(
       instance_key, dimension_type, dimension_id, platform, executions, failures, retries, saturation,
+      current_depth, max_depth, last_saturated_at,
       total_wait_ms, max_wait_ms, last_wait_ms, total_execution_ms, max_execution_ms, last_execution_ms, updated_at
-    ) VALUES(?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES(?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(instance_key, dimension_type, dimension_id, platform) DO UPDATE SET
       executions = ops_queue_metrics.executions + 1,
       failures = ops_queue_metrics.failures + excluded.failures,
       retries = ops_queue_metrics.retries + excluded.retries,
       saturation = ops_queue_metrics.saturation + excluded.saturation,
+      current_depth = excluded.current_depth,
+      max_depth = MAX(ops_queue_metrics.max_depth, excluded.max_depth),
+      last_saturated_at = CASE WHEN excluded.last_saturated_at > 0 THEN excluded.last_saturated_at ELSE ops_queue_metrics.last_saturated_at END,
       total_wait_ms = ops_queue_metrics.total_wait_ms + excluded.total_wait_ms,
       max_wait_ms = MAX(ops_queue_metrics.max_wait_ms, excluded.max_wait_ms),
       last_wait_ms = excluded.last_wait_ms,
@@ -126,6 +155,9 @@ function upsertQueue(dimensionType: QueueMetricDimension, dimensionId: string, i
       input.failed ? 1 : 0,
       Math.max(0, Math.trunc(input.retries ?? 0)),
       input.saturated ? 1 : 0,
+      depth,
+      depth,
+      saturatedAt,
       waitMs,
       waitMs,
       waitMs,
@@ -146,6 +178,7 @@ export function recordQueueObservation(input: {
   failed?: boolean
   retries?: number
   saturated?: boolean
+  depth?: number
   instanceKey?: string
 }) {
   const dimensions: Array<[QueueMetricDimension, string | undefined]> = [
@@ -220,7 +253,8 @@ export function recordAdapterOperation(platform: RuntimePlatform, input: {
 
 export function readQueueMetrics(instanceKey = opsInstanceKey()): QueueMetricRecord[] {
   return (opsDb.prepare(`SELECT dimension_type AS dimensionType, dimension_id AS dimensionId, platform,
-      executions, failures, retries, saturation, total_wait_ms AS totalWaitMs, max_wait_ms AS maxWaitMs,
+      executions, failures, retries, saturation, current_depth AS currentDepth, max_depth AS maxDepth,
+      last_saturated_at AS lastSaturatedAt, total_wait_ms AS totalWaitMs, max_wait_ms AS maxWaitMs,
       last_wait_ms AS lastWaitMs, total_execution_ms AS totalExecutionMs,
       max_execution_ms AS maxExecutionMs, last_execution_ms AS lastExecutionMs, updated_at AS updatedAt
     FROM ops_queue_metrics WHERE instance_key = ? ORDER BY updated_at DESC LIMIT 250`)
@@ -234,6 +268,9 @@ export function readQueueMetrics(instanceKey = opsInstanceKey()): QueueMetricRec
         failures: Number(row.failures ?? 0),
         retries: Number(row.retries ?? 0),
         saturation: Number(row.saturation ?? 0),
+        currentDepth: Number(row.currentDepth ?? 0),
+        maxDepth: Number(row.maxDepth ?? 0),
+        lastSaturatedAt: Number(row.lastSaturatedAt ?? 0),
         averageWaitMs: executions ? Number(row.totalWaitMs ?? 0) / executions : 0,
         maxWaitMs: Number(row.maxWaitMs ?? 0),
         lastWaitMs: Number(row.lastWaitMs ?? 0),
@@ -307,12 +344,26 @@ export function recordAdapterRetry(
   platform: RuntimePlatform,
   input: { rateLimited?: boolean; instanceKey?: string } = {},
 ) {
+  const instanceKey = input.instanceKey ?? opsInstanceKey()
   recordAdapterOperation(platform, {
     ok: true,
     operation: 'api',
     latencyMs: 0,
     retries: 1,
     rateLimits: input.rateLimited ? 1 : 0,
-    instanceKey: input.instanceKey,
+    instanceKey,
   })
+  if (input.rateLimited) {
+    const stamp = Date.now()
+    opsDb.prepare('INSERT INTO ops_adapter_rate_limit_events(instance_key, platform, created_at) VALUES(?, ?, ?)')
+      .run(instanceKey, platform, stamp)
+    opsDb.prepare('DELETE FROM ops_adapter_rate_limit_events WHERE created_at < ?').run(stamp - 60 * 60_000)
+  }
+}
+
+export function recentAdapterRateLimitCount(instanceKey = opsInstanceKey(), sinceMs = 10 * 60_000) {
+  const row = opsDb.prepare(`SELECT COUNT(*) AS count FROM ops_adapter_rate_limit_events
+    WHERE instance_key = ? AND created_at >= ?`)
+    .get(instanceKey, Date.now() - Math.max(60_000, sinceMs)) as { count?: number } | undefined
+  return Number(row?.count ?? 0)
 }
