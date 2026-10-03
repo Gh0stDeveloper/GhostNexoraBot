@@ -27,6 +27,9 @@ import { performanceAudit } from '../../services/performance-audit.js'
 import { logger } from '../../utils/logger.js'
 import { createNeutralCommandContext, SharedCommandEngine } from '../../core/shared-command-engine.js'
 import { createRequestContext } from '../../core/request-context.js'
+import { executionLaneForCommand, executionQueues } from '../../services/execution-queues.js'
+import { withTraceContext } from '../../services/trace-context.js'
+import { recordGroupedError } from '../../services/error-groups.js'
 import { sharedNeutralCommands } from '../../commands/shared-neutral.js'
 import type { DiscordAdapter } from './adapter.js'
 import { discordOwner, discordStaff } from './config.js'
@@ -441,6 +444,19 @@ export class DiscordCommandRouter {
     const auditStarted = performance.now()
     await this.adapter.setTyping?.(invocation.channelId, true).catch(() => undefined)
     try {
+      return await withTraceContext({
+        correlationId: request.correlationId,
+        platform: 'discord',
+        botInstanceId: this.adapter.botInstanceId,
+        command: invocation.command,
+      }, () => executionQueues.run({
+        chatId: invocation.channelId,
+        userId: `discord:${invocation.user.id}`,
+        isGroup: Boolean(invocation.guildId),
+        lane: executionLaneForCommand({ name: invocation.command, category }),
+        platform: 'discord',
+        command: invocation.command,
+      }, async () => {
       if (sharedCommand) {
         const args = invocation.argText.trim() ? invocation.argText.trim().split(/\\s+/) : []
         const normalizedMessage = {
@@ -491,7 +507,13 @@ export class DiscordCommandRouter {
         })
       } catch {}
       return true
+      }))
     } catch (error) {
+      recordGroupedError(error, {
+        platform: 'discord',
+        command: invocation.command,
+        correlationId: request.correlationId,
+      })
       try {
         performanceAudit.recordRuntimeCommand(invocation.command, performance.now() - auditStarted, false, undefined, {
           userJid: invocation.user.id,
