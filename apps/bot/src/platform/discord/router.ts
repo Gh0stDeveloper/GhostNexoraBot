@@ -12,7 +12,7 @@ import {
   type LocaleCode,
 } from '../../i18n/index.js'
 import { isSupportedLocale } from '../../i18n/types.js'
-import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore } from '../../services/download-providers/apk-stores.js'
+import { downloadApk, searchApkMirror, searchApkPure, type ApkStore } from '../../services/download-providers/apk-stores.js'
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
@@ -128,7 +128,7 @@ function humanBytes(bytes: number) {
   return `${bytes} B`
 }
 
-function storeLabel(store: Phase3ApkStore) { return store === 'apkmirror' ? 'APKMirror' : 'APKPure' }
+function storeLabel(store: ApkStore) { return store === 'apkmirror' ? 'APKMirror' : 'APKPure' }
 function t(locale: LocaleCode, key: string, values: Record<string, string | number | boolean | null | undefined> = {}) { return translate(locale, key, values) }
 
 function parseLocale(raw?: string): LocaleCode | null {
@@ -268,7 +268,7 @@ export class DiscordCommandRouter {
         `${t(effective, 'language.status.bot')}: ${bot ? `${localeName(bot, effective)} (${bot})` : t(effective, 'language.status.none')}`,
         `${t(effective, 'language.status.effective')}: ${localeName(effective, effective)} (${effective})`,
         '',
-        t(effective, 'language.usage.phase6', { command: '/language' }),
+        t(effective, 'language.usage', { command: '/language' }),
       ].join('\n'), invocation.messageId ? { replyTo: invocation.messageId } : undefined)
       return
     }
@@ -291,7 +291,7 @@ export class DiscordCommandRouter {
     await this.adapter.sendText(invocation.channelId, t(nextLocale, key, { language: localeName(nextLocale, nextLocale) }), invocation.messageId ? { replyTo: invocation.messageId } : undefined)
   }
 
-  private async store(invocation: Invocation, store: Phase3ApkStore, locale: LocaleCode) {
+  private async store(invocation: Invocation, store: ApkStore, locale: LocaleCode) {
     if (!invocation.argText) throw new Error(t(locale, 'common.storeUsage', { store }))
     const results = store === 'apkmirror' ? await searchApkMirror(invocation.argText) : await searchApkPure(invocation.argText)
     const command = store === 'apkmirror' ? 'apkmirrordl' : 'apkpuredl'
@@ -314,14 +314,14 @@ export class DiscordCommandRouter {
     await this.adapter.sendUi(invocation.channelId, ui, invocation.messageId ? { replyTo: invocation.messageId } : undefined)
   }
 
-  private async storeDownload(invocation: Invocation, store: Phase3ApkStore, locale: LocaleCode) {
+  private async storeDownload(invocation: Invocation, store: ApkStore, locale: LocaleCode) {
     const token = invocation.argText.split(/\s+/)[0] || ''
     if (!token) throw new Error(t(locale, 'common.storeSelectFirst', { store }))
     const update = await progress(this.adapter, invocation.channelId, invocation.messageId, `${storeLabel(store)} · Android`, locale)
     await update(t(locale, store === 'apkmirror' ? 'common.storeResolvingMirror' : 'common.storeResolvingSigned'))
     const result = store === 'apkmirror'
-      ? await withProviderLease('apkmirror', () => downloadPhase3Apk(token))
-      : await downloadPhase3Apk(token)
+      ? await withProviderLease('apkmirror', () => downloadApk(token))
+      : await downloadApk(token)
     try {
       if (result.store !== store) throw new Error(t(locale, 'common.storeWrongToken'))
       if (result.size > this.adapter.capabilities.maxUploadBytes) {

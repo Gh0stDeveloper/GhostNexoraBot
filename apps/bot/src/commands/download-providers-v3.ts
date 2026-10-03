@@ -4,11 +4,11 @@ import { createDownloadProgress } from '../services/progress.js'
 import { recordSubbotDownload } from '../services/subbot-metrics.js'
 import { downloadVkVideo } from '../services/download-providers/vk.js'
 import {
-  downloadPhase3Apk,
+  downloadApk,
   searchApkMirror,
   searchApkPure,
-  type Phase3ApkItem,
-  type Phase3ApkStore,
+  type ApkItem,
+  type ApkStore,
 } from '../services/download-providers/apk-stores.js'
 import { withProviderLease } from '../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../services/download-providers/runtime.js'
@@ -24,11 +24,11 @@ function humanBytes(bytes: number) {
   return `${bytes} B`
 }
 
-function storeLabel(store: Phase3ApkStore) {
+function storeLabel(store: ApkStore) {
   return store === 'apkmirror' ? 'APKMirror' : 'APKPure'
 }
 
-async function showStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkStore) {
+async function showStore(ctx: LegacyCompatibleCommandContext, store: ApkStore) {
   const query = ctx.argText.trim()
   if (!query) throw new Error(`Uso: ${ctx.prefix}${store} <aplicación|package>`)
   const results = store === 'apkmirror' ? await searchApkMirror(query) : await searchApkPure(query)
@@ -38,7 +38,7 @@ async function showStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkSt
     title: `${storeLabel(store)} · resultados`,
     body: `Búsqueda: ${query.slice(0, 90)}\nFuente consultada directamente: ${storeLabel(store)}`,
     footer: 'Ghost Nexora Bot · V2 provider engine',
-    cards: results.map((item: Phase3ApkItem) => ({
+    cards: results.map((item: ApkItem) => ({
       title: item.name,
       body: [
         item.packageName ? `Package: ${item.packageName}` : undefined,
@@ -52,7 +52,7 @@ async function showStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkSt
   })
 }
 
-async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3ApkStore) {
+async function downloadStore(ctx: LegacyCompatibleCommandContext, store: ApkStore) {
   const token = ctx.args[0]?.trim()
   if (!token) throw new Error(`Selecciona primero una aplicación con ${ctx.prefix}${store} <búsqueda>.`)
   const progress = await createDownloadProgress(ctx, `${storeLabel(store)} · paquete Android`)
@@ -64,8 +64,8 @@ async function downloadStore(ctx: LegacyCompatibleCommandContext, store: Phase3A
   // misma IP. MainBot y subbots usan procesos separados, por lo que el lease se
   // coordina mediante almacenamiento global y cubre resolución + descarga.
   const result = store === 'apkmirror'
-    ? await withProviderLease('apkmirror', () => downloadPhase3Apk(token))
-    : await downloadPhase3Apk(token)
+    ? await withProviderLease('apkmirror', () => downloadApk(token))
+    : await downloadApk(token)
 
   if (result.store !== store) {
     await result.cleanup()

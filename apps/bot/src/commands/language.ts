@@ -54,7 +54,7 @@ async function status(ctx: LegacyCompatibleCommandContext) {
   ]
   if (ctx.isGroup) lines.push(`${ctx.t('language.status.group')}: *${chat ? `${localeName(chat, effective)} (${chat})` : ctx.t('language.status.inherit')}*`)
   lines.push(`${ctx.t('language.status.effective')}: *${localeName(effective, effective)} (${effective})*`)
-  lines.push('', translate(effective, 'language.usage.phase6', { command: `${ctx.prefix}language` }))
+  lines.push('', translate(effective, 'language.usage', { command: `${ctx.prefix}language` }))
   await ctx.reply(lines.join('\n'))
 }
 
@@ -132,7 +132,7 @@ async function languageCommand(ctx: LegacyCompatibleCommandContext) {
     return
   }
   if (!ctx.isGroup && isInherit(action)) return setUser(ctx, action)
-  throw new Error(ctx.t('language.usage.phase6', { command: `${ctx.prefix}language` }))
+  throw new Error(ctx.t('language.usage', { command: `${ctx.prefix}language` }))
 }
 
 export const languageCommands: BotCommand[] = [

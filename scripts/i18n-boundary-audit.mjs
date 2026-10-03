@@ -176,8 +176,8 @@ const report = {
   webCatalog: { esKeys: webEsKeys.length, enKeys: webEnKeys.length },
   webLiteralFindings,
   legacyLiteralDebt: legacyDebt,
-  note: 'Legacy WhatsApp inline literals remain measured separately. The blocking Phase 6 gate requires every supported user-facing dispatch boundary to be locale-aware and prevents new untranslated Web UI literals.',
+  note: 'Legacy WhatsApp inline literals remain measured separately. The blocking i18n gate requires every supported user-facing dispatch boundary to be locale-aware and prevents new untranslated Web UI literals.',
   checks,
 }
-await fs.writeFile(path.join(ROOT, 'v2-phase6-i18n-audit.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8')
-console.log(`[v2-phase6-i18n-audit] OK · webKeys=${webEsKeys.length} · legacyFindings=${legacyDebt.findings ?? 'n/a'}`)
+await fs.writeFile(path.join(ROOT, 'i18n-platform-audit.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+console.log(`[i18n-boundary-audit] OK · webKeys=${webEsKeys.length} · legacyFindings=${legacyDebt.findings ?? 'n/a'}`)

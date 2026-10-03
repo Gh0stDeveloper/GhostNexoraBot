@@ -13,7 +13,7 @@ import {
 } from '../../i18n/index.js'
 import { isSupportedLocale } from '../../i18n/types.js'
 import { downloadVkVideo } from '../../services/download-providers/vk.js'
-import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore } from '../../services/download-providers/apk-stores.js'
+import { downloadApk, searchApkMirror, searchApkPure, type ApkStore } from '../../services/download-providers/apk-stores.js'
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
@@ -45,7 +45,7 @@ function humanBytes(bytes: number) {
   return `${bytes} B`
 }
 
-function storeLabel(store: Phase3ApkStore) { return store === 'apkmirror' ? 'APKMirror' : 'APKPure' }
+function storeLabel(store: ApkStore) { return store === 'apkmirror' ? 'APKMirror' : 'APKPure' }
 function t(locale: LocaleCode, key: string, values: Record<string, string | number | boolean | null | undefined> = {}) { return translate(locale, key, values) }
 
 function parseLocale(raw?: string): LocaleCode | null {
@@ -144,7 +144,7 @@ export class TelegramCommandRouter {
         `${t(effective, 'language.status.bot')}: ${bot ? `${localeName(bot, effective)} (${bot})` : t(effective, 'language.status.none')}`,
         `${t(effective, 'language.status.effective')}: ${localeName(effective, effective)} (${effective})`,
         '',
-        t(effective, 'language.usage.phase6', { command: '/language' }),
+        t(effective, 'language.usage', { command: '/language' }),
       ].join('\n'), { replyTo: String(message.message_id) })
       return
     }
@@ -165,7 +165,7 @@ export class TelegramCommandRouter {
     await this.adapter.sendText(String(message.chat.id), t(nextLocale, key, { language: localeName(nextLocale, nextLocale) }), { replyTo: String(message.message_id) })
   }
 
-  private async store(chatId: string, messageId: string, store: Phase3ApkStore, query: string, locale: LocaleCode) {
+  private async store(chatId: string, messageId: string, store: ApkStore, query: string, locale: LocaleCode) {
     if (!query) throw new Error(t(locale, 'common.storeUsage', { store }))
     const results = store === 'apkmirror' ? await searchApkMirror(query) : await searchApkPure(query)
     const command = store === 'apkmirror' ? 'apkmirrordl' : 'apkpuredl'
@@ -184,13 +184,13 @@ export class TelegramCommandRouter {
     await this.adapter.sendUi(chatId, ui, { replyTo: messageId })
   }
 
-  private async storeDownload(chatId: string, messageId: string, store: Phase3ApkStore, token: string, locale: LocaleCode) {
+  private async storeDownload(chatId: string, messageId: string, store: ApkStore, token: string, locale: LocaleCode) {
     if (!token) throw new Error(t(locale, 'common.storeSelectFirst', { store }))
     const update = await progress(this.adapter, chatId, messageId, `${storeLabel(store)} · Android`, locale)
     await update(t(locale, store === 'apkmirror' ? 'common.storeResolvingMirror' : 'common.storeResolvingSigned'))
     const result = store === 'apkmirror'
-      ? await withProviderLease('apkmirror', () => downloadPhase3Apk(token))
-      : await downloadPhase3Apk(token)
+      ? await withProviderLease('apkmirror', () => downloadApk(token))
+      : await downloadApk(token)
     try {
       if (result.store !== store) throw new Error(t(locale, 'common.storeWrongToken'))
       if (result.size > this.adapter.capabilities.maxUploadBytes) {

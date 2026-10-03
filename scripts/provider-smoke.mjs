@@ -180,7 +180,7 @@ try {
   assert.match(envSource, /^VK_ACCESS_TOKEN=/m)
   assert.match(termuxSource, /downloadProgressV2Commands/, 'Termux Lite must inherit the same Providers provider command array')
 
-  console.log('[V2 PHASE 3] OK — X/VK/APKMirror/APKPure contracts, countdown-aware signed URLs, session cookies, persistent circuit failover, telemetry and shared command registration validated.')
+  console.log('[PROVIDERS] OK — X/VK/APKMirror/APKPure contracts, countdown-aware signed URLs, session cookies, persistent circuit failover, telemetry and shared command registration validated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

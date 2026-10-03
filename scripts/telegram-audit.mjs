@@ -13,7 +13,7 @@ const source = Object.fromEntries(await Promise.all(Object.entries(files).map(as
 
 assert.match(source.client, /getUpdates\(offset:/)
 assert.match(source.runtime, /client!\.getUpdates\(/)
-assert.doesNotMatch(source.bridge, /\.getUpdates\(/, 'legacy bridge must never consume updates after Phase 4')
+assert.doesNotMatch(source.bridge, /\.getUpdates\(/, 'legacy bridge must never consume updates after native runtime migration')
 assert.match(source.runtime, /update\.channel_post/)
 assert.match(source.runtime, /update\.callback_query/)
 assert.match(source.runtime, /Math\.max\(this\.offset, Number\(update\.update_id\) \+ 1\)/)
@@ -25,7 +25,7 @@ assert.match(source.adapter, /TELEGRAM_TEXT_LIMIT = 4096/)
 assert.match(source.router, /downloadVkVideo/)
 assert.match(source.router, /searchApkMirror/)
 assert.match(source.router, /searchApkPure/)
-assert.match(source.router, /downloadPhase3Apk/)
+assert.match(source.router, /downloadApk/)
 assert.match(source.bridge, /ingestTelegramChannelPost/)
 
 const botApiReferences = Object.entries(source).filter(([, text]) => text.includes('api.telegram.org'))
@@ -41,4 +41,4 @@ const index = await readFile('apps/bot/src/index.ts', 'utf8')
 assert.match(index, /startTelegramBridge\(\)/, 'legacy startup hook must remain for update compatibility')
 assert.match(source.bridge, /startTelegramPlatform/, 'legacy startup hook must delegate to native runtime')
 
-console.log('[V2 PHASE 4 AUDIT] OK — one getUpdates consumer, isolated Bot API boundary, webhook guard and shared providers verified.')
+console.log('[TELEGRAM AUDIT] OK — one getUpdates consumer, isolated Bot API boundary, webhook guard and shared providers verified.')

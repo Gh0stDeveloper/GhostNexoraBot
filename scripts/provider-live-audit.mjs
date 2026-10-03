@@ -4,7 +4,7 @@ import path from 'node:path'
 import { execa } from 'execa'
 
 const outputArg = process.argv.find((arg) => arg.startsWith('--output='))
-const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'artifacts/v2-phase3-live-provider-audit.json')
+const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'artifacts/provider-live-audit.json')
 const apk = await import('../apps/bot/dist/services/download-providers/apk-stores.js')
 
 const report = {
@@ -99,14 +99,14 @@ async function required(name, work) {
   try {
     const value = await retry(name, work)
     report.required[name] = { ok: true, ...value }
-    console.log(`[phase3-live] ${name}: OK`)
+    console.log(`[provider-live] ${name}: OK`)
     return value
   } catch (error) {
     const message = compactError(error)
     const externalBlock = /HTTP 403.*(?:anti-bot|cloudflare)|protecci[oó]n anti-bot/i.test(message)
     report.required[name] = { ok: false, externalBlock, error: message }
     requiredFailures.push(`${name}: ${message}`)
-    console.error(`[phase3-live] ${name}: FAIL · ${message}`)
+    console.error(`[provider-live] ${name}: FAIL · ${message}`)
     return undefined
   }
 }
@@ -115,10 +115,10 @@ async function advisory(name, work) {
   try {
     const value = await work()
     report.advisory[name] = { ok: true, ...value }
-    console.log(`[phase3-live] ${name}: OK`)
+    console.log(`[provider-live] ${name}: OK`)
   } catch (error) {
     report.advisory[name] = { ok: false, error: compactError(error) }
-    console.warn(`[phase3-live] ${name}: advisory failure · ${compactError(error)}`)
+    console.warn(`[provider-live] ${name}: advisory failure · ${compactError(error)}`)
   }
 }
 
@@ -169,7 +169,7 @@ await required('apkmirror-signed-download', async () => {
   let lastError
   for (const candidate of liveMirrorRows.slice(0, 2)) {
     try {
-      const direct = await apk.resolvePhase3ApkDirect({
+      const direct = await apk.resolveApkDirect({
         ...candidate,
         token: 'live-apkmirror',
         store: 'apkmirror',
@@ -203,7 +203,7 @@ await required('apkpure-online-downloader', async () => {
 
 await required('apkpure-signed-cdn', async () => {
   const detail = 'https://apkpure.net/es/apkpure/com.apkpure.aegon'
-  const direct = await apk.resolvePhase3ApkDirect({
+  const direct = await apk.resolveApkDirect({
     token: 'live-apkpure',
     store: 'apkpure',
     name: 'APKPure',
@@ -242,9 +242,9 @@ report.summary = {
 
 await mkdir(path.dirname(outputPath), { recursive: true })
 await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
-console.log(`[phase3-live] report=${path.relative(process.cwd(), outputPath)}`)
+console.log(`[provider-live] report=${path.relative(process.cwd(), outputPath)}`)
 
 if (requiredFailures.length) {
-  throw new Error(`[V2 PHASE 3 LIVE] ${requiredFailures.length} required check(s) failed: ${requiredFailures.join(' | ')}`)
+  throw new Error(`[PROVIDER LIVE] ${requiredFailures.length} required check(s) failed: ${requiredFailures.join(' | ')}`)
 }
-console.log('[V2 PHASE 3 LIVE] PASS — all current provider endpoints and signed download chains are reachable and structurally valid.')
+console.log('[PROVIDER LIVE] PASS — all current provider endpoints and signed download chains are reachable and structurally valid.')

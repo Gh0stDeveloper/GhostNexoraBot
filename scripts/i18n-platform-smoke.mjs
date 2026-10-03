@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-phase6-'))
+const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-i18n-'))
 process.env.DATA_DIR = temp
 process.env.SESSION_DIR = path.join(temp, 'session')
 process.env.ADMIN_WEB_TOKEN = 'phase6-i18n-smoke-token'
@@ -84,8 +84,8 @@ try {
 
   assert.equal(translate('es', 'common.download'), 'Descargar')
   assert.equal(translate('en', 'common.download'), 'Download')
-  assert.equal(translate('en', 'telegram.info.runtime').includes('Phase 6'), true)
-  assert.equal(translate('en', 'discord.info.runtime').includes('Phase 6'), true)
+  assert.equal(translate('en', 'telegram.info.runtime').includes('runtime'), true)
+  assert.equal(translate('en', 'discord.info.runtime').includes('runtime'), true)
 
   const language = commands.find((command) => command.name === 'language')
   assert.ok(language, 'WhatsApp language command must remain registered')
@@ -104,7 +104,7 @@ try {
   const interactiveSource = await readFile(new URL('../apps/bot/dist/platform/whatsapp/interactive.js', import.meta.url), 'utf8')
   assert.match(interactiveSource, /localizedSocketContext/, 'WhatsApp interactive renderer must inherit socket locale context')
 
-  console.log(`[v2-phase6-i18n] OK · catalogs=${parity.esKeys} · precedence=user>chat>bot>client>global · platform/instance isolation · WhatsApp context`)
+  console.log(`[i18n-platform] OK · catalogs=${parity.esKeys} · precedence=user>chat>bot>client>global · platform/instance isolation · WhatsApp context`)
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

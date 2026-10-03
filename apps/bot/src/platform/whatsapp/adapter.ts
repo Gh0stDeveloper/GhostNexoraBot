@@ -155,7 +155,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
   }
 
   /**
-   * Phase 1 wraps an already-connected Baileys socket. Lifecycle ownership stays
+   * This adapter wraps an already-connected Baileys socket. Lifecycle ownership stays
    * in the existing session runtime until the dedicated V2 runtime migration.
    */
   async start(): Promise<void> {}
