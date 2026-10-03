@@ -17,11 +17,10 @@ import { downloadPhase3Apk, searchApkMirror, searchApkPure, type Phase3ApkStore 
 import { withProviderLease } from '../../services/download-providers/lease.js'
 import { providerHealthSnapshot } from '../../services/download-providers/runtime.js'
 import { telegramBridgeStatus } from '../../services/telegram-bridge-v7.js'
-import { telegramCommandAliases } from '../../services/command-platform-support.js'
 import {
   commandMetadataForPlatformToken,
-  commandMetadataVisibleTo,
-  platformCommandMetadata,
+  platformCommandHelpCatalog,
+  resolvePlatformCommandToken,
 } from '../../services/command-metadata.js'
 import { commandRuntimeDecision, markCommandCooldown, resolveConfiguredCommandCategory } from '../../services/command-runtime-config.js'
 import { performanceAudit } from '../../services/performance-audit.js'
@@ -34,7 +33,6 @@ import type { TelegramAdapter } from './adapter.js'
 import { normalizeTelegramMessage } from './normalize.js'
 import type { TelegramMessage } from './types.js'
 
-const aliases = telegramCommandAliases
 const sharedCommandEngine = new SharedCommandEngine(sharedNeutralCommands, sharedNeutralCommands)
 
 function humanBytes(bytes: number) {
@@ -67,7 +65,7 @@ function parseCommand(text: string, botUsername?: string) {
   const head = (firstSpace < 0 ? clean : clean.slice(0, firstSpace)).slice(prefix.length)
   const [rawName, mention] = head.split('@', 2)
   if (mention && botUsername && mention.toLowerCase() !== botUsername.toLowerCase()) return undefined
-  const command = aliases.get(rawName.toLowerCase()) ?? sharedCommandEngine.resolve(rawName)?.name
+  const command = resolvePlatformCommandToken('telegram', rawName)
   if (!command) return { command: rawName.toLowerCase(), argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(), known: false }
   return { command, argText: firstSpace < 0 ? '' : clean.slice(firstSpace + 1).trim(), known: true }
 }
@@ -100,12 +98,14 @@ export class TelegramCommandRouter {
       isStaff: telegramStaff(userId),
       isGroup: message.chat.type !== 'private',
     }
-    const items = platformCommandMetadata('telegram')
-      .filter((metadata) => commandMetadataVisibleTo(metadata, visibility))
+    const items = platformCommandHelpCatalog('telegram', visibility)
       .map((metadata) => ({
         id: metadata.name,
-        title: `/${metadata.usage || metadata.name}`,
-        description: metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+        title: `/${metadata.usage}`,
+        description: [
+          metadata.descriptionKey ? translate(locale, metadata.descriptionKey) : metadata.description,
+          metadata.aliases.length ? `Aliases: ${metadata.aliases.map((alias) => `/${alias}`).join(', ')}` : '',
+        ].filter(Boolean).join('\n'),
         action: { kind: 'command' as const, label: metadata.name, value: metadata.name },
       }))
     const ui: NormalizedUi = {
