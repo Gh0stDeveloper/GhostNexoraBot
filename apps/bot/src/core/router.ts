@@ -18,6 +18,7 @@ import { resolveChatLocale, translate, type LocaleCode } from '../i18n/index.js'
 import { SharedCommandEngine } from './shared-command-engine.js'
 import { createRequestContext } from './request-context.js'
 import { sharedNeutralCommands } from '../commands/shared-neutral.js'
+import { executionLaneForCommand, executionQueues } from '../services/execution-queues.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -140,9 +141,11 @@ export class CommandRouter {
     performanceAudit.recordStage('03', performance.now() - stateStarted)
 
     const currentReplyTo = normalizedMessage.messageId || undefined
-    const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
+    const delivery = { userId: sender, locale }
+    const withCurrentReply = <T extends { replyTo?: string; delivery?: unknown }>(options?: T) => ({
       ...options,
       replyTo: options?.replyTo ?? currentReplyTo,
+      delivery: options?.delivery ?? delivery,
     })
     const sendText: LegacyCompatibleCommandContext['sendText'] = (value, options) =>
       adapter.sendText(chatId, value, withCurrentReply(options))
@@ -155,7 +158,7 @@ export class CommandRouter {
     }
     const editMessage: LegacyCompatibleCommandContext['editMessage'] = async (messageId, value) => {
       if (!adapter.editMessage) throw new Error(`La plataforma ${adapter.id} no soporta edición de mensajes.`)
-      await adapter.editMessage(chatId, messageId, value)
+      await adapter.editMessage(chatId, messageId, value, delivery)
     }
     const reply = async (replyText: string) => {
       const sent = await sendText(replyText)
@@ -164,7 +167,7 @@ export class CommandRouter {
     const react = async (emoji: string) => {
       const messageId = normalizedMessage.messageId
       if (!messageId || !adapter.react) return undefined
-      return adapter.react(chatId, messageId, emoji)
+      return adapter.react(chatId, messageId, emoji, delivery)
     }
 
     let senderIsGroupAdmin = false
@@ -195,6 +198,7 @@ export class CommandRouter {
         await adapter.sendText(chatId, messageText, {
           replyTo: message.key.id ?? undefined,
           mentions: [result.proposerJid, result.targetJid],
+          delivery,
         })
         await react(result.accepted ? '💞' : '💔').catch(() => undefined)
         return true
@@ -381,12 +385,17 @@ export class CommandRouter {
         markCommandCooldown('whatsapp', command.name, sender)
       }
       try {
-        await this.engine.execute(command, context, {
+        await executionQueues.run({
+          chatId,
+          userId: sender,
+          isGroup,
+          lane: executionLaneForCommand(command),
+        }, () => this.engine.execute(command, context, {
           allowLegacy: true,
           enforceMetadata: false,
-          isGroupAdmin: requestContext.permissions.isGroupAdmin,
-          botIsGroupAdmin: requestContext.permissions.isBotGroupAdmin,
-        })
+          isGroupAdmin: requestContext!.permissions.isGroupAdmin,
+          botIsGroupAdmin: requestContext!.permissions.isBotGroupAdmin,
+        }))
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
         performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
