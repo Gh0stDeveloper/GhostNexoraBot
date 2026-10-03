@@ -68,6 +68,9 @@ jobs:
       - name: Phase C2-C6 Discord and Telegram parity smoke
         run: node scripts/phase-c-parity-smoke.mjs
 
+      - name: Phase D1-D6 WhatsApp runtime and delivery smoke
+        run: node scripts/phase-d-runtime-delivery-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 
