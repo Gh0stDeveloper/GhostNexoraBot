@@ -126,16 +126,18 @@ export class TelegramRuntime {
   private async loop() {
     while (this.running) {
       try {
-        const pollStarted = performance.now()
         const updates = await this.client!.getUpdates(this.offset, telegramConfig.pollTimeoutSeconds, (telegramConfig.pollTimeoutSeconds + 10) * 1000)
+        let lastProcessingLatencyMs = 0
         for (const update of updates) {
           if (!this.running) break
           this.offset = Math.max(this.offset, Number(update.update_id) + 1)
+          const processingStarted = performance.now()
           try {
             await this.processUpdate(update)
           } catch (error) {
             logger.warn({ error, updateId: update.update_id }, 'Telegram update failed')
           }
+          lastProcessingLatencyMs = performance.now() - processingStarted
           this.updatesProcessed += 1
           this.lastUpdateAt = new Date().toISOString()
         }
@@ -143,7 +145,7 @@ export class TelegramRuntime {
         this.lastError = undefined
         updatePlatformRuntime('telegram', {
           state: 'running',
-          latencyMs: performance.now() - pollStarted,
+          latencyMs: lastProcessingLatencyMs,
           eventDelta: updates.length,
           reconnects: this.reconnects,
           lastEventAt: updates.length ? Date.now() : (this.lastUpdateAt ? Date.parse(this.lastUpdateAt) : Date.now()),
