@@ -42,6 +42,7 @@ import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
 import { startBrowserProxy } from './services/browser-proxy.js'
+import { executionQueues } from './services/execution-queues.js'
 
 installAtomicWalletBridge()
 
@@ -256,6 +257,8 @@ async function routeMessage(
 
   const text = getMessageText(message).trim()
   const pushName = (message as { pushName?: string }).pushName || 'Usuario'
+  const queueUserId = resolveStoredIdentity(getSender(message))
+  const queueScope = { chatId, userId: queueUserId, isGroup: chatId.endsWith('@g.us'), lane: 'ai' as const }
 
   if (!message.key.fromMe) {
     observeGroupActivity(
@@ -299,27 +302,29 @@ async function routeMessage(
     if (state.requireMention && chatId.endsWith('@g.us')) {
       // No responder audios de grupo sin mención cuando esa política está activa.
     } else {
-      const stopTyping = startTypingIndicator(transport, chatId)
-      try {
-        if (message.key.id) await transport.react(chatId, message.key.id, '🎧').catch(() => undefined)
-        const transcript = await transcribeWhatsAppAudio(message, false)
-        if (transcript.trim().length >= 2) {
-          llmFreeChat.commitRespond(chatId)
-          const response = await llmFreeChat.respond(transcript, chatId, pushName)
-          if (response) {
-            await sendAssistantReply(socket, chatId, response, {
-              userPrompt: transcript,
-              title: 'Ghost Nexora',
-              quoted: message,
-            })
-            await llmFreeChat.maybeReact(socket, message, transcript, response)
+      await executionQueues.run(queueScope, async () => {
+        const stopTyping = startTypingIndicator(transport, chatId)
+        try {
+          if (message.key.id) await transport.react(chatId, message.key.id, '🎧').catch(() => undefined)
+          const transcript = await transcribeWhatsAppAudio(message, false)
+          if (transcript.trim().length >= 2) {
+            llmFreeChat.commitRespond(chatId)
+            const response = await llmFreeChat.respond(transcript, chatId, pushName)
+            if (response) {
+              await sendAssistantReply(socket, chatId, response, {
+                userPrompt: transcript,
+                title: 'Ghost Nexora',
+                quoted: message,
+              })
+              await llmFreeChat.maybeReact(socket, message, transcript, response)
+            }
           }
+        } catch (error) {
+          logger.warn({ error, chatId }, 'audio free-chat failed')
+        } finally {
+          stopTyping()
         }
-      } catch (error) {
-        logger.warn({ error, chatId }, 'audio free-chat failed')
-      } finally {
-        stopTyping()
-      }
+      })
       return
     }
   }
@@ -328,22 +333,24 @@ async function routeMessage(
     config.ollamaEnabled &&
     llmFreeChat.shouldHandle({ chatId, text, prefix: settings.prefix, message, socket })
   ) {
-    const stopTyping = startTypingIndicator(transport, chatId)
-    try {
-      const response = await llmFreeChat.respond(text, chatId, pushName)
-      if (!response) return
-      llmFreeChat.commitRespond(chatId)
-      await sendAssistantReply(socket, chatId, response, {
-        userPrompt: text,
-        title: 'Ghost Nexora',
-        quoted: message,
-      })
-      await llmFreeChat.maybeReact(socket, message, text, response)
-    } catch (error) {
-      logger.warn({ error, chatId }, 'llm free-chat response failed')
-    } finally {
-      stopTyping()
-    }
+    await executionQueues.run(queueScope, async () => {
+      const stopTyping = startTypingIndicator(transport, chatId)
+      try {
+        const response = await llmFreeChat.respond(text, chatId, pushName)
+        if (!response) return
+        llmFreeChat.commitRespond(chatId)
+        await sendAssistantReply(socket, chatId, response, {
+          userPrompt: text,
+          title: 'Ghost Nexora',
+          quoted: message,
+        })
+        await llmFreeChat.maybeReact(socket, message, text, response)
+      } catch (error) {
+        logger.warn({ error, chatId }, 'llm free-chat response failed')
+      } finally {
+        stopTyping()
+      }
+    })
     return
   }
 
@@ -354,20 +361,22 @@ async function routeMessage(
     autoChat.isEnabled(chatId) &&
     autoChat.canRespond(chatId)
   ) {
-    const stopTyping = startTypingIndicator(transport, chatId)
-    try {
-      const response = await autoChat.respond(chatId, text)
-      if (!response) return
-      await sendAssistantReply(socket, chatId, response, {
-        userPrompt: text,
-        title: 'Ghost Nexora · Chat',
-        quoted: message,
-      })
-    } catch (error) {
-      logger.warn({ error, chatId }, 'auto-chat response failed')
-    } finally {
-      stopTyping()
-    }
+    await executionQueues.run(queueScope, async () => {
+      const stopTyping = startTypingIndicator(transport, chatId)
+      try {
+        const response = await autoChat.respond(chatId, text)
+        if (!response) return
+        await sendAssistantReply(socket, chatId, response, {
+          userPrompt: text,
+          title: 'Ghost Nexora · Chat',
+          quoted: message,
+        })
+      } catch (error) {
+        logger.warn({ error, chatId }, 'auto-chat response failed')
+      } finally {
+        stopTyping()
+      }
+    })
     return
   }
 
