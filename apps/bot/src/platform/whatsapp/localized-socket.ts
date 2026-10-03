@@ -1,6 +1,7 @@
 import type { WASocket } from 'baileys'
 import type { NexoraSocket } from '../../types.js'
 import { localizeLegacyText, resolveChatLocale, type LocaleCode } from '../../i18n/index.js'
+import { deliverWithOutbox } from '../../services/delivery-outbox.js'
 
 const LOCALIZED_KEYS = new Set([
   'text',
@@ -13,7 +14,7 @@ const LOCALIZED_KEYS = new Set([
 ])
 
 export const LOCALIZED_SOCKET_CONTEXT = Symbol.for('ghostnexora.localizedSocketContext')
-export type LocalizedSocketContext = { locale: LocaleCode; chatId?: string; botInstanceId?: string }
+export type LocalizedSocketContext = { locale: LocaleCode; chatId?: string; botInstanceId?: string; correlationId?: string }
 
 function isBinary(value: unknown) {
   return Buffer.isBuffer(value) || value instanceof Uint8Array
@@ -45,12 +46,13 @@ export function localizedSocketContext(socket: WASocket): LocalizedSocketContext
 export function createLocalizedSocket(
   socket: WASocket,
   fallbackLocale: LocaleCode,
-  options: { contextChatId?: string; botInstanceId?: string } = {},
+  options: { contextChatId?: string; botInstanceId?: string; useOutbox?: boolean; correlationId?: string } = {},
 ): NexoraSocket {
   const context: LocalizedSocketContext = {
     locale: fallbackLocale,
     chatId: options.contextChatId,
     botInstanceId: options.botInstanceId,
+    correlationId: options.correlationId,
   }
   return new Proxy(socket as NexoraSocket, {
     get(target, property, receiver) {
@@ -61,8 +63,26 @@ export function createLocalizedSocket(
           if (!options.contextChatId || jid !== options.contextChatId) {
             try { locale = resolveChatLocale(jid, undefined, options.botInstanceId ?? 'main') } catch { /* keep context fallback */ }
           }
-          return target.sendMessage(jid, localizeValue(content, locale) as never, sendOptions as never)
+          const send = () => target.sendMessage(jid, localizeValue(content, locale) as never, sendOptions as never)
+          if (!options.useOutbox) return send()
+          return deliverWithOutbox({
+            platform: 'whatsapp',
+            chatId: jid,
+            kind: 'legacy-message',
+            label: 'whatsapp_legacy_send',
+            correlationId: options.correlationId,
+          }, send)
         }
+      }
+      if (property === 'relayMessage' && options.useOutbox) {
+        return async (jid: string, content: unknown, relayOptions?: unknown) =>
+          deliverWithOutbox({
+            platform: 'whatsapp',
+            chatId: jid,
+            kind: 'legacy-relay',
+            label: 'whatsapp_legacy_relay',
+            correlationId: options.correlationId,
+          }, () => target.relayMessage(jid, content as never, relayOptions as never))
       }
       const value = Reflect.get(target, property, receiver)
       return typeof value === 'function' ? value.bind(target) : value
