@@ -8,8 +8,8 @@ on:
       - 'scripts/whatsapp-adapter-v2-smoke.mjs'
       - 'scripts/phase-d-*.mjs'
       - 'scripts/phase-f-*.mjs'
-      - 'scripts/v2-phase1-command-regression.mjs'
-      - 'scripts/v2-phase3-command-regression.mjs'
+      - 'scripts/command-regression.mjs'
+      - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'scripts/v2-inventory-worker.mjs'
       - 'docs/v2/**'
@@ -68,7 +68,7 @@ jobs:
         run: node scripts/v2-baseline-report.mjs --output=v2-phase1-inventory.json
 
       - name: Verify frozen V1 surface plus approved Phase 3 delta
-        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase1-inventory.json
+        run: node scripts/command-surface-regression.mjs --input=v2-phase1-inventory.json
 
       - name: Upload Phase 1 inventory
         uses: actions/upload-artifact@v4

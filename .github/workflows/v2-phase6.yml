@@ -13,7 +13,7 @@ on:
       - 'scripts/phase-f-*.mjs'
       - 'scripts/v2-phase5-discord-*.mjs'
       - 'scripts/v2-phase4-telegram-*.mjs'
-      - 'scripts/v2-phase3-command-regression.mjs'
+      - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'package.json'
       - 'docs/v2/**'
@@ -89,7 +89,7 @@ jobs:
         run: node scripts/v2-baseline-report.mjs --output=v2-phase6-inventory.json
 
       - name: Verify WhatsApp command surface remains compatible
-        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase6-inventory.json
+        run: node scripts/command-surface-regression.mjs --input=v2-phase6-inventory.json
 
       - name: Upload Phase 6 i18n evidence
         if: always()

@@ -17,7 +17,7 @@ on:
       - 'scripts/update.sh'
       - 'scripts/v2-phase7-*.mjs'
       - 'scripts/v2-phase6-*.mjs'
-      - 'scripts/v2-phase3-command-regression.mjs'
+      - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'package.json'
       - 'docs/v2/**'
@@ -69,7 +69,7 @@ jobs:
       - name: Generate command inventory
         run: node scripts/v2-baseline-report.mjs --output=v2-phase7-inventory.json
       - name: Preserve WhatsApp command surface
-        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase7-inventory.json
+        run: node scripts/command-surface-regression.mjs --input=v2-phase7-inventory.json
       - name: Upload Phase 7 evidence
         if: always()
         uses: actions/upload-artifact@v4

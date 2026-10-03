@@ -184,10 +184,10 @@ jobs:
         run: node scripts/i18n-user-facing-audit.mjs
 
       - name: V2 Phase 6 locale isolation smoke
-        run: node scripts/v2-phase6-i18n-smoke.mjs
+        run: node scripts/i18n-platform-smoke.mjs
 
       - name: V2 Phase 6 i18n boundary audit
-        run: node scripts/v2-phase6-i18n-boundary-audit.mjs
+        run: node scripts/i18n-boundary-audit.mjs
 
       - name: Upload i18n audit
         if: always()
@@ -212,8 +212,8 @@ jobs:
             apps/web/lib/i18n.ts
             package.json
             scripts/i18n-smoke.mjs
-            scripts/v2-phase6-i18n-smoke.mjs
-            scripts/v2-phase6-i18n-boundary-audit.mjs
+            scripts/i18n-platform-smoke.mjs
+            scripts/i18n-boundary-audit.mjs
             scripts/private-chat-policy-smoke.mjs
             scripts/router-category-policy-smoke.mjs
             scripts/group-inactivity-smoke.mjs

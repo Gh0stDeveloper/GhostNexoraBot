@@ -5,12 +5,12 @@ on:
     paths:
       - 'apps/bot/**'
       - 'packages/**'
-      - 'scripts/v2-phase3-provider-smoke.mjs'
-      - 'scripts/v2-phase3-provider-http-smoke.mjs'
-      - 'scripts/v2-phase3-provider-lease-smoke.mjs'
-      - 'scripts/v2-phase3-live-provider-audit.mjs'
-      - 'scripts/v2-phase3-live-provider-gate.mjs'
-      - 'scripts/v2-phase3-command-regression.mjs'
+      - 'scripts/provider-smoke.mjs'
+      - 'scripts/provider-http-smoke.mjs'
+      - 'scripts/provider-lease-smoke.mjs'
+      - 'scripts/provider-live-audit.mjs'
+      - 'scripts/provider-live-gate.mjs'
+      - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'docs/v2/**'
       - '.env.example'
@@ -72,11 +72,11 @@ jobs:
         run: node scripts/v2-baseline-report.mjs --output=v2-phase3-inventory.json
 
       - name: Verify frozen V1 surface plus approved Phase 3 delta
-        run: node scripts/v2-phase3-command-regression.mjs --input=v2-phase3-inventory.json
+        run: node scripts/command-surface-regression.mjs --input=v2-phase3-inventory.json
 
       - name: Live endpoint and signed-download contract gate
         run: >-
-          node scripts/v2-phase3-live-provider-gate.mjs
+          node scripts/provider-live-gate.mjs
           --allow-known-antibot-blocks
           --output=artifacts/v2-phase3-live-provider-audit.json
           --gate-output=artifacts/v2-phase3-live-provider-gate.json

@@ -5,8 +5,8 @@ import { messages as esDefault, legacyReplacements as esLegacy } from './locales
 import { messages as enDefault, legacyReplacements as enLegacy } from './locales/en/default.js'
 import { messages as esSystem } from './locales/es/system.js'
 import { messages as enSystem } from './locales/en/system.js'
-import { messages as esPhase6 } from './locales/es/phase6.js'
-import { messages as enPhase6 } from './locales/en/phase6.js'
+import { messages as esExtended } from './locales/es/phase6.js'
+import { messages as enExtended } from './locales/en/phase6.js'
 import { messages as esPlatform } from './locales/es/platform.js'
 import { messages as enPlatform } from './locales/en/platform.js'
 import { localePreferences, type LocalePreferenceScope } from './preferences.js'
@@ -19,8 +19,8 @@ import {
 } from './types.js'
 
 export const catalogs = {
-  es: { ...esDefault, ...esSystem, ...esPhase6, ...esPlatform },
-  en: { ...enDefault, ...enSystem, ...enPhase6, ...enPlatform },
+  es: { ...esDefault, ...esSystem, ...esExtended, ...esPlatform },
+  en: { ...enDefault, ...enSystem, ...enExtended, ...enPlatform },
 } as const
 const replacements = { es: esLegacy, en: enLegacy } as const
 
@@ -66,7 +66,7 @@ function storedLocale(
 }
 
 /**
- * Phase 6 locale policy. Explicit preferences always win over inferred locale:
+ * Locale preference policy. Explicit preferences always win over inferred locale:
  * user -> chat -> legacy WhatsApp group -> bot/platform -> client hint -> global -> es.
  */
 export function resolvePlatformLocale(context: PlatformLocaleContext): LocaleCode {
