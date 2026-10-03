@@ -44,9 +44,9 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
 | Fase B | Núcleo multiplataforma compartido | TERMINADO |
 | Fase C | Paridad Discord y Telegram | TERMINADO |
-| Fase D | Runtime y entrega WhatsApp | POSPUESTO |
+| Fase D | Runtime y entrega WhatsApp | TERMINADO |
 
-Orden actualizado: Fases A, B, C y E quedaron terminadas. Fase D continúa pospuesta y Fase F permanece pendiente.
+Orden actualizado: Fases A, B, C, D y E quedaron terminadas. Fase F permanece pendiente.
 
 ---
 
@@ -582,7 +582,7 @@ Evolucionar el control actual de 429 para considerar:
 
 # FASE D — Runtime y entrega WhatsApp
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -590,7 +590,7 @@ Mejorar concurrencia, estabilidad y tolerancia a cambios o fallos de WhatsApp y 
 
 ## D1. Eliminar activeUserId mutable del WhatsAppAdapter
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Actualmente el adapter mantiene un usuario activo para resolver locale.
 
@@ -602,9 +602,16 @@ Riesgo conceptual:
 
 Pasar el usuario y locale explícitamente en cada contexto de envío.
 
+Implementado:
+
+- `DeliveryContext` explícito en el contrato de plataforma;
+- `userId`, `locale` y `correlationId` propagados desde cada request;
+- `activeUserId` eliminado del adapter;
+- edición, reacciones y envíos usan el contexto correspondiente a la petición.
+
 ## D2. Caché de mensajes por chat con TTL y LRU
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Cambiar claves simples por chatId:messageId.
 
@@ -620,9 +627,11 @@ Objetivo inicial sugerido:
 - 500 a 1000 referencias;
 - TTL de 10 a 20 minutos.
 
+Implementado con 1000 referencias por instancia, TTL de 15 minutos, clave `chatId:messageId`, acceso LRU y limpieza automática.
+
 ## D3. Colas de ejecución
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Introducir límites de concurrencia.
 
@@ -636,9 +645,11 @@ Ejemplo inicial:
 
 Los valores finales se ajustarán con métricas reales.
 
+Implementado con límites iniciales global 20, grupo 3, usuario 2, downloads 4, IA 3 y subbots 3. Los comandos y los flujos de IA fuera de comandos pasan por estas colas.
+
 ## D4. Outbox fiable
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Pipeline objetivo:
 
@@ -663,9 +674,11 @@ Aplicar especialmente a:
 - mensajes costosos;
 - operaciones de subbots.
 
+Implementado con tabla persistente `delivery_outbox`, estados pending/sending/sent/retry/failed, correlation ID y backoff 1 s → 3 s → 10 s. Texto, media, UI y edición de WhatsApp usan el outbox; broadcasts del comando, Web y controles de grupo también pasan por el adapter.
+
 ## D5. Fallback automático de UI
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Cuando una interfaz avanzada no pueda enviarse:
 
@@ -673,9 +686,11 @@ Carousel → Card → List → Plain text.
 
 Esto evita que un cambio de WhatsApp o Baileys deje inutilizable un comando completo.
 
+Implementado mediante una cadena automática y determinista `Carousel → Card → List → Plain text`, conservando los fallbacks internos existentes de Native Flow.
+
 ## D6. MediaPipeline común
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Crear una capa compartida para:
 
@@ -687,6 +702,8 @@ Crear una capa compartida para:
 - cleanup;
 - retries;
 - transcodificación cuando aplique.
+
+Implementado en `media-pipeline.ts` con límites, streaming, materialización temporal segura, MIME/nombre, cleanup, retries y hook opcional de transcodificación. WhatsApp, Discord y Telegram consumen esta capa común.
 
 ---
 
@@ -1596,7 +1613,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase B4 | Capability-aware command execution | TERMINADO | PR #85 |
 | 2026-09-19 | Fase B5 | RequestContext inmutable y aislamiento concurrente | TERMINADO | PR #86 |
 | 2026-10-02 | Fase C | Paridad Discord y Telegram · C1–C6 completadas | TERMINADO | PR #105 |
-| — | Fase D | Runtime WhatsApp | PENDIENTE | — |
+| 2026-10-02 | Fase D | Runtime y entrega WhatsApp · D1–D6 completadas | TERMINADO | PR #105 |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
 | 2026-09-19 | Fase E7 | Vista detallada y controles seguros de grupos | TERMINADO | 690415c9a418681173345d0e1ebe2013b3ae3237 |
@@ -1613,16 +1630,15 @@ Estas tareas están incluidas dentro de las fases anteriores:
 
 # Próximo paso
 
-**FASE C está TERMINADA con C1–C6 completadas.**
+**FASE D está TERMINADA con D1–D6 completadas.**
 
-Las fases todavía pendientes del roadmap son:
+La fase todavía pendiente del roadmap es:
 
-- **FASE D · Runtime y entrega WhatsApp** — D1 a D6;
 - **FASE F · Observabilidad, métricas y operación** — F1 a F6.
 
-El siguiente bloque técnico es **D1 · Eliminar activeUserId mutable del WhatsAppAdapter** cuando se decida retomar la Fase D.
+El siguiente bloque técnico es **F1** cuando se decida retomar la Fase F.
 
-No iniciar D o F automáticamente sin indicación del usuario.
+No iniciar F automáticamente sin indicación del usuario.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
@@ -1642,4 +1658,4 @@ Resultados principales de Fase A:
 - panel privado de seguridad;
 - CI, typecheck, build y smoke de Fase A en verde.
 
-Las Fases B y C ya quedaron validadas y registradas como TERMINADO; D y F continúan pendientes.
+Las Fases B, C y D ya quedaron implementadas y registradas como TERMINADO en la rama de trabajo; F continúa pendiente.
