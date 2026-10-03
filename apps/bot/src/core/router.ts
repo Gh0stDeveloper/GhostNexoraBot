@@ -20,6 +20,8 @@ import { SharedCommandEngine } from './shared-command-engine.js'
 import { createRequestContext } from './request-context.js'
 import { sharedNeutralCommands } from '../commands/shared-neutral.js'
 import { executionLaneForCommand, executionQueues } from '../services/execution-queues.js'
+import { withTraceContext } from '../services/trace-context.js'
+import { recordGroupedError } from '../services/error-groups.js'
 
 function normalizeJid(value?: string | null) {
   if (!value) return ''
@@ -400,12 +402,17 @@ export class CommandRouter {
           lane: executionLaneForCommand(command),
           platform: 'whatsapp',
           command: command.name,
+        }, () => withTraceContext({
+          correlationId: requestContext!.correlationId,
+          platform: 'whatsapp',
+          botInstanceId,
+          command: command.name,
         }, () => this.engine.execute(command, context, {
           allowLegacy: true,
           enforceMetadata: false,
           isGroupAdmin: requestContext!.permissions.isGroupAdmin,
           botIsGroupAdmin: requestContext!.permissions.isBotGroupAdmin,
-        }))
+        })))
         const durationMs = performance.now() - executionStarted
         performanceAudit.recordStage('06', durationMs)
         performanceAudit.recordCommand(command, durationMs, true, process.memoryUsage().heapUsed - heapBefore, undefined, { userJid: sender, displayName: pushName })
@@ -420,6 +427,11 @@ export class CommandRouter {
       await react('✅').catch(() => undefined)
       return true
     } catch (error) {
+      recordGroupedError(error, {
+        platform: 'whatsapp',
+        command: command.name,
+        correlationId: requestContext?.correlationId ?? correlationId,
+      })
       logger.error({
         error,
         command: command.name,
