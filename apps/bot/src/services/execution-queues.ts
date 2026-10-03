@@ -1,3 +1,5 @@
+import { recordQueueObservation } from './ops-observability-metrics.js'
+
 export type ExecutionLane = 'default' | 'downloads' | 'ai' | 'subbots'
 
 export type ExecutionQueueLimits = {
@@ -111,18 +113,62 @@ export class ExecutionQueueManager {
     userId: string
     isGroup: boolean
     lane?: ExecutionLane
+    platform?: string
+    command?: string
+    provider?: string
     timeoutMs?: number
   }, task: () => Promise<T>): Promise<T> {
+    const laneName = input.lane ?? 'default'
     const semaphores: Semaphore[] = [this.global]
     if (input.isGroup) semaphores.push(this.keyed(this.groups, input.chatId, this.limits.perGroup))
     semaphores.push(this.keyed(this.users, input.userId, this.limits.perUser))
-    const lane = this.laneSemaphore(input.lane ?? 'default')
+    const lane = this.laneSemaphore(laneName)
     if (lane) semaphores.push(lane)
 
+    const saturated = semaphores.some((semaphore) => {
+      const stats = semaphore.stats()
+      return stats.active >= stats.limit || stats.waiting > 0
+    })
+    const queuedAt = performance.now()
     const releases: Array<() => void> = []
+    let recorded = false
     try {
       for (const semaphore of semaphores) releases.push(await semaphore.acquire(input.timeoutMs))
-      return await task()
+      const waitMs = performance.now() - queuedAt
+      const executionStarted = performance.now()
+      let failed = false
+      try {
+        return await task()
+      } catch (error) {
+        failed = true
+        throw error
+      } finally {
+        recorded = true
+        recordQueueObservation({
+          platform: input.platform,
+          command: input.command,
+          provider: input.provider,
+          lane: laneName,
+          waitMs,
+          executionMs: performance.now() - executionStarted,
+          failed,
+          saturated,
+        })
+      }
+    } catch (error) {
+      if (!recorded) {
+        recordQueueObservation({
+          platform: input.platform,
+          command: input.command,
+          provider: input.provider,
+          lane: laneName,
+          waitMs: performance.now() - queuedAt,
+          executionMs: 0,
+          failed: true,
+          saturated: true,
+        })
+      }
+      throw error
     } finally {
       for (const release of releases.reverse()) release()
       this.prune()
