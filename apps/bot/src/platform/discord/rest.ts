@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { Readable } from 'node:stream'
+import { recordAdapterRetry } from '../../services/ops-observability-metrics.js'
+import { recordPlatformRuntimeEvent } from '../../services/platform-runtime-registry.js'
 import type {
   DiscordApplicationCommandDefinition,
   DiscordCreateMessageBody,
@@ -210,6 +212,12 @@ export class DiscordRestClient {
 
     if (response.status === 429) {
       this.rememberRateLimit(method, path, response, payload)
+      recordAdapterRetry('discord', { rateLimited: true })
+      recordPlatformRuntimeEvent('discord', {
+        state: 'running',
+        rateLimited: true,
+        details: { route: routeTemplate(method, path) },
+      })
       const headerSeconds = Number(response.headers.get('retry-after') || 0)
       const bodySeconds = Number(payload?.retry_after || 0)
       const retryAfter = Math.max(headerSeconds, bodySeconds)
