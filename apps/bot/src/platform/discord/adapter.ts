@@ -9,7 +9,7 @@ import {
   type SentMessage,
   type UiAction,
 } from '@ghostnexora/platform-contracts'
-import { outgoingMediaStreamSource } from '../../services/outgoing-media-stream.js'
+import { withPreparedMedia } from '../../services/media-pipeline.js'
 import { persistDiscordComponentRef, resolveDiscordComponentRef } from './component-store.js'
 import { DiscordRestClient } from './rest.js'
 import type { DiscordActionRow, DiscordCreateMessageBody, DiscordEmbed, DiscordMessage } from './types.js'
@@ -223,14 +223,20 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   async sendMedia(chatId: string, media: OutgoingMedia, options?: SendOptions): Promise<SentMessage> {
-    const source = await outgoingMediaStreamSource(media, MAX_UPLOAD_BYTES, 'Discord')
-    const fileName = media.fileName || fallbackFileName(media)
-    const message = await this.client.createMessageWithFileStream(chatId, {
-      ...baseBody(options),
-      ...(media.caption ? { content: trim(media.caption, DISCORD_TEXT_LIMIT) } : {}),
-      attachments: [{ id: 0, filename: fileName }],
-    }, source.open, fileName, media.mimeType, MAX_UPLOAD_BYTES)
-    return sent(message)
+    return withPreparedMedia(media, {
+      platform: 'Discord',
+      maxBytes: MAX_UPLOAD_BYTES,
+      mode: 'stream',
+      retries: 2,
+    }, async (prepared) => {
+      const fileName = prepared.fileName || fallbackFileName(media)
+      const message = await this.client.createMessageWithFileStream(chatId, {
+        ...baseBody(options),
+        ...(media.caption ? { content: trim(media.caption, DISCORD_TEXT_LIMIT) } : {}),
+        attachments: [{ id: 0, filename: fileName }],
+      }, prepared.openStream, fileName, prepared.mimeType, MAX_UPLOAD_BYTES)
+      return sent(message)
+    })
   }
 
   async sendUi(chatId: string, ui: NormalizedUi, options?: SendOptions): Promise<SentMessage> {
