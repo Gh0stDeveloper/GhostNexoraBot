@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 
-const token = 'phase7-manager-agent-test-token-123456'
+const token = 'apps-manager-agent-test-token-123456'
 const port = 39002 + Math.floor(Math.random() * 500)
 const botPort = port + 1000
 const dataDir = await mkdtemp(path.join(os.tmpdir(), 'ghost-nexora-manager-agent-'))
@@ -74,7 +74,7 @@ try {
   const unknown = await api('/v2/not-real')
   assert.equal(unknown.status, 503, 'unknown /v2 route is proxied only to the bot and must fail closed while bot is offline')
 
-  console.log('[V2 PHASE 7 MANAGER] OK — authenticated loopback agent reports offline state and queues only the fixed updater signal.')
+  console.log('[OFFICIAL APPS MANAGER] OK — authenticated loopback agent reports offline state and queues only the fixed updater signal.')
 } finally {
   child.kill('SIGTERM')
   await new Promise((resolve) => {

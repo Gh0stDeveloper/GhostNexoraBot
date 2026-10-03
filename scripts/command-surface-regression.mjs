@@ -18,7 +18,7 @@ const PROVIDER_COMMANDS = new Map([
 ])
 
 // This command already exists on the PR base (main, PR #67). The historical
-// Phase 1 fingerprint predates it, so it must be accounted for explicitly
+// command baseline fingerprint predates it, so it must be accounted for explicitly
 // rather than weakening or regenerating the frozen V1 baseline.
 const PREEXISTING_MAIN_COMMANDS = new Map([
   ['game', ['games']],

@@ -89,4 +89,4 @@ for (const variable of [
   'DISCORD_PLATFORM_STATE_FILE=',
 ]) assert.ok(files.env.includes(variable), `.env.example missing ${variable}`)
 
-console.log('[V2 PHASE 5] OK — Discord remains isolated from Baileys/Telegram, REST/Gateway boundaries are explicit, MESSAGE_CONTENT is opt-in and main runtime starts the platform.')
+console.log('[DISCORD] OK — Discord remains isolated from Baileys/Telegram, REST/Gateway boundaries are explicit, MESSAGE_CONTENT is opt-in and main runtime starts the platform.')

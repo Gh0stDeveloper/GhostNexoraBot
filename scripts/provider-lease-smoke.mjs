@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-phase3-lease-'))
+const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-providers-lease-'))
 process.env.DATA_DIR = temp
 process.env.SESSION_DIR = path.join(temp, 'session')
 process.env.OLLAMA_ENABLED = 'false'
@@ -51,7 +51,7 @@ try {
   process.env.NEXORA_GLOBAL_CONTROL_DB = path.join(temp, 'global', 'ghost-nexora.sqlite')
   assert.equal(lease.providerLeaseRoot(), path.join(temp, 'global', 'provider-leases'))
 
-  console.log('[V2 PHASE 3 LEASE] OK — concurrent APKMirror work is serialized, stale locks recover, and subbots resolve the shared global lease root.')
+  console.log('[PROVIDERS LEASE] OK — concurrent APKMirror work is serialized, stale locks recover, and subbots resolve the shared global lease root.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

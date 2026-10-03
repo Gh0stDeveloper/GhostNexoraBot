@@ -102,4 +102,4 @@ const interaction = calls.find((call) => call.url.includes('/interactions/700/to
 assert.ok(interaction)
 assert.equal(interaction.headers.get('authorization'), null)
 
-console.log('[V2 PHASE 5] OK — Discord REST v10 handles auth, bucket/global rate limits, streaming multipart, reactions, command scope and callbacks.')
+console.log('[DISCORD] OK — Discord REST v10 handles auth, bucket/global rate limits, streaming multipart, reactions, command scope and callbacks.')

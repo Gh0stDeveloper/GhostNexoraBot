@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-phase3-http-'))
+const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-providers-http-'))
 process.env.DATA_DIR = temp
 process.env.SESSION_DIR = path.join(temp, 'session')
 process.env.OLLAMA_ENABLED = 'false'
@@ -134,7 +134,7 @@ try {
     /Host de proveedor no permitido: example\.com/,
   )
 
-  console.log('[V2 PHASE 3 HTTP] OK — HTML and binary redirects are bounded/allowlisted, hop cookies survive, and Android ZIP validation remains active.')
+  console.log('[PROVIDERS HTTP] OK — HTML and binary redirects are bounded/allowlisted, hop cookies survive, and Android ZIP validation remains active.')
 } finally {
   await new Promise((resolve) => server.close(() => resolve()))
   await rm(temp, { recursive: true, force: true })

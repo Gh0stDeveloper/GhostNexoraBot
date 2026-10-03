@@ -113,13 +113,13 @@ try {
   assert.match(String(sent.at(-1)?.content?.text ?? ''), /\.one/)
 
   const beforeRich = relayed.length
-  const responseId = 'message-phase2-smoke'
+  const responseId = 'message-ui-smoke'
   const richMessage = await rich.relayWhatsAppRichResponse(socket, chatId, {
     responseId,
     submessages: [{ messageType: 2, messageText: 'HTML' }],
     unifiedData: Buffer.from('{"ok":true}').toString('base64'),
     timeoutMs: 2_000,
-    logLabel: 'phase2-smoke',
+    logLabel: 'ui-smoke',
   })
   assert.equal(relayed.length, beforeRich + 1)
   assert.equal(relayed.at(-1).options.messageId, richMessage.key.id)
@@ -155,7 +155,7 @@ try {
   assert.match(editSource, /executeValleyInvisibleMessageIdCollision/)
   assert.doesNotMatch(editSource, /ui-compat|planCarousel|relayWhatsAppRichResponse/)
 
-  console.log('[V2 PHASE 2] OK — WhatsApp native carousels are restored while .view/game rich transport remains isolated.')
+  console.log('[WHATSAPP UI] OK — WhatsApp native carousels are restored while .view/game rich transport remains isolated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

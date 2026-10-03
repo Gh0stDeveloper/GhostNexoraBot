@@ -19,7 +19,7 @@ const [
   desktopControl,
   desktopConfig,
   desktopPackage,
-  phase7Workflow,
+  appsWorkflow,
   androidClient,
   androidStore,
   androidManifest,
@@ -46,7 +46,7 @@ const [
   read('apps/desktop/src/control.ts'),
   read('apps/desktop/src-tauri/tauri.conf.json'),
   read('apps/desktop/package.json'),
-  read('.github/workflows/v2-phase7.yml'),
+  read('.github/workflows/official-apps-validation.yml'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ControlApiClient.kt'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/SecureTokenStore.kt'),
   read('apps/android/app/src/main/AndroidManifest.xml'),
@@ -130,10 +130,10 @@ assert.match(desktopPackageJson.scripts?.['tauri:build'] ?? '', /npm run icons/)
 assert.ok(Array.isArray(tauriConfig.bundle?.icon), 'Tauri bundle.icon must declare generated desktop icons')
 assert.ok(tauriConfig.bundle.icon.includes('icons/icon.ico'), 'Tauri Windows bundle must declare icon.ico')
 assert.ok(tauriConfig.bundle.icon.includes('icons/128x128.png'), 'Tauri Linux bundle must declare a square PNG icon')
-assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles nsis/)
-assert.match(phase7Workflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles deb,appimage/)
+assert.match(appsWorkflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles nsis/)
+assert.match(appsWorkflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles deb,appimage/)
 
-// Android Phase 1 is now local-first. Termux is the execution engine; the
+// Android command baseline is now local-first. Termux is the execution engine; the
 // Compose app only invokes the fixed Ghost Nexora CLI surface through the
 // official RUN_COMMAND service. Remote Manager support remains optional and
 // retains its Keystore/HTTPS restrictions.
@@ -186,4 +186,4 @@ assert.match(termuxRuntime, /localWebEnabled/)
 assert.match(termuxPair, /PAIRING_OUTPUT_MODE/)
 assert.match(termuxPair, /GHOST_NEXORA_PAIR_EVENT/)
 
-console.log('[V2 PHASE 7 AUDIT] OK — remote Control API boundaries remain hardened; Android is local-first through a fixed Termux/Ghost Nexora command surface with optional remote management.')
+console.log('[OFFICIAL APPS AUDIT] OK — remote Control API boundaries remain hardened; Android is local-first through a fixed Termux/Ghost Nexora command surface with optional remote management.')

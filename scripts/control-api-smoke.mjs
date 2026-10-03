@@ -5,10 +5,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-phase7-'))
+const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-apps-'))
 process.env.DATA_DIR = temp
 process.env.SESSION_DIR = path.join(temp, 'session')
-process.env.ADMIN_WEB_TOKEN = 'phase7-control-token-123456789'
+process.env.ADMIN_WEB_TOKEN = 'apps-control-token-123456789'
 process.env.OLLAMA_ENABLED = 'false'
 process.env.WEB_ENABLED = 'false'
 process.env.TELEGRAM_BOT_TOKEN = ''
@@ -115,7 +115,7 @@ try {
   assert.equal(lifecycle.body.managerRequired, true)
 
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
-  console.log('[V2 PHASE 7] OK — authenticated Control API V2, platform metrics/restart, redaction, config and safe updater validated.')
+  console.log('[OFFICIAL APPS] OK — authenticated Control API V2, platform metrics/restart, redaction, config and safe updater validated.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

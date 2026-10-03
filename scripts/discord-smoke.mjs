@@ -177,4 +177,4 @@ assert.ok(pingCalls.some((call) =>
 const ignored = { ...incoming, id: '666', content: 'ping' }
 assert.equal(await router.handleMessage(ignored), false, 'plain guild text without prefix/mention must be ignored')
 
-console.log('[V2 PHASE 5] OK — Discord adapter/router normalize messages and enforce text, embed, component, file, edit, typing and reaction limits.')
+console.log('[DISCORD] OK — Discord adapter/router normalize messages and enforce text, embed, component, file, edit, typing and reaction limits.')

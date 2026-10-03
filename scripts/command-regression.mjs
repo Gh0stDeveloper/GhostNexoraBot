@@ -45,7 +45,7 @@ for (const profileName of ['minimal', 'full']) {
   for (const [key, expected] of Object.entries(expectedProfile)) {
     assertEqual(`${profileName}.${key}`, actual[key], expected)
   }
-  console.log(`[V2 PHASE 1] ${profileName}: ${actual.commandCount} entries, ${actual.canonicalCommandCount} canonical, registry fingerprint unchanged.`)
+  console.log(`[COMMAND REGRESSION] ${profileName}: ${actual.commandCount} entries, ${actual.canonicalCommandCount} canonical, registry fingerprint unchanged.`)
 }
 
-console.log('[V2 PHASE 1] PASS — WhatsApp adapter migration did not change the frozen V1 command/provider surface.')
+console.log('[COMMAND REGRESSION] PASS — WhatsApp adapter migration did not change the frozen V1 command/provider surface.')

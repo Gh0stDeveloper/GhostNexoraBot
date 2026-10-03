@@ -174,7 +174,7 @@ try {
   await runtime.stop()
   assert.equal(runtime.status().state, 'stopped')
 
-  console.log('[V2 PHASE 5] OK — native Discord runtime covers Gateway READY, command sync, slash ACK, router output and persisted sequence.')
+  console.log('[DISCORD] OK — native Discord runtime covers Gateway READY, command sync, slash ACK, router output and persisted sequence.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

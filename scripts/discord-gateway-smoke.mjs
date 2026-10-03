@@ -161,4 +161,4 @@ assert.equal(exhausted.getState(), 'error')
 assert.equal(exhaustedSockets.length, 0)
 assert.ok(exhaustedStates.some(([state, error]) => state === 'error' && String(error).includes('IDENTIFY')))
 
-console.log('[V2 PHASE 5] OK — Discord Gateway covers Hello, heartbeat, IDENTIFY, READY, dispatch, RESUME, fatal intents and identify quota.')
+console.log('[DISCORD] OK — Discord Gateway covers Hello, heartbeat, IDENTIFY, READY, dispatch, RESUME, fatal intents and identify quota.')
