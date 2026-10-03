@@ -3,6 +3,7 @@ import type { NexoraSocket } from '../../types.js'
 import { localizeLegacyText, resolveChatLocale, type LocaleCode } from '../../i18n/index.js'
 import { deliverWithOutbox } from '../../services/delivery-outbox.js'
 import { whatsappOpsInstanceKey } from './instance.js'
+import { relayWhatsAppMessage } from './raw-relay-transport.js'
 
 const LOCALIZED_KEYS = new Set([
   'text',
@@ -85,7 +86,7 @@ export function createLocalizedSocket(
             label: 'whatsapp_legacy_relay',
             correlationId: options.correlationId,
             instanceKey: whatsappOpsInstanceKey(options.botInstanceId ?? 'main'),
-          }, () => target.relayMessage(jid, content as never, relayOptions as never))
+          }, () => relayWhatsAppMessage(target, jid, content, relayOptions))
       }
       const value = Reflect.get(target, property, receiver)
       return typeof value === 'function' ? value.bind(target) : value

@@ -5,6 +5,10 @@ on:
     branches: ["feat/v2-*", "feature/v2-*"]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
