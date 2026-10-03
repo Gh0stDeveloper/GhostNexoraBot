@@ -25,6 +25,68 @@ export type WebOpsRuntimeLog = {
   createdAt: number
 }
 
+
+export type WebPlatformRuntime = {
+  platform: 'whatsapp' | 'discord' | 'telegram'
+  state: string
+  latencyMs: number
+  eventCount: number
+  groupCount: number
+  reconnects: number
+  rateLimits: number
+  lastEventAt: number
+  lastError: string | null
+  updatedAt: number
+}
+
+export type WebQueueMetric = {
+  dimensionType: 'platform' | 'command' | 'provider' | 'lane'
+  dimensionId: string
+  platform: string
+  executions: number
+  failures: number
+  retries: number
+  saturation: number
+  currentDepth: number
+  maxDepth: number
+  lastSaturatedAt: number
+  averageWaitMs: number
+  maxWaitMs: number
+  lastWaitMs: number
+  averageExecutionMs: number
+  maxExecutionMs: number
+  lastExecutionMs: number
+  updatedAt: number
+}
+
+export type WebAdapterMetric = {
+  platform: 'whatsapp' | 'discord' | 'telegram'
+  sent: number
+  failed: number
+  retries: number
+  editFailures: number
+  typingFailures: number
+  uploadBytes: number
+  rateLimits: number
+  averageLatencyMs: number
+  maxLatencyMs: number
+  lastLatencyMs: number
+  lastError: string | null
+  updatedAt: number
+}
+
+export type WebErrorGroup = {
+  fingerprint: string
+  platform: string | null
+  command: string | null
+  provider: string | null
+  firstSeenAt: number
+  lastSeenAt: number
+  count: number
+  sample: string
+  lastCorrelationId: string | null
+}
+
 export type WebOpsLogFilters = {
   channel?: WebOpsLogChannel
   level?: 'all' | WebOpsLogLevel
@@ -244,6 +306,141 @@ export function readOpsRuntimeLogCounts(instanceKey: string, sinceMs = 60 * 60_0
     }
   } catch {
     return { total: 0, errors: 0, warnings: 0, commands: 0, api: 0, downloads: 0 }
+  } finally {
+    db.close()
+  }
+}
+
+
+export function readPlatformRuntimeRegistry(instanceKey: string): WebPlatformRuntime[] {
+  const db = openBotDb()
+  if (!db) return []
+  try {
+    if (!tableExists(db, 'ops_platform_runtime')) return []
+    return db.prepare(`SELECT platform, state, latency_ms AS latencyMs, event_count AS eventCount,
+        group_count AS groupCount, reconnects, rate_limits AS rateLimits, last_event_at AS lastEventAt,
+        last_error AS lastError, updated_at AS updatedAt
+      FROM ops_platform_runtime WHERE instance_key = ? ORDER BY platform ASC`)
+      .all(instanceKey).map((row: any) => ({
+        platform: String(row.platform) as WebPlatformRuntime['platform'],
+        state: safeLogText(row.state).slice(0, 64),
+        latencyMs: Number(row.latencyMs ?? 0),
+        eventCount: Number(row.eventCount ?? 0),
+        groupCount: Number(row.groupCount ?? 0),
+        reconnects: Number(row.reconnects ?? 0),
+        rateLimits: Number(row.rateLimits ?? 0),
+        lastEventAt: Number(row.lastEventAt ?? 0),
+        lastError: row.lastError ? safeLogText(row.lastError) : null,
+        updatedAt: Number(row.updatedAt ?? 0),
+      })) as WebPlatformRuntime[]
+  } catch {
+    return []
+  } finally {
+    db.close()
+  }
+}
+
+export function readQueueMetrics(instanceKey: string, limit = 100): WebQueueMetric[] {
+  const db = openBotDb()
+  if (!db) return []
+  try {
+    if (!tableExists(db, 'ops_queue_metrics')) return []
+    const columns = columnsFor(db, 'ops_queue_metrics')
+    const currentDepth = columns.has('current_depth') ? 'current_depth AS currentDepth' : '0 AS currentDepth'
+    const maxDepth = columns.has('max_depth') ? 'max_depth AS maxDepth' : '0 AS maxDepth'
+    const lastSaturatedAt = columns.has('last_saturated_at') ? 'last_saturated_at AS lastSaturatedAt' : '0 AS lastSaturatedAt'
+    return db.prepare(`SELECT dimension_type AS dimensionType, dimension_id AS dimensionId, platform,
+        executions, failures, retries, saturation, ${currentDepth}, ${maxDepth}, ${lastSaturatedAt},
+        total_wait_ms AS totalWaitMs, max_wait_ms AS maxWaitMs, last_wait_ms AS lastWaitMs,
+        total_execution_ms AS totalExecutionMs, max_execution_ms AS maxExecutionMs,
+        last_execution_ms AS lastExecutionMs, updated_at AS updatedAt
+      FROM ops_queue_metrics WHERE instance_key = ? ORDER BY updated_at DESC LIMIT ?`)
+      .all(instanceKey, Math.max(1, Math.min(250, limit))).map((row: any) => {
+        const executions = Number(row.executions ?? 0)
+        return {
+          dimensionType: String(row.dimensionType) as WebQueueMetric['dimensionType'],
+          dimensionId: safeLogText(row.dimensionId).slice(0, 120),
+          platform: safeLogText(row.platform).slice(0, 40),
+          executions,
+          failures: Number(row.failures ?? 0),
+          retries: Number(row.retries ?? 0),
+          saturation: Number(row.saturation ?? 0),
+          currentDepth: Number(row.currentDepth ?? 0),
+          maxDepth: Number(row.maxDepth ?? 0),
+          lastSaturatedAt: Number(row.lastSaturatedAt ?? 0),
+          averageWaitMs: executions ? Number(row.totalWaitMs ?? 0) / executions : 0,
+          maxWaitMs: Number(row.maxWaitMs ?? 0),
+          lastWaitMs: Number(row.lastWaitMs ?? 0),
+          averageExecutionMs: executions ? Number(row.totalExecutionMs ?? 0) / executions : 0,
+          maxExecutionMs: Number(row.maxExecutionMs ?? 0),
+          lastExecutionMs: Number(row.lastExecutionMs ?? 0),
+          updatedAt: Number(row.updatedAt ?? 0),
+        }
+      }) as WebQueueMetric[]
+  } catch {
+    return []
+  } finally {
+    db.close()
+  }
+}
+
+export function readAdapterMetrics(instanceKey: string): WebAdapterMetric[] {
+  const db = openBotDb()
+  if (!db) return []
+  try {
+    if (!tableExists(db, 'ops_adapter_metrics')) return []
+    return db.prepare(`SELECT platform, sent, failed, retries, edit_failures AS editFailures,
+        typing_failures AS typingFailures, upload_bytes AS uploadBytes, rate_limits AS rateLimits,
+        total_latency_ms AS totalLatencyMs, max_latency_ms AS maxLatencyMs,
+        last_latency_ms AS lastLatencyMs, last_error AS lastError, updated_at AS updatedAt
+      FROM ops_adapter_metrics WHERE instance_key = ? ORDER BY platform ASC`)
+      .all(instanceKey).map((row: any) => {
+        const attempts = Number(row.sent ?? 0) + Number(row.failed ?? 0)
+        return {
+          platform: String(row.platform) as WebAdapterMetric['platform'],
+          sent: Number(row.sent ?? 0),
+          failed: Number(row.failed ?? 0),
+          retries: Number(row.retries ?? 0),
+          editFailures: Number(row.editFailures ?? 0),
+          typingFailures: Number(row.typingFailures ?? 0),
+          uploadBytes: Number(row.uploadBytes ?? 0),
+          rateLimits: Number(row.rateLimits ?? 0),
+          averageLatencyMs: attempts ? Number(row.totalLatencyMs ?? 0) / attempts : 0,
+          maxLatencyMs: Number(row.maxLatencyMs ?? 0),
+          lastLatencyMs: Number(row.lastLatencyMs ?? 0),
+          lastError: row.lastError ? safeLogText(row.lastError) : null,
+          updatedAt: Number(row.updatedAt ?? 0),
+        }
+      }) as WebAdapterMetric[]
+  } catch {
+    return []
+  } finally {
+    db.close()
+  }
+}
+
+export function readErrorGroups(instanceKey: string, limit = 50): WebErrorGroup[] {
+  const db = openBotDb()
+  if (!db) return []
+  try {
+    if (!tableExists(db, 'ops_error_groups')) return []
+    return db.prepare(`SELECT fingerprint, platform, command_name AS commandName, provider_id AS providerId,
+        first_seen_at AS firstSeenAt, last_seen_at AS lastSeenAt, occurrences,
+        sample, last_correlation_id AS lastCorrelationId
+      FROM ops_error_groups WHERE instance_key = ? ORDER BY last_seen_at DESC LIMIT ?`)
+      .all(instanceKey, Math.max(1, Math.min(200, limit))).map((row: any) => ({
+        fingerprint: String(row.fingerprint ?? '').slice(0, 64),
+        platform: row.platform ? safeLogText(row.platform).slice(0, 80) : null,
+        command: row.commandName ? safeLogText(row.commandName).slice(0, 120) : null,
+        provider: row.providerId ? safeLogText(row.providerId).slice(0, 120) : null,
+        firstSeenAt: Number(row.firstSeenAt ?? 0),
+        lastSeenAt: Number(row.lastSeenAt ?? 0),
+        count: Number(row.occurrences ?? 0),
+        sample: safeLogText(row.sample),
+        lastCorrelationId: row.lastCorrelationId ? safeLogText(row.lastCorrelationId).slice(0, 180) : null,
+      })) as WebErrorGroup[]
+  } catch {
+    return []
   } finally {
     db.close()
   }
