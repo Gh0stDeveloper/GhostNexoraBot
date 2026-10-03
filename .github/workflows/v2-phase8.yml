@@ -12,6 +12,7 @@ on:
       - 'scripts/v2-phase8-*.mjs'
       - 'scripts/phase-c-*.mjs'
       - 'scripts/phase-d-*.mjs'
+      - 'scripts/phase-f-*.mjs'
       - 'scripts/v2-phase8-*.sh'
       - 'package.json'
       - 'docs/v2/**'
@@ -59,6 +60,9 @@ jobs:
 
       - name: Preserve completed Phase D runtime delivery
         run: node scripts/phase-d-runtime-delivery-smoke.mjs
+
+      - name: Preserve completed Phase F observability
+        run: node scripts/phase-f-observability-smoke.mjs
       - name: Preserve i18n
         run: npm run v2:i18n
       - name: Preserve official app boundary
