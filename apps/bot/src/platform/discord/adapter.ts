@@ -10,6 +10,7 @@ import {
   type UiAction,
 } from '@ghostnexora/platform-contracts'
 import { withPreparedMedia } from '../../services/media-pipeline.js'
+import { trackedAdapterOperation } from '../../services/ops-observability-metrics.js'
 import { persistDiscordComponentRef, resolveDiscordComponentRef } from './component-store.js'
 import { DiscordRestClient } from './rest.js'
 import type { DiscordActionRow, DiscordCreateMessageBody, DiscordEmbed, DiscordMessage } from './types.js'
@@ -210,16 +211,18 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   async sendText(chatId: string, text: string, options?: SendOptions): Promise<SentMessage> {
-    let last: DiscordMessage | undefined
-    const parts = chunks(text || ' ')
-    for (let index = 0; index < parts.length; index += 1) {
-      last = await this.client.createMessage(chatId, {
-        ...baseBody(index === 0 ? options : undefined),
-        content: parts[index],
-      })
-    }
-    if (!last) throw new Error('Discord no devolvió mensaje al enviar texto.')
-    return sent(last)
+    return trackedAdapterOperation('discord', 'send', async () => {
+      let last: DiscordMessage | undefined
+      const parts = chunks(text || ' ')
+      for (let index = 0; index < parts.length; index += 1) {
+        last = await this.client.createMessage(chatId, {
+          ...baseBody(index === 0 ? options : undefined),
+          content: parts[index],
+        })
+      }
+      if (!last) throw new Error('Discord no devolvió mensaje al enviar texto.')
+      return sent(last)
+    })
   }
 
   async sendMedia(chatId: string, media: OutgoingMedia, options?: SendOptions): Promise<SentMessage> {
@@ -228,7 +231,7 @@ export class DiscordAdapter implements PlatformAdapter {
       maxBytes: MAX_UPLOAD_BYTES,
       mode: 'stream',
       retries: 2,
-    }, async (prepared) => {
+    }, async (prepared) => trackedAdapterOperation('discord', 'media', async () => {
       const fileName = prepared.fileName || fallbackFileName(media)
       const message = await this.client.createMessageWithFileStream(chatId, {
         ...baseBody(options),
@@ -236,31 +239,33 @@ export class DiscordAdapter implements PlatformAdapter {
         attachments: [{ id: 0, filename: fileName }],
       }, prepared.openStream, fileName, prepared.mimeType, MAX_UPLOAD_BYTES)
       return sent(message)
-    })
+    }, { uploadBytes: prepared.size }))
   }
 
   async sendUi(chatId: string, ui: NormalizedUi, options?: SendOptions): Promise<SentMessage> {
     if (ui.kind === 'text') return this.sendText(chatId, ui.text, options)
-    const message = await this.client.createMessage(chatId, {
-      ...baseBody(options),
-      ...this.uiPayload(ui),
+    return trackedAdapterOperation('discord', 'ui', async () => {
+      const message = await this.client.createMessage(chatId, {
+        ...baseBody(options),
+        ...this.uiPayload(ui),
+      })
+      return sent(message)
     })
-    return sent(message)
   }
 
   async editMessage(chatId: string, messageId: string, text: string) {
-    await this.client.editMessage(chatId, messageId, {
+    await trackedAdapterOperation('discord', 'edit', () => this.client.editMessage(chatId, messageId, {
       content: trim(text || ' ', DISCORD_TEXT_LIMIT),
       allowed_mentions: { parse: [], replied_user: false },
-    })
+    }))
   }
 
   async setTyping(chatId: string, active: boolean) {
-    if (active) await this.client.triggerTyping(chatId)
+    if (active) await trackedAdapterOperation('discord', 'typing', () => this.client.triggerTyping(chatId))
   }
 
   async react(chatId: string, messageId: string, reaction: string) {
     if (!reaction) return
-    await this.client.createReaction(chatId, messageId, reaction)
+    await trackedAdapterOperation('discord', 'reaction', () => this.client.createReaction(chatId, messageId, reaction))
   }
 }
