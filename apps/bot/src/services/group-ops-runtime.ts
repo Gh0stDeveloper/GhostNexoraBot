@@ -9,6 +9,7 @@ import { economy } from './economy.js'
 import { community } from './community.js'
 import { groupControlsV9 } from './group-controls-v9.js'
 import { getGroupCommandPolicy, setGroupCategoryOverride } from './group-command-policy.js'
+import { createWhatsAppAdapter } from '../platform/whatsapp/adapter.js'
 
 const instanceKey = opsInstanceKey()
 let currentSocket: WASocket | null = null
@@ -784,7 +785,11 @@ async function processOneRequest() {
       }
       const text = String(payload.message ?? '').trim().slice(0, 2000)
       if (!text) throw new Error('El anuncio del grupo está vacío.')
-      await currentSocket.sendMessage(groupJid, { text })
+      const subbotMatch = /^subbot:(\d+)$/.exec(instanceKey)
+      const adapter = createWhatsAppAdapter(currentSocket, subbotMatch?.[1] ? Number(subbotMatch[1]) : undefined)
+      await adapter.sendText(groupJid, text, {
+        delivery: { correlationId: `group-ops-${request.id}` },
+      })
     } else {
       throw new Error('Acción de grupo no soportada.')
     }
