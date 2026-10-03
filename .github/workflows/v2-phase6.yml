@@ -8,6 +8,7 @@ on:
       - 'packages/**'
       - 'scripts/i18n-*.mjs'
       - 'scripts/v2-phase6-*.mjs'
+      - 'scripts/phase-c-*.mjs'
       - 'scripts/v2-phase5-discord-*.mjs'
       - 'scripts/v2-phase4-telegram-*.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
@@ -59,6 +60,9 @@ jobs:
 
       - name: Phase 5 Discord remains valid
         run: npm run v2:discord
+
+      - name: Preserve completed Phase C parity
+        run: node scripts/phase-c-parity-smoke.mjs
 
       - name: Phase 6 ES/EN locale isolation and boundary gate
         run: npm run v2:i18n
