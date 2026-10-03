@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 const root = process.cwd()
-const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-phase3-'))
+const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-v2-providers-'))
 process.env.DATA_DIR = path.join(temp, 'data')
 process.env.SESSION_DIR = path.join(temp, 'session')
 process.env.OLLAMA_ENABLED = 'false'
@@ -22,14 +22,14 @@ async function providerSessionSmoke(http) {
       response.statusCode = 200
       response.setHeader('content-type', 'text/html; charset=utf-8')
       response.setHeader('set-cookie', [
-        'phase3_session=preserved; Path=/; HttpOnly; SameSite=Lax',
-        'phase3_scoped=yes; Path=/signed; HttpOnly',
+        'providers_session=preserved; Path=/; HttpOnly; SameSite=Lax',
+        'providers_scoped=yes; Path=/signed; HttpOnly',
       ])
       response.end('<html><body>seed</body></html>')
       return
     }
     if (request.url === '/signed/check') {
-      response.statusCode = request.headers.cookie?.includes('phase3_session=preserved') && request.headers.cookie?.includes('phase3_scoped=yes') ? 200 : 403
+      response.statusCode = request.headers.cookie?.includes('providers_session=preserved') && request.headers.cookie?.includes('providers_scoped=yes') ? 200 : 403
       response.setHeader('content-type', 'text/html; charset=utf-8')
       response.end(`<html><body>${request.headers.cookie ?? 'missing-cookie'}</body></html>`)
       return
@@ -49,11 +49,11 @@ async function providerSessionSmoke(http) {
     const session = new http.ProviderHttpSession()
     const allowed = [/^127\.0\.0\.1$/]
     await session.fetchHtml(`${origin}/seed`, allowed)
-    assert.match(session.cookieHeader(`${origin}/signed/check`), /phase3_session=preserved/)
-    assert.match(session.cookieHeader(`${origin}/signed/check`), /phase3_scoped=yes/)
-    assert.doesNotMatch(session.cookieHeader(`${origin}/outside`), /phase3_scoped=yes/)
+    assert.match(session.cookieHeader(`${origin}/signed/check`), /providers_session=preserved/)
+    assert.match(session.cookieHeader(`${origin}/signed/check`), /providers_scoped=yes/)
+    assert.doesNotMatch(session.cookieHeader(`${origin}/outside`), /providers_scoped=yes/)
     const checked = await session.fetchHtml(`${origin}/signed/check`, allowed, { referer: `${origin}/seed` })
-    assert.match(checked.html, /phase3_session=preserved/)
+    assert.match(checked.html, /providers_session=preserved/)
   } finally {
     await new Promise((resolve) => server.close(() => resolve()))
   }
@@ -133,7 +133,7 @@ try {
   assert.equal(runtime.providerCircuitSnapshot('x-official'), 'closed')
   assert.deepEqual(runtime.providerFailoverOrder(['x-official', 'x-ytdlp']), ['x-official', 'x-ytdlp'], 'successful probe must restore primary ordering')
 
-  const catalog = JSON.parse(await source('docs/v2/baselines/providers-v2-phase3.json'))
+  const catalog = JSON.parse(await source('docs/v2/baselines/providers-v2.json'))
   assert.equal(catalog.totalProviders, 21)
   for (const id of ['twitter', 'vk', 'apkmirror', 'apkpure']) assert.ok(catalog.providers.some((provider) => provider.id === id), `provider catalog missing ${id}`)
 
@@ -178,7 +178,7 @@ try {
   assert.doesNotMatch(apkSource, /com\.apkpure\.aegon-\d+\.apk\?/, 'APKPure signed CDN URL must never be hardcoded')
   assert.match(envSource, /^X_BEARER_TOKEN=/m)
   assert.match(envSource, /^VK_ACCESS_TOKEN=/m)
-  assert.match(termuxSource, /downloadProgressV2Commands/, 'Termux Lite must inherit the same Phase 3 provider command array')
+  assert.match(termuxSource, /downloadProgressV2Commands/, 'Termux Lite must inherit the same Providers provider command array')
 
   console.log('[V2 PHASE 3] OK — X/VK/APKMirror/APKPure contracts, countdown-aware signed URLs, session cookies, persistent circuit failover, telemetry and shared command registration validated.')
 } finally {

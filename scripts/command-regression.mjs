@@ -5,7 +5,7 @@ import path from 'node:path'
 
 const inputArg = process.argv.find((arg) => arg.startsWith('--input='))
 const inputPath = path.resolve(inputArg ? inputArg.slice('--input='.length) : 'artifacts/v2-current-inventory.json')
-const baselinePath = path.resolve('docs/v2/baselines/phase1-command-regression.json')
+const baselinePath = path.resolve('docs/v2/baselines/command-regression.json')
 
 const [report, baseline] = await Promise.all([
   readFile(inputPath, 'utf8').then(JSON.parse),

@@ -5,10 +5,10 @@ import path from 'node:path'
 
 const inputArg = process.argv.find((arg) => arg.startsWith('--input='))
 const inputPath = path.resolve(inputArg ? inputArg.slice('--input='.length) : 'artifacts/v2-current-inventory.json')
-const baselinePath = path.resolve('docs/v2/baselines/phase1-command-regression.json')
-const providerCatalogPath = path.resolve('docs/v2/baselines/providers-v2-phase3.json')
+const baselinePath = path.resolve('docs/v2/baselines/command-regression.json')
+const providerCatalogPath = path.resolve('docs/v2/baselines/providers-v2.json')
 
-const PHASE3_COMMANDS = new Map([
+const PROVIDER_COMMANDS = new Map([
   ['vk', ['vkd', 'vkvideo']],
   ['apkmirror', ['amirror', 'apkm']],
   ['apkmirrordl', ['amdl']],
@@ -39,7 +39,7 @@ const POST_BASELINE_COMMANDS = new Map([
 ])
 
 const APPROVED_COMMANDS = new Map([
-  ...PHASE3_COMMANDS,
+  ...PROVIDER_COMMANDS,
   ...PREEXISTING_MAIN_COMMANDS,
   ...DOWNLOAD_COMMANDS,
   ...POST_BASELINE_COMMANDS,
@@ -88,9 +88,9 @@ function assertEqual(label, actual, expected) {
 }
 
 assertEqual('historical provider inventory remains frozen', report.providers?.length ?? 0, baseline.providerCount)
-assertEqual('phase3 provider catalog total', providerCatalog.totalProviders, 21)
+assertEqual('providers provider catalog total', providerCatalog.totalProviders, 21)
 for (const id of ['vk', 'apkmirror', 'apkpure']) {
-  if (!providerCatalog.providers?.some((provider) => provider.id === id)) throw new Error(`Phase 3 provider catalog missing ${id}`)
+  if (!providerCatalog.providers?.some((provider) => provider.id === id)) throw new Error(`provider compatibility provider catalog missing ${id}`)
 }
 
 for (const profileName of ['minimal', 'full']) {

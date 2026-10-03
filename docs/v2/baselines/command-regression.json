@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "kind": "ghost-nexora-v2-phase1-command-regression",
+  "kind": "ghost-nexora-command-regression",
   "sourceSha": "f50f27a4438bb3bd7958e5d28956d3aed4b11997",
   "sourceArtifactId": 10135146185,
   "algorithm": {
