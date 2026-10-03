@@ -43,10 +43,10 @@ Una fase solo se marca como TERMINADO cuando:
 | Fase E | Dashboard Web V2 | TERMINADO |
 | Fase F | Observabilidad, métricas y operación | PENDIENTE |
 | Fase B | Núcleo multiplataforma compartido | TERMINADO |
-| Fase C | Paridad Discord y Telegram | POSPUESTO |
+| Fase C | Paridad Discord y Telegram | TERMINADO |
 | Fase D | Runtime y entrega WhatsApp | POSPUESTO |
 
-Orden actualizado por decisión de proyecto: Fase E y Fase B quedaron terminadas. Fase F permanece pendiente; las fases C y D continúan pospuestas hasta que corresponda retomarlas.
+Orden actualizado: Fases A, B, C y E quedaron terminadas. Fase D continúa pospuesta y Fase F permanece pendiente.
 
 ---
 
@@ -472,7 +472,7 @@ Cierre B5:
 
 # FASE C — Paridad Discord y Telegram
 
-Estado: EN PROGRESO
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -517,13 +517,13 @@ Siguiente subfase: C2 — Aliases centralizados.
 
 ## C2. Aliases centralizados
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Eliminar mapas duplicados de aliases en routers de Discord y Telegram conforme se migren comandos.
 
 ## C3. Menús y ayuda generados desde metadata
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 La ayuda de cada plataforma debe salir del mismo registro:
 
@@ -538,7 +538,7 @@ La ayuda de cada plataforma debe salir del mismo registro:
 
 ## C4. Component IDs persistentes de Discord
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Actualmente los comandos largos de componentes pueden quedar asociados a un mapa RAM con TTL.
 
@@ -555,7 +555,7 @@ Los botones válidos deberían sobrevivir reinicios dentro de su TTL.
 
 ## C5. Media streaming en Discord
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Evitar cargar archivos remotos completos mediante arrayBuffer cuando no sea necesario.
 
@@ -567,7 +567,7 @@ Compartir el pipeline multimedia con las otras plataformas cuando sea viable.
 
 ## C6. Rate limiting Discord por buckets
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Evolucionar el control actual de 429 para considerar:
 
@@ -1595,7 +1595,7 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase B3 | Metadata central de comandos | TERMINADO | PR #83 |
 | 2026-09-19 | Fase B4 | Capability-aware command execution | TERMINADO | PR #85 |
 | 2026-09-19 | Fase B5 | RequestContext inmutable y aislamiento concurrente | TERMINADO | PR #86 |
-| — | Fase C | Paridad Discord y Telegram | PENDIENTE | — |
+| 2026-10-02 | Fase C | Paridad Discord y Telegram · C1–C6 completadas | TERMINADO | PR #105 |
 | — | Fase D | Runtime WhatsApp | PENDIENTE | — |
 | 2026-09-19 | Fase E | Dashboard Web V2 completo · E0–E14 | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
 | 2026-09-19 | Fase E6 | Editor de configuración de comandos | TERMINADO | 8016ab107ff272bea9c80c4684023a5bcb128760 |
@@ -1613,17 +1613,16 @@ Estas tareas están incluidas dentro de las fases anteriores:
 
 # Próximo paso
 
-**FASE B está TERMINADA con B1, B2, B3, B4 y B5 completadas.**
+**FASE C está TERMINADA con C1–C6 completadas.**
 
 Las fases todavía pendientes del roadmap son:
 
-- **FASE C · Paridad Discord y Telegram** — C1 a C6;
 - **FASE D · Runtime y entrega WhatsApp** — D1 a D6;
 - **FASE F · Observabilidad, métricas y operación** — F1 a F6.
 
-Por orden del roadmap, el siguiente bloque sería **C1 · Slash commands de Discord generados automáticamente**, cuando el usuario indique retomar la Fase C.
+El siguiente bloque técnico es **D1 · Eliminar activeUserId mutable del WhatsAppAdapter** cuando se decida retomar la Fase D.
 
-No iniciar C, D o F automáticamente sin indicación del usuario.
+No iniciar D o F automáticamente sin indicación del usuario.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
@@ -1643,4 +1642,4 @@ Resultados principales de Fase A:
 - panel privado de seguridad;
 - CI, typecheck, build y smoke de Fase A en verde.
 
-La Fase B ya quedó validada y registrada como TERMINADO; C, D y F continúan pendientes.
+Las Fases B y C ya quedaron validadas y registradas como TERMINADO; D y F continúan pendientes.
