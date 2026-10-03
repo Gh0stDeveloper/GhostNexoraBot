@@ -30,7 +30,7 @@ assert.match(whatsapp, /new SharedCommandEngine\(commands, sharedNeutralCommands
 assert.match(whatsapp, /this\.engine\.resolve\(typedName\)/, 'WhatsApp lookup must use the B2 engine')
 assert.match(
   whatsapp,
-  /this\.engine\.execute\(command, context, \{\s*allowLegacy: true,\s*enforceMetadata: false,\s*isGroupAdmin: requestContext\.permissions\.isGroupAdmin,\s*botIsGroupAdmin: requestContext\.permissions\.isBotGroupAdmin,\s*\}\)/,
+  /this\.engine\.execute\(command, context, \{\s*allowLegacy: true,\s*enforceMetadata: false,\s*isGroupAdmin: requestContext!?\.permissions\.isGroupAdmin,\s*botIsGroupAdmin: requestContext!?\.permissions\.isBotGroupAdmin,\s*\}\)/,
   'WhatsApp execution must pass through the B2 engine while preserving V1 compatibility',
 )
 
