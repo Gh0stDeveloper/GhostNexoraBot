@@ -71,6 +71,9 @@ jobs:
       - name: Phase D1-D6 WhatsApp runtime and delivery smoke
         run: node scripts/phase-d-runtime-delivery-smoke.mjs
 
+      - name: Phase F1-F6 observability and operations smoke
+        run: node scripts/phase-f-observability-smoke.mjs
+
       - name: Phase E platform groups dashboard smoke
         run: node scripts/phase-e-platform-groups-smoke.mjs
 
