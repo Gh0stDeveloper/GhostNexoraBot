@@ -1,6 +1,8 @@
 import { setOpsAlert } from './ops-alerts.js'
 import { opsDb, opsInstanceKey } from './ops-database.js'
 import { recordOpsRuntimeLog } from './ops-runtime-log.js'
+import { recordGroupedError } from './error-groups.js'
+import { currentCorrelationId, withTraceFields } from './trace-context.js'
 
 export type ProviderHealthRecord = {
   providerId: string
@@ -155,8 +157,8 @@ export function recordProviderAttempt(providerId: string, input: {
     input.ok ? 'debug' : 'error',
     `api.${id}`,
     input.ok
-      ? `provider_ok · provider=${label} · latency=${Math.round(latencyMs)}ms`
-      : `provider_failed · provider=${label} · latency=${Math.round(latencyMs)}ms · error=${errorCode}`,
+      ? `provider_ok · provider=${label} · latency=${Math.round(latencyMs)}ms · correlation=${currentCorrelationId() ?? 'none'}`
+      : `provider_failed · provider=${label} · latency=${Math.round(latencyMs)}ms · error=${errorCode} · correlation=${currentCorrelationId() ?? 'none'}`,
     instanceKey,
     'api',
   )
@@ -260,28 +262,31 @@ export async function trackedProviderCall<T>(
     }
   }
 
-  const started = performance.now()
-  try {
-    const result = await task()
+  return withTraceFields({ provider: normalizedProviderId(providerId) }, async () => {
+    const started = performance.now()
     try {
-      recordProviderAttempt(providerId, {
-        ok: true,
-        latencyMs: Math.max(0, performance.now() - started),
-        label: input.label,
-        instanceKey,
-      })
-    } catch {}
-    return result
-  } catch (error) {
-    try {
-      recordProviderAttempt(providerId, {
-        ok: false,
-        latencyMs: Math.max(0, performance.now() - started),
-        label: input.label,
-        errorCode: providerErrorCode(error),
-        instanceKey,
-      })
-    } catch {}
-    throw error
-  }
+      const result = await task()
+      try {
+        recordProviderAttempt(providerId, {
+          ok: true,
+          latencyMs: Math.max(0, performance.now() - started),
+          label: input.label,
+          instanceKey,
+        })
+      } catch {}
+      return result
+    } catch (error) {
+      try {
+        recordProviderAttempt(providerId, {
+          ok: false,
+          latencyMs: Math.max(0, performance.now() - started),
+          label: input.label,
+          errorCode: providerErrorCode(error),
+          instanceKey,
+        })
+        recordGroupedError(error, { provider: providerId, correlationId: currentCorrelationId(), instanceKey })
+      } catch {}
+      throw error
+    }
+  })
 }
