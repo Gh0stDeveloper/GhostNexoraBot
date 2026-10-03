@@ -501,7 +501,12 @@ async function broadcastCommand(ctx: LegacyCompatibleCommandContext) {
     for (const group of groups) {
       if (cancelled) break
       try {
-        await ctx.socket.sendMessage(group.id, { text: `╭━━〔 📢 *NOVEDADES GHOST NEXORA* 〕━━╮\n${text}\n╰━━━━━━━━━━━━━━━━╯\n\n👻 Usa *${ctx.prefix}menu* para ver las funciones disponibles.` })
+        await ctx.adapter.sendText(group.id, `╭━━〔 📢 *NOVEDADES GHOST NEXORA* 〕━━╮\n${text}\n╰━━━━━━━━━━━━━━━━╯\n\n👻 Usa *${ctx.prefix}menu* para ver las funciones disponibles.`, {
+          delivery: {
+            userId: ctx.sender,
+            correlationId: ctx.request.correlationId,
+          },
+        })
         sent += 1
       } catch { failed += 1 }
       const completed = sent + failed
