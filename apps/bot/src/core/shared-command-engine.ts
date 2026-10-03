@@ -80,9 +80,15 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   const currentReplyTo = replyToMessageId === null
     ? undefined
     : ((replyToMessageId ?? normalizedMessage.messageId) || undefined)
-  const withCurrentReply = <T extends { replyTo?: string }>(options?: T) => ({
+  const delivery = {
+    userId: request.userId,
+    locale: request.locale,
+    correlationId: request.correlationId,
+  }
+  const withCurrentReply = <T extends { replyTo?: string; delivery?: unknown }>(options?: T) => ({
     ...options,
     replyTo: options?.replyTo ?? currentReplyTo,
+    delivery: options?.delivery ?? delivery,
   })
   const sendText: CommandContext['sendText'] = (text, options) =>
     adapter.sendText(chatId, text, withCurrentReply(options))
@@ -101,7 +107,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   }
   const editMessage: CommandContext['editMessage'] = async (messageId, text) => {
     if (adapter.capabilities.editMessage && adapter.editMessage) {
-      await adapter.editMessage(chatId, messageId, text)
+      await adapter.editMessage(chatId, messageId, text, delivery)
       return
     }
     await sendText(text)
@@ -112,7 +118,7 @@ export function createNeutralCommandContext(input: SharedCommandContextInput): C
   }
   const react: CommandContext['react'] = async (reaction) => {
     if (!normalizedMessage.messageId || !adapter.capabilities.reactions || !adapter.react) return undefined
-    await adapter.react(chatId, normalizedMessage.messageId, reaction)
+    await adapter.react(chatId, normalizedMessage.messageId, reaction, delivery)
     return undefined
   }
 
