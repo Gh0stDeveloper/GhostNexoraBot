@@ -171,7 +171,7 @@ try {
 
 const report = {
   generatedAt: new Date().toISOString(),
-  gate: 'phase6-i18n-boundary',
+  gate: 'i18n-boundary',
   botCatalog: 'validated by runtime smoke/assertCatalogParity',
   webCatalog: { esKeys: webEsKeys.length, enKeys: webEnKeys.length },
   webLiteralFindings,

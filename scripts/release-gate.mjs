@@ -64,7 +64,7 @@ check(state.includes('chmod 0700'), 'release snapshots are private by default');
 check(/for rel in data session sessions db sqlite downloads/.test(state), 'snapshot covers VPS data, sessions, databases and downloads');
 check(stateSmoke.includes('nexora-economy.sqlite'), 'snapshot smoke exercises VPS database state');
 check(stateSmoke.includes('release_state_restore_persistent'), 'snapshot smoke exercises restore path');
-check(validationWorkflow.includes('v2-phase8-release-state-smoke.sh'), 'release validation runs snapshot/restore smoke');
+check(validationWorkflow.includes('release-state-smoke.sh'), 'release validation runs snapshot/restore smoke');
 check(releaseWorkflow.includes('attest-build-provenance'), 'release workflow generates build provenance');
 check(releaseWorkflow.includes('npm sbom --sbom-format cyclonedx'), 'release workflow generates CycloneDX SBOM');
 check(releaseWorkflow.includes('WINDOWS_CERTIFICATE_BASE64'), 'Windows Authenticode signing requires a certificate secret');

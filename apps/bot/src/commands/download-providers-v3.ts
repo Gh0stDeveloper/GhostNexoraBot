@@ -120,7 +120,7 @@ async function providerHealth(ctx: LegacyCompatibleCommandContext) {
     return
   }
   await ctx.reply([
-    '*PROVIDER HEALTH · V2 PHASE 3*',
+    '*PROVIDER HEALTH · V2*',
     ...rows.map((item) => [
       `${item.provider}: ${item.successes}/${item.attempts} OK · fallos ${item.failures}`,
       item.lastLatencyMs !== undefined ? `última latencia ${item.lastLatencyMs} ms` : undefined,

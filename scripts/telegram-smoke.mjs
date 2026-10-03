@@ -5,11 +5,11 @@ import os from 'node:os'
 import path from 'node:path'
 
 // Configure the native Telegram runtime before importing adapter/runtime modules.
-// Phase F adapter telemetry imports ops/config transitively, so late env mutation
+// Adapter telemetry imports ops/config transitively, so late env mutation
 // would leave telegramConfig.token frozen as empty in this smoke process.
 const runtimeDir = await mkdtemp(path.join(os.tmpdir(), 'ghost-nexora-tg-telegram-'))
 const runtimeStateFile = path.join(runtimeDir, 'state.json')
-process.env.TELEGRAM_BOT_TOKEN = '123456:PHASE4_TEST_TOKEN'
+process.env.TELEGRAM_BOT_TOKEN = '123456:TELEGRAM_TEST_TOKEN'
 process.env.TELEGRAM_PLATFORM_STATE_FILE = runtimeStateFile
 process.env.TELEGRAM_POLL_TIMEOUT_SECONDS = '5'
 process.env.TELEGRAM_RECONNECT_DELAY_MS = '1000'

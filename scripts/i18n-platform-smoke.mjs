@@ -6,7 +6,7 @@ import path from 'node:path'
 const temp = await mkdtemp(path.join(os.tmpdir(), 'ghostnexora-i18n-'))
 process.env.DATA_DIR = temp
 process.env.SESSION_DIR = path.join(temp, 'session')
-process.env.ADMIN_WEB_TOKEN = 'phase6-i18n-smoke-token'
+process.env.ADMIN_WEB_TOKEN = 'i18n-smoke-token'
 process.env.NEXORA_INSTANCE_ROLE = 'main'
 
 try {

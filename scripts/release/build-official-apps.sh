@@ -342,7 +342,7 @@ LINUX_DEB="ghost-nexora-manager_${VERSION}_amd64.deb"
 LINUX_APPIMAGE="GhostNexoraManager-${VERSION}-linux-x86_64.AppImage"
 LINUX_RPM="ghost-nexora-manager-${VERSION}-1.x86_64.rpm"
 WINDOWS_ARTIFACT="GhostNexoraManager-${VERSION}-windows-x64-setup.exe"
-FAILED_PHASES=()
+FAILED_PLATFORMS=()
 
 if step_done android "${ANDROID_ARTIFACT}"; then
   info 'Android ya estaba completado para este SHA; reutilizando artefacto validado del staging.'
@@ -351,7 +351,7 @@ else
   if ( build_android ); then
     mark_step android
   else
-    FAILED_PHASES+=(android)
+    FAILED_PLATFORMS+=(android)
     rm -f "${STAGE}/${ANDROID_ARTIFACT}"
     info 'Android falló; continuará la compilación de las demás plataformas.'
   fi
@@ -364,7 +364,7 @@ else
   if ( build_linux ); then
     mark_step linux
   else
-    FAILED_PHASES+=(linux)
+    FAILED_PLATFORMS+=(linux)
     rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
     info 'Linux falló; continuará la compilación de las demás plataformas.'
   fi
@@ -377,7 +377,7 @@ else
   if ( build_windows ); then
     mark_step windows
   else
-    FAILED_PHASES+=(windows)
+    FAILED_PLATFORMS+=(windows)
     rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
     info 'Windows falló; se publicarán igualmente las aplicaciones disponibles.'
   fi
@@ -390,8 +390,8 @@ sign_catalog_files
 publish
 mark_step published
 
-if (( ${#FAILED_PHASES[@]} > 0 )); then
-  info "Distribución parcial publicada correctamente. Plataformas con error: ${FAILED_PHASES[*]}."
+if (( ${#FAILED_PLATFORMS[@]} > 0 )); then
+  info "Distribución parcial publicada correctamente. Plataformas con error: ${FAILED_PLATFORMS[*]}."
 else
   info 'Distribución completa publicada correctamente.'
 fi

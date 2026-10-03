@@ -1,6 +1,6 @@
 # Ghost Nexora Bot 2.0.0
 
-Ghost Nexora Bot 2.0.0 is the production release target for the V2 multi-platform architecture completed through Phases 0–8.
+Ghost Nexora Bot 2.0.0 is the production release target for the V2 multi-platform architecture current validated multi-platform architecture.
 
 ## Highlights
 
@@ -50,7 +50,7 @@ Unsigned artifacts produced by regression CI are test artifacts only and must no
 
 Confirm all of the following against the exact candidate commit:
 
-- Phase 0–8 CI is green;
+- the validation matrix is green;
 - production signing secrets are configured in GitHub Actions;
 - Android signature verification passes;
 - Windows Authenticode verification passes;
@@ -65,7 +65,7 @@ If runtime code changes after the soak begins, restart the 72-hour soak window.
 
 ## Compatibility
 
-release does not intentionally remove supported Phase 7 installation paths. Existing VPS, Termux Lite and Windows installation/update routes remain available while the new release-safe VPS updater is introduced for production tag transitions.
+release does not intentionally remove supported installation paths. Existing VPS, Termux Lite and Windows installation/update routes remain available while the new release-safe VPS updater is introduced for production tag transitions.
 
 ## Security
 
