@@ -41,12 +41,12 @@ Una fase solo se marca como TERMINADO cuando:
 |---|---|---|
 | Fase A | Login y seguridad Web | TERMINADO |
 | Fase E | Dashboard Web V2 | TERMINADO |
-| Fase F | Observabilidad, métricas y operación | PENDIENTE |
+| Fase F | Observabilidad, métricas y operación | TERMINADO |
 | Fase B | Núcleo multiplataforma compartido | TERMINADO |
 | Fase C | Paridad Discord y Telegram | TERMINADO |
 | Fase D | Runtime y entrega WhatsApp | TERMINADO |
 
-Orden actualizado: Fases A, B, C, D y E quedaron terminadas. Fase F permanece pendiente.
+Orden actualizado: Fases A, B, C, D, E y F quedaron implementadas en la rama de trabajo.
 
 ---
 
@@ -1449,7 +1449,7 @@ Cierre:
 
 # FASE F — Observabilidad, métricas y operación
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 ## Objetivo
 
@@ -1457,7 +1457,7 @@ Tener visibilidad suficiente para saber por qué una función falla o se vuelve 
 
 ## F1. PlatformRuntimeRegistry
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Estado uniforme de todas las plataformas.
 
@@ -1478,9 +1478,11 @@ Telegram:
 - latency;
 - events.
 
+Implementado con `ops_platform_runtime`, registro por instancia y plataforma, estado/latencia/eventos/comunidades/reconexiones/rate limits/error sanitizado y metadata técnica acotada. WhatsApp, Discord y Telegram publican eventos reales de sus runtimes.
+
 ## F2. Métricas de colas
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Medir:
 
@@ -1499,9 +1501,11 @@ Separar por:
 - download;
 - IA.
 
+Implementado con `ops_queue_metrics`: profundidad actual/máxima, wait/exec time, fallos, retries y saturación; dimensiones por plataforma, command, provider y lane (`default`, `downloads`, `ai`, `subbots`). Providers registran además tiempo de ejecución bajo su propia dimensión.
+
 ## F3. Métricas de adapters
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Registrar:
 
@@ -1514,9 +1518,11 @@ Registrar:
 - latency;
 - rate limits.
 
+Implementado con `ops_adapter_metrics` para WhatsApp/Discord/Telegram y eventos recientes de rate limit. Texto, media, UI, edición, typing y reacciones reportan latencia/fallos; uploads acumulan bytes y los retries del outbox/429 quedan contabilizados por instancia.
+
 ## F4. Correlation IDs
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Cada mensaje y comando debe recibir un identificador de correlación que viaje por:
 
@@ -1524,9 +1530,11 @@ ingest → router → command → provider → media → outbox → adapter.
 
 Así se podrá reconstruir un fallo completo sin exponer datos sensibles.
 
+Implementado mediante `AsyncLocalStorage`: el correlation ID nace en ingest/request y se hereda por router, command, provider, MediaPipeline y outbox. Adapters y errores agrupados conservan la referencia operativa sin persistir contenido de conversaciones.
+
 ## F5. Alertas operativas
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Generar alertas cuando ocurra, por ejemplo:
 
@@ -1541,9 +1549,11 @@ Generar alertas cuando ocurra, por ejemplo:
 - disco bajo;
 - memoria alta.
 
+Implementado mediante un monitor periódico independiente del dashboard. Usa señales recientes para 429 y saturación, salud de providers, estado de plataformas, jobs FFmpeg/yt-dlp/download, errores DB locked, latencia de adapters, espacio de disco y memoria RSS; publica en el `ops_alerts` ya existente.
+
 ## F6. Error grouping
 
-Estado: PENDIENTE
+Estado: TERMINADO
 
 Agrupar errores repetidos por fingerprint para evitar miles de entradas iguales.
 
@@ -1555,6 +1565,8 @@ Mostrar:
 - plataforma;
 - comando o provider;
 - muestra sanitizada.
+
+Implementado con `ops_error_groups` y fingerprint SHA-256 sobre error normalizado/sanitizado + plataforma/comando/provider. Conserva primera/última aparición, cantidad, scope, muestra sanitizada y último correlation ID. Diagnostics muestra estas agrupaciones sin contenido de mensajes.
 
 ---
 
@@ -1624,21 +1636,17 @@ Estas tareas están incluidas dentro de las fases anteriores:
 | 2026-09-19 | Fase E12 | Actualizaciones seguras desde Dashboard con progreso y healthcheck | TERMINADO | 9bec819c28a04be010aa0f2e00d7e86ecf29b255 |
 | 2026-09-19 | Fase E13 | Backups tipados, verificación, dry-run y restore seguro | TERMINADO | ea5d6940c7246c0746570b8568b9170254c11ede |
 | 2026-09-19 | Fase E14 | Pulido visual, command palette, modales, toasts y responsive | TERMINADO | efa6d6b28e98a0af17cb198f098db42e2c659649 |
-| — | Fase F | Observabilidad | PENDIENTE | — |
+| 2026-10-03 | Fase F | Observabilidad, métricas y operación · F1–F6 completadas | TERMINADO | PR #105 |
 
 ---
 
 # Próximo paso
 
-**FASE D está TERMINADA con D1–D6 completadas.**
+**FASE F está TERMINADA con F1–F6 completadas en la rama de trabajo.**
 
-La fase todavía pendiente del roadmap es:
+Con esto, las fases A–F de este roadmap ya están implementadas. El siguiente paso es revisar la validación final del PR #105 y decidir cuándo integrarlo a `main`.
 
-- **FASE F · Observabilidad, métricas y operación** — F1 a F6.
-
-El siguiente bloque técnico es **F1** cuando se decida retomar la Fase F.
-
-No iniciar F automáticamente sin indicación del usuario.
+No fusionar automáticamente a `main` sin revisión/indicación.
 
 La Fase A quedó terminada y fusionada a `main` mediante PR #75.
 
@@ -1658,4 +1666,4 @@ Resultados principales de Fase A:
 - panel privado de seguridad;
 - CI, typecheck, build y smoke de Fase A en verde.
 
-Las Fases B, C y D ya quedaron implementadas y registradas como TERMINADO en la rama de trabajo; F continúa pendiente.
+Las Fases B, C, D y F ya quedaron implementadas y registradas como TERMINADO en la rama de trabajo.
