@@ -112,7 +112,7 @@ export async function deliverWithOutbox<T>(input: {
         break
       }
       if (input.platform === 'whatsapp' || input.platform === 'discord' || input.platform === 'telegram') {
-        recordAdapterRetry(input.platform)
+        recordAdapterRetry(input.platform, { instanceKey })
       }
       const backoff = input.backoffMs?.length ? input.backoffMs : BACKOFF_MS
       const wait = Math.max(0, Math.min(60_000, Math.trunc(backoff[Math.min(attempt - 1, backoff.length - 1)] ?? 0)))
