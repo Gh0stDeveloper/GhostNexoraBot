@@ -464,7 +464,7 @@ Cierre B5:
 - aislamiento concurrente validado entre chats, usuarios y locales distintos;
 - bindings cruzados request/adapter/mensaje se rechazan antes del handler;
 - WhatsApp, Discord y Telegram crean snapshots independientes;
-- correlation ID queda disponible en el borde de comando y logs de error; la propagación end-to-end continúa reservada para F4;
+- correlation ID quedó disponible inicialmente en el borde de comando; F4 completó después su propagación end-to-end hacia providers, media, outbox y adapters;
 - B1–B5, Typecheck, Build, Termux y CI principal pasan en verde sobre el HEAD de implementación `087d09f8c041ad42e532bca8fdf1515341b7f9ca`;
 - PR de cierre: #86 `feat: complete Phase B5 immutable RequestContext`.
 
