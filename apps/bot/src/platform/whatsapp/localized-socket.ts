@@ -2,6 +2,7 @@ import type { WASocket } from 'baileys'
 import type { NexoraSocket } from '../../types.js'
 import { localizeLegacyText, resolveChatLocale, type LocaleCode } from '../../i18n/index.js'
 import { deliverWithOutbox } from '../../services/delivery-outbox.js'
+import { whatsappOpsInstanceKey } from './instance.js'
 
 const LOCALIZED_KEYS = new Set([
   'text',
@@ -71,6 +72,7 @@ export function createLocalizedSocket(
             kind: 'legacy-message',
             label: 'whatsapp_legacy_send',
             correlationId: options.correlationId,
+            instanceKey: whatsappOpsInstanceKey(options.botInstanceId ?? 'main'),
           }, send)
         }
       }
@@ -82,6 +84,7 @@ export function createLocalizedSocket(
             kind: 'legacy-relay',
             label: 'whatsapp_legacy_relay',
             correlationId: options.correlationId,
+            instanceKey: whatsappOpsInstanceKey(options.botInstanceId ?? 'main'),
           }, () => target.relayMessage(jid, content as never, relayOptions as never))
       }
       const value = Reflect.get(target, property, receiver)
