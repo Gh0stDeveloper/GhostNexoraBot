@@ -1,6 +1,7 @@
 import { opsDb, opsInstanceKey } from './ops-database.js'
 import { sanitizeOpsLogText } from './ops-runtime-log.js'
 import type { RuntimePlatform } from './platform-runtime-registry.js'
+import { recordGroupedError } from './error-groups.js'
 
 export type QueueMetricDimension = 'platform' | 'command' | 'provider' | 'lane'
 
@@ -268,4 +269,50 @@ export function readAdapterMetrics(instanceKey = opsInstanceKey()): AdapterMetri
         updatedAt: Number(row.updatedAt ?? 0),
       }
     })
+}
+
+
+export async function trackedAdapterOperation<T>(
+  platform: RuntimePlatform,
+  operation: 'send' | 'media' | 'ui' | 'edit' | 'typing' | 'reaction' | 'api',
+  task: () => Promise<T>,
+  input: { uploadBytes?: number; instanceKey?: string } = {},
+): Promise<T> {
+  const started = performance.now()
+  try {
+    const result = await task()
+    recordAdapterOperation(platform, {
+      ok: true,
+      operation,
+      latencyMs: performance.now() - started,
+      uploadBytes: input.uploadBytes,
+      instanceKey: input.instanceKey,
+    })
+    return result
+  } catch (error) {
+    recordAdapterOperation(platform, {
+      ok: false,
+      operation,
+      latencyMs: performance.now() - started,
+      uploadBytes: input.uploadBytes,
+      error,
+      instanceKey: input.instanceKey,
+    })
+    recordGroupedError(error, { platform, instanceKey: input.instanceKey })
+    throw error
+  }
+}
+
+export function recordAdapterRetry(
+  platform: RuntimePlatform,
+  input: { rateLimited?: boolean; instanceKey?: string } = {},
+) {
+  recordAdapterOperation(platform, {
+    ok: true,
+    operation: 'api',
+    latencyMs: 0,
+    retries: 1,
+    rateLimits: input.rateLimited ? 1 : 0,
+    instanceKey: input.instanceKey,
+  })
 }
