@@ -169,6 +169,7 @@ try {
     adminControl,
     groupOps,
     commandV2,
+    localizedSocket,
     roadmap,
   ] = await Promise.all([
     source('packages/platform-contracts/src/index.ts'),
@@ -184,6 +185,7 @@ try {
     source('apps/bot/src/services/admin-web-control.ts'),
     source('apps/bot/src/services/group-ops-runtime.ts'),
     source('apps/bot/src/commands/v2.ts'),
+    source('apps/bot/src/platform/whatsapp/localized-socket.ts'),
     source('README_NEXT_INTEGRATIONS.md'),
   ])
 
@@ -209,6 +211,8 @@ try {
   assert.match(adminControl, /adapter\.sendText\(groupJid/, 'D4 admin broadcast bypasses adapter/outbox')
   assert.match(groupOps, /adapter\.sendText\(groupJid/, 'D4 group broadcast bypasses adapter/outbox')
   assert.match(commandV2, /ctx\.adapter\.sendText\(group\.id/, 'D4 command broadcast bypasses adapter/outbox')
+  assert.match(router, /useOutbox: true/, 'D4 legacy command socket must opt into the reliable outbox')
+  assert.match(localizedSocket, /deliverWithOutbox/, 'D4 legacy send/relay boundary is not outbox-backed')
 
   assert.match(uiSource, /whatsappUiFallbackChain/, 'D5 fallback planner missing')
   assert.match(adapter, /for \(const stage of whatsappUiFallbackChain\(ui\)\)/, 'D5 adapter fallback execution missing')
