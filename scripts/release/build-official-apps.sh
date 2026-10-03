@@ -38,10 +38,10 @@ BUILD_DIR="${BUILD_ROOT}/${SOURCE_SHA:0:12}"
 STAGE="${BUILD_DIR}/stage"
 install -d -m 0750 "${BUILD_DIR}" "${STAGE}"
 
-phase_done() {
-  local phase="$1"
+step_done() {
+  local step="$1"
   shift
-  local marker="${BUILD_DIR}/.${phase}.done" artifact
+  local marker="${BUILD_DIR}/.${step}.done" artifact
   [[ -f "${marker}" ]] || return 1
   [[ "$(cat "${marker}" 2>/dev/null || true)" == "${SOURCE_SHA}|${VERSION}" ]] || return 1
   for artifact in "$@"; do
@@ -49,8 +49,8 @@ phase_done() {
   done
 }
 
-mark_phase() {
-  local phase="$1" marker="${BUILD_DIR}/.${1}.done" tmp="${BUILD_DIR}/.${1}.done.$$"
+mark_step() {
+  local step="$1" marker="${BUILD_DIR}/.${1}.done" tmp="${BUILD_DIR}/.${1}.done.$$"
   printf '%s|%s\n' "${SOURCE_SHA}" "${VERSION}" >"${tmp}"
   chmod 0640 "${tmp}"
   mv -f "${tmp}" "${marker}"
@@ -344,12 +344,12 @@ LINUX_RPM="ghost-nexora-manager-${VERSION}-1.x86_64.rpm"
 WINDOWS_ARTIFACT="GhostNexoraManager-${VERSION}-windows-x64-setup.exe"
 FAILED_PHASES=()
 
-if phase_done android "${ANDROID_ARTIFACT}"; then
+if step_done android "${ANDROID_ARTIFACT}"; then
   info 'Android ya estaba completado para este SHA; reutilizando artefacto validado del staging.'
 else
   rm -f "${STAGE}/${ANDROID_ARTIFACT}"
   if ( build_android ); then
-    mark_phase android
+    mark_step android
   else
     FAILED_PHASES+=(android)
     rm -f "${STAGE}/${ANDROID_ARTIFACT}"
@@ -357,12 +357,12 @@ else
   fi
 fi
 
-if phase_done linux "${LINUX_DEB}" "${LINUX_APPIMAGE}"; then
+if step_done linux "${LINUX_DEB}" "${LINUX_APPIMAGE}"; then
   info 'Linux ya estaba completado para este SHA; reutilizando artefactos del staging.'
 else
   rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
   if ( build_linux ); then
-    mark_phase linux
+    mark_step linux
   else
     FAILED_PHASES+=(linux)
     rm -f "${STAGE}/${LINUX_DEB}" "${STAGE}/${LINUX_APPIMAGE}" "${STAGE}/${LINUX_RPM}"
@@ -370,12 +370,12 @@ else
   fi
 fi
 
-if phase_done windows "${WINDOWS_ARTIFACT}"; then
+if step_done windows "${WINDOWS_ARTIFACT}"; then
   info 'Windows ya estaba completado para este SHA; reutilizando instalador firmado del staging.'
 else
   rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
   if ( build_windows ); then
-    mark_phase windows
+    mark_step windows
   else
     FAILED_PHASES+=(windows)
     rm -f "${STAGE}/${WINDOWS_ARTIFACT}"
@@ -388,7 +388,7 @@ PUBLISHABLE_COUNT="$(find "${STAGE}" -maxdepth 1 -type f \( -name '*.apk' -o -na
 
 sign_catalog_files
 publish
-mark_phase published
+mark_step published
 
 if (( ${#FAILED_PHASES[@]} > 0 )); then
   info "Distribución parcial publicada correctamente. Plataformas con error: ${FAILED_PHASES[*]}."

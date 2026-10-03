@@ -1,10 +1,10 @@
 # V2 Release Candidate signing
 
-This document defines the temporary signing model used by the Phase 8 release-candidate workflow.
+This document defines the temporary signing model used by the release-candidate workflow.
 
 ## Purpose
 
-The repository cannot manufacture or persist production signing secrets. Production `v2.0.0` still requires permanent private credentials supplied through protected GitHub Actions secrets and the real 72-hour soak gate documented in `PHASE_8.md`.
+The repository cannot manufacture or persist production signing secrets. Production `v2.0.0` still requires permanent private credentials supplied through protected GitHub Actions secrets and the real 72-hour soak gate documented in `RELEASE_2_0.md`.
 
 To make a visible, installable release candidate available before those permanent credentials exist, `.github/workflows/v2-rc-release.yml` generates short-lived signing material inside GitHub-hosted runners. Private keys never leave the runner and are never committed or uploaded as artifacts.
 
@@ -35,7 +35,7 @@ The Linux runner generates a temporary GPG signing key with no persistent privat
 
 ## Release candidate publication
 
-A successful run publishes a GitHub prerelease named `v2.0.0-rc.<run_number>` targeting the exact Phase 8 commit that was built.
+A successful run publishes a GitHub prerelease named `v2.0.0-rc.<run_number>` targeting the exact release commit that was built.
 
 The prerelease contains:
 
@@ -59,4 +59,4 @@ The final `v2.0.0` release remains blocked until:
 3. at least 72 continuous hours of soak complete on the exact candidate SHA;
 4. the production release workflow verifies every final signature and provenance record.
 
-No Phase 8 branch is merged to `main` by this RC publication process.
+No release branch is merged to `main` by this RC publication process.

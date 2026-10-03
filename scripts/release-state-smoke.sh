@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(mktemp -d /tmp/ghost-nexora-phase8-state.XXXXXX)"
+ROOT="$(mktemp -d /tmp/ghost-nexora-release-state.XXXXXX)"
 INSTALL_DIR="${ROOT}/install"
 STATE_DIR="${ROOT}/state"
 RELEASE_STATE_DIR="${STATE_DIR}/releases"
@@ -10,8 +10,8 @@ trap cleanup EXIT
 
 mkdir -p "${INSTALL_DIR}/data" "${STATE_DIR}/data" "${STATE_DIR}/session"
 git -C "${ROOT}" init -q install
-git -C "${INSTALL_DIR}" config user.email phase8@example.invalid
-git -C "${INSTALL_DIR}" config user.name 'Phase 8 Smoke'
+git -C "${INSTALL_DIR}" config user.email release@example.invalid
+git -C "${INSTALL_DIR}" config user.name 'Release Smoke'
 printf 'tracked\n' > "${INSTALL_DIR}/README"
 git -C "${INSTALL_DIR}" add README
 git -C "${INSTALL_DIR}" commit -qm init
@@ -25,7 +25,7 @@ export INSTALL_DIR STATE_DIR RELEASE_STATE_DIR
 # shellcheck source=./release-state.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/release-state.sh"
 
-snapshot="$(release_state_create_snapshot phase8-smoke)"
+snapshot="$(release_state_create_snapshot release-smoke)"
 [[ -f "${snapshot}/manifest.env" ]]
 [[ "$(stat -c '%a' "${RELEASE_STATE_DIR}")" == '700' ]]
 [[ -f "${snapshot}/state/data/nexora-economy.sqlite" ]]
@@ -42,4 +42,4 @@ grep -qx 'TOKEN=original' "${INSTALL_DIR}/.env"
 grep -qx 'legacy-install-data' "${INSTALL_DIR}/data/legacy.txt"
 grep -qx 'sqlite-state' "${STATE_DIR}/data/nexora-economy.sqlite"
 grep -qx 'session-secret' "${STATE_DIR}/session/creds.json"
-printf 'Phase 8 release-state smoke passed.\n'
+printf 'Release release-state smoke passed.\n'

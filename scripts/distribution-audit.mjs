@@ -61,10 +61,10 @@ assert.match(builder, /assembleRelease/)
 assert.match(builder, /apksigner.*verify/)
 assert.match(builder, /--bundles deb,appimage,rpm/)
 assert.match(builder, /--bundles nsis/)
-assert.match(builder, /phase_done\(\)/)
-assert.match(builder, /mark_phase\(\)/)
+assert.match(builder, /step_done\(\)/)
+assert.match(builder, /mark_step\(\)/)
 assert.match(builder, /already completed|ya estaba completado/i)
-assert.doesNotMatch(builder, /rm -rf "\$\{BUILD_ROOT:\?\}\/\$\{SOURCE_SHA:0:12\}"/, 'Same-SHA staging must survive a failed phase for resume')
+assert.doesNotMatch(builder, /rm -rf "\$\{BUILD_ROOT:\?\}\/\$\{SOURCE_SHA:0:12\}"/, 'Same-SHA staging must survive a failed step for resume')
 assert.match(builder, /FAILED_PHASES=\(\)/)
 assert.match(builder, /if \( build_android \); then/)
 assert.match(builder, /if \( build_linux \); then/)
@@ -114,7 +114,7 @@ try {
       OFFICIAL_RELEASE_VERSION: '2.0.0',
       OFFICIAL_RELEASE_CHANNEL: 'rc',
       OFFICIAL_SOURCE_SHA: '0123456789abcdef0123456789abcdef01234567',
-      OFFICIAL_SOURCE_REF: 'phase7-partial-smoke',
+      OFFICIAL_SOURCE_REF: 'distribution-partial-smoke',
       ANDROID_SIGNER_FINGERPRINT: 'android-test',
       WINDOWS_SIGNER_FINGERPRINT: 'windows-test',
       WINDOWS_SIGNING_MODE: 'self-signed',
@@ -140,7 +140,7 @@ try {
       OFFICIAL_RELEASE_VERSION: '2.0.0',
       OFFICIAL_RELEASE_CHANNEL: 'rc',
       OFFICIAL_SOURCE_SHA: 'fedcba9876543210fedcba9876543210fedcba98',
-      OFFICIAL_SOURCE_REF: 'phase7-empty-smoke',
+      OFFICIAL_SOURCE_REF: 'distribution-empty-smoke',
     },
   })
   assert.notEqual(empty.status, 0, 'empty release publisher must fail')

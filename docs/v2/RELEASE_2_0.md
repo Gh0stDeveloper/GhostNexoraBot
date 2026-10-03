@@ -17,7 +17,7 @@ Ghost Nexora Bot 2.0.0 is the production release target for the V2 multi-platfor
 
 ## Upgrade safety
 
-For a production release upgrade, use the release updater after `v2.0.0` has passed all Phase 8 production gates:
+For a production release upgrade, use the release updater after `v2.0.0` has passed all production release gates:
 
 ```bash
 sudo bash /opt/ghost-nexora-bot/scripts/release-update.sh v2.0.0
@@ -65,7 +65,7 @@ If runtime code changes after the soak begins, restart the 72-hour soak window.
 
 ## Compatibility
 
-Phase 8 does not intentionally remove supported Phase 7 installation paths. Existing VPS, Termux Lite and Windows installation/update routes remain available while the new release-safe VPS updater is introduced for production tag transitions.
+release does not intentionally remove supported Phase 7 installation paths. Existing VPS, Termux Lite and Windows installation/update routes remain available while the new release-safe VPS updater is introduced for production tag transitions.
 
 ## Security
 

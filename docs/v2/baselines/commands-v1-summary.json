@@ -5,7 +5,7 @@
   "generator": "scripts/v2-baseline-report.mjs",
   "ciRunId": 34432910222,
   "artifactId": 10135146185,
-  "artifactName": "v2-phase0-baseline",
+  "artifactName": "v2-baseline",
   "artifactZipSha256": "3fa4bcd6e8c599a8aa26ce6a7fc5848bba2a25068d21f4a91831a017e3e71f19",
   "providerCount": 18,
   "profiles": {

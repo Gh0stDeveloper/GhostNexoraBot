@@ -5,7 +5,7 @@ import path from 'node:path'
 const root = process.cwd()
 const sourceRoot = path.join(root, 'apps/bot/src')
 const outputArg = process.argv.find((arg) => arg.startsWith('--output='))
-const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'artifacts/v2-phase2-ui-audit.json')
+const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'artifacts/whatsapp-ui-audit.json')
 
 const allowedMessageGenerators = new Set([
   'apps/bot/src/platform/whatsapp/interactive.ts',
@@ -86,7 +86,7 @@ const totals = rows.reduce((acc, row) => {
 
 const report = {
   schemaVersion: 1,
-  kind: 'ghost-nexora-v2-phase2-ui-compat-audit',
+  kind: 'ghost-nexora-whatsapp-ui-compat-audit',
   generatedAt: new Date().toISOString(),
   generatedFromSha: process.env.GITHUB_SHA || null,
   stablePolicy: {
