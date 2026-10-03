@@ -36,6 +36,23 @@ class FakeDiscordRest {
     }
   }
 
+  async createMessageWithFileStream(channelId, body, sourceFactory, fileName, mimeType, maxBytes) {
+    let total = 0
+    const source = await sourceFactory()
+    for await (const chunk of source) {
+      total += chunk.byteLength
+      assert.ok(total <= maxBytes)
+    }
+    this.calls.push(['createMessageWithFileStream', channelId, body, total, fileName, mimeType])
+    return {
+      id: String(this.nextId++),
+      channel_id: channelId,
+      author: { id: '999', username: 'GhostNexoraBot', bot: true },
+      content: body.content || '',
+      attachments: [{ id: '1', filename: fileName, content_type: mimeType, size: total, url: 'https://cdn.discord.test/file' }],
+    }
+  }
+
   async editMessage(channelId, messageId, body) {
     this.calls.push(['editMessage', channelId, messageId, body])
     return { id: messageId, channel_id: channelId, author: { id: '999', username: 'GhostNexoraBot', bot: true }, content: body.content || '', attachments: [] }
@@ -103,6 +120,8 @@ assert.equal(uiCall[2].embeds[0].title, 'APKMirror')
 const customId = uiCall[2].components[0].components[0].custom_id
 assert.ok(Buffer.byteLength(customId, 'utf8') <= 100)
 assert.equal(adapter.resolveComponentCustomId(customId), hugeCommand)
+const restartedAdapter = new DiscordAdapter(rest, 'discord-smoke')
+assert.equal(restartedAdapter.resolveComponentCustomId(customId), hugeCommand, 'C4 component reference must survive adapter recreation')
 assert.equal(uiCall[2].components[0].components[1].url, 'https://github.com/Gh0stDeveloper/GhostNexoraBot')
 
 await adapter.sendUi('44', {
@@ -128,9 +147,9 @@ await adapter.sendMedia('44', {
   mimeType: 'application/octet-stream',
   caption: 'Archivo de prueba',
 })
-const mediaCall = rest.calls.find((call) => call[0] === 'createMessageWithFile')
+const mediaCall = rest.calls.find((call) => call[0] === 'createMessageWithFileStream')
 assert.ok(mediaCall)
-assert.equal(mediaCall[3].byteLength, 4)
+assert.equal(mediaCall[3], 4)
 assert.equal(mediaCall[4], 'test.bin')
 
 const editable = await adapter.sendText('44', 'editable')
