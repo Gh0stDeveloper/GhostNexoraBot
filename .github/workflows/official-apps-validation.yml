@@ -12,13 +12,13 @@ on:
       - 'scripts/install-manager-api.sh'
       - 'scripts/install.sh'
       - 'scripts/update.sh'
-      - 'scripts/v2-phase7-*.mjs'
-      - 'scripts/v2-phase6-*.mjs'
+      - 'scripts/official-apps-*.mjs'
+      - 'scripts/i18n-*.mjs'
       - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'package.json'
       - 'docs/v2/**'
-      - '.github/workflows/v2-phase7.yml'
+      - '.github/workflows/official-apps-validation.yml'
   workflow_dispatch:
 
 concurrency:
@@ -71,7 +71,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase7-evidence
+          name: official-apps-evidence
           path: |
             official-apps-inventory.json
             i18n-platform-audit.json

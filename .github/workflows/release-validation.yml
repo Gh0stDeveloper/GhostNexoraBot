@@ -6,11 +6,11 @@ on:
       - 'apps/**'
       - 'packages/**'
       - 'scripts/release-*.sh'
-      - 'scripts/v2-phase8-*.mjs'
-      - 'scripts/v2-phase8-*.sh'
+      - 'scripts/release-*.mjs'
+      - 'scripts/release-*.sh'
       - 'package.json'
       - 'docs/v2/**'
-      - '.github/workflows/v2-phase8.yml'
+      - '.github/workflows/release-validation.yml'
       - '.github/workflows/v2-release.yml'
   workflow_dispatch:
 
@@ -40,7 +40,7 @@ jobs:
         run: npm run typecheck
       - name: Build all workspaces
         run: npm run build
-      - name: Preserve Contracts contracts
+      - name: Preserve platform contracts
         run: npm run v2:contracts
       - name: Preserve WhatsApp adapter
         run: npm run v2:whatsapp-adapter
@@ -58,7 +58,7 @@ jobs:
         run: npm run v2:i18n
       - name: Preserve official app boundary
         run: npm run v2:official-apps
-      - name: Release release invariants
+      - name: Release invariants
         run: npm run v2:release-gate
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
@@ -72,7 +72,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase8-evidence
+          name: release-evidence
           path: |
             release-gate.json
             release-inventory.json

@@ -13,7 +13,7 @@ on:
       - 'scripts/v2-baseline-report.mjs'
       - 'docs/v2/**'
       - 'package.json'
-      - '.github/workflows/v2-phase2.yml'
+      - '.github/workflows/whatsapp-ui-validation.yml'
   workflow_dispatch:
 
 concurrency:
@@ -69,13 +69,13 @@ jobs:
       - name: Upload WhatsApp UI UI audit
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase2-ui-audit
-          path: artifacts/v2-phase2-ui-audit.json
+          name: whatsapp-ui-ui-audit
+          path: artifacts/whatsapp-ui-ui-audit.json
           retention-days: 30
 
       - name: Upload WhatsApp UI command inventory
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase2-inventory
+          name: whatsapp-ui-inventory
           path: whatsapp-ui-inventory.json
           retention-days: 30

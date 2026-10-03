@@ -12,7 +12,7 @@ on:
       - '.env.example'
       - 'package.json'
       - 'docs/v2/**'
-      - '.github/workflows/v2-phase4.yml'
+      - '.github/workflows/telegram-validation.yml'
   workflow_dispatch:
 
 concurrency:
@@ -75,7 +75,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase4-inventory
+          name: telegram-inventory
           path: telegram-inventory.json
           if-no-files-found: warn
           retention-days: 30

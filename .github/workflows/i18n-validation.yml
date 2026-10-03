@@ -7,14 +7,14 @@ on:
       - 'apps/web/**'
       - 'packages/**'
       - 'scripts/i18n-*.mjs'
-      - 'scripts/v2-phase6-*.mjs'
-      - 'scripts/v2-phase5-discord-*.mjs'
-      - 'scripts/v2-phase4-telegram-*.mjs'
+      - 'scripts/i18n-*.mjs'
+      - 'scripts/discord-discord-*.mjs'
+      - 'scripts/telegram-telegram-*.mjs'
       - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
       - 'package.json'
       - 'docs/v2/**'
-      - '.github/workflows/v2-phase6.yml'
+      - '.github/workflows/i18n-validation.yml'
   workflow_dispatch:
 
 concurrency:
@@ -85,7 +85,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase6-i18n
+          name: i18n-i18n
           path: |
             i18n-platform-audit.json
             i18n-user-facing-audit.json

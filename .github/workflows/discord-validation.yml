@@ -5,7 +5,7 @@ on:
     paths:
       - 'apps/bot/**'
       - 'packages/**'
-      - 'scripts/v2-phase5-discord-*.mjs'
+      - 'scripts/discord-discord-*.mjs'
       - 'scripts/telegram-smoke.mjs'
       - 'scripts/telegram-audit.mjs'
       - 'scripts/command-surface-regression.mjs'
@@ -13,7 +13,7 @@ on:
       - '.env.example'
       - 'package.json'
       - 'docs/v2/**'
-      - '.github/workflows/v2-phase5.yml'
+      - '.github/workflows/discord-validation.yml'
   workflow_dispatch:
 
 concurrency:
@@ -81,7 +81,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase5-inventory
+          name: discord-inventory
           path: discord-inventory.json
           if-no-files-found: warn
           retention-days: 30

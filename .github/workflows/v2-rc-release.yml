@@ -5,7 +5,7 @@ on:
       - '.github/workflows/v2-rc-release.yml'
       - 'apps/**'
       - 'packages/**'
-      - 'scripts/v2-phase8-*'
+      - 'scripts/release-*'
       - 'package.json'
       - 'package-lock.json'
   workflow_dispatch:
@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: 24
       - run: npm install
-      - name: Recheck Release release invariants
+      - name: Recheck Release invariants
         run: npm run v2:release-gate
       - name: Generate CycloneDX SBOM and candidate metadata
         shell: bash

@@ -15,7 +15,7 @@ on:
       - 'docs/v2/**'
       - '.env.example'
       - 'package.json'
-      - '.github/workflows/v2-phase3.yml'
+      - '.github/workflows/providers-validation.yml'
   workflow_dispatch:
 
 concurrency:
@@ -78,17 +78,17 @@ jobs:
         run: >-
           node scripts/provider-live-gate.mjs
           --allow-known-antibot-blocks
-          --output=artifacts/v2-phase3-live-provider-audit.json
-          --gate-output=artifacts/v2-phase3-live-provider-gate.json
+          --output=artifacts/providers-live-provider-audit.json
+          --gate-output=artifacts/providers-live-provider-gate.json
 
       - name: Upload Providers live audit
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase3-live-provider-audit
+          name: providers-live-provider-audit
           path: |
-            artifacts/v2-phase3-live-provider-audit.json
-            artifacts/v2-phase3-live-provider-gate.json
+            artifacts/providers-live-provider-audit.json
+            artifacts/providers-live-provider-gate.json
           if-no-files-found: warn
           retention-days: 30
 
@@ -96,7 +96,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v2-phase3-inventory
+          name: providers-inventory
           path: providers-inventory.json
           if-no-files-found: warn
           retention-days: 30
