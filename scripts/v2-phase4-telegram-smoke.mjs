@@ -80,12 +80,25 @@ const textMessage = await adapter.sendText('123', 'editable')
 await adapter.editMessage('123', textMessage.messageId, 'edited')
 assert.ok(fake.calls.some((call) => call[0] === 'editMessageText' && String(call[2]) === textMessage.messageId))
 
-const mediaMessage = await adapter.sendMedia('123', {
-  kind: 'image',
-  source: { kind: 'url', value: 'https://example.com/image.jpg' },
-  mimeType: 'image/jpeg',
-  caption: 'image',
-})
+const mediaFetch = globalThis.fetch
+globalThis.fetch = async (input) => {
+  assert.equal(String(input), 'https://example.com/image.jpg')
+  return new Response(new Uint8Array([1, 2, 3, 4]), {
+    status: 200,
+    headers: { 'content-type': 'image/jpeg', 'content-length': '4' },
+  })
+}
+let mediaMessage
+try {
+  mediaMessage = await adapter.sendMedia('123', {
+    kind: 'image',
+    source: { kind: 'url', value: 'https://example.com/image.jpg' },
+    mimeType: 'image/jpeg',
+    caption: 'image',
+  })
+} finally {
+  globalThis.fetch = mediaFetch
+}
 await adapter.editMessage('123', mediaMessage.messageId, 'new caption')
 assert.ok(fake.calls.some((call) => call[0] === 'editMessageCaption' && String(call[2]) === mediaMessage.messageId))
 
