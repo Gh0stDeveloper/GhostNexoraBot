@@ -22,7 +22,7 @@ assert.match(roadmap, /Fase E \| Dashboard Web V2 \| TERMINADO/, 'Phase E must r
 assert.match(roadmap, /Fase B \| Núcleo multiplataforma compartido \| TERMINADO/, 'Phase B must remain completed after B5 closure')
 assert.match(roadmap, /Fase F \| Observabilidad, métricas y operación \| PENDIENTE/, 'Phase F must remain pending')
 assert.match(roadmap, /Fase C \| Paridad Discord y Telegram \| TERMINADO/, 'Phase C must remain completed after C1-C6 closure')
-assert.match(roadmap, /Fase D \| Runtime y entrega WhatsApp \| POSPUESTO/, 'Phase D must remain postponed')
+assert.match(roadmap, /Fase D \| Runtime y entrega WhatsApp \| TERMINADO/, 'Phase D must remain completed after D1-D6 closure')
 
 assert.match(registry, /CREATE TABLE IF NOT EXISTS ops_platform_groups/, 'cross-platform group registry table missing')
 assert.match(registry, /platform TEXT NOT NULL/, 'platform dimension missing from group registry')
