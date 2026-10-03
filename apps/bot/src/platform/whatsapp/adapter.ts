@@ -22,6 +22,7 @@ import { logger } from '../../utils/logger.js'
 import { createLocalizedSocket } from '../../services/localized-socket.js'
 import { sendCarousel, sendInteractiveCard, type InteractiveButton } from './interactive.js'
 import { whatsappMessageCache } from './message-cache.js'
+import { whatsappOpsInstanceKey } from './instance.js'
 import { whatsappUiFallbackChain } from './ui-fallback.js'
 
 export const WHATSAPP_CAPABILITIES = createPlatformCapabilities({
@@ -213,6 +214,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       kind: 'text',
       label: 'whatsapp_text',
       correlationId: options.delivery?.correlationId,
+      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
     }, () => this.sendTextDirect(chatId, text, options))
   }
 
@@ -228,6 +230,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       kind: 'media',
       label: `whatsapp_media_${media.kind}`,
       correlationId: options.delivery?.correlationId,
+      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
     }, async () => {
       const source = outgoingSource(prepared)
       const common = {
@@ -325,6 +328,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       kind: 'ui',
       label: `whatsapp_ui_${ui.kind}`,
       correlationId: options.delivery?.correlationId,
+      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
     }, async () => {
       let lastError: unknown
       for (const stage of whatsappUiFallbackChain(ui)) {
@@ -346,6 +350,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       kind: 'edit',
       label: 'whatsapp_edit',
       correlationId: delivery?.correlationId,
+      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
     }, async () => {
       await this.localizedSocket(chatId, delivery).sendMessage(chatId, {
         text,
