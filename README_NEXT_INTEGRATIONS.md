@@ -454,7 +454,7 @@ Implementación B5:
 - Discord separa reply `messageId` del `requestMessageId` de slash/components;
 - Telegram crea un snapshot por mensaje procesado;
 - logs de error de los tres routers incluyen el correlation ID del request;
-- B5 no modifica `WhatsAppAdapter.activeUserId`: esa migración permanece en D1;
+- B5 dejó `WhatsAppAdapter.activeUserId` como deuda para D1; D1 ya la eliminó usando contexto de entrega explícito;
 - documentación: `docs/v2/PHASE_B5.md`;
 - gate dedicado: `scripts/phase-b5-request-context-smoke.mjs`.
 
