@@ -24,6 +24,7 @@ import { sendCarousel, sendInteractiveCard, type InteractiveButton } from './int
 import { whatsappMessageCache } from './message-cache.js'
 import { whatsappOpsInstanceKey } from './instance.js'
 import { whatsappUiFallbackChain } from './ui-fallback.js'
+import { trackedAdapterOperation } from '../../services/ops-observability-metrics.js'
 
 export const WHATSAPP_CAPABILITIES = createPlatformCapabilities({
   editMessage: true,
@@ -208,14 +209,15 @@ export class WhatsAppAdapter implements PlatformAdapter {
   }
 
   async sendText(chatId: string, text: string, options: SendOptions = {}): Promise<SentMessage> {
-    return deliverWithOutbox({
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    return trackedAdapterOperation('whatsapp', 'send', () => deliverWithOutbox({
       platform: this.id,
       chatId,
       kind: 'text',
       label: 'whatsapp_text',
       correlationId: options.delivery?.correlationId,
-      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
-    }, () => this.sendTextDirect(chatId, text, options))
+      instanceKey,
+    }, () => this.sendTextDirect(chatId, text, options)), { instanceKey })
   }
 
   async sendMedia(chatId: string, media: OutgoingMedia, options: SendOptions = {}): Promise<SentMessage> {
@@ -224,13 +226,15 @@ export class WhatsAppAdapter implements PlatformAdapter {
       maxBytes: this.capabilities.maxUploadBytes,
       mode: media.source.kind === 'url' ? 'materialize' : 'direct',
       retries: 2,
-    }, (prepared) => deliverWithOutbox({
+    }, (prepared) => {
+      const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+      return trackedAdapterOperation('whatsapp', 'media', () => deliverWithOutbox({
       platform: this.id,
       chatId,
       kind: 'media',
       label: `whatsapp_media_${media.kind}`,
       correlationId: options.delivery?.correlationId,
-      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
+      instanceKey,
     }, async () => {
       const source = outgoingSource(prepared)
       const common = {
@@ -261,7 +265,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
         messageId: requireMessageId(sent, 'sendMedia'),
         raw: sent,
       }
-    }))
+    }), { uploadBytes: prepared.size, instanceKey })
+    })
   }
 
   private async sendUiStage(chatId: string, ui: NormalizedUi, options: SendOptions): Promise<SentMessage> {
@@ -322,13 +327,14 @@ export class WhatsAppAdapter implements PlatformAdapter {
   }
 
   async sendUi(chatId: string, ui: NormalizedUi, options: SendOptions = {}): Promise<SentMessage> {
-    return deliverWithOutbox({
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    return trackedAdapterOperation('whatsapp', 'ui', () => deliverWithOutbox({
       platform: this.id,
       chatId,
       kind: 'ui',
       label: `whatsapp_ui_${ui.kind}`,
       correlationId: options.delivery?.correlationId,
-      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
+      instanceKey,
     }, async () => {
       let lastError: unknown
       for (const stage of whatsappUiFallbackChain(ui)) {
@@ -340,33 +346,39 @@ export class WhatsAppAdapter implements PlatformAdapter {
         }
       }
       throw lastError instanceof Error ? lastError : new Error('WhatsApp UI delivery failed.')
-    })
+    }), { instanceKey })
   }
 
   async editMessage(chatId: string, messageId: string, text: string, delivery?: DeliveryContext): Promise<void> {
-    await deliverWithOutbox({
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    await trackedAdapterOperation('whatsapp', 'edit', () => deliverWithOutbox({
       platform: this.id,
       chatId,
       kind: 'edit',
       label: 'whatsapp_edit',
       correlationId: delivery?.correlationId,
-      instanceKey: whatsappOpsInstanceKey(this.botInstanceId),
+      instanceKey,
     }, async () => {
       await this.localizedSocket(chatId, delivery).sendMessage(chatId, {
         text,
         edit: { remoteJid: chatId, fromMe: true, id: messageId },
       })
-    })
+    }), { instanceKey })
   }
 
   async setTyping(chatId: string, active: boolean): Promise<void> {
-    await this.socket.sendPresenceUpdate(active ? 'composing' : 'paused', chatId)
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    await trackedAdapterOperation('whatsapp', 'typing', () =>
+      this.socket.sendPresenceUpdate(active ? 'composing' : 'paused', chatId), { instanceKey })
   }
 
   async react(chatId: string, messageId: string, reaction: string, delivery?: DeliveryContext): Promise<void> {
-    const remembered = this.messageCache.get(chatId, messageId)
-    const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
-    await this.localizedSocket(chatId, delivery).sendMessage(chatId, { react: { text: reaction, key } } as never)
+    const instanceKey = whatsappOpsInstanceKey(this.botInstanceId)
+    await trackedAdapterOperation('whatsapp', 'reaction', async () => {
+      const remembered = this.messageCache.get(chatId, messageId)
+      const key = remembered?.key ?? { remoteJid: chatId, fromMe: false, id: messageId }
+      await this.localizedSocket(chatId, delivery).sendMessage(chatId, { react: { text: reaction, key } } as never)
+    }, { instanceKey })
   }
 }
 
