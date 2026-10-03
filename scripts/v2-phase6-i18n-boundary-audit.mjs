@@ -27,8 +27,8 @@ const [router, adapter, localizedSocket, interactive, language, telegram, discor
 
 check('WhatsApp router sender+instance locale', /resolveChatLocale\(chatId,\s*sender,\s*botInstanceId\)/.test(router))
 check('WhatsApp router contextual localized socket', /createLocalizedSocket\(socket,\s*locale,\s*\{\s*contextChatId:\s*chatId,\s*botInstanceId\s*\}\)/s.test(router))
-check('WhatsApp adapter retains active sender', /private activeUserId\?: string/.test(adapter) && /this\.activeUserId = normalized\.senderId/.test(adapter))
-check('WhatsApp adapter resolves sender+instance locale', /resolveChatLocale\(chatId,\s*this\.activeUserId,\s*this\.botInstanceId\)/.test(adapter))
+check('WhatsApp adapter has no mutable active sender', !/activeUserId/.test(adapter))
+check('WhatsApp adapter resolves explicit delivery locale', /deliveryLocale\(chatId:\s*string,\s*delivery\?:\s*DeliveryContext\)/.test(adapter) && /resolveChatLocale\(chatId,\s*delivery\?\.userId,\s*this\.botInstanceId\)/.test(adapter))
 check('WhatsApp interactive receives localized proxy', /sendInteractiveCard\(localizedSocket/.test(adapter) && /sendCarousel\(localizedSocket/.test(adapter))
 check('WhatsApp localized socket exposes context', /LOCALIZED_SOCKET_CONTEXT/.test(localizedSocket) && /contextChatId/.test(localizedSocket) && /botInstanceId/.test(localizedSocket))
 check('WhatsApp interactive inherits socket context', /localizedSocketContext/.test(interactive) && /interactiveLocale\(socket, chatId\)/.test(interactive))
