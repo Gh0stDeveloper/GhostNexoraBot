@@ -80,7 +80,7 @@ export async function ingestTelegramChannelPost(message: TelegramMessage) {
   return true
 }
 
-// Compatibilidad V7: index.ts conserva este nombre, pero desde Phase 4 ya no
+// Compatibilidad V7: index.ts conserva este nombre, pero desde la migración nativa ya no
 // existe un segundo poller. El arranque se delega al runtime Telegram nativo.
 export async function startTelegramBridge() {
   if (!token()) return false

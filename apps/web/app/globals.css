@@ -325,7 +325,7 @@ textarea:focus-visible,
   *, *::before, *::after { scroll-behavior:auto !important; transition-duration:.01ms !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; }
 }
 
-/* Phase E14 · Operations Center visual system */
+/* Operations Center visual system */
 .ops-page-frame {
   width:100%;
   max-width:1540px;

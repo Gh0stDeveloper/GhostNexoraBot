@@ -58,7 +58,7 @@ export type CommandCategory =
  * WhatsApp socket or WAMessage.
  */
 export interface CommandContext {
-  /** Immutable per-message snapshot introduced by Phase B5. */
+  /** Immutable per-message request snapshot. */
   request: RequestContext
   platform: PlatformId
   adapter: PlatformAdapter

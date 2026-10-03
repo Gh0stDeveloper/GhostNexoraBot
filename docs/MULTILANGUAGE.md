@@ -78,7 +78,7 @@ apps/bot/src/i18n/
 
 `default.ts` representa la voz neutral/default actual del bot. `system.ts` contiene mensajes transversales como UI interactiva, navegador y directivas del asistente.
 
-La separación está preparada para que una fase posterior añada una capa de personalidad por estilo/waifu sin acoplarla al idioma. El idioma (`es`, `en`, etc.) y la personalidad (`default`, futura `megumin`, `rem`, etc.) permanecen como ejes independientes.
+La separación está preparada para añadir posteriormente una capa de personalidad por estilo/waifu sin acoplarla al idioma. El idioma (`es`, `en`, etc.) y la personalidad (`default`, futura `megumin`, `rem`, etc.) permanecen como ejes independientes.
 
 ## Reglas para textos del bot
 

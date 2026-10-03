@@ -26,7 +26,7 @@ export function protectGameHtmlInput(html: string) {
  * Envía los juegos/UI HTML con exactamente el mismo constructor richResponse
  * centralizado que usa `.view`.
  *
- * Fase 2 elimina la duplicación del sobre GenAI: navegador y juegos comparten
+ * Esta capa elimina la duplicación del sobre GenAI: navegador y juegos comparten
  * messageContextInfo, botMetadata, forwarded context y opciones de relay. Esto
  * impide que una futura modificación deje nuevamente a los juegos usando un
  * payload distinto al navegador que sí renderiza en los clientes compatibles.

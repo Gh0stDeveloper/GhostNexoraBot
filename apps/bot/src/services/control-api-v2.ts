@@ -374,7 +374,7 @@ export async function handleControlApiV2(req: http.IncomingMessage, res: http.Se
       return true
     }
 
-    // Backward-compatible alias kept for pre-Phase-7 clients.
+    // Backward-compatible alias kept for older clients.
     if (req.method === 'POST' && url.pathname === '/v2/update') {
       await runtimeUpdate()
       json(res, 202, { ok: true, accepted: true })

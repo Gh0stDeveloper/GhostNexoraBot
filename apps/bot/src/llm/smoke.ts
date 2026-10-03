@@ -73,9 +73,9 @@ try {
   assert.ok(fs.existsSync(path.join(llmDir, 'model-2.bin')))
   assert.ok(fs.existsSync(path.join(llmDir, 'vocab-2.json')))
 
-  // Phase 1: chunk deduplication + local RAG.
+  // Chunk deduplication + local RAG.
   const incrementalCorpus = await import('./incremental-corpus.js')
-  const knowledge = 'El comando fantasma fase uno usa RAG local con Ollama y evita duplicar chunks del corpus.'
+  const knowledge = 'El comando fantasma modo incremental usa RAG local con Ollama y evita duplicar chunks del corpus.'
   const first = incrementalCorpus.ingestLive(knowledge)
   const afterFirst = incrementalCorpus.countVectors()
   const second = incrementalCorpus.ingestLive(knowledge)
@@ -86,7 +86,7 @@ try {
   assert.equal(afterSecond, afterFirst, 'vector count must remain stable after duplicate ingestion')
 
   const { retrieveLocalKnowledge } = await import('../services/llm-rag.js')
-  const rag = retrieveLocalKnowledge('comando fantasma fase uno RAG Ollama', 0)
+  const rag = retrieveLocalKnowledge('comando fantasma modo incremental RAG Ollama', 0)
   assert.ok(rag.hits.length >= 1, 'RAG must retrieve local knowledge')
   assert.match(rag.contextText, /CONTEXTO LOCAL RECUPERADO/)
   assert.match(rag.contextText, /RAG local con Ollama/i)

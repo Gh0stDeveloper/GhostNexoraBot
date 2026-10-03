@@ -168,7 +168,7 @@ try {
   assert.match(main, /startTypingIndicator\(transport, chatId\)/)
   assert.doesNotMatch(main, /function startTypingIndicator\(socket:/)
 
-  console.log('[V2 PHASE 1] OK — WhatsApp adapter preserves V1 compatibility and native carousel transport while exposing normalized APIs.')
+  console.log('[WHATSAPP ADAPTER] OK — WhatsApp adapter preserves V1 compatibility and native carousel transport while exposing normalized APIs.')
 } finally {
   await rm(temp, { recursive: true, force: true })
 }

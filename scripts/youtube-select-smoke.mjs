@@ -13,7 +13,7 @@ const ytformats = effective.find((row) => row.tokens.includes('ytformats'))?.com
 assert.ok(ytformats, 'missing effective .ytformats command')
 assert.equal(ytformats.description.includes('menú interactivo'), true, '.ytformats must resolve to the interactive selector')
 
-// Fase 1 mueve la implementación real de Native Flow a la frontera WhatsApp.
+// Native Flow se implementa en la frontera WhatsApp.
 // El servicio histórico queda como shim para no romper imports V1.
 const interactiveSource = await readFile(new URL('../apps/bot/dist/platform/whatsapp/interactive.js', import.meta.url), 'utf8')
 assert.equal(interactiveSource.includes("name: 'single_select'"), true, 'WhatsApp transport must support single_select')
