@@ -9,7 +9,7 @@ const telegram = read('apps/bot/src/platform/telegram/router.ts')
 const componentStore = read('apps/bot/src/platform/discord/component-store.ts')
 const adapter = read('apps/bot/src/platform/discord/adapter.ts')
 const rest = read('apps/bot/src/platform/discord/rest.ts')
-const media = read('apps/bot/src/services/outgoing-media-stream.ts')
+const media = read('apps/bot/src/services/media-pipeline.ts')
 const roadmap = read('README_NEXT_INTEGRATIONS.md')
 
 assert.match(metadata, /resolvePlatformCommandToken/, 'C2 central token resolver missing')
@@ -27,7 +27,7 @@ assert.match(adapter, /persistDiscordComponentRef/, 'C4 adapter does not persist
 assert.match(adapter, /resolveDiscordComponentRef/, 'C4 adapter does not restore component IDs')
 
 assert.match(media, /createReadStream/, 'C5 path media is not streamed')
-assert.match(media, /AsyncIterable<Uint8Array>/, 'C5 shared streaming contract missing')
+assert.match(media, /AsyncIterable<Uint8Array>/, 'C5/D6 shared streaming contract missing')
 assert.match(adapter, /createMessageWithFileStream/, 'C5 Discord adapter is not using streaming upload')
 assert.doesNotMatch(adapter, /arrayBuffer\(\)/, 'C5 Discord adapter still buffers remote media')
 
