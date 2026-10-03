@@ -273,6 +273,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
         imageUrl: ui.imageUrl,
         footer: ui.footer,
         buttons: (ui.buttons ?? []).map(actionButton),
+        fallbackToText: false,
       })
       return { platform: this.id, chatId, messageId }
     }
@@ -287,6 +288,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
           footer: card.footer,
           buttons: (card.buttons ?? []).map(actionButton),
         })),
+        fallbackToText: false,
       })
       return { platform: this.id, chatId, messageId }
     }
@@ -308,6 +310,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
             })),
           }],
         }],
+        fallbackToText: false,
       })
       return { platform: this.id, chatId, messageId }
     }
