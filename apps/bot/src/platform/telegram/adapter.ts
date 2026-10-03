@@ -9,6 +9,7 @@ import {
   type SentMessage,
   type UiAction,
 } from '@ghostnexora/platform-contracts'
+import { withPreparedMedia } from '../../services/media-pipeline.js'
 import { TelegramBotApiClient, type TelegramMediaInput } from './client.js'
 import type { TelegramInlineButton, TelegramMessage } from './types.js'
 
@@ -155,19 +156,27 @@ export class TelegramAdapter implements PlatformAdapter {
   }
 
   async sendMedia(chatId: string, media: OutgoingMedia, options?: SendOptions): Promise<SentMessage> {
-    const input = mediaInput(media)
-    const extra: Record<string, unknown> = {
-      ...replyMarkupOptions(options),
-      ...(media.caption ? { caption: media.caption.slice(0, 1024) } : {}),
-    }
-    let message: TelegramMessage
-    if (media.kind === 'image') message = await this.client.sendMedia('sendPhoto', chatId, 'photo', input, extra)
-    else if (media.kind === 'video') message = await this.client.sendMedia('sendVideo', chatId, 'video', input, extra)
-    else if (media.kind === 'audio') message = await this.client.sendMedia('sendAudio', chatId, 'audio', input, { ...extra, ...(media.fileName ? { title: media.fileName } : {}) })
-    else if (media.kind === 'sticker') message = await this.client.sendMedia('sendSticker', chatId, 'sticker', input, replyMarkupOptions(options))
-    else message = await this.client.sendMedia('sendDocument', chatId, 'document', input, { ...extra, ...(media.fileName ? { disable_content_type_detection: false } : {}) })
-    this.rememberKind(chatId, message.message_id, 'media')
-    return sent(message)
+    return withPreparedMedia(media, {
+      platform: 'Telegram',
+      maxBytes: MAX_UPLOAD_BYTES,
+      mode: 'direct',
+      retries: 2,
+    }, async (prepared) => {
+      const normalized = prepared.media
+      const input = mediaInput(normalized)
+      const extra: Record<string, unknown> = {
+        ...replyMarkupOptions(options),
+        ...(normalized.caption ? { caption: normalized.caption.slice(0, 1024) } : {}),
+      }
+      let message: TelegramMessage
+      if (normalized.kind === 'image') message = await this.client.sendMedia('sendPhoto', chatId, 'photo', input, extra)
+      else if (normalized.kind === 'video') message = await this.client.sendMedia('sendVideo', chatId, 'video', input, extra)
+      else if (normalized.kind === 'audio') message = await this.client.sendMedia('sendAudio', chatId, 'audio', input, { ...extra, ...(normalized.fileName ? { title: normalized.fileName } : {}) })
+      else if (normalized.kind === 'sticker') message = await this.client.sendMedia('sendSticker', chatId, 'sticker', input, replyMarkupOptions(options))
+      else message = await this.client.sendMedia('sendDocument', chatId, 'document', input, { ...extra, ...(normalized.fileName ? { disable_content_type_detection: false } : {}) })
+      this.rememberKind(chatId, message.message_id, 'media')
+      return sent(message)
+    })
   }
 
   async sendUi(chatId: string, ui: NormalizedUi, options?: SendOptions): Promise<SentMessage> {
