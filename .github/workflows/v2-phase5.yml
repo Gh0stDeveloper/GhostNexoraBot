@@ -7,6 +7,7 @@ on:
       - 'packages/**'
       - 'scripts/v2-phase5-discord-*.mjs'
       - 'scripts/phase-c-*.mjs'
+      - 'scripts/phase-d-*.mjs'
       - 'scripts/v2-phase4-telegram-smoke.mjs'
       - 'scripts/v2-phase4-telegram-audit.mjs'
       - 'scripts/v2-phase3-command-regression.mjs'
@@ -62,6 +63,9 @@ jobs:
 
       - name: Preserve completed Phase C parity
         run: node scripts/phase-c-parity-smoke.mjs
+
+      - name: Preserve completed Phase D runtime delivery
+        run: node scripts/phase-d-runtime-delivery-smoke.mjs
 
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
