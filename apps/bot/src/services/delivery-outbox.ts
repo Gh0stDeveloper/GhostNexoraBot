@@ -38,13 +38,13 @@ function safe(value: unknown, max: number) {
   return String(value ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max)
 }
 
-function prune(now = Date.now()) {
+function prune(instanceKey: string, now = Date.now()) {
   if (now - lastPruneAt < 60_000) return
   lastPruneAt = now
   opsDb.prepare(`UPDATE delivery_outbox
     SET status = 'retry', next_attempt_at = ?, updated_at = ?
     WHERE instance_key = ? AND status = 'sending' AND updated_at < ?`)
-    .run(now, now, opsInstanceKey(), now - 5 * 60_000)
+    .run(now, now, instanceKey, now - 5 * 60_000)
   opsDb.prepare(`DELETE FROM delivery_outbox
     WHERE updated_at < ? AND status IN ('sent','failed')`).run(now - RETENTION_MS)
 }
@@ -83,7 +83,7 @@ export async function deliverWithOutbox<T>(input: {
       now,
       now,
     )
-  prune(now)
+  prune(instanceKey, now)
 
   let lastError: unknown
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
