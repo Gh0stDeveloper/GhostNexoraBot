@@ -43,7 +43,7 @@ El snapshot se crea después de resolver permisos relevantes para el comando.
 
 Se conservan `args` mutables por compatibilidad V1: existen handlers legacy que modifican el array antes de delegar a otro handler.
 
-B5 **no** elimina `WhatsAppAdapter.activeUserId`; esa deuda pertenece a **D1** y continúa pospuesta.
+B5 dejó deliberadamente `WhatsAppAdapter.activeUserId` para la fase D. **D1 ya eliminó después ese estado mutable** y ahora el adapter recibe usuario/locale explícitos por cada entrega.
 
 ### Discord
 
@@ -85,7 +85,7 @@ La propagación end-to-end por todos los subsistemas/telemetría sigue perteneci
 - Dos ejecuciones concurrentes conservan chat, usuario, locale, permisos y correlation ID propios.
 - WhatsApp, Discord y Telegram usan un snapshot independiente por comando.
 - El correlation ID aparece en logs de error de los tres routers.
-- `activeUserId` de WhatsApp no se modifica aquí y continúa explícitamente en D1.
+- B5 dejó `activeUserId` como deuda explícita; D1 la cerró posteriormente mediante `DeliveryContext`.
 - La propagación completa de tracing hacia providers/media/outbox continúa en F4.
 - CI principal y gate B5 pasaron en verde sobre `087d09f8c041ad42e532bca8fdf1515341b7f9ca`.
 - PR de cierre: #86.
