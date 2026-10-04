@@ -1,13 +1,6 @@
 name: V2 Release Candidate
 
 on:
-    paths:
-      - '.github/workflows/v2-rc-release.yml'
-      - 'apps/**'
-      - 'packages/**'
-      - 'scripts/release-*'
-      - 'package.json'
-      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
