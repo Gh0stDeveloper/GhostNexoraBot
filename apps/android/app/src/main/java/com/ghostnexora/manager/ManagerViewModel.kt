@@ -205,6 +205,7 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
                 dispatchLocal { localRuntime.logs() }
             }
             "logs" -> applyLogs(result.stdout)
+            "web" -> _state.value = _state.value.copy(busy = false, webEnabled = false, error = null)
             "config-save" -> {
                 val json = parseJson(result.stdout)
                 _state.value = _state.value.copy(
