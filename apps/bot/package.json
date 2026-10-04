@@ -15,7 +15,9 @@
     "termux:pair": "NEXORA_RUNTIME_PROFILE=termux-lite node dist-termux/pair.js",
     "llm:train": "node dist/llm/train.js",
     "llm:worker": "node dist/llm/llm-worker-supervisor.js",
-    "playwright:install": "playwright install chromium"
+    "playwright:install": "playwright install chromium",
+    "build:mobile": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/control-api-contracts && tsc -p tsconfig.mobile.json",
+    "mobile:start": "NEXORA_RUNTIME_PROFILE=mobile-lite node dist-mobile/mobile-lite.js"
   },
   "dependencies": {
     "@ghostnexora/control-api-contracts": "0.1.0",
