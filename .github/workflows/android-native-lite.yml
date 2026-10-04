@@ -32,7 +32,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.21.0'
-          cache: npm
       - name: Install dependencies
         run: npm install
       - name: Build mobile-lite
@@ -62,7 +61,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
@@ -96,7 +94,6 @@ jobs:
         abi: [arm64-v8a, x86_64]
     steps:
       - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
       - name: Install pinned NDK
         run: sdkmanager 'ndk;28.2.13676358'
       - name: Build Nexora Embedded Node
