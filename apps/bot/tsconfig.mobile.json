@@ -5,7 +5,6 @@
   },
   "include": [],
   "files": [
-    "src/mobile-lite.ts",
-    "src/pair.ts"
+    "src/mobile-lite.ts"
   ]
 }
