@@ -123,7 +123,10 @@ jobs:
         run: |
           file "artifacts/embedded-node/${{ matrix.abi }}/libnode.so"
           readelf -h "artifacts/embedded-node/${{ matrix.abi }}/libnode.so"
-          sha256sum -c "artifacts/embedded-node/${{ matrix.abi }}/libnode.so.sha256"
+          (
+            cd "artifacts/embedded-node/${{ matrix.abi }}"
+            sha256sum -c libnode.so.sha256
+          )
       - uses: actions/upload-artifact@v4
         with:
           name: nexora-embedded-node-${{ matrix.abi }}
