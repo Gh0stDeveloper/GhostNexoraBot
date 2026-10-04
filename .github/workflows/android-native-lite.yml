@@ -104,9 +104,10 @@ jobs:
           NODE_VERSION: v24.21.0
           ANDROID_API: '33'
           ANDROID_ABI: ${{ matrix.abi }}
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/28.2.13676358
           JOBS: '2'
-        run: bash scripts/android/build-embedded-node.sh
+        run: |
+          export ANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          bash scripts/android/build-embedded-node.sh
       - name: Verify shared object
         run: |
           file "artifacts/embedded-node/${{ matrix.abi }}/libnode.so"
