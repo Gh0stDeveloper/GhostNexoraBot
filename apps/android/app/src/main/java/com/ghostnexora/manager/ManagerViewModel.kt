@@ -144,6 +144,14 @@ class ManagerViewModel(application: Application) : AndroidViewModel(application)
         dispatchLocal { localRuntime.saveConfig(current.botName, current.prefix, current.language) }
     }
 
+    fun setWebEnabled(enabled: Boolean) {
+        dispatchLocal { localRuntime.setWebEnabled(enabled) }
+    }
+
+    fun openLocalWeb() {
+        _state.value = _state.value.copy(error = "local_web_not_available_in_mobile_lite")
+    }
+
     fun requestUpdate() = runtime("update")
 
     fun connect() = launchRemoteAction(saveConnection = true) {
