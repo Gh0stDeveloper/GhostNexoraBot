@@ -1,0 +1,120 @@
+name: Android Native Lite
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'apps/bot/src/mobile-lite.ts'
+      - 'apps/bot/src/commands/mobile-lite.ts'
+      - 'apps/bot/tsconfig.mobile.json'
+      - 'apps/bot/package.json'
+      - 'scripts/android/**'
+      - 'scripts/android-native-lite-audit.mjs'
+      - 'scripts/mobile-lite-runtime-smoke.mjs'
+      - '.github/workflows/android-native-lite.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-lite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: Build mobile-lite
+        run: npm run build:mobile --workspace=@ghostnexora/bot
+      - name: JavaScript syntax smoke
+        run: find apps/bot/dist-mobile -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Runtime capability smoke
+        run: node scripts/mobile-lite-runtime-smoke.mjs
+      - name: Native Lite anti-regression audit
+        run: node scripts/android-native-lite-audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-nexora-mobile-lite-js
+          path: apps/bot/dist-mobile/**
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'platform-tools'
+      - name: Native Lite anti-regression audit
+        run: node scripts/android-native-lite-audit.mjs
+      - name: Android lint and unit tests
+        run: gradle -p apps/android lintDebug testDebugUnitTest
+      - name: Build debug and release APKs
+        run: gradle -p apps/android assembleDebug assembleRelease
+      - name: APK checksums
+        run: find apps/android/app/build/outputs/apk -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum | tee android-native-lite-apk-sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-nexora-android-native-lite
+          path: |
+            apps/android/app/build/outputs/apk/debug/*.apk
+            apps/android/app/build/outputs/apk/release/*.apk
+            android-native-lite-apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  embedded-node:
+    name: Embedded Node (${{ matrix.abi }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned NDK
+        run: sdkmanager 'ndk;28.2.13676358'
+      - name: Build Nexora Embedded Node
+        env:
+          NODE_VERSION: v24.21.0
+          ANDROID_API: '33'
+          ANDROID_ABI: ${{ matrix.abi }}
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}/ndk/28.2.13676358
+          JOBS: '2'
+        run: bash scripts/android/build-embedded-node.sh
+      - name: Verify shared object
+        run: |
+          file "artifacts/embedded-node/${{ matrix.abi }}/libnode.so"
+          readelf -h "artifacts/embedded-node/${{ matrix.abi }}/libnode.so"
+          sha256sum -c "artifacts/embedded-node/${{ matrix.abi }}/libnode.so.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexora-embedded-node-${{ matrix.abi }}
+          path: artifacts/embedded-node/${{ matrix.abi }}/**
+          if-no-files-found: error
+          retention-days: 14
