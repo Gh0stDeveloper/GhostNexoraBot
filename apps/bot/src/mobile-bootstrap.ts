@@ -1,13 +1,12 @@
-const args = new Map(
-  process.argv.slice(2)
-    .filter((value) => value.startsWith('--') && value.includes('='))
-    .map((value) => {
-      const index = value.indexOf('=')
-      return [value.slice(2, index), value.slice(index + 1)]
-    }),
-)
+const args = new Map<string, string>()
 
-const required = (name) => {
+for (const value of process.argv.slice(2)) {
+  if (!value.startsWith('--') || !value.includes('=')) continue
+  const index = value.indexOf('=')
+  args.set(value.slice(2, index), value.slice(index + 1))
+}
+
+const required = (name: string): string => {
   const value = args.get(name)?.trim()
   if (!value) throw new Error(`missing_mobile_runtime_argument:${name}`)
   return value
