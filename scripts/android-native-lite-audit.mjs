@@ -6,6 +6,7 @@ import path from 'node:path'
 const repoRoot = process.cwd()
 const androidRoot = path.join(repoRoot, 'apps/android')
 const mobileFiles = [
+  'apps/bot/src/mobile-bootstrap.ts',
   'apps/bot/src/mobile-lite.ts',
   'apps/bot/src/commands/mobile-lite.ts',
   'apps/bot/tsconfig.mobile.json',
@@ -50,6 +51,7 @@ const controller = await readFile(path.join(androidRoot, 'app/src/main/java/com/
 const service = await readFile(path.join(androidRoot, 'app/src/main/java/com/ghostnexora/manager/BotRuntimeService.kt'), 'utf8')
 const storage = await readFile(path.join(androidRoot, 'app/src/main/java/com/ghostnexora/manager/RuntimeStorage.kt'), 'utf8')
 const host = await readFile(path.join(androidRoot, 'app/src/main/java/com/ghostnexora/manager/EmbeddedNodeHost.kt'), 'utf8')
+const mobileBootstrap = await readFile(path.join(repoRoot, 'apps/bot/src/mobile-bootstrap.ts'), 'utf8')
 const mobile = await readFile(path.join(repoRoot, 'apps/bot/src/mobile-lite.ts'), 'utf8')
 const mobileCommands = await readFile(path.join(repoRoot, 'apps/bot/src/commands/mobile-lite.ts'), 'utf8')
 const mobilePackage = JSON.parse(await readFile(path.join(repoRoot, 'apps/bot/package.json'), 'utf8'))
@@ -74,10 +76,13 @@ assert.match(storage, /cacheDir/)
 assert.match(storage, /noBackupFilesDir/)
 assert.match(host, /System\.loadLibrary\("nexora_node_bridge"\)/)
 assert.match(host, /v24\.21\.0/)
-assert.match(mobile, /NEXORA_RUNTIME_PROFILE=mobile-lite/)
+assert.match(mobileBootstrap, /NEXORA_RUNTIME_PROFILE = 'mobile-lite'/)
+assert.match(mobileBootstrap, /SESSION_DIR/)
+assert.match(mobileBootstrap, /DATA_DIR/)
+assert.match(mobileBootstrap, /TMPDIR/)
 assert.match(mobile, /mobileLiteCommands/)
 assert.doesNotMatch(mobile + mobileCommands, /qrcode-terminal|readline|process\.stdin/)
 assert.match(mobilePackage.scripts?.['build:mobile'] ?? '', /tsconfig\.mobile\.json/)
-assert.match(mobilePackage.scripts?.['mobile:start'] ?? '', /NEXORA_RUNTIME_PROFILE=mobile-lite/)
+assert.match(mobilePackage.scripts?.['mobile:start'] ?? '', /dist-mobile\/mobile-bootstrap\.js/)
 
 console.log('[ANDROID NATIVE LITE AUDIT] OK — Android/mobile-lite contain no external runtime bootstrap and the native service/storage contracts are present.')
