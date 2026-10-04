@@ -93,7 +93,7 @@ class RuntimeStorage(private val context: Context) {
 
     fun inactiveSlotDirectory(): File = if (activeSlotName() == "b") paths.slotA else paths.slotB
 
-    fun activeEntryFile(): File = File(activeSlotDirectory(), "dist-mobile/mobile-lite.js")
+    fun activeEntryFile(): File = File(activeSlotDirectory(), "dist-mobile/mobile-bootstrap.js")
 
     fun isRuntimePackInstalled(): Boolean = activeEntryFile().isFile
 
