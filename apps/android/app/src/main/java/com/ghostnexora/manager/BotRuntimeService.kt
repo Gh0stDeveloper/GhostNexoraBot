@@ -149,6 +149,7 @@ class BotRuntimeService : Service() {
                     stateDir = storage.paths.stateRoot.absolutePath,
                     sessionDir = storage.paths.session.absolutePath,
                     dataDir = storage.paths.data.absolutePath,
+                    cacheDir = storage.paths.mediaCache.absolutePath,
                 )
             }.getOrElse { error ->
                 storage.appendLog("error", "Embedded runtime exception: ${error.message}")
