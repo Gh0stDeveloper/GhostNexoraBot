@@ -1,0 +1,24 @@
+diff --git a/deps/zlib/android-cpu-features.c b/deps/zlib/android-cpu-features.c
+new file mode 100644
+index 0000000..6c58f50
+--- /dev/null
++++ b/deps/zlib/android-cpu-features.c
+@@ -0,0 +1,2 @@
++// Build the Android NDK CPU feature implementation as part of zlib.
++#include <cpu-features.c>
+diff --git a/deps/zlib/zlib.gyp b/deps/zlib/zlib.gyp
+index d2b35fe..f80354f 100644
+--- a/deps/zlib/zlib.gyp
++++ b/deps/zlib/zlib.gyp
+@@ -201,6 +201,11 @@
+                 'USE_FILE32API'
+               ],
+             }],
++            ['OS=="android"', {
++              'sources': [
++                '<(ZLIB_ROOT)/android-cpu-features.c',
++              ],
++            }],
+             # Incorporate optimizations where possible.
+             ['(target_arch in "ia32 x64" and OS!="ios") or arm_fpu=="neon"', {
+               'dependencies': [ 'zlib_data_chunk_simd' ],
