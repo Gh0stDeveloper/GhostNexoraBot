@@ -6,12 +6,12 @@ class EmbeddedNodeHost {
     private val stopRequested = AtomicBoolean(false)
 
     val available: Boolean
-        get() = nativeLibraryLoaded
+        get() = nativeLibraryLoaded && runCatching { nativeAvailable() }.getOrDefault(false)
 
     val runtimeVersion: String
-        get() = if (nativeLibraryLoaded) runCatching { nativeVersion() }.getOrDefault(expectedNodeVersion) else expectedNodeVersion
+        get() = if (available) runCatching { nativeVersion() }.getOrDefault(expectedNodeVersion) else expectedNodeVersion
 
-    fun start(entryFile: String, stateDir: String, sessionDir: String, dataDir: String): Int {
+    fun start(entryFile: String, stateDir: String, sessionDir: String, dataDir: String, cacheDir: String): Int {
         if (!nativeLibraryLoaded) return ERROR_LIBRARY_UNAVAILABLE
         stopRequested.set(false)
         return nativeStart(
@@ -22,6 +22,7 @@ class EmbeddedNodeHost {
                 "--state-dir=$stateDir",
                 "--session-dir=$sessionDir",
                 "--data-dir=$dataDir",
+                "--cache-dir=$cacheDir",
             ),
         )
     }
@@ -33,6 +34,7 @@ class EmbeddedNodeHost {
 
     private external fun nativeStart(argv: Array<String>): Int
     private external fun nativeRequestStop()
+    private external fun nativeAvailable(): Boolean
     private external fun nativeVersion(): String
 
     companion object {
