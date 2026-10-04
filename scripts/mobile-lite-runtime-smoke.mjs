@@ -42,7 +42,7 @@ await new Promise((resolve, reject) => server.close((error) => error ? reject(er
 
 // Baileys can be resolved without creating a network session.
 const baileys = await import('baileys')
-assert.equal(typeof baileys.makeWASocket, 'function')
+assert.equal(typeof baileys.default, 'function')
 
 await access('apps/bot/dist-mobile/mobile-lite.js')
 await access('apps/bot/dist-mobile/commands/mobile-lite.js')
