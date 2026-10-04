@@ -55,6 +55,18 @@ Java_com_ghostnexora_manager_EmbeddedNodeHost_nativeRequestStop(
     g_stop_requested.store(true);
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_ghostnexora_manager_EmbeddedNodeHost_nativeAvailable(
+    JNIEnv*,
+    jobject
+) {
+#if NEXORA_EMBEDDED_NODE
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_ghostnexora_manager_EmbeddedNodeHost_nativeVersion(
     JNIEnv* env,
