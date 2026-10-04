@@ -7,12 +7,6 @@ val releaseKeystorePath = providers.environmentVariable("GHOST_NEXORA_ANDROID_KE
 val releaseKeyAlias = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEY_ALIAS").orNull
 val releaseStorePassword = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEYSTORE_PASSWORD").orNull
 val releaseKeyPassword = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEY_PASSWORD").orNull
-val sourceRef = providers.environmentVariable("GHOST_NEXORA_SOURCE_REF")
-    .orElse(providers.environmentVariable("GITHUB_HEAD_REF"))
-    .orElse(providers.environmentVariable("GITHUB_REF_NAME"))
-    .orElse("main")
-    .get()
-val sourceRefLiteral = sourceRef.replace("\\", "\\\\").replace("\"", "\\\"")
 val hasReleaseSigning = listOf(
     releaseKeystorePath,
     releaseKeyAlias,
