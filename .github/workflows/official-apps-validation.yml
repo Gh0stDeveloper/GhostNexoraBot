@@ -13,6 +13,9 @@ on:
       - 'scripts/install.sh'
       - 'scripts/update.sh'
       - 'scripts/official-apps-*.mjs'
+      - 'scripts/android-native-lite-audit.mjs'
+      - 'scripts/mobile-lite-runtime-smoke.mjs'
+      - 'scripts/android/**'
       - 'scripts/i18n-*.mjs'
       - 'scripts/command-surface-regression.mjs'
       - 'scripts/v2-baseline-report.mjs'
@@ -59,6 +62,11 @@ jobs:
         run: npm run v2:i18n
       - name: Official Apps Control API and app boundary
         run: npm run v2:official-apps
+      - name: Mobile Lite build and smoke
+        run: |
+          npm run build:mobile --workspace=@ghostnexora/bot
+          node scripts/mobile-lite-runtime-smoke.mjs
+          node scripts/android-native-lite-audit.mjs
       - name: Termux Lite build
         run: npm run build:termux --workspace=@ghostnexora/bot
       - name: Termux Lite smoke
@@ -162,6 +170,8 @@ jobs:
           gradle-version: '9.6.0'
       - name: Install Android 17 SDK
         run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - name: Android Native Lite audit
+        run: node scripts/android-native-lite-audit.mjs
       - name: Android lint and unit tests
         run: gradle -p apps/android lintDebug testDebugUnitTest
       - name: Build debug and unsigned release APKs
