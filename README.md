@@ -905,6 +905,7 @@ El workflow de GitHub Actions valida:
 | [`docs/OLLAMA.md`](docs/OLLAMA.md) | Ollama/Qwen opcional |
 | [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md) | Windows 10/11 |
 | [`docs/TERMUX_LITE.md`](docs/TERMUX_LITE.md) | Android / Termux Lite |
+| [`docs/ANDROID_NATIVE_LITE.md`](docs/ANDROID_NATIVE_LITE.md) | Rediseño Android autónomo sin Termux |
 | [`README-LLM.md`](README-LLM.md) | Arquitectura LLM |
 | [`.env.example`](.env.example) | Variables configurables |
 
