@@ -42,6 +42,14 @@ jobs:
         run: node scripts/mobile-lite-runtime-smoke.mjs
       - name: Native Lite anti-regression audit
         run: node scripts/android-native-lite-audit.mjs
+      - name: Build autonomous runtime pack
+        run: bash scripts/android/build-mobile-runtime-pack.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ghost-nexora-mobile-lite-runtime
+          path: artifacts/mobile-runtime/**
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: ghost-nexora-mobile-lite-js
@@ -50,6 +58,7 @@ jobs:
           retention-days: 14
 
   android:
+    needs: [mobile-lite, embedded-node]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -64,21 +73,61 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
-      - name: Install Android SDK
+      - name: Install Android SDK / NDK / CMake
         run: |
           export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" 'platforms;android-37.0' 'build-tools;37.0.0' 'platform-tools'
+          "$SDKMANAGER" \
+            'platforms;android-37.0' \
+            'build-tools;37.0.0' \
+            'platform-tools' \
+            'ndk;28.2.13676358' \
+            'cmake;3.22.1'
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+      - name: Download arm64 Embedded Node
+        uses: actions/download-artifact@v4
+        with:
+          name: nexora-embedded-node-arm64-v8a
+          path: apps/android/app/src/main/node-runtime/arm64-v8a
+      - name: Download x86_64 Embedded Node
+        uses: actions/download-artifact@v4
+        with:
+          name: nexora-embedded-node-x86_64
+          path: apps/android/app/src/main/node-runtime/x86_64
+      - name: Download Mobile Lite runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: ghost-nexora-mobile-lite-runtime
+          path: apps/android/app/src/main/assets/runtime
+      - name: Verify staged autonomous runtime
+        run: |
+          test -f apps/android/app/src/main/node-runtime/arm64-v8a/libnode.so
+          test -f apps/android/app/src/main/node-runtime/arm64-v8a/include/node/node.h
+          test -f apps/android/app/src/main/node-runtime/x86_64/libnode.so
+          test -f apps/android/app/src/main/node-runtime/x86_64/include/node/node.h
+          test -f apps/android/app/src/main/assets/runtime/mobile-lite-runtime.zip
+          test -f apps/android/app/src/main/assets/runtime/mobile-lite-runtime.zip.sha256
+          sha256sum -c apps/android/app/src/main/assets/runtime/mobile-lite-runtime.zip.sha256
       - name: Native Lite anti-regression audit
         run: node scripts/android-native-lite-audit.mjs
       - name: Android lint and unit tests
         run: gradle -p apps/android lintDebug testDebugUnitTest
       - name: Build debug and release APKs
         run: gradle -p apps/android assembleDebug assembleRelease
+      - name: Verify autonomous payload inside APK
+        run: |
+          APK="$(find apps/android/app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libnode.so'
+          unzip -l "$APK" | grep -F 'lib/arm64-v8a/libnexora_node_bridge.so'
+          unzip -l "$APK" | grep -F 'lib/x86_64/libnode.so'
+          unzip -l "$APK" | grep -F 'lib/x86_64/libnexora_node_bridge.so'
+          unzip -l "$APK" | grep -F 'assets/runtime/mobile-lite-runtime.zip'
+          unzip -l "$APK" | grep -F 'assets/runtime/mobile-lite-runtime.zip.sha256'
       - name: APK checksums
         run: find apps/android/app/build/outputs/apk -type f -name '*.apk' -print0 | sort -z | xargs -0 sha256sum | tee android-native-lite-apk-sha256.txt
       - uses: actions/upload-artifact@v4
