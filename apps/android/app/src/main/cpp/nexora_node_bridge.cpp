@@ -10,6 +10,7 @@
 namespace {
 std::atomic_bool g_stop_requested{false};
 
+#if NEXORA_EMBEDDED_NODE
 std::vector<std::string> to_strings(JNIEnv* env, jobjectArray values) {
     const jsize size = env->GetArrayLength(values);
     std::vector<std::string> output;
@@ -23,6 +24,7 @@ std::vector<std::string> to_strings(JNIEnv* env, jobjectArray values) {
     }
     return output;
 }
+#endif
 }
 
 extern "C" JNIEXPORT jint JNICALL
