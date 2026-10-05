@@ -75,15 +75,41 @@ export CXX_host="${HOST_CXX}"
 ./android-configure   "${ANDROID_NDK_ROOT}"   "${ANDROID_API}"   "${NODE_ARCH}"   --shared   --without-npm   --without-inspector
 
 echo "Building Node.js ${NODE_VERSION} for ${ANDROID_ABI} with ${JOBS} parallel jobs"
-make -j"${JOBS}" V=0
 
-LIBNODE="$(find out/Release -type f \( -name 'libnode.so' -o -name 'libnode.so.*' -o -name 'libnode.*.so' \) -print -quit)"
+# Build only the shared library when the generated GYP Makefile exposes the
+# libnode target. This avoids spending CI time compiling cctest/embedtest and
+# the standalone node executable, none of which are shipped in the APK.
+if make -C out BUILDTYPE=Release -n libnode >/dev/null 2>&1; then
+  make -C out BUILDTYPE=Release -j"${JOBS}" V=0 libnode
+else
+  echo "Generated build does not expose a libnode target; falling back to the default Node build"
+  make -j"${JOBS}" V=0
+fi
+
+# Node's Release directory may contain a GNU linker-script named libnode.so
+# alongside the actual Android ELF in obj.target. Never package the text
+# linker-script: select the first candidate that readelf validates as ELF.
+LIBNODE=""
+while IFS= read -r candidate; do
+  if readelf -h "${candidate}" >/dev/null 2>&1; then
+    LIBNODE="${candidate}"
+    break
+  fi
+done < <(
+  {
+    [[ -f out/Release/obj.target/libnode.so ]] && printf '%s\n' out/Release/obj.target/libnode.so
+    find out/Release -type f \( -name 'libnode.so' -o -name 'libnode.so.*' -o -name 'libnode.*.so' \) -print
+  } | awk '!seen[$0]++'
+)
+
 if [[ -z "${LIBNODE}" ]]; then
-  echo "libnode shared library was not produced" >&2
-  find out/Release -maxdepth 5 -type f | sort | tail -n 150 >&2 || true
+  echo "A valid ELF libnode shared library was not produced" >&2
+  find out/Release -maxdepth 5 -type f -name '*libnode*' -print -exec file {} \; >&2 || true
   exit 3
 fi
 
+echo "Selected Android ELF: ${LIBNODE}"
+readelf -h "${LIBNODE}" | sed -n '1,20p'
 cp "${LIBNODE}" "${OUTPUT_DIR_ABS}/libnode.so"
 
 mkdir -p "${OUTPUT_DIR_ABS}/include/node"
