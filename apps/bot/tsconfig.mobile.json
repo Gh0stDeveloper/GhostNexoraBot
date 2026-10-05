@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-mobile"
+  },
+  "include": [],
+  "files": [
+    "src/mobile-bootstrap.ts",
+    "src/mobile-lite.ts"
+  ]
+}

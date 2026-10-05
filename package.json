@@ -3,7 +3,10 @@
   "version": "2.0.0",
   "private": true,
   "description": "Ghost Nexora Bot - multi-platform bot runtime, economy, subbots and Next.js web",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "postinstall": "node scripts/install-cli.mjs",
     "assets:waifus": "node scripts/extract-waifus.mjs",
@@ -26,7 +29,8 @@
     "v2:discord": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && node scripts/discord-smoke.mjs && node scripts/discord-rest-smoke.mjs && node scripts/discord-gateway-smoke.mjs && node scripts/discord-runtime-smoke.mjs && node scripts/discord-audit.mjs",
     "v2:i18n": "npm run build --workspace=@ghostnexora/platform-contracts && npm run build --workspace=@ghostnexora/bot && npm run build --workspace=@ghostnexora/web && node scripts/i18n-user-facing-audit.mjs && node scripts/i18n-platform-smoke.mjs && node scripts/i18n-boundary-audit.mjs",
     "v2:official-apps": "npm run build --workspace=@ghostnexora/control-api-contracts && npm run build --workspace=@ghostnexora/bot && npm run build --workspace=@ghostnexora/manager-agent && npm run build --workspace=@ghostnexora/desktop && node scripts/control-api-smoke.mjs && node scripts/manager-agent-smoke.mjs && node scripts/official-apps-audit.mjs && node scripts/linux-local-audit.mjs && node scripts/distribution-smoke.mjs && node scripts/distribution-audit.mjs",
-    "v2:release-gate": "node scripts/release-gate.mjs"
+    "v2:release-gate": "node scripts/release-gate.mjs",
+    "android:native-lite": "npm run build:mobile --workspace=@ghostnexora/bot && node scripts/mobile-lite-runtime-smoke.mjs && node scripts/android-native-lite-audit.mjs"
   },
   "overrides": {
     "redstar": {

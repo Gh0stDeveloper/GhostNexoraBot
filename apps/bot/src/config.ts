@@ -18,7 +18,7 @@ for (const candidate of envCandidates) {
 }
 
 const schema = z.object({
-  NEXORA_RUNTIME_PROFILE: z.enum(['full', 'termux-lite']).default('full'),
+  NEXORA_RUNTIME_PROFILE: z.enum(['full', 'termux-lite', 'mobile-lite']).default('full'),
   BOT_NAME: z.string().min(1).default('Ghost Nexora Bot'),
   PREFIX: z.string().min(1).max(4).default('.'),
   OWNER_NUMBERS: z.string().default(''),
@@ -93,6 +93,8 @@ const splitList = (value: string) => value
   .map((item) => item.trim())
   .filter(Boolean)
 const isTermuxLite = raw.NEXORA_RUNTIME_PROFILE === 'termux-lite'
+const isMobileLite = raw.NEXORA_RUNTIME_PROFILE === 'mobile-lite'
+const isLiteRuntime = isTermuxLite || isMobileLite
 
 function executableAvailable(command: string) {
   try {
@@ -107,14 +109,16 @@ function executableAvailable(command: string) {
   }
 }
 
-const ollamaRequested = !isTermuxLite && truthy(raw.OLLAMA_ENABLED)
+const ollamaRequested = !isLiteRuntime && truthy(raw.OLLAMA_ENABLED)
 const ollamaExecutable = process.platform === 'win32' ? 'ollama.exe' : 'ollama'
 const ollamaInstalled = ollamaRequested && executableAvailable(ollamaExecutable)
-const webEnabled = !isTermuxLite && truthy(raw.WEB_ENABLED)
+const webEnabled = !isLiteRuntime && truthy(raw.WEB_ENABLED)
 
 export const config = {
   runtimeProfile: raw.NEXORA_RUNTIME_PROFILE,
   isTermuxLite,
+  isMobileLite,
+  isLiteRuntime,
   botName: raw.BOT_NAME,
   defaultPrefix: raw.PREFIX,
   owners: raw.OWNER_NUMBERS.split(',').map((value) => value.replace(/\D/g, '')).filter(Boolean),
@@ -147,7 +151,7 @@ export const config = {
   lempiPinterestSearchEndpoints: splitList(raw.LEMPI_PINTEREST_SEARCH_ENDPOINTS),
   lempiHappyModSearchEndpoints: splitList(raw.LEMPI_HAPPYMOD_SEARCH_ENDPOINTS),
   lempiHappyModDownloadEndpoints: splitList(raw.LEMPI_HAPPYMOD_DOWNLOAD_ENDPOINTS),
-  // Runtime real: requiere flag + binario. Termux Lite siempre permanece en false.
+  // Runtime real: requiere flag + binario. Los perfiles Lite permanecen en false.
   ollamaRequested,
   ollamaInstalled,
   ollamaEnabled: ollamaInstalled,

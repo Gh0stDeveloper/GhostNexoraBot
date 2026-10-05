@@ -7,12 +7,6 @@ val releaseKeystorePath = providers.environmentVariable("GHOST_NEXORA_ANDROID_KE
 val releaseKeyAlias = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEY_ALIAS").orNull
 val releaseStorePassword = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEYSTORE_PASSWORD").orNull
 val releaseKeyPassword = providers.environmentVariable("GHOST_NEXORA_ANDROID_KEY_PASSWORD").orNull
-val sourceRef = providers.environmentVariable("GHOST_NEXORA_SOURCE_REF")
-    .orElse(providers.environmentVariable("GITHUB_HEAD_REF"))
-    .orElse(providers.environmentVariable("GITHUB_REF_NAME"))
-    .orElse("main")
-    .get()
-val sourceRefLiteral = sourceRef.replace("\\", "\\\\").replace("\"", "\\\"")
 val hasReleaseSigning = listOf(
     releaseKeystorePath,
     releaseKeyAlias,
@@ -23,6 +17,7 @@ val hasReleaseSigning = listOf(
 android {
     namespace = "com.ghostnexora.manager"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.ghostnexora.manager"
@@ -31,7 +26,16 @@ android {
         versionCode = 2000000
         versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "GHOST_NEXORA_SOURCE_REF", "\"$sourceRefLiteral\"")
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments += "-DNEXORA_NODE_ROOT=${file("src/main/node-runtime").absolutePath}"
+            }
+        }
     }
 
     signingConfigs {
@@ -52,6 +56,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {

@@ -26,7 +26,10 @@ const [
   androidBuild,
   androidUi,
   androidViewModel,
-  androidLocalRuntime,
+  androidRuntimeController,
+  androidRuntimeService,
+  androidRuntimeStorage,
+  androidEmbeddedNode,
   termuxManager,
   termuxInstaller,
   termuxRuntime,
@@ -53,7 +56,10 @@ const [
   read('apps/android/app/build.gradle.kts'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ui/ManagerApp.kt'),
   read('apps/android/app/src/main/java/com/ghostnexora/manager/ManagerViewModel.kt'),
-  read('apps/android/app/src/main/java/com/ghostnexora/manager/LocalRuntimeBridge.kt'),
+  read('apps/android/app/src/main/java/com/ghostnexora/manager/NativeRuntimeController.kt'),
+  read('apps/android/app/src/main/java/com/ghostnexora/manager/BotRuntimeService.kt'),
+  read('apps/android/app/src/main/java/com/ghostnexora/manager/RuntimeStorage.kt'),
+  read('apps/android/app/src/main/java/com/ghostnexora/manager/EmbeddedNodeHost.kt'),
   read('scripts/termux/ghostnexora'),
   read('scripts/install-termux.sh'),
   read('apps/bot/src/termux-lite.ts'),
@@ -133,45 +139,50 @@ assert.ok(tauriConfig.bundle.icon.includes('icons/128x128.png'), 'Tauri Linux bu
 assert.match(appsWorkflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles nsis/)
 assert.match(appsWorkflow, /npm run tauri:build --workspace=@ghostnexora\/desktop -- --bundles deb,appimage/)
 
-// Android command baseline is now local-first. Termux is the execution engine; the
-// Compose app only invokes the fixed Ghost Nexora CLI surface through the
-// official RUN_COMMAND service. Remote Manager support remains optional and
-// retains its Keystore/HTTPS restrictions.
+// Android local mode is an autonomous foreground-service boundary. Remote Manager
+// support remains optional and retains its Keystore/HTTPS restrictions.
 assert.match(androidStore, /AndroidKeyStore/)
 assert.match(androidStore, /AES\/GCM\/NoPadding/)
 assert.match(androidClient, /https_required_for_remote_control/)
 assert.match(androidClient, /host == "10\.0\.2\.2"/)
 assert.match(androidManifest, /usesCleartextTraffic="false"/)
-assert.match(androidManifest, /com\.termux\.permission\.RUN_COMMAND/)
-assert.match(androidManifest, /<package android:name="com\.termux"/)
-assert.match(androidManifest, /android:name="\.TermuxResultService"/)
-assert.match(androidManifest, /android:exported="false"/)
+assert.match(androidManifest, /android\.permission\.FOREGROUND_SERVICE/)
+assert.match(androidManifest, /android\.permission\.FOREGROUND_SERVICE_SPECIAL_USE/)
+assert.match(androidManifest, /android:name="\.BotRuntimeService"/)
+assert.match(androidManifest, /android:process=":bot"/)
+assert.match(androidManifest, /android:foregroundServiceType="specialUse"/)
+assert.doesNotMatch(androidManifest, /com\.termux|RUN_COMMAND|TermuxResultService/)
 assert.match(androidBuild, /compileSdk = 37/)
 assert.match(androidBuild, /targetSdk = 36/)
 assert.match(androidBuild, /minSdk = 33/)
-assert.match(androidBuild, /GHOST_NEXORA_SOURCE_REF/)
 
-assert.match(androidLocalRuntime, /com\.termux\.app\.RunCommandService/)
-assert.match(androidLocalRuntime, /\/data\/data\/com\.termux\/files\/usr\/bin\/ghostnexora/)
-assert.match(androidLocalRuntime, /app-status/)
-assert.match(androidLocalRuntime, /app-pair-start/)
-assert.match(androidLocalRuntime, /app-pair-status/)
-assert.match(androidLocalRuntime, /app-config-set/)
-assert.match(androidLocalRuntime, /https:\/\/github\.com\/Gh0stDeveloper\/GhostNexoraBot\.git/)
-assert.match(androidLocalRuntime, /BuildConfig\.GHOST_NEXORA_SOURCE_REF/)
-assert.doesNotMatch(androidLocalRuntime, /Runtime\.getRuntime|ProcessBuilder/, 'Android app must not expose Java process execution')
+assert.match(androidRuntimeController, /class NativeRuntimeController/)
+assert.match(androidRuntimeController, /BotRuntimeService::class\.java/)
+assert.match(androidRuntimeController, /Context\.RECEIVER_NOT_EXPORTED/)
+assert.doesNotMatch(androidRuntimeController, /Runtime\.getRuntime|ProcessBuilder|com\.termux|RUN_COMMAND/)
+assert.match(androidRuntimeService, /class BotRuntimeService : Service/)
+assert.match(androidRuntimeService, /startForeground\(/)
+assert.match(androidRuntimeService, /ACTION_START/)
+assert.match(androidRuntimeService, /ACTION_STOP/)
+assert.match(androidRuntimeService, /ACTION_RESTART/)
+assert.match(androidRuntimeStorage, /runtime\/slot-a/)
+assert.match(androidRuntimeStorage, /runtime\/slot-b/)
+assert.match(androidRuntimeStorage, /state\/session/)
+assert.match(androidRuntimeStorage, /state\/data/)
+assert.match(androidRuntimeStorage, /state\/subbots/)
+assert.match(androidRuntimeStorage, /state\/logs/)
+assert.match(androidRuntimeStorage, /noBackupFilesDir/)
+assert.match(androidEmbeddedNode, /System\.loadLibrary\("nexora_node_bridge"\)/)
+assert.match(androidEmbeddedNode, /v24\.21\.0/)
 
+assert.match(androidViewModel, /NativeRuntimeController/)
 assert.match(androidViewModel, /localRuntime\.start\(\)/)
 assert.match(androidViewModel, /localRuntime\.stop\(\)/)
 assert.match(androidViewModel, /localRuntime\.restart\(\)/)
-assert.match(androidViewModel, /localRuntime\.update\(\)/)
 assert.match(androidViewModel, /localRuntime\.pairStart/)
-assert.match(androidViewModel, /localRuntime\.setWebEnabled/)
 assert.match(androidUi, /installLocalRuntime/)
-assert.match(androidUi, /RUN_COMMAND_PERMISSION/)
-assert.match(androidUi, /setWebEnabled/)
 assert.match(androidUi, /remote_optional|R\.string\.remote_optional/)
-assert.doesNotMatch(androidUi + androidViewModel, /Runtime\.getRuntime|ProcessBuilder/)
+assert.doesNotMatch(androidUi + androidViewModel, /Runtime\.getRuntime|ProcessBuilder|com\.termux|RUN_COMMAND/)
 
 // The Termux CLI is the constrained Android runtime surface. Web is disabled
 // on install and only a loopback Lite page can be enabled explicitly.
@@ -186,4 +197,4 @@ assert.match(termuxRuntime, /localWebEnabled/)
 assert.match(termuxPair, /PAIRING_OUTPUT_MODE/)
 assert.match(termuxPair, /GHOST_NEXORA_PAIR_EVENT/)
 
-console.log('[OFFICIAL APPS AUDIT] OK — remote Control API boundaries remain hardened; Android is local-first through a fixed Termux/Ghost Nexora command surface with optional remote management.')
+console.log('[OFFICIAL APPS AUDIT] OK — remote Control API boundaries remain hardened; Android local mode uses the native foreground runtime boundary while legacy migration tooling remains separately validated.')

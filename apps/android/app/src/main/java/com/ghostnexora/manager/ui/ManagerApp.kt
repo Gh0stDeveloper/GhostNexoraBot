@@ -1,8 +1,6 @@
 package com.ghostnexora.manager.ui
 
 import android.graphics.Bitmap
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -72,7 +70,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ghostnexora.manager.LocalRuntimeBridge
 import com.ghostnexora.manager.LogUi
 import com.ghostnexora.manager.ManagerUiState
 import com.ghostnexora.manager.ManagerViewModel
@@ -92,10 +89,6 @@ private enum class ManagerDestination(@StringRes val labelRes: Int, val icon: Im
 fun ManagerApp(vm: ManagerViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     var destination by remember { mutableStateOf(ManagerDestination.Home) }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { vm.refreshLocalEnvironment() }
-
     Scaffold(
         containerColor = GhostBackground,
         bottomBar = {
@@ -124,22 +117,10 @@ fun ManagerApp(vm: ManagerViewModel) {
     ) { innerPadding ->
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             when (destination) {
-                ManagerDestination.Home -> HomeScreen(
-                    state = state,
-                    vm = vm,
-                    onRequestPermission = {
-                        permissionLauncher.launch(LocalRuntimeBridge.RUN_COMMAND_PERMISSION)
-                    },
-                )
+                ManagerDestination.Home -> HomeScreen(state = state, vm = vm)
                 ManagerDestination.Pair -> PairScreen(state, vm)
                 ManagerDestination.Activity -> ActivityScreen(state, vm)
-                ManagerDestination.Settings -> SettingsScreen(
-                    state = state,
-                    vm = vm,
-                    onRequestPermission = {
-                        permissionLauncher.launch(LocalRuntimeBridge.RUN_COMMAND_PERMISSION)
-                    },
-                )
+                ManagerDestination.Settings -> SettingsScreen(state = state, vm = vm)
             }
 
             if (state.busy) {
@@ -157,7 +138,6 @@ fun ManagerApp(vm: ManagerViewModel) {
 private fun HomeScreen(
     state: ManagerUiState,
     vm: ManagerViewModel,
-    onRequestPermission: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -178,7 +158,7 @@ private fun HomeScreen(
         state.error?.let { error -> item { ErrorBanner(error) } }
 
         if (!state.localInstalled) {
-            item { SetupCard(state, vm, onRequestPermission) }
+            item { SetupCard(state, vm) }
         } else {
             item { RuntimeHeroCard(state, vm) }
             item { LocalEnvironmentCard(state) }
@@ -217,97 +197,52 @@ private fun HomeScreen(
 private fun SetupCard(
     state: ManagerUiState,
     vm: ManagerViewModel,
-    onRequestPermission: () -> Unit,
 ) {
-    val title: String
-    val body: String
-    when (state.setupState) {
-        "termux_missing" -> {
-            title = stringResource(R.string.termux_missing)
-            body = stringResource(R.string.termux_missing_hint)
-        }
-        "permission_required" -> {
-            title = stringResource(R.string.permission_required)
-            body = stringResource(R.string.permission_required_hint)
-        }
-        "termux_configuration_required" -> {
-            title = stringResource(R.string.termux_configuration_required)
-            body = stringResource(R.string.termux_configuration_hint)
-        }
-        "installing" -> {
-            title = stringResource(R.string.installing_runtime)
-            body = stringResource(R.string.installing_runtime_hint)
-        }
-        "checking" -> {
-            title = stringResource(R.string.local_engine)
-            body = stringResource(R.string.local_engine_subtitle)
-        }
-        else -> {
-            title = stringResource(R.string.runtime_not_installed)
-            body = stringResource(R.string.runtime_not_installed_hint)
-        }
+    val title = when (state.setupState) {
+        "engine_missing" -> stringResource(R.string.embedded_node_missing)
+        "runtime_missing" -> stringResource(R.string.runtime_pack_missing)
+        "preparing" -> stringResource(R.string.preparing_runtime)
+        "checking" -> stringResource(R.string.local_engine)
+        else -> stringResource(R.string.runtime_not_installed)
+    }
+    val body = when (state.setupState) {
+        "engine_missing" -> stringResource(R.string.embedded_node_missing_hint)
+        "runtime_missing" -> stringResource(R.string.runtime_pack_missing_hint)
+        "preparing" -> stringResource(R.string.preparing_runtime_hint)
+        else -> stringResource(R.string.local_engine_subtitle)
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = GhostSurfaceElevated),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(GhostPrimary.copy(alpha = 0.16f)),
+                    Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(GhostPrimary.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("GN", fontWeight = FontWeight.Black, color = GhostPrimarySoft)
                 }
-                Column(Modifier.weight(1f).padding(start = 13.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleLarge)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
                     Text(body, style = MaterialTheme.typography.bodySmall, color = GhostTextMuted, modifier = Modifier.padding(top = 4.dp))
                 }
             }
 
-            if (state.setupState == "installing" || state.setupState == "checking") {
+            if (state.setupState == "preparing" || state.setupState == "checking") {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth(),
                     color = GhostPrimarySoft,
                     trackColor = GhostSurfaceSoft,
                 )
-            }
-
-            when (state.setupState) {
-                "termux_missing" -> Button(
-                    onClick = vm::openTermuxDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.download_termux)) }
-
-                "permission_required" -> {
-                    Button(
-                        onClick = onRequestPermission,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.grant_permission)) }
-                    OutlinedButton(
-                        onClick = vm::openPermissionSettings,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.open_app_settings)) }
-                }
-
-                "termux_configuration_required" -> {
-                    Button(onClick = vm::openTermux, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.open_termux))
-                    }
-                    OutlinedButton(onClick = vm::refreshLocalEnvironment, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.retry_check))
-                    }
-                }
-
-                "checking", "installing" -> Unit
-
-                else -> Button(
+            } else {
+                Button(
                     onClick = vm::installLocalRuntime,
-                    enabled = state.termuxInstalled && state.termuxPermissionGranted && !state.busy,
+                    enabled = !state.busy,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.install_runtime)) }
+                ) { Text(stringResource(R.string.prepare_runtime)) }
             }
 
             Surface(
@@ -639,7 +574,6 @@ private fun ActivityScreen(state: ManagerUiState, vm: ManagerViewModel) {
 private fun SettingsScreen(
     state: ManagerUiState,
     vm: ManagerViewModel,
-    onRequestPermission: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -662,22 +596,14 @@ private fun SettingsScreen(
                 Text(stringResource(R.string.local_engine), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.local_engine_subtitle), style = MaterialTheme.typography.bodySmall, color = GhostTextMuted, modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(14.dp))
-                InfoLine("Termux", if (state.termuxInstalled) "OK" else "—")
-                InfoLine("RUN_COMMAND", if (state.termuxPermissionGranted) "OK" else "—")
+                InfoLine(stringResource(R.string.embedded_node), if (state.engineAvailable) stringResource(R.string.available) else stringResource(R.string.pending))
+                InfoLine(stringResource(R.string.runtime_pack), if (state.localInstalled) stringResource(R.string.available) else stringResource(R.string.pending))
                 InfoLine(stringResource(R.string.runtime_version), state.localVersion.ifBlank { "—" })
                 InfoLine(stringResource(R.string.node_version), state.nodeVersion.ifBlank { "—" })
-                Spacer(Modifier.height(12.dp))
-                if (!state.termuxInstalled) {
-                    Button(onClick = vm::openTermuxDownload, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.download_termux))
-                    }
-                } else if (!state.termuxPermissionGranted) {
-                    Button(onClick = onRequestPermission, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.grant_permission))
-                    }
-                } else {
-                    OutlinedButton(onClick = vm::openTermux, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.open_termux))
+                if (!state.localInstalled || !state.engineAvailable) {
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = vm::installLocalRuntime, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.prepare_runtime))
                     }
                 }
             }
