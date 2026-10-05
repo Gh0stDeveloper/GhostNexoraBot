@@ -58,12 +58,6 @@ android {
         buildConfig = true
     }
 
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDir("src/main/node-runtime")
-        }
-    }
-
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
