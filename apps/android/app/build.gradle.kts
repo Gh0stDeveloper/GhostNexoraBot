@@ -17,6 +17,7 @@ val hasReleaseSigning = listOf(
 android {
     namespace = "com.ghostnexora.manager"
     compileSdk = 37
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.ghostnexora.manager"
@@ -25,6 +26,16 @@ android {
         versionCode = 2000000
         versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments += "-DNEXORA_NODE_ROOT=${file("src/main/node-runtime").absolutePath}"
+            }
+        }
     }
 
     signingConfigs {
@@ -45,6 +56,19 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir("src/main/node-runtime")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {
