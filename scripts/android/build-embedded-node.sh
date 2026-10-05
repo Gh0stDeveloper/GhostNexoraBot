@@ -6,7 +6,21 @@ ANDROID_API="${ANDROID_API:-33}"
 ANDROID_ABI="${ANDROID_ABI:-arm64-v8a}"
 WORK_DIR="${WORK_DIR:-${RUNNER_TEMP:-/tmp}/nexora-embedded-node}"
 OUTPUT_DIR="${OUTPUT_DIR:-artifacts/embedded-node/${ANDROID_ABI}}"
-JOBS="${JOBS:-2}"
+if [[ -z "${JOBS:-}" ]]; then
+  DETECTED_JOBS="$(nproc 2>/dev/null || echo 2)"
+  if (( DETECTED_JOBS > 4 )); then
+    JOBS=4
+  elif (( DETECTED_JOBS < 1 )); then
+    JOBS=1
+  else
+    JOBS="${DETECTED_JOBS}"
+  fi
+fi
+
+if ! [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "JOBS must be a positive integer" >&2
+  exit 2
+fi
 PATCHSET_DIR="${PATCHSET_DIR:-scripts/android/patches/node-${NODE_VERSION}}"
 
 if [[ -z "${ANDROID_NDK_ROOT:-}" ]]; then
@@ -60,7 +74,8 @@ export CXX_host="${HOST_CXX}"
 
 ./android-configure   "${ANDROID_NDK_ROOT}"   "${ANDROID_API}"   "${NODE_ARCH}"   --shared   --without-npm   --without-inspector
 
-make -j"${JOBS}"
+echo "Building Node.js ${NODE_VERSION} for ${ANDROID_ABI} with ${JOBS} parallel jobs"
+make -j"${JOBS}" V=0
 
 LIBNODE="$(find out/Release -type f \( -name 'libnode.so' -o -name 'libnode.so.*' -o -name 'libnode.*.so' \) -print -quit)"
 if [[ -z "${LIBNODE}" ]]; then
