@@ -111,7 +111,10 @@ jobs:
           test -f apps/android/app/src/main/node-runtime/x86_64/include/node/node.h
           test -f apps/android/app/src/main/assets/runtime/mobile-lite-runtime.zip
           test -f apps/android/app/src/main/assets/runtime/mobile-lite-runtime.zip.sha256
-          sha256sum -c apps/android/app/src/main/assets/runtime/mobile-lite-runtime.zip.sha256
+          (
+            cd apps/android/app/src/main/assets/runtime
+            sha256sum -c mobile-lite-runtime.zip.sha256
+          )
       - name: Native Lite anti-regression audit
         run: node scripts/android-native-lite-audit.mjs
       - name: Android lint and unit tests
