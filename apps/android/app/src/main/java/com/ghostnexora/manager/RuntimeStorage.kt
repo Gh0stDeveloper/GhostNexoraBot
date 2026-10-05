@@ -3,7 +3,10 @@ package com.ghostnexora.manager
 import android.content.Context
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.zip.ZipInputStream
 
 data class RuntimePaths(
     val runtimeRoot: File,
@@ -54,15 +57,10 @@ class RuntimeStorage(private val context: Context) {
         }
 
         if (!activeFile.exists()) {
-            writeAtomically(
-                activeFile,
-                JSONObject()
-                    .put("activeSlot", "a")
-                    .put("previousSlot", JSONObject.NULL)
-                    .put("updatedAt", Instant.now().toString())
-                    .toString(2),
-            )
+            writeActiveSlot("a", null)
         }
+
+        installBundledRuntimeIfNeeded()
 
         if (!statusFile.exists()) {
             writeStatus(
@@ -93,7 +91,7 @@ class RuntimeStorage(private val context: Context) {
 
     fun inactiveSlotDirectory(): File = if (activeSlotName() == "b") paths.slotA else paths.slotB
 
-    fun activeEntryFile(): File = File(activeSlotDirectory(), "dist-mobile/mobile-bootstrap.js")
+    fun activeEntryFile(): File = File(activeSlotDirectory(), RUNTIME_ENTRY)
 
     fun isRuntimePackInstalled(): Boolean = activeEntryFile().isFile
 
@@ -149,6 +147,113 @@ class RuntimeStorage(private val context: Context) {
         return logFile.readLines().takeLast(maxLines).joinToString("\n")
     }
 
+    private fun installBundledRuntimeIfNeeded() {
+        if (activeEntryFile().isFile) return
+
+        val slotAEntry = File(paths.slotA, RUNTIME_ENTRY)
+        if (slotAEntry.isFile) {
+            writeActiveSlot("a", activeSlotName())
+            return
+        }
+
+        val expectedChecksum = runCatching {
+            context.assets.open(BUNDLED_RUNTIME_CHECKSUM_ASSET).bufferedReader().use { reader ->
+                reader.readLine().trim().substringBefore(' ')
+            }
+        }.getOrNull()?.takeIf { it.matches(Regex("[a-fA-F0-9]{64}")) } ?: return
+
+        val tempZip = File(context.cacheDir, "mobile-lite-runtime.bootstrap.zip")
+        val staging = File(paths.runtimeRoot, ".bootstrap-install")
+
+        try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            context.assets.open(BUNDLED_RUNTIME_ASSET).use { input ->
+                tempZip.outputStream().buffered().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var totalCompressed = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        totalCompressed += count
+                        check(totalCompressed <= MAX_COMPRESSED_RUNTIME_BYTES) { "bundled_runtime_too_large" }
+                        digest.update(buffer, 0, count)
+                        output.write(buffer, 0, count)
+                    }
+                }
+            }
+
+            val actualChecksum = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actualChecksum.equals(expectedChecksum, ignoreCase = true)) {
+                "bundled_runtime_checksum_mismatch"
+            }
+
+            staging.deleteRecursively()
+            check(staging.mkdirs()) { "cannot_create_runtime_staging" }
+            extractRuntimeZip(tempZip, staging)
+
+            check(File(staging, RUNTIME_ENTRY).isFile) { "bundled_runtime_entry_missing" }
+            check(File(staging, "runtime-manifest.json").isFile) { "bundled_runtime_manifest_missing" }
+            File(staging, ".bundled-runtime.sha256").writeText(actualChecksum + "\n")
+
+            paths.slotA.deleteRecursively()
+            check(staging.renameTo(paths.slotA)) { "cannot_activate_bundled_runtime" }
+            writeActiveSlot("a", activeSlotName())
+        } finally {
+            tempZip.delete()
+            if (staging.exists()) staging.deleteRecursively()
+        }
+    }
+
+    private fun extractRuntimeZip(zipFile: File, destination: File) {
+        val rootPath = destination.canonicalPath + File.separator
+        var fileCount = 0
+        var expandedBytes = 0L
+
+        ZipInputStream(FileInputStream(zipFile).buffered()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                fileCount += 1
+                check(fileCount <= MAX_RUNTIME_FILES) { "bundled_runtime_too_many_files" }
+
+                val target = File(destination, entry.name)
+                val canonicalTarget = target.canonicalPath
+                check(canonicalTarget == destination.canonicalPath || canonicalTarget.startsWith(rootPath)) {
+                    "bundled_runtime_invalid_path"
+                }
+
+                if (entry.isDirectory) {
+                    check(target.exists() || target.mkdirs()) { "cannot_create_runtime_directory" }
+                } else {
+                    target.parentFile?.let { parent ->
+                        check(parent.exists() || parent.mkdirs()) { "cannot_create_runtime_parent" }
+                    }
+                    target.outputStream().buffered().use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val count = zip.read(buffer)
+                            if (count < 0) break
+                            expandedBytes += count
+                            check(expandedBytes <= MAX_EXPANDED_RUNTIME_BYTES) { "bundled_runtime_expanded_too_large" }
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                }
+                zip.closeEntry()
+            }
+        }
+    }
+
+    private fun writeActiveSlot(active: String, previous: String?) {
+        writeAtomically(
+            activeFile,
+            JSONObject()
+                .put("activeSlot", if (active == "b") "b" else "a")
+                .put("previousSlot", previous ?: JSONObject.NULL)
+                .put("updatedAt", Instant.now().toString())
+                .toString(2),
+        )
+    }
+
     private fun rotateLogIfNeeded() {
         if (!logFile.isFile || logFile.length() <= 2L * 1024 * 1024) return
         val keep = logFile.readLines().takeLast(2_000).joinToString("\n", postfix = "\n")
@@ -168,5 +273,14 @@ class RuntimeStorage(private val context: Context) {
             target.writeText(content)
             temp.delete()
         }
+    }
+
+    companion object {
+        private const val RUNTIME_ENTRY = "dist-mobile/mobile-bootstrap.js"
+        private const val BUNDLED_RUNTIME_ASSET = "runtime/mobile-lite-runtime.zip"
+        private const val BUNDLED_RUNTIME_CHECKSUM_ASSET = "runtime/mobile-lite-runtime.zip.sha256"
+        private const val MAX_COMPRESSED_RUNTIME_BYTES = 256L * 1024 * 1024
+        private const val MAX_EXPANDED_RUNTIME_BYTES = 512L * 1024 * 1024
+        private const val MAX_RUNTIME_FILES = 75_000
     }
 }
