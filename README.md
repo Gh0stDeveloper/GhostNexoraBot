@@ -44,7 +44,7 @@ Node.js · TypeScript · Baileys · Next.js · Linux · GitHub Actions · Option
 
 ## Installation
 
-- [Linux VPS setup](docs/README.md)
+- [Linux VPS setup](docs/)
 - [Windows installation](docs/WINDOWS_INSTALL.md)
 - [Repository source and workflows](https://github.com/Gh0stDeveloper/GhostNexoraBot)
 
