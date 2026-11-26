@@ -139,7 +139,10 @@ function antiViewOnceCaption(originalCaption?: string) {
 export async function handleAntiViewOnce(socket: WASocket, message: WAMessage): Promise<boolean> {
   const chatId = message.key.remoteJid
   if (!chatId?.endsWith('@g.us')) return false
-  if (message.key.fromMe) return false
+  // NO se ignora fromMe: si el dueño manda un ver una vez desde el número
+  // del negocio (la misma cuenta del bot), también debe republicarse. No hay
+  // riesgo de bucle: lo republicado es media normal, no ver una vez, así que
+  // isViewOnceMessage lo ignora cuando vuelve como mensaje propio.
   if (!groupControlsV9.get(chatId).antiViewOnce) return false
   if (!isViewOnceMessage(message)) return false
 
