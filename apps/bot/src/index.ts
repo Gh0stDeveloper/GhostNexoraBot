@@ -43,6 +43,7 @@ import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
 import { handleSoundStickerAudio } from './services/sound-sticker.js'
+import { registrarAudioStickerDeMensaje } from './services/audio-sticker-store.js'
 import { startBrowserProxy } from './services/browser-proxy.js'
 import { executionQueues } from './services/execution-queues.js'
 import { withTraceContext } from './services/trace-context.js'
@@ -303,6 +304,14 @@ async function routeMessage(
     logger.warn({ error, chatId }, 'sound sticker audio handler failed')
     return false
   })) return
+
+  // Sticker con sonido: si el mensaje trae audio, se guarda solo su
+  // referencia (disco, se borra a los 20 min) para que .get/.relay/
+  // .stickerpremium lo puedan usar al responder al sticker. Nunca
+  // consume el mensaje ni detiene su ruta.
+  await registrarAudioStickerDeMensaje(message.message).catch((error) => {
+    logger.warn({ error, chatId }, 'audio sticker store failed')
+  })
 
   const handled = await router.handle(socket, message)
   if (handled) return
