@@ -28,18 +28,58 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { proto, WAMessage, WASocket } from 'baileys'
 import type { LegacyCompatibleCommandContext } from '../types.js'
-import { downloadMessageMedia, unwrapMessage, getContextInfo } from '../utils/message.js'
+import { downloadMessageMedia, unwrapMessage, getContextInfo, getSenderCandidates } from '../utils/message.js'
 import { mediaToSticker } from '../services/sticker.js'
 import { stickerPreferences } from '../services/sticker-preferences.js'
 
 const MAX_SEG = 10
 const ESPERA_MS = 2 * 60 * 1000
 
-type Pendiente = { webp: Buffer; animado: boolean; ts: number }
+type Pendiente = { webp: Buffer; animado: boolean; ts: number; claves: string[] }
 const pendientes = new Map<string, Pendiente>()
 
 const clave = (chat: string, persona: string) =>
   `${chat}|${String(persona || '').split('@')[0].split(':')[0]}`
+
+// Todas las identidades del remitente de un mensaje (número y LID): WhatsApp
+// a veces manda una u otra, así que el pendiente se guarda y se busca por
+// todas, para que el audio lo encuentre el mismo usuario que mandó la imagen.
+function clavesPendiente(chat: string, message: WAMessage, sender?: string): string[] {
+  const personas = new Set<string>()
+  for (const c of getSenderCandidates(message)) personas.add(c)
+  if (sender) personas.add(sender)
+  const chatId = message.key.remoteJid ?? ''
+  if (chatId.endsWith('@g.us')) {
+    personas.delete(chatId)
+    if (message.key.remoteJidAlt) personas.delete(message.key.remoteJidAlt)
+  }
+  const lista = [...personas].filter(Boolean)
+  const base = lista.length ? lista : [message.key.participant ?? chatId]
+  return [...new Set(base.map((p) => clave(chat, p)))]
+}
+
+function guardarPendiente(chat: string, message: WAMessage, sender: string, data: { webp: Buffer; animado: boolean }): void {
+  const claves = clavesPendiente(chat, message, sender)
+  const p: Pendiente = { ...data, ts: Date.now(), claves }
+  for (const k of claves) pendientes.set(k, p)
+}
+
+function buscarPendiente(chat: string, message: WAMessage): Pendiente | undefined {
+  for (const k of clavesPendiente(chat, message)) {
+    const p = pendientes.get(k)
+    if (!p) continue
+    if (Date.now() - p.ts > ESPERA_MS) {
+      for (const kk of p.claves) pendientes.delete(kk)
+      return undefined
+    }
+    return p
+  }
+  return undefined
+}
+
+function borrarPendiente(p: Pendiente): void {
+  for (const k of p.claves) pendientes.delete(k)
+}
 
 // ---------------------------------------------------------------- Baileys en crudo
 const _b: Record<string, any> = {}
@@ -217,15 +257,27 @@ function nodoMedia(message: WAMessage): NodoMedia | null {
 async function descargarAudio(message: WAMessage): Promise<Buffer | null> {
   const b = await baileys()
   const downloadContentFromMessage = pick(b, 'downloadContentFromMessage')
-  const propio = unwrapMessage(message.message)?.audioMessage
-  const citado = getContextInfo(message)?.quotedMessage
-  const node = propio ?? unwrapMessage(citado)?.audioMessage
-  if (!node) return null
-  const stream = await downloadContentFromMessage(node, 'audio')
-  const chunks: Buffer[] = []
-  for await (const chunk of stream as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk))
-  if (!chunks.length) return null
-  return Buffer.concat(chunks)
+  const propio = unwrapMessage(message.message)
+  const citado = unwrapMessage(getContextInfo(message)?.quotedMessage)
+  // 1) audioMessage: nota de voz o audio normal
+  const nodoAudio = propio?.audioMessage ?? citado?.audioMessage
+  if (nodoAudio) {
+    const stream = await downloadContentFromMessage(nodoAudio, 'audio')
+    const chunks: Buffer[] = []
+    for await (const chunk of stream as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk))
+    if (!chunks.length) return null
+    return Buffer.concat(chunks)
+  }
+  // 2) documentMessage con mimetype de audio: archivo de música enviado como documento
+  const nodoDoc = propio?.documentMessage ?? citado?.documentMessage
+  if (nodoDoc && String(nodoDoc.mimetype || '').startsWith('audio/')) {
+    const stream = await downloadContentFromMessage(nodoDoc, 'document')
+    const chunks: Buffer[] = []
+    for await (const chunk of stream as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk))
+    if (!chunks.length) return null
+    return Buffer.concat(chunks)
+  }
+  return null
 }
 
 // ---------------------------------------------------------------- envío
@@ -240,13 +292,33 @@ async function enviarSoundSticker(
   const b = await baileys()
   const protoObj = pick(b, 'proto')
   const prepare = pick(b, 'prepareWAMessageMedia')
-  const { ogg, seg } = await aOpus(audioBuffer)
+  // El audio se recorta solo a 10 s en aOpus (ffmpeg -t 10), aunque venga largo.
+  let ogg: Buffer | null = null
+  let seg = 0
+  try {
+    const r = await aOpus(audioBuffer)
+    ogg = r.ogg
+    seg = r.seg
+  } catch (e) {
+    console.log('[stickersonido] no pude extraer el audio:', (e as Error).message)
+  }
+  // Sin audio válido no hay sticker con sonido: mandar solo el sticker y avisar,
+  // en vez de mandar un sticker "con sonido" que suena a nada.
+  if (!ogg || !ogg.length || seg < 1) {
+    await sock.sendMessage(jid, { sticker: webp }, quoted ? { quoted } : undefined).catch(() => undefined)
+    return { ok: false, error: 'SIN_AUDIO' }
+  }
 
   try {
     parchearEncode(protoObj)
     const opts = { upload: (sock as any).waUploadToServer }
     const s = await prepare({ sticker: webp }, opts)
     const a = await prepare({ audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: false, seconds: seg }, opts)
+    // Validar que el audio subido trae los datos para descargarlo; si no,
+    // el sticker llegaría sin sonido y mejor cae al respaldo.
+    if (!a.audioMessage?.mediaKey || (!a.audioMessage?.url && !a.audioMessage?.directPath)) {
+      throw new Error('AUDIO_SIN_DATOS')
+    }
     const stickerMessage = s.stickerMessage
     const audioMessage = a.audioMessage
     stickerMessage.isAnimated = !!animado
@@ -264,6 +336,7 @@ async function enviarSoundSticker(
     const genId = pick(b, 'generateMessageIDV2') || pick(b, 'generateMessageID')
     const messageId = genId.length ? genId((sock as any).user && (sock as any).user.id) : genId()
     await (sock as any).relayMessage(jid, { __crudo: bytes, audioStickerMessage: {} }, { messageId })
+    console.log('[stickersonido] enviado con sonido, ogg', ogg.length, 'bytes,', seg, 's')
     return { ok: true }
   } catch (e) {
     console.log('[stickersonido] envío como sticker con sonido falló, mando por separado:', (e as Error).message)
@@ -292,7 +365,7 @@ export async function iniciarSoundSticker(ctx: LegacyCompatibleCommandContext): 
       `🔊 *STICKER CON SONIDO*\n\n` +
         `1️⃣ Responde a una *foto, video, GIF o sticker* con *${prefix}stickersonido*\n` +
         `2️⃣ Si es un *video con sonido*, el bot usa ese mismo sonido 🎬 (si dura más de 10 s, lo recorta solo a 10 s)\n` +
-        `3️⃣ Si es foto, GIF o sticker, luego envía un *audio o nota de voz* (máx. ${MAX_SEG} s)\n\n` +
+        `3️⃣ Si es foto, GIF o sticker, luego envía un *audio, nota de voz o archivo de música* (si dura más de 10 s, lo recorto solo a 10 s)\n\n` +
         `Y listo: un sticker que suena al tocarlo 🎶`,
     )
     return
@@ -330,19 +403,19 @@ export async function iniciarSoundSticker(ctx: LegacyCompatibleCommandContext): 
     return
   }
 
-  pendientes.set(clave(chatId, sender), { webp, animado, ts: Date.now() })
+  guardarPendiente(chatId, message, sender, { webp, animado })
   if (nodo.kind === 'video' && !esGif) {
-    await reply(`🔇 Ese video no tiene sonido. Envía un *audio o nota de voz* (máx. ${MAX_SEG} s).\n⏳ Tienes 2 minutos.`)
+    await reply(`🔇 Ese video no tiene sonido. Envía un *audio, nota de voz o archivo de música* (si dura más de 10 s, lo recorto solo a 10 s).\n⏳ Tienes 2 minutos.`)
     return
   }
-  await reply(`🎙️ ¡Imagen lista! Ahora envía un *audio o nota de voz* (máx. ${MAX_SEG} s).\n⏳ Tienes 2 minutos.`)
+  await reply(`🎙️ ¡Imagen lista! Ahora envía un *audio, nota de voz o archivo de música* (si dura más de 10 s, lo recorto solo a 10 s).\n⏳ Tienes 2 minutos.`)
 }
 
 export function hayPendienteSoundSticker(chat: string, persona: string): boolean {
   const p = pendientes.get(clave(chat, persona))
   if (!p) return false
   if (Date.now() - p.ts > ESPERA_MS) {
-    pendientes.delete(clave(chat, persona))
+    borrarPendiente(p)
     return false
   }
   return true
@@ -355,13 +428,11 @@ export async function handleSoundStickerAudio(
   message: WAMessage,
 ): Promise<boolean> {
   const chatId = message.key.remoteJid ?? ''
-  const persona = message.key.participant ?? chatId
-  if (!hayPendienteSoundSticker(chatId, persona)) return false
+  const p = buscarPendiente(chatId, message)
+  if (!p) return false
   const audio = await descargarAudio(message).catch(() => null)
   if (!audio) return false
-  const p = pendientes.get(clave(chatId, persona))
-  pendientes.delete(clave(chatId, persona))
-  if (!p) return false
+  borrarPendiente(p)
   try {
     const r = await enviarSoundSticker(socket, chatId, p.webp, p.animado, audio, message)
     if (!r.ok) {
