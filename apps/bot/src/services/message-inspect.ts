@@ -12,6 +12,12 @@
 //
 // El JSON que devuelve .get es el mismo que acepta .relay: se copia,
 // se pega como mensaje y se responde con .relay.
+//
+// Cómo reenvía .relay: como un reenvío del contenido original
+// (generateWAMessageFromContent + relayMessage), sin volver a subir el
+// archivo. Así el sticker llega tal cual: con su premium, su tamaño,
+// su animación y, si es Lottie, como Lottie. Si eso falla, intenta la
+// ruta vieja (descargar y volver a subir) y si también falla, avisa.
 
 import type { proto, WAMessage, WASocket } from 'baileys'
 import type { LegacyCompatibleCommandContext } from '../types.js'
@@ -48,17 +54,44 @@ async function baileys(): Promise<any> {
 }
 const pick = (b: any, k: string) => b[k] || (b.default && b.default[k])
 
+// Los números de 64 bits llegan como objetos Long {low, high, unsigned}.
+// En JSON saldrían así y el otro bot los muestra como texto ("18458").
+// Se convierten a su valor decimal en texto.
+function esLong(v: unknown): v is { low: number; high: number; unsigned?: boolean } {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    typeof (v as { low?: unknown }).low === 'number' &&
+    typeof (v as { high?: unknown }).high === 'number'
+  )
+}
+
+function longAString(v: { low: number; high: number; unsigned?: boolean }): string {
+  const low = BigInt(v.low >>> 0)
+  const high = BigInt(v.high >>> 0)
+  const u = (high << 32n) | low
+  if (v.unsigned) return u.toString()
+  return BigInt.asIntN(64, u).toString()
+}
+
 // Los campos binarios de Baileys llegan como Uint8Array: a base64 para
 // que el JSON salga limpio y .relay lo pueda leer de vuelta tal cual.
+// Los arreglos y objetos vacíos (valores por defecto del proto, como
+// mentionedJid: []) se quitan, como hace el otro bot.
 function normalizar(valor: unknown): unknown {
   if (valor instanceof Uint8Array) return Buffer.from(valor).toString('base64')
-  if (Array.isArray(valor)) return valor.map(normalizar)
+  if (esLong(valor)) return longAString(valor)
+  if (Array.isArray(valor)) {
+    const arr = valor.map(normalizar).filter((v) => v !== undefined)
+    return arr.length ? arr : undefined
+  }
   if (valor && typeof valor === 'object') {
     const out: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(valor as Record<string, unknown>)) {
-      if (v !== undefined) out[k] = normalizar(v)
+      const n = normalizar(v)
+      if (n !== undefined) out[k] = n
     }
-    return out
+    return Object.keys(out).length ? out : undefined
   }
   return valor
 }
@@ -106,6 +139,22 @@ export function parsearContenido(texto: string): { contenido: proto.IMessage; cl
   return { contenido, clave }
 }
 
+// Reenvía el contenido original tal cual (como un reenvío): el archivo
+// no se vuelve a subir, así que conserva premium, tamaño, animación y,
+// si es Lottie, sigue siendo Lottie. El medio ya está alojado en los
+// servidores de WhatsApp (url/directPath del JSON).
+async function reenviarPorContenido(
+  sock: WASocket,
+  jid: string,
+  contenido: proto.IMessage,
+  quoted?: WAMessage,
+): Promise<void> {
+  const b = await baileys()
+  const generateWAMessageFromContent = pick(b, 'generateWAMessageFromContent')
+  const wa = generateWAMessageFromContent(jid, contenido, quoted ? { quoted } : {})
+  await sock.relayMessage(jid, wa.message!, { messageId: wa.key.id! })
+}
+
 async function descargarMedia(
   nodo: any,
   tipo: 'sticker' | 'image' | 'video' | 'audio' | 'document',
@@ -139,6 +188,24 @@ export async function reenviarContenido(
     return 'texto'
   }
   const nodo = (contenido as any)[clave]
+  // 1) Reenvío del contenido original (conserva todo, no corrompe Lottie)
+  try {
+    await reenviarPorContenido(sock, jid, contenido, quoted)
+    return clave === 'stickerMessage'
+      ? 'sticker'
+      : clave === 'imageMessage'
+        ? 'imagen'
+        : clave === 'videoMessage'
+          ? 'video'
+          : clave === 'audioMessage'
+            ? 'audio'
+            : 'documento'
+  } catch (e) {
+    console.log('[relay] reenvío por contenido falló, intento descarga:', e instanceof Error ? e.message : e)
+  }
+  // 2) Respaldo: descargar y volver a subir. Un sticker Lottie por esta
+  // ruta saldría corrupto (sus bytes son JSON, no WebP), así que no se intenta.
+  if (nodo?.isLottie) throw new Error('LOTTIE_SIN_RELAY')
   const tipo = TIPOS_MEDIA[clave]
   const buffer = await descargarMedia(nodo, tipo)
   switch (clave) {
@@ -195,6 +262,8 @@ export function mensajeErrorRelay(error: unknown): string {
       return '❌ Ese JSON no trae los datos del archivo (falta mediaKey o el enlace). Pídele al bot el JSON de nuevo con .get.'
     case 'DESCARGA_VACIA':
       return '❌ No pude descargar ese archivo, llegó vacío. Intenta de nuevo o pide que te lo reenvíen.'
+    case 'LOTTIE_SIN_RELAY':
+      return '❌ Ese sticker es animado (Lottie) y no lo pude reenviar con sus datos originales. Pide que te lo reenvíen de nuevo y saca el JSON otra vez con .get.'
     default:
       return '❌ No pude reenviarlo. Puede que el enlace del archivo ya haya caducado (los enlaces de WhatsApp vencen); pídele a quien lo mandó que lo reenvíe y saca el JSON de nuevo con .get.'
   }
