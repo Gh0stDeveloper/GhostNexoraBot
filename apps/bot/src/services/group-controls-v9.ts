@@ -139,6 +139,25 @@ function antiViewOnceCaption(originalCaption?: string) {
 export async function handleAntiViewOnce(socket: WASocket, message: WAMessage): Promise<boolean> {
   const chatId = message.key.remoteJid
   if (!chatId?.endsWith('@g.us')) return false
+  // Diagnóstico: registra cada mensaje de grupo con media o envoltorio
+  // ver-una-vez, para ver si se detecta y si la función está activa.
+  // Solo media/envoltorios (no texto normal), para no llenar el log.
+  {
+    const content = message.message ?? {}
+    const keys = Object.keys(content)
+    const esMedia = keys.some((k) => [
+      'imageMessage', 'videoMessage', 'viewOnceMessage', 'viewOnceMessageV2',
+      'viewOnceMessageV2Extension', 'ephemeralMessage', 'documentWithCaptionMessage',
+    ].includes(k))
+    if (esMedia) {
+      logger.info({
+        chatId,
+        antiViewOnce: groupControlsV9.get(chatId).antiViewOnce,
+        detectado: isViewOnceMessage(message),
+        keys,
+      }, 'anti view-once: mensaje con media recibido')
+    }
+  }
   // NO se ignora fromMe: si el dueño manda un ver una vez desde el número
   // del negocio (la misma cuenta del bot), también debe republicarse. No hay
   // riesgo de bucle: lo republicado es media normal, no ver una vez, así que
