@@ -145,6 +145,11 @@ export async function handleAntiViewOnce(socket: WASocket, message: WAMessage): 
 
   const media = extractViewOnceMedia(message)
   if (!media) {
+    // Sin este registro el fallo de extracción era invisible en el log.
+    logger.warn(
+      { chatId, keys: message.message ? Object.keys(message.message) : [] },
+      'anti view-once: no se pudo extraer el media del mensaje',
+    )
     await socket.sendMessage(chatId, {
       text: [
         '👁️ *ANTI VER UNA VEZ*',

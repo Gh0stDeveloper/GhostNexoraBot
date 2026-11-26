@@ -3,7 +3,12 @@ import { groupControlsV9 } from '../services/group-controls-v9.js'
 
 function requireGroupAdmin(ctx: CommandContext) {
   if (!ctx.isGroup) throw new Error('Este comando solo funciona en grupos.')
-  if (!ctx.isOwner && !ctx.isBotStaff) {
+  // El router ya verificó si el remitente es admin del grupo (adminOnly)
+  // y lo deja en ctx.request.permissions.isGroupAdmin. Hay que aceptarlo:
+  // antes solo se aceptaba owner/staff, así que un admin del grupo (que no
+  // es owner ni staff) era rechazado aunque el mensaje dijera lo contrario.
+  const isGroupAdmin = ctx.request?.permissions?.isGroupAdmin === true
+  if (!ctx.isOwner && !ctx.isBotStaff && !ctx.isSubbotOwner && !isGroupAdmin) {
     throw new Error('Necesitas ser administrador del grupo o staff del bot.')
   }
 }
