@@ -291,18 +291,15 @@ export async function iniciarSoundSticker(ctx: LegacyCompatibleCommandContext): 
     await reply(
       `🔊 *STICKER CON SONIDO*\n\n` +
         `1️⃣ Responde a una *foto, video, GIF o sticker* con *${prefix}stickersonido*\n` +
-        `2️⃣ Si es un *video con sonido*, el bot usa ese mismo sonido 🎬\n` +
+        `2️⃣ Si es un *video con sonido*, el bot usa ese mismo sonido 🎬 (si dura más de 10 s, lo recorta solo a 10 s)\n` +
         `3️⃣ Si es foto, GIF o sticker, luego envía un *audio o nota de voz* (máx. ${MAX_SEG} s)\n\n` +
         `Y listo: un sticker que suena al tocarlo 🎶`,
     )
     return
   }
 
-  if (nodo.kind === 'video' && (nodo.seconds || 0) > MAX_SEG) {
-    await reply('🎞️ El video debe durar máximo 10 segundos.')
-    return
-  }
-
+  // Si el video dura más de 10 s, el bot lo recorta solo a 10 s:
+  // el audio se corta con -t 10 en aOpus y la animación a 6 s en mediaToSticker.
   let webp: Buffer
   let animado = false
   try {

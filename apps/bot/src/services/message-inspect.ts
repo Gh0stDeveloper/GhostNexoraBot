@@ -223,12 +223,15 @@ async function resubirMedio(
 
 // Reenvía el contenido en el chat. Devuelve el tipo reenviado.
 // Siempre descarga del JSON y vuelve a subir: nunca reenvía el original.
+// forzarPremium: si se pasa (stickerpremium), pone ese valor en premium
+// antes de reenviar el sticker.
 export async function reenviarContenido(
   sock: WASocket,
   jid: string,
   contenido: proto.IMessage,
   clave: ClaveValida,
   quoted?: WAMessage,
+  forzarPremium?: number,
 ): Promise<string> {
   const opts = quoted ? { quoted } : undefined
   if (clave === 'conversation') {
@@ -240,6 +243,10 @@ export async function reenviarContenido(
     return 'texto'
   }
   const nodo = (contenido as any)[clave]
+  // stickerpremium: forzar el valor premium antes de reenviar
+  if (clave === 'stickerMessage' && forzarPremium != null) {
+    nodo.premium = forzarPremium
+  }
   const tipo = TIPOS_MEDIA[clave]
   const nombreTipo =
     clave === 'stickerMessage'
@@ -366,6 +373,53 @@ export async function ejecutarRelay(ctx: LegacyCompatibleCommandContext): Promis
     await reenviarContenido(sock, chatId, contenido, clave, message)
   } catch (e) {
     console.log('[relay]', e instanceof Error ? e.message : e)
+    await reply(mensajeErrorRelay(e))
+  }
+}
+
+export async function ejecutarStickerPremium(ctx: LegacyCompatibleCommandContext): Promise<void> {
+  const message = (ctx as unknown as { message: WAMessage }).message
+  const prefix = (ctx as unknown as { prefix: string }).prefix
+  const sock = (ctx as unknown as { socket: WASocket }).socket
+  const chatId = (ctx as unknown as { chatId: string }).chatId
+  const reply = (ctx as unknown as { reply: (text: string) => Promise<unknown> }).reply
+  const argText = ((ctx as unknown as { argText?: string }).argText ?? '').trim()
+
+  // 1) Si responde directo a un sticker, usarlo tal cual
+  const citado = mensajeCitado(message)
+  let contenido: proto.IMessage | undefined
+  let clave: ClaveValida | undefined
+  if (citado && (citado as any).stickerMessage) {
+    contenido = citado
+    clave = 'stickerMessage'
+  } else {
+    // 2) Si no, buscar un JSON (pegado al comando o en el mensaje citado)
+    let texto = argText
+    if (!texto) texto = textoDeContenido(citado)
+    if (!texto) {
+      await reply(
+        `⭐ *STICKER PREMIUM*\n\nResponde a un sticker con *${prefix}stickerpremium* y lo vuelvo a enviar con premium en 1. También puedes responder al JSON del sticker (el que da *${prefix}get*).`,
+      )
+      return
+    }
+    try {
+      const p = parsearContenido(texto)
+      contenido = p.contenido
+      clave = p.clave
+    } catch (e) {
+      console.log('[stickerpremium]', e instanceof Error ? e.message : e)
+      await reply(mensajeErrorRelay(e))
+      return
+    }
+  }
+  if (clave !== 'stickerMessage' || !contenido) {
+    await reply('❌ Esto solo funciona con stickers. Responde a un sticker (o a su JSON) con el comando.')
+    return
+  }
+  try {
+    await reenviarContenido(sock, chatId, contenido, clave, message, 1)
+  } catch (e) {
+    console.log('[stickerpremium]', e instanceof Error ? e.message : e)
     await reply(mensajeErrorRelay(e))
   }
 }
