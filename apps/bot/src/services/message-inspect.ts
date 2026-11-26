@@ -177,6 +177,10 @@ async function resubirMedio(
       mensaje.sticker = buffer
       if (nodo.mimetype) mensaje.mimetype = nodo.mimetype
       if (nodo.isLottie) mensaje.isLottie = true
+      if (nodo.isAnimated) mensaje.isAnimated = true
+      if (nodo.premium != null) mensaje.premium = nodo.premium
+      if (nodo.firstFrameLength) mensaje.firstFrameLength = nodo.firstFrameLength
+      if (nodo.firstFrameSidecar) mensaje.firstFrameSidecar = nodo.firstFrameSidecar
       if (nodo.height) mensaje.height = nodo.height
       if (nodo.width) mensaje.width = nodo.width
       break
@@ -192,6 +196,7 @@ async function resubirMedio(
       if (nodo.caption) mensaje.caption = nodo.caption
       if (nodo.mimetype) mensaje.mimetype = nodo.mimetype
       if (nodo.gifPlayback) mensaje.gifPlayback = true
+      if (nodo.seconds) mensaje.seconds = nodo.seconds
       if (nodo.height) mensaje.height = nodo.height
       if (nodo.width) mensaje.width = nodo.width
       break
@@ -199,6 +204,7 @@ async function resubirMedio(
       mensaje.audio = buffer
       mensaje.mimetype = 'audio/ogg; codecs=opus'
       if (nodo.ptt) mensaje.ptt = true
+      if (nodo.seconds) mensaje.seconds = nodo.seconds
       break
     case 'documentMessage':
       mensaje.document = buffer
@@ -257,6 +263,10 @@ export async function reenviarContenido(
   // por esta ruta saldría corrupto (sus bytes son JSON, no WebP y el
   // envío simple lo marca como image/webp), así que no se intenta.
   if (nodo?.isLottie) throw new Error('LOTTIE_SIN_RELAY')
+  // El envío simple no puede llevar la marca premium: si el sticker es
+  // premium y la resubida con metadatos falló, mejor avisar que mandar
+  // un sticker sin premium.
+  if (clave === 'stickerMessage' && nodo?.premium != null) throw new Error('PREMIUM_SIN_REENVIO')
   switch (clave) {
     case 'stickerMessage':
       await sock.sendMessage(jid, { sticker: buffer }, opts)
@@ -313,6 +323,8 @@ export function mensajeErrorRelay(error: unknown): string {
       return '❌ No pude descargar ese archivo, llegó vacío. Intenta de nuevo o pide que te lo reenvíen.'
     case 'LOTTIE_SIN_RELAY':
       return '❌ Ese sticker es animado (Lottie) y no lo pude reenviar con sus datos originales. Pide que te lo reenvíen de nuevo y saca el JSON otra vez con .get.'
+    case 'PREMIUM_SIN_REENVIO':
+      return '❌ Ese sticker es premium y no lo pude reenviar con su marca premium. Intenta de nuevo.'
     default:
       return '❌ No pude reenviarlo. Puede que el enlace del archivo ya haya caducado (los enlaces de WhatsApp vencen); pídele a quien lo mandó que lo reenvíe y saca el JSON de nuevo con .get.'
   }
