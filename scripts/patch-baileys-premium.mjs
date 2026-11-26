@@ -20,6 +20,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 
 const ESPERADA = '7.0.0-rc14'
 
@@ -31,12 +32,36 @@ const TAG_PREMIUM = 192
 function buscarBaileys() {
   const aqui = path.dirname(fileURLToPath(import.meta.url))
   const raiz = path.resolve(aqui, '..')
+  // 1) Donde Node lo resolvería (igual que el bot al arrancar)
+  const req = createRequire(import.meta.url)
+  for (const base of [raiz, path.join(raiz, 'apps', 'bot')]) {
+    try {
+      const pkgJson = req.resolve('@whiskeysockets/baileys/package.json', { paths: [base] })
+      return path.dirname(pkgJson)
+    } catch {}
+  }
+  // 2) Rutas directas habituales
   const candidatos = [
     path.join(raiz, 'node_modules', '@whiskeysockets', 'baileys'),
     path.join(raiz, 'apps', 'bot', 'node_modules', '@whiskeysockets', 'baileys'),
   ]
   for (const c of candidatos) {
     if (fs.existsSync(path.join(c, 'package.json'))) return c
+  }
+  // 3) Búsqueda bajo la raíz, por si npm lo instaló en otro sitio
+  const cola = [{ dir: raiz, prof: 0 }]
+  while (cola.length) {
+    const { dir, prof } = cola.shift()
+    const cand = path.join(dir, 'node_modules', '@whiskeysockets', 'baileys', 'package.json')
+    if (fs.existsSync(cand)) return path.dirname(cand)
+    if (prof >= 3) continue
+    let entradas
+    try { entradas = fs.readdirSync(dir, { withFileTypes: true }) } catch { continue }
+    for (const e of entradas) {
+      if (!e.isDirectory()) continue
+      if (e.name === '.git' || e.name === 'node_modules' || e.name.startsWith('dist')) continue
+      cola.push({ dir: path.join(dir, e.name), prof: prof + 1 })
+    }
   }
   return null
 }
@@ -195,7 +220,8 @@ function parchearIndexDts(ruta) {
 
 const dirBaileys = process.argv[2] ? path.resolve(process.argv[2]) : buscarBaileys()
 if (!dirBaileys) {
-  console.error('No encontré Baileys en node_modules. Corre "npm install" primero o pasa la ruta como argumento.')
+  console.error('No encontré Baileys. Busca dónde está con: find . -maxdepth 6 -type d -name baileys (desde la raíz del repo)')
+  console.error('Y luego corre: node scripts/patch-baileys-premium.mjs <esa ruta>')
   process.exit(1)
 }
 const pkg = JSON.parse(fs.readFileSync(path.join(dirBaileys, 'package.json'), 'utf8'))
