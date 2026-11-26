@@ -435,6 +435,20 @@ async function connect() {
   const router = new CommandRouter(commands)
 
   socket.ev.on('messages.upsert', ({ messages, type }) => {
+    // Diagnóstico anti view-once (temporal): registrar TODO lo que llega al
+    // grupo de prueba ANTES de cualquier filtro, para ver si el mensaje de
+    // ver una vez llega al socket y con qué tipo/claves.
+    for (const message of messages ?? []) {
+      if (message.key?.remoteJid === '120363431659539991@g.us') {
+        logger.info({
+          upsertType: type,
+          tieneMessage: Boolean(message.message),
+          keys: message.message ? Object.keys(message.message) : [],
+          remoteJid: message.key.remoteJid,
+          fromMe: message.key.fromMe,
+        }, 'anti view-once: upsert recibido')
+      }
+    }
     if (generation !== socketGeneration || type !== 'notify') return
     markMainSocketLive(socket)
     for (const message of messages) {
