@@ -1,17 +1,29 @@
-// Parche para Baileys 7.0.0-rc14: campo `premium` en los stickers.
+// Parche para Baileys 7.0.0-rc14: campos completos de StickerMessage.
 //
-// El proto de WhatsApp ya tiene `premium` en StickerMessage (campo 24,
-// int32: 1 = sticker premium, 0 = no premium), pero el Baileys que usa
-// el bot (7.0.0-rc14, la última versión publicada) no lo conoce: al
-// decodificar un sticker, ese campo se descarta y .get nunca lo muestra.
-// Este script añade el campo al codec generado de Baileys (WAProto)
-// para que la decodificación lo conserve y .get lo muestre.
+// El proto de WhatsApp ya tiene estos campos en StickerMessage, pero el
+// Baileys que usa el bot (7.0.0-rc14, la última versión publicada) no
+// los conoce: al decodificar un sticker, esos campos se descartan.
+//
+//   premium = 24 (int32: 1 = sticker premium, 0 = no premium)
+//   emojis = 25 (repeated string: emojis asociados al sticker)
+//   audioMessage = 26 (AudioMessage: el sonido de un sticker con sonido)
+//
+// (wppconnect-team/wa-proto, WAProto.proto)
+//
+// Sin este parche, .get nunca muestra el audio de un sticker con sonido
+// ni si es premium, y .relay/.stickerpremium no pueden conservar el
+// sonido al reenviar (el audio ni siquiera llega al JSON).
+//
+// Este script añade los tres campos al codec generado de Baileys (WAProto)
+// para que la decodificación los conserve y .get muestre el JSON completo.
 //
 // Uso:
 //   node scripts/patch-baileys-premium.mjs            (busca Baileys en node_modules)
 //   node scripts/patch-baileys-premium.mjs <ruta>    (ruta a baileys o @whiskeysockets/baileys)
 //
-// Es idempotente: si el parche ya está aplicado, no hace nada.
+// Es idempotente: cada campo se revisa por separado; si ya está aplicado,
+// ese campo no se toca (así, si ya corriste la versión que solo ponía
+// premium, esta versión solo agrega emojis y audioMessage).
 // Busca Baileys con nombre con ámbito (@whiskeysockets/baileys) o sin
 // ámbito (baileys). Si la versión no es 7.0.0-rc14 avisa y lo intenta
 // igual: si los textos que busca no coinciden, falla sin tocar nada.
@@ -25,10 +37,12 @@ import { createRequire } from 'node:module'
 
 const ESPERADA = '7.0.0-rc14'
 
-// Campo 24 de StickerMessage en el proto actual de WhatsApp
-// (wppconnect-team/wa-proto, WAProto.proto): optional int32 premium = 24
-// Tag en el cable: (24 << 3) | 0 = 192, varint.
+// Campos de StickerMessage en el proto actual de WhatsApp.
+// Tags en el cable: premium (24<<3)|0 = 192, emojis (25<<3)|2 = 202,
+// audioMessage (26<<3)|2 = 210.
 const TAG_PREMIUM = 192
+const TAG_EMOJIS = 202
+const TAG_AUDIO = 210
 
 // Baileys puede estar instalado con ámbito (@whiskeysockets/baileys)
 // o sin ámbito (baileys). Se prueban los dos nombres en cada búsqueda.
@@ -95,14 +109,9 @@ function bloqueStickerJs(texto) {
   return { inicio, fin, bloque: texto.slice(inicio, fin) }
 }
 
-function parchearIndexJs(ruta) {
-  let texto = fs.readFileSync(ruta, 'utf8')
-  if (texto.includes('StickerMessage.prototype.premium = null')) {
-    console.log('WAProto/index.js: el parche ya está aplicado, no hago nada.')
-    return false
-  }
-  const { inicio, fin, bloque } = bloqueStickerJs(texto)
-  let b = bloque
+// --- premium (campo 24, int32) ---
+function parchearPremium(b) {
+  if (b.includes('StickerMessage.prototype.premium = null')) return b
   b = reemplazarUnaVez(
     b,
     '            StickerMessage.prototype.mediaKeyDomain = null;',
@@ -191,40 +200,297 @@ function parchearIndexJs(ruta) {
                 return d;`,
     'toObject premium',
   )
-  texto = texto.slice(0, inicio) + b + texto.slice(fin)
-  fs.writeFileSync(ruta, texto)
-  console.log('WAProto/index.js: parche aplicado (premium, campo 24).')
+  return b
+}
+
+// --- emojis (campo 25, repeated string) ---
+// Los campos repetidos no llevan oneOf. El prototype usa $util.emptyArray
+// (patrón de protobufjs, igual que mentionedJid en ContextInfo).
+function parchearEmojis(b) {
+  if (b.includes('StickerMessage.prototype.emojis = $util.emptyArray')) return b
+  b = reemplazarUnaVez(
+    b,
+    '            StickerMessage.prototype.premium = null;',
+    '            StickerMessage.prototype.premium = null;\n            StickerMessage.prototype.emojis = $util.emptyArray;',
+    'prototype.emojis',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                if (m.premium != null && Object.hasOwnProperty.call(m, "premium"))
+                    w.uint32(${TAG_PREMIUM}).int32(m.premium);
+                return w;`,
+    `                if (m.premium != null && Object.hasOwnProperty.call(m, "premium"))
+                    w.uint32(${TAG_PREMIUM}).int32(m.premium);
+                if (m.emojis != null && m.emojis.length) {
+                    for (var i = 0; i < m.emojis.length; ++i)
+                        w.uint32(${TAG_EMOJIS}).string(m.emojis[i]);
+                }
+                return w;`,
+    'encode emojis',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                    case 24: {
+                            m.premium = r.int32();
+                            break;
+                        }
+                    default:`,
+    `                    case 24: {
+                            m.premium = r.int32();
+                            break;
+                        }
+                    case 25: {
+                            if (!(m.emojis && m.emojis.length))
+                                m.emojis = [];
+                            m.emojis.push(r.string());
+                            break;
+                        }
+                    default:`,
+    'decode emojis',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                if (d.premium != null) {
+                    m.premium = d.premium | 0;
+                }
+                return m;`,
+    `                if (d.premium != null) {
+                    m.premium = d.premium | 0;
+                }
+                if (d.emojis) {
+                    if (!Array.isArray(d.emojis))
+                        throw TypeError(".proto.Message.StickerMessage.emojis: array expected");
+                    m.emojis = [];
+                    for (var i = 0; i < d.emojis.length; ++i) {
+                        m.emojis[i] = String(d.emojis[i]);
+                    }
+                }
+                return m;`,
+    'fromObject emojis',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                if (m.premium != null && m.hasOwnProperty("premium")) {
+                    d.premium = m.premium;
+                    if (o.oneofs)
+                        d._premium = "premium";
+                }
+                return d;`,
+    `                if (m.premium != null && m.hasOwnProperty("premium")) {
+                    d.premium = m.premium;
+                    if (o.oneofs)
+                        d._premium = "premium";
+                }
+                if (m.emojis && m.emojis.length) {
+                    d.emojis = [];
+                    for (var j = 0; j < m.emojis.length; ++j)
+                        d.emojis[j] = m.emojis[j];
+                }
+                return d;`,
+    'toObject emojis',
+  )
+  return b
+}
+
+// --- audioMessage (campo 26, AudioMessage) ---
+// Mismo patrón que contextInfo (campo mensaje): prototype null, oneOf,
+// encode con fork+ldelim (tag 210), decode, fromObject y toObject.
+function parchearAudio(b) {
+  if (b.includes('StickerMessage.prototype.audioMessage = null')) return b
+  b = reemplazarUnaVez(
+    b,
+    '            StickerMessage.prototype.emojis = $util.emptyArray;',
+    '            StickerMessage.prototype.emojis = $util.emptyArray;\n            StickerMessage.prototype.audioMessage = null;',
+    'prototype.audioMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `            Object.defineProperty(StickerMessage.prototype, "_premium", {
+                get: $util.oneOfGetter($oneOfFields = ["premium"]),
+                set: $util.oneOfSetter($oneOfFields)
+            });`,
+    `            Object.defineProperty(StickerMessage.prototype, "_premium", {
+                get: $util.oneOfGetter($oneOfFields = ["premium"]),
+                set: $util.oneOfSetter($oneOfFields)
+            });
+            Object.defineProperty(StickerMessage.prototype, "_audioMessage", {
+                get: $util.oneOfGetter($oneOfFields = ["audioMessage"]),
+                set: $util.oneOfSetter($oneOfFields)
+            });`,
+    'oneOf _audioMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                if (m.emojis != null && m.emojis.length) {
+                    for (var i = 0; i < m.emojis.length; ++i)
+                        w.uint32(${TAG_EMOJIS}).string(m.emojis[i]);
+                }
+                return w;`,
+    `                if (m.emojis != null && m.emojis.length) {
+                    for (var i = 0; i < m.emojis.length; ++i)
+                        w.uint32(${TAG_EMOJIS}).string(m.emojis[i]);
+                }
+                if (m.audioMessage != null && Object.hasOwnProperty.call(m, "audioMessage"))
+                    $root.proto.Message.AudioMessage.encode(m.audioMessage, w.uint32(${TAG_AUDIO}).fork()).ldelim();
+                return w;`,
+    'encode audioMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                    case 25: {
+                            if (!(m.emojis && m.emojis.length))
+                                m.emojis = [];
+                            m.emojis.push(r.string());
+                            break;
+                        }
+                    default:`,
+    `                    case 25: {
+                            if (!(m.emojis && m.emojis.length))
+                                m.emojis = [];
+                            m.emojis.push(r.string());
+                            break;
+                        }
+                    case 26: {
+                            m.audioMessage = $root.proto.Message.AudioMessage.decode(r, r.uint32());
+                            break;
+                        }
+                    default:`,
+    'decode audioMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                if (d.emojis) {
+                    if (!Array.isArray(d.emojis))
+                        throw TypeError(".proto.Message.StickerMessage.emojis: array expected");
+                    m.emojis = [];
+                    for (var i = 0; i < d.emojis.length; ++i) {
+                        m.emojis[i] = String(d.emojis[i]);
+                    }
+                }
+                return m;`,
+    `                if (d.emojis) {
+                    if (!Array.isArray(d.emojis))
+                        throw TypeError(".proto.Message.StickerMessage.emojis: array expected");
+                    m.emojis = [];
+                    for (var i = 0; i < d.emojis.length; ++i) {
+                        m.emojis[i] = String(d.emojis[i]);
+                    }
+                }
+                if (d.audioMessage != null) {
+                    m.audioMessage = $root.proto.Message.AudioMessage.fromObject(d.audioMessage);
+                }
+                return m;`,
+    'fromObject audioMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                if (m.emojis && m.emojis.length) {
+                    d.emojis = [];
+                    for (var j = 0; j < m.emojis.length; ++j)
+                        d.emojis[j] = m.emojis[j];
+                }
+                return d;`,
+    `                if (m.emojis && m.emojis.length) {
+                    d.emojis = [];
+                    for (var j = 0; j < m.emojis.length; ++j)
+                        d.emojis[j] = m.emojis[j];
+                }
+                if (m.audioMessage != null && m.hasOwnProperty("audioMessage")) {
+                    d.audioMessage = $root.proto.Message.AudioMessage.toObject(m.audioMessage, o);
+                    if (o.oneofs)
+                        d._audioMessage = "audioMessage";
+                }
+                return d;`,
+    'toObject audioMessage',
+  )
+  return b
+}
+
+function parchearIndexJs(ruta) {
+  const texto = fs.readFileSync(ruta, 'utf8')
+  const yaPremium = texto.includes('StickerMessage.prototype.premium = null')
+  const yaEmojis = texto.includes('StickerMessage.prototype.emojis = $util.emptyArray')
+  const yaAudio = texto.includes('StickerMessage.prototype.audioMessage = null')
+  if (yaPremium && yaEmojis && yaAudio) {
+    console.log('WAProto/index.js: el parche ya está aplicado, no hago nada.')
+    return false
+  }
+  const { inicio, fin, bloque } = bloqueStickerJs(texto)
+  let b = bloque
+  // En orden de campo: premium (24), emojis (25), audioMessage (26).
+  // Cada uno se ancla en el anterior, que ya está presente o se acaba
+  // de agregar en esta misma corrida.
+  b = parchearPremium(b)
+  b = parchearEmojis(b)
+  b = parchearAudio(b)
+  const nuevoTexto = texto.slice(0, inicio) + b + texto.slice(fin)
+  fs.writeFileSync(ruta, nuevoTexto)
+  console.log('WAProto/index.js: parche aplicado (premium 24, emojis 25, audioMessage 26).')
   return true
 }
 
 function parchearIndexDts(ruta) {
   let texto = fs.readFileSync(ruta, 'utf8')
-  if (texto.includes('premium?: (number|null);')) {
+  // OJO: premium/emojis/audioMessage existen en OTROS mensajes del .d.ts
+  // (audioMessage está en IMessage, por ejemplo). La revisión de si ya
+  // están aplicados tiene que ser solo dentro de IStickerMessage y de la
+  // clase StickerMessage, no en todo el archivo.
+  function bloqueDts(inicioTexto) {
+    const inicio = texto.indexOf(inicioTexto)
+    if (inicio < 0) throw new Error(`no encontré ${inicioTexto} en index.d.ts`)
+    const posCierre = texto.indexOf('\n        }\n', inicio)
+    if (posCierre < 0) throw new Error(`no encontré el final de ${inicioTexto} en index.d.ts`)
+    const fin = posCierre + '\n        }\n'.length
+    return { inicio, fin, bloque: texto.slice(inicio, fin) }
+  }
+  function agregarCampo(bloque, ancla, linea) {
+    const pos = bloque.indexOf(ancla)
+    if (pos < 0) throw new Error(`no encontré el ancla de ${linea.trim()} en index.d.ts`)
+    return bloque.slice(0, pos + ancla.length) + '\n' + linea + bloque.slice(pos + ancla.length)
+  }
+  let cambio = false
+  // Interfaz IStickerMessage
+  {
+    const { inicio, fin, bloque } = bloqueDts('interface IStickerMessage {')
+    let b = bloque
+    if (!b.includes('premium?: (number|null);')) {
+      b = agregarCampo(b, '            mediaKeyDomain?: (proto.Message.MediaKeyDomain|null);', '            premium?: (number|null);')
+      cambio = true
+    }
+    if (!b.includes('emojis?: (string[]|null);')) {
+      b = agregarCampo(b, '            premium?: (number|null);', '            emojis?: (string[]|null);')
+      cambio = true
+    }
+    if (!b.includes('audioMessage?: (proto.Message.IAudioMessage|null);')) {
+      b = agregarCampo(b, '            emojis?: (string[]|null);', '            audioMessage?: (proto.Message.IAudioMessage|null);')
+      cambio = true
+    }
+    texto = texto.slice(0, inicio) + b + texto.slice(fin)
+  }
+  // Clase StickerMessage
+  {
+    const { inicio, fin, bloque } = bloqueDts('class StickerMessage implements IStickerMessage {')
+    let b = bloque
+    if (!b.includes('public premium?: (number|null);')) {
+      b = agregarCampo(b, '            public mediaKeyDomain?: (proto.Message.MediaKeyDomain|null);', '            public premium?: (number|null);')
+      cambio = true
+    }
+    if (!b.includes('public emojis?: (string[]|null);')) {
+      b = agregarCampo(b, '            public premium?: (number|null);', '            public emojis?: (string[]|null);')
+      cambio = true
+    }
+    if (!b.includes('public audioMessage?: (proto.Message.IAudioMessage|null);')) {
+      b = agregarCampo(b, '            public emojis?: (string[]|null);', '            public audioMessage?: (proto.Message.IAudioMessage|null);')
+      cambio = true
+    }
+    texto = texto.slice(0, inicio) + b + texto.slice(fin)
+  }
+  if (!cambio) {
     console.log('WAProto/index.d.ts: el parche ya está aplicado, no hago nada.')
     return false
   }
-  // Interfaz IStickerMessage: añadir premium después de su mediaKeyDomain
-  const inicioInterfaz = texto.indexOf('interface IStickerMessage {')
-  if (inicioInterfaz < 0) throw new Error('no encontré IStickerMessage en index.d.ts')
-  const anclaInterfaz = '            mediaKeyDomain?: (proto.Message.MediaKeyDomain|null);'
-  const posInterfaz = texto.indexOf(anclaInterfaz, inicioInterfaz)
-  if (posInterfaz < 0) throw new Error('no encontré mediaKeyDomain en IStickerMessage')
-  texto =
-    texto.slice(0, posInterfaz + anclaInterfaz.length) +
-    '\n            premium?: (number|null);' +
-    texto.slice(posInterfaz + anclaInterfaz.length)
-  // Clase StickerMessage: añadir premium después de su mediaKeyDomain
-  const inicioClase = texto.indexOf('class StickerMessage implements IStickerMessage {')
-  if (inicioClase < 0) throw new Error('no encontré la clase StickerMessage en index.d.ts')
-  const anclaClase = '            public mediaKeyDomain?: (proto.Message.MediaKeyDomain|null);'
-  const posClase = texto.indexOf(anclaClase, inicioClase)
-  if (posClase < 0) throw new Error('no encontré mediaKeyDomain en la clase StickerMessage')
-  texto =
-    texto.slice(0, posClase + anclaClase.length) +
-    '\n            public premium?: (number|null);' +
-    texto.slice(posClase + anclaClase.length)
   fs.writeFileSync(ruta, texto)
-  console.log('WAProto/index.d.ts: parche aplicado (premium).')
+  console.log('WAProto/index.d.ts: parche aplicado (premium, emojis, audioMessage).')
   return true
 }
 
@@ -237,9 +503,10 @@ if (!dirBaileys) {
 const pkg = JSON.parse(fs.readFileSync(path.join(dirBaileys, 'package.json'), 'utf8'))
 console.log(`Baileys ${pkg.version} en ${dirBaileys}`)
 if (pkg.version !== ESPERADA) {
-  // No se bloquea: el campo premium (24) es del proto de WhatsApp y no
-  // depende de la versión de Baileys. Si los textos que busca el parche
-  // no coinciden, falla sin tocar nada (esa es la verdadera protección).
+  // No se bloquea: los campos premium (24), emojis (25) y audioMessage (26)
+  // son del proto de WhatsApp y no dependen de la versión de Baileys. Si
+  // los textos que busca el parche no coinciden, falla sin tocar nada
+  // (esa es la verdadera protección).
   console.log(`Aviso: el parche se probó en ${ESPERADA}; intento aplicarlo de todas formas.`)
 }
 const js = path.join(dirBaileys, 'WAProto', 'index.js')
