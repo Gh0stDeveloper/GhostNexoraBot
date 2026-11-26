@@ -10,6 +10,8 @@ import { aiCommands } from './ai.js'
 import { profileCommands } from './profile.js'
 import { reactionCommands } from './reactions.js'
 import { stickerCommands } from './stickers.js'
+import { soundStickerCommands } from './sound-sticker.js'
+import { messageInspectCommands } from './message-inspect.js'
 import { downloadCommands } from './downloads.js'
 import { lyricsCommands } from './lyrics.js'
 import { resourceCommands } from './resources.js'
@@ -257,6 +259,8 @@ export const commands: BotCommand[] = [
   ...automaticResponseCommands,
   ...happyModV19Commands,
   ...commandSearchCommands,
+  ...soundStickerCommands,
+  ...messageInspectCommands,
 ]
 
 setMenuCommandProvider(() => commands)

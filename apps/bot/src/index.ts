@@ -42,6 +42,7 @@ import { getMessageText, getSender } from './utils/message.js'
 import { logger } from './utils/logger.js'
 import { withTimeout } from './utils/timeout.js'
 import { groupControlsV9, handleAntiViewOnce } from './services/group-controls-v9.js'
+import { handleSoundStickerAudio } from './services/sound-sticker.js'
 import { startBrowserProxy } from './services/browser-proxy.js'
 import { executionQueues } from './services/execution-queues.js'
 import { withTraceContext } from './services/trace-context.js'
@@ -295,6 +296,11 @@ async function routeMessage(
 
   if (await moderateIncomingV2(socket, message).catch((error) => {
     logger.warn({ error, chatId }, 'moderation failed; continuing command route')
+    return false
+  })) return
+
+  if (await handleSoundStickerAudio(socket, message).catch((error) => {
+    logger.warn({ error, chatId }, 'sound sticker audio handler failed')
     return false
   })) return
 
