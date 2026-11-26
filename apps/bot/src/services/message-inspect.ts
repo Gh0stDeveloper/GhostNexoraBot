@@ -13,11 +13,11 @@
 // El JSON que devuelve .get es el mismo que acepta .relay: se copia,
 // se pega como mensaje y se responde con .relay.
 //
-// Cómo reenvía .relay: como un reenvío del contenido original
-// (generateWAMessageFromContent + relayMessage), sin volver a subir el
-// archivo. Así el sticker llega tal cual: con su premium, su tamaño,
-// su animación y, si es Lottie, como Lottie. Si eso falla, intenta la
-// ruta vieja (descargar y volver a subir) y si también falla, avisa.
+// Cómo reenvía .relay: SOLO desde el JSON. Descarga el archivo con los
+// datos del JSON (url/directPath + mediaKey) y lo vuelve a subir como un
+// archivo nuevo, con los metadatos del JSON (mimetype, tamaño, animación,
+// Lottie...). Nunca busca el sticker original ni lo reenvía tal cual:
+// el sticker que llega es una copia nueva subida por el bot.
 
 import type { proto, WAMessage, WASocket } from 'baileys'
 import type { LegacyCompatibleCommandContext } from '../types.js'
@@ -139,22 +139,6 @@ export function parsearContenido(texto: string): { contenido: proto.IMessage; cl
   return { contenido, clave }
 }
 
-// Reenvía el contenido original tal cual (como un reenvío): el archivo
-// no se vuelve a subir, así que conserva premium, tamaño, animación y,
-// si es Lottie, sigue siendo Lottie. El medio ya está alojado en los
-// servidores de WhatsApp (url/directPath del JSON).
-async function reenviarPorContenido(
-  sock: WASocket,
-  jid: string,
-  contenido: proto.IMessage,
-  quoted?: WAMessage,
-): Promise<void> {
-  const b = await baileys()
-  const generateWAMessageFromContent = pick(b, 'generateWAMessageFromContent')
-  const wa = generateWAMessageFromContent(jid, contenido, quoted ? { quoted } : {})
-  await sock.relayMessage(jid, wa.message!, { messageId: wa.key.id! })
-}
-
 async function descargarMedia(
   nodo: any,
   tipo: 'sticker' | 'image' | 'video' | 'audio' | 'document',
@@ -170,7 +154,69 @@ async function descargarMedia(
   return Buffer.concat(chunks)
 }
 
+// Vuelve a subir el archivo descargado como un archivo nuevo, con los
+// metadatos del JSON (mimetype, tamaño, animación, Lottie...). El medio
+// queda alojado de nuevo en los servidores de WhatsApp, con url y clave
+// nuevas: el sticker que llega es una copia nueva, no el original.
+// Usa prepareWAMessageMedia de Baileys (lo mismo que usa sendMessage por
+// dentro) y luego envía el contenido ya subido.
+async function resubirMedio(
+  sock: WASocket,
+  jid: string,
+  clave: ClaveValida,
+  nodo: any,
+  buffer: Buffer,
+  quoted?: WAMessage,
+): Promise<void> {
+  const b = await baileys()
+  const prepareWAMessageMedia = pick(b, 'prepareWAMessageMedia')
+  const generateWAMessageFromContent = pick(b, 'generateWAMessageFromContent')
+  const mensaje: Record<string, unknown> = {}
+  switch (clave) {
+    case 'stickerMessage':
+      mensaje.sticker = buffer
+      if (nodo.mimetype) mensaje.mimetype = nodo.mimetype
+      if (nodo.isLottie) mensaje.isLottie = true
+      if (nodo.height) mensaje.height = nodo.height
+      if (nodo.width) mensaje.width = nodo.width
+      break
+    case 'imageMessage':
+      mensaje.image = buffer
+      if (nodo.caption) mensaje.caption = nodo.caption
+      if (nodo.mimetype) mensaje.mimetype = nodo.mimetype
+      if (nodo.height) mensaje.height = nodo.height
+      if (nodo.width) mensaje.width = nodo.width
+      break
+    case 'videoMessage':
+      mensaje.video = buffer
+      if (nodo.caption) mensaje.caption = nodo.caption
+      if (nodo.mimetype) mensaje.mimetype = nodo.mimetype
+      if (nodo.gifPlayback) mensaje.gifPlayback = true
+      if (nodo.height) mensaje.height = nodo.height
+      if (nodo.width) mensaje.width = nodo.width
+      break
+    case 'audioMessage':
+      mensaje.audio = buffer
+      mensaje.mimetype = 'audio/ogg; codecs=opus'
+      if (nodo.ptt) mensaje.ptt = true
+      break
+    case 'documentMessage':
+      mensaje.document = buffer
+      if (nodo.mimetype) mensaje.mimetype = nodo.mimetype
+      if (nodo.fileName) mensaje.fileName = nodo.fileName
+      break
+    default:
+      throw new Error('SIN_MENSAJE')
+  }
+  const contenido = await prepareWAMessageMedia(mensaje, {
+    upload: (sock as any).waUploadToServer,
+  })
+  const wa = generateWAMessageFromContent(jid, contenido, quoted ? { quoted } : {})
+  await sock.relayMessage(jid, wa.message!, { messageId: wa.key.id! })
+}
+
 // Reenvía el contenido en el chat. Devuelve el tipo reenviado.
+// Siempre descarga del JSON y vuelve a subir: nunca reenvía el original.
 export async function reenviarContenido(
   sock: WASocket,
   jid: string,
@@ -188,10 +234,9 @@ export async function reenviarContenido(
     return 'texto'
   }
   const nodo = (contenido as any)[clave]
-  // 1) Reenvío del contenido original (conserva todo, no corrompe Lottie)
-  try {
-    await reenviarPorContenido(sock, jid, contenido, quoted)
-    return clave === 'stickerMessage'
+  const tipo = TIPOS_MEDIA[clave]
+  const nombreTipo =
+    clave === 'stickerMessage'
       ? 'sticker'
       : clave === 'imageMessage'
         ? 'imagen'
@@ -200,14 +245,18 @@ export async function reenviarContenido(
           : clave === 'audioMessage'
             ? 'audio'
             : 'documento'
-  } catch (e) {
-    console.log('[relay] reenvío por contenido falló, intento descarga:', e instanceof Error ? e.message : e)
-  }
-  // 2) Respaldo: descargar y volver a subir. Un sticker Lottie por esta
-  // ruta saldría corrupto (sus bytes son JSON, no WebP), así que no se intenta.
-  if (nodo?.isLottie) throw new Error('LOTTIE_SIN_RELAY')
-  const tipo = TIPOS_MEDIA[clave]
+  // 1) Descargar del JSON y volver a subir como archivo nuevo
   const buffer = await descargarMedia(nodo, tipo)
+  try {
+    await resubirMedio(sock, jid, clave, nodo, buffer, quoted)
+    return nombreTipo
+  } catch (e) {
+    console.log('[relay] resubida con metadatos falló, intento envío simple:', e instanceof Error ? e.message : e)
+  }
+  // 2) Respaldo: envío simple del archivo descargado. Un sticker Lottie
+  // por esta ruta saldría corrupto (sus bytes son JSON, no WebP y el
+  // envío simple lo marca como image/webp), así que no se intenta.
+  if (nodo?.isLottie) throw new Error('LOTTIE_SIN_RELAY')
   switch (clave) {
     case 'stickerMessage':
       await sock.sendMessage(jid, { sticker: buffer }, opts)
