@@ -9,11 +9,12 @@
 //
 // Uso:
 //   node scripts/patch-baileys-premium.mjs            (busca Baileys en node_modules)
-//   node scripts/patch-baileys-premium.mjs <ruta>    (ruta a @whiskeysockets/baileys)
+//   node scripts/patch-baileys-premium.mjs <ruta>    (ruta a baileys o @whiskeysockets/baileys)
 //
 // Es idempotente: si el parche ya está aplicado, no hace nada.
-// Falla con mensaje claro si la versión de Baileys no es 7.0.0-rc14 o si
-// los textos que busca no coinciden (en ese caso no toca nada).
+// Busca Baileys con nombre con ámbito (@whiskeysockets/baileys) o sin
+// ámbito (baileys). Si la versión no es 7.0.0-rc14 avisa y lo intenta
+// igual: si los textos que busca no coinciden, falla sin tocar nada.
 // Después de aplicar el parche hay que compilar de nuevo el bot
 // (npm run build) y reiniciar el servicio.
 
@@ -29,22 +30,29 @@ const ESPERADA = '7.0.0-rc14'
 // Tag en el cable: (24 << 3) | 0 = 192, varint.
 const TAG_PREMIUM = 192
 
+// Baileys puede estar instalado con ámbito (@whiskeysockets/baileys)
+// o sin ámbito (baileys). Se prueban los dos nombres en cada búsqueda.
+const NOMBRES_BAILEYS = ['@whiskeysockets/baileys', 'baileys']
+
 function buscarBaileys() {
   const aqui = path.dirname(fileURLToPath(import.meta.url))
   const raiz = path.resolve(aqui, '..')
   // 1) Donde Node lo resolvería (igual que el bot al arrancar)
   const req = createRequire(import.meta.url)
   for (const base of [raiz, path.join(raiz, 'apps', 'bot')]) {
-    try {
-      const pkgJson = req.resolve('@whiskeysockets/baileys/package.json', { paths: [base] })
-      return path.dirname(pkgJson)
-    } catch {}
+    for (const nombre of NOMBRES_BAILEYS) {
+      try {
+        const pkgJson = req.resolve(`${nombre}/package.json`, { paths: [base] })
+        return path.dirname(pkgJson)
+      } catch {}
+    }
   }
   // 2) Rutas directas habituales
-  const candidatos = [
-    path.join(raiz, 'node_modules', '@whiskeysockets', 'baileys'),
-    path.join(raiz, 'apps', 'bot', 'node_modules', '@whiskeysockets', 'baileys'),
-  ]
+  const candidatos = []
+  for (const nombre of NOMBRES_BAILEYS) {
+    candidatos.push(path.join(raiz, 'node_modules', nombre))
+    candidatos.push(path.join(raiz, 'apps', 'bot', 'node_modules', nombre))
+  }
   for (const c of candidatos) {
     if (fs.existsSync(path.join(c, 'package.json'))) return c
   }
@@ -52,8 +60,10 @@ function buscarBaileys() {
   const cola = [{ dir: raiz, prof: 0 }]
   while (cola.length) {
     const { dir, prof } = cola.shift()
-    const cand = path.join(dir, 'node_modules', '@whiskeysockets', 'baileys', 'package.json')
-    if (fs.existsSync(cand)) return path.dirname(cand)
+    for (const nombre of NOMBRES_BAILEYS) {
+      const cand = path.join(dir, 'node_modules', nombre, 'package.json')
+      if (fs.existsSync(cand)) return path.dirname(cand)
+    }
     if (prof >= 3) continue
     let entradas
     try { entradas = fs.readdirSync(dir, { withFileTypes: true }) } catch { continue }
@@ -225,9 +235,12 @@ if (!dirBaileys) {
   process.exit(1)
 }
 const pkg = JSON.parse(fs.readFileSync(path.join(dirBaileys, 'package.json'), 'utf8'))
+console.log(`Baileys ${pkg.version} en ${dirBaileys}`)
 if (pkg.version !== ESPERADA) {
-  console.error(`Baileys es ${pkg.version}, el parche es solo para ${ESPERADA}. No toco nada.`)
-  process.exit(1)
+  // No se bloquea: el campo premium (24) es del proto de WhatsApp y no
+  // depende de la versión de Baileys. Si los textos que busca el parche
+  // no coinciden, falla sin tocar nada (esa es la verdadera protección).
+  console.log(`Aviso: el parche se probó en ${ESPERADA}; intento aplicarlo de todas formas.`)
 }
 const js = path.join(dirBaileys, 'WAProto', 'index.js')
 const dts = path.join(dirBaileys, 'WAProto', 'index.d.ts')
