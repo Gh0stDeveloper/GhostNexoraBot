@@ -32,6 +32,11 @@ import { unwrapMessage, getContextInfo } from '../utils/message.js'
 // al sticker con bytes crudos, y aOpus lo deja en OGG Opus de 10 s.
 // Se usan solo para reenviar un sticker que YA trae sonido.
 import { armarBytes, parchearEncode, aOpus } from './sound-sticker.js'
+// Audio guardado de stickers con sonido (disco, 20 min): cuando un
+// sticker con sonido llega, su audio se guarda por huella (fileSha256);
+// al responder con .get/.relay/.stickerpremium se busca ahí, porque la
+// cita no trae el audio.
+import { claveHuella, obtenerAudioSticker } from './audio-sticker-store.js'
 
 const CLAVES_VALIDAS = [
   'stickerMessage',
@@ -110,6 +115,21 @@ function normalizar(valor: unknown): unknown {
 export function mensajeCitado(message: WAMessage): proto.IMessage | undefined {
   const citado = getContextInfo(message)?.quotedMessage
   return unwrapMessage(citado)
+}
+
+// Busca el audio guardado de un sticker por su huella (fileSha256).
+// La cita no trae el audio, así que si el sticker no lo trae, se busca
+// en el almacén (disco, 20 min). Devuelve el audioMessage normalizado
+// (como en un JSON de .get) o undefined. Nunca lanza.
+async function audioGuardadoDeSticker(nodo: any): Promise<Record<string, unknown> | undefined> {
+  if (!nodo || nodo.audioMessage) return undefined
+  const clave = claveHuella(nodo.fileSha256)
+  if (!clave) return undefined
+  try {
+    return await obtenerAudioSticker(clave)
+  } catch {
+    return undefined
+  }
 }
 
 // Texto de un contenido: texto plano, texto extendido o caption
@@ -328,6 +348,12 @@ export async function reenviarContenido(
   if (clave === 'stickerMessage' && forzarPremium != null) {
     nodo.premium = forzarPremium
   }
+  // Sticker con sonido: si el JSON/cita no trae el audio, se busca el
+  // guardado (por huella) para reenviarlo con sonido.
+  if (clave === 'stickerMessage' && nodo && !nodo.audioMessage) {
+    const audio = await audioGuardadoDeSticker(nodo)
+    if (audio) nodo.audioMessage = audio
+  }
   const tipo = TIPOS_MEDIA[clave]
   const nombreTipo =
     clave === 'stickerMessage'
@@ -433,6 +459,14 @@ export async function ejecutarGet(ctx: LegacyCompatibleCommandContext): Promise<
   if (!citado) {
     await reply(`🔍 *GET*\n\nResponde a un mensaje o sticker con *${prefix}get* y te devuelvo su JSON.`)
     return
+  }
+  // Sticker con sonido: si la cita no trae el audio, se busca el
+  // guardado (por huella) y se muestra en el JSON, para que .relay
+  // pueda usarlo después.
+  const sticker = (citado as any).stickerMessage
+  if (sticker && !sticker.audioMessage) {
+    const audio = await audioGuardadoDeSticker(sticker)
+    if (audio) sticker.audioMessage = audio
   }
   await reply(JSON.stringify(normalizar(citado), null, 2))
 }

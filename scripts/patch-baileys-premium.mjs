@@ -1,12 +1,17 @@
-// Parche para Baileys 7.0.0-rc14: campos completos de StickerMessage.
+// Parche para Baileys 7.0.0-rc14: campos completos de StickerMessage y
+// de Message para los stickers con sonido.
 //
-// El proto de WhatsApp ya tiene estos campos en StickerMessage, pero el
-// Baileys que usa el bot (7.0.0-rc14, la última versión publicada) no
-// los conoce: al decodificar un sticker, esos campos se descartan.
+// El proto de WhatsApp ya tiene estos campos, pero el Baileys que usa el
+// bot (7.0.0-rc14, la última versión publicada) no los conoce: al
+// decodificar, esos campos se descartan.
 //
-//   premium = 24 (int32: 1 = sticker premium, 0 = no premium)
-//   emojis = 25 (repeated string: emojis asociados al sticker)
-//   audioMessage = 26 (AudioMessage: el sonido de un sticker con sonido)
+//   StickerMessage:
+//     premium = 24 (int32: 1 = sticker premium, 0 = no premium)
+//     emojis = 25 (repeated string: emojis asociados al sticker)
+//     audioMessage = 26 (AudioMessage: el sonido de un sticker con sonido)
+//   Message:
+//     audioStickerMessage = 134 (FutureProofMessage: el envoltorio de un
+//       sticker con sonido; adentro trae el stickerMessage con su audio)
 //
 // (wppconnect-team/wa-proto, WAProto.proto)
 //
@@ -14,8 +19,16 @@
 // ni si es premium, y .relay/.stickerpremium no pueden conservar el
 // sonido al reenviar (el audio ni siquiera llega al JSON).
 //
-// Este script añade los tres campos al codec generado de Baileys (WAProto)
-// para que la decodificación los conserve y .get muestre el JSON completo.
+// El campo 134 es además el único sitio donde vive el audio: cuando se
+// responde a un sticker con sonido, la cita que manda WhatsApp solo trae
+// lo visual (el stickerMessage sin audioMessage). El audio solo está en
+// el mensaje original, dentro de audioStickerMessage. Sin el campo 134,
+// Baileys tira el envoltorio entero al decodificar y el bot jamás ve
+// el audio, aunque el sticker se le mande directo.
+//
+// Este script añade los cuatro campos al codec generado de Baileys
+// (WAProto) para que la decodificación los conserve y .get muestre el
+// JSON completo.
 //
 // Uso:
 //   node scripts/patch-baileys-premium.mjs            (busca Baileys en node_modules)
@@ -40,9 +53,11 @@ const ESPERADA = '7.0.0-rc14'
 // Campos de StickerMessage en el proto actual de WhatsApp.
 // Tags en el cable: premium (24<<3)|0 = 192, emojis (25<<3)|2 = 202,
 // audioMessage (26<<3)|2 = 210.
+// Campo de Message: audioStickerMessage (134<<3)|2 = 1074.
 const TAG_PREMIUM = 192
 const TAG_EMOJIS = 202
 const TAG_AUDIO = 210
+const TAG_AUDIO_STICKER = 1074
 
 // Baileys puede estar instalado con ámbito (@whiskeysockets/baileys)
 // o sin ámbito (baileys). Se prueban los dos nombres en cada búsqueda.
@@ -106,6 +121,17 @@ function bloqueStickerJs(texto) {
   if (inicio < 0) throw new Error('no encontré el bloque de StickerMessage en index.js')
   const fin = texto.indexOf('return StickerMessage;', inicio)
   if (fin < 0) throw new Error('no encontré el final del bloque de StickerMessage en index.js')
+  return { inicio, fin, bloque: texto.slice(inicio, fin) }
+}
+
+// Devuelve el bloque de Message en WAProto/index.js (desde su inicio
+// hasta su `return Message;`). Igual que bloqueStickerJs: las ediciones
+// del campo audioStickerMessage se hacen solo dentro de este bloque.
+function bloqueMessageJs(texto) {
+  const inicio = texto.indexOf('proto.Message = (function() {')
+  if (inicio < 0) throw new Error('no encontré el bloque de Message en index.js')
+  const fin = texto.indexOf('return Message;', inicio)
+  if (fin < 0) throw new Error('no encontré el final del bloque de Message en index.js')
   return { inicio, fin, bloque: texto.slice(inicio, fin) }
 }
 
@@ -406,26 +432,145 @@ function parchearAudio(b) {
   return b
 }
 
+// --- audioStickerMessage (campo 134 de Message, FutureProofMessage) ---
+// El envoltorio de un sticker con sonido en el mensaje original. Sin
+// este campo, Baileys tira el envoltorio entero al decodificar y el bot
+// jamás ve el audio (la cita al responder tampoco lo trae).
+// Mismo patrón que lottieStickerMessage (campo 74, FutureProofMessage):
+// prototype null, oneOf, encode con fork+ldelim (tag 1074), decode,
+// fromObject y toObject. Se ancla en pollResultSnapshotMessageV3,
+// el último campo de Message (114), que ya está presente.
+function parchearAudioSticker(b) {
+  if (b.includes('Message.prototype.audioStickerMessage = null')) return b
+  b = reemplazarUnaVez(
+    b,
+    '        Message.prototype.pollResultSnapshotMessageV3 = null;',
+    '        Message.prototype.pollResultSnapshotMessageV3 = null;\n        Message.prototype.audioStickerMessage = null;',
+    'prototype.audioStickerMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `        Object.defineProperty(Message.prototype, "_pollResultSnapshotMessageV3", {
+            get: $util.oneOfGetter($oneOfFields = ["pollResultSnapshotMessageV3"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });`,
+    `        Object.defineProperty(Message.prototype, "_pollResultSnapshotMessageV3", {
+            get: $util.oneOfGetter($oneOfFields = ["pollResultSnapshotMessageV3"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
+        Object.defineProperty(Message.prototype, "_audioStickerMessage", {
+            get: $util.oneOfGetter($oneOfFields = ["audioStickerMessage"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });`,
+    'oneOf _audioStickerMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `            if (m.pollResultSnapshotMessageV3 != null && Object.hasOwnProperty.call(m, "pollResultSnapshotMessageV3"))
+                $root.proto.Message.PollResultSnapshotMessage.encode(m.pollResultSnapshotMessageV3, w.uint32(914).fork()).ldelim();
+            return w;`,
+    `            if (m.pollResultSnapshotMessageV3 != null && Object.hasOwnProperty.call(m, "pollResultSnapshotMessageV3"))
+                $root.proto.Message.PollResultSnapshotMessage.encode(m.pollResultSnapshotMessageV3, w.uint32(914).fork()).ldelim();
+            if (m.audioStickerMessage != null && Object.hasOwnProperty.call(m, "audioStickerMessage"))
+                $root.proto.Message.FutureProofMessage.encode(m.audioStickerMessage, w.uint32(${TAG_AUDIO_STICKER}).fork()).ldelim();
+            return w;`,
+    'encode audioStickerMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `                case 114: {
+                        m.pollResultSnapshotMessageV3 = $root.proto.Message.PollResultSnapshotMessage.decode(r, r.uint32());
+                        break;
+                    }
+                default:`,
+    `                case 114: {
+                        m.pollResultSnapshotMessageV3 = $root.proto.Message.PollResultSnapshotMessage.decode(r, r.uint32());
+                        break;
+                    }
+                case 134: {
+                        m.audioStickerMessage = $root.proto.Message.FutureProofMessage.decode(r, r.uint32());
+                        break;
+                    }
+                default:`,
+    'decode audioStickerMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `            if (d.pollResultSnapshotMessageV3 != null) {
+                if (typeof d.pollResultSnapshotMessageV3 !== "object")
+                    throw TypeError(".proto.Message.pollResultSnapshotMessageV3: object expected");
+                m.pollResultSnapshotMessageV3 = $root.proto.Message.PollResultSnapshotMessage.fromObject(d.pollResultSnapshotMessageV3);
+            }
+            return m;`,
+    `            if (d.pollResultSnapshotMessageV3 != null) {
+                if (typeof d.pollResultSnapshotMessageV3 !== "object")
+                    throw TypeError(".proto.Message.pollResultSnapshotMessageV3: object expected");
+                m.pollResultSnapshotMessageV3 = $root.proto.Message.PollResultSnapshotMessage.fromObject(d.pollResultSnapshotMessageV3);
+            }
+            if (d.audioStickerMessage != null) {
+                if (typeof d.audioStickerMessage !== "object")
+                    throw TypeError(".proto.Message.audioStickerMessage: object expected");
+                m.audioStickerMessage = $root.proto.Message.FutureProofMessage.fromObject(d.audioStickerMessage);
+            }
+            return m;`,
+    'fromObject audioStickerMessage',
+  )
+  b = reemplazarUnaVez(
+    b,
+    `            if (m.pollResultSnapshotMessageV3 != null && m.hasOwnProperty("pollResultSnapshotMessageV3")) {
+                d.pollResultSnapshotMessageV3 = $root.proto.Message.PollResultSnapshotMessage.toObject(m.pollResultSnapshotMessageV3, o);
+                if (o.oneofs)
+                    d._pollResultSnapshotMessageV3 = "pollResultSnapshotMessageV3";
+            }
+            return d;`,
+    `            if (m.pollResultSnapshotMessageV3 != null && m.hasOwnProperty("pollResultSnapshotMessageV3")) {
+                d.pollResultSnapshotMessageV3 = $root.proto.Message.PollResultSnapshotMessage.toObject(m.pollResultSnapshotMessageV3, o);
+                if (o.oneofs)
+                    d._pollResultSnapshotMessageV3 = "pollResultSnapshotMessageV3";
+            }
+            if (m.audioStickerMessage != null && m.hasOwnProperty("audioStickerMessage")) {
+                d.audioStickerMessage = $root.proto.Message.FutureProofMessage.toObject(m.audioStickerMessage, o);
+                if (o.oneofs)
+                    d._audioStickerMessage = "audioStickerMessage";
+            }
+            return d;`,
+    'toObject audioStickerMessage',
+  )
+  return b
+}
+
 function parchearIndexJs(ruta) {
-  const texto = fs.readFileSync(ruta, 'utf8')
+  let texto = fs.readFileSync(ruta, 'utf8')
   const yaPremium = texto.includes('StickerMessage.prototype.premium = null')
   const yaEmojis = texto.includes('StickerMessage.prototype.emojis = $util.emptyArray')
   const yaAudio = texto.includes('StickerMessage.prototype.audioMessage = null')
-  if (yaPremium && yaEmojis && yaAudio) {
+  const yaAudioSticker = texto.includes('Message.prototype.audioStickerMessage = null')
+  if (yaPremium && yaEmojis && yaAudio && yaAudioSticker) {
     console.log('WAProto/index.js: el parche ya está aplicado, no hago nada.')
     return false
   }
-  const { inicio, fin, bloque } = bloqueStickerJs(texto)
-  let b = bloque
-  // En orden de campo: premium (24), emojis (25), audioMessage (26).
-  // Cada uno se ancla en el anterior, que ya está presente o se acaba
-  // de agregar en esta misma corrida.
-  b = parchearPremium(b)
-  b = parchearEmojis(b)
-  b = parchearAudio(b)
-  const nuevoTexto = texto.slice(0, inicio) + b + texto.slice(fin)
-  fs.writeFileSync(ruta, nuevoTexto)
-  console.log('WAProto/index.js: parche aplicado (premium 24, emojis 25, audioMessage 26).')
+  // StickerMessage: premium (24), emojis (25), audioMessage (26).
+  {
+    const { inicio, fin, bloque } = bloqueStickerJs(texto)
+    let b = bloque
+    // En orden de campo: premium (24), emojis (25), audioMessage (26).
+    // Cada uno se ancla en el anterior, que ya está presente o se acaba
+    // de agregar en esta misma corrida.
+    b = parchearPremium(b)
+    b = parchearEmojis(b)
+    b = parchearAudio(b)
+    texto = texto.slice(0, inicio) + b + texto.slice(fin)
+  }
+  // Message: audioStickerMessage (134). Bloque aparte: los anclajes son
+  // de Message, no de StickerMessage.
+  {
+    const { inicio, fin, bloque } = bloqueMessageJs(texto)
+    let b = bloque
+    b = parchearAudioSticker(b)
+    texto = texto.slice(0, inicio) + b + texto.slice(fin)
+  }
+  fs.writeFileSync(ruta, texto)
+  console.log('WAProto/index.js: parche aplicado (premium 24, emojis 25, audioMessage 26, audioStickerMessage 134).')
   return true
 }
 
@@ -485,12 +630,34 @@ function parchearIndexDts(ruta) {
     }
     texto = texto.slice(0, inicio) + b + texto.slice(fin)
   }
+  // Interfaz IMessage (nivel superior): audioStickerMessage (134).
+  // OJO: el ancla lleva el salto de línea + 8 espacios y SIN `public`,
+  // para no confundirla con la línea de la clase Message.
+  if (!texto.includes('\n        audioStickerMessage?: (proto.Message.IFutureProofMessage|null);')) {
+    texto = reemplazarUnaVez(
+      texto,
+      '        pollResultSnapshotMessageV3?: (proto.Message.IPollResultSnapshotMessage|null);',
+      '        pollResultSnapshotMessageV3?: (proto.Message.IPollResultSnapshotMessage|null);\n        audioStickerMessage?: (proto.Message.IFutureProofMessage|null);',
+      'IMessage.audioStickerMessage',
+    )
+    cambio = true
+  }
+  // Clase Message (nivel superior): audioStickerMessage (134).
+  if (!texto.includes('\n        public audioStickerMessage?: (proto.Message.IFutureProofMessage|null);')) {
+    texto = reemplazarUnaVez(
+      texto,
+      '        public pollResultSnapshotMessageV3?: (proto.Message.IPollResultSnapshotMessage|null);',
+      '        public pollResultSnapshotMessageV3?: (proto.Message.IPollResultSnapshotMessage|null);\n        public audioStickerMessage?: (proto.Message.IFutureProofMessage|null);',
+      'Message.audioStickerMessage',
+    )
+    cambio = true
+  }
   if (!cambio) {
     console.log('WAProto/index.d.ts: el parche ya está aplicado, no hago nada.')
     return false
   }
   fs.writeFileSync(ruta, texto)
-  console.log('WAProto/index.d.ts: parche aplicado (premium, emojis, audioMessage).')
+  console.log('WAProto/index.d.ts: parche aplicado (premium, emojis, audioMessage, audioStickerMessage).')
   return true
 }
 
@@ -503,10 +670,10 @@ if (!dirBaileys) {
 const pkg = JSON.parse(fs.readFileSync(path.join(dirBaileys, 'package.json'), 'utf8'))
 console.log(`Baileys ${pkg.version} en ${dirBaileys}`)
 if (pkg.version !== ESPERADA) {
-  // No se bloquea: los campos premium (24), emojis (25) y audioMessage (26)
-  // son del proto de WhatsApp y no dependen de la versión de Baileys. Si
-  // los textos que busca el parche no coinciden, falla sin tocar nada
-  // (esa es la verdadera protección).
+  // No se bloquea: los campos premium (24), emojis (25), audioMessage (26)
+  // y audioStickerMessage (134) son del proto de WhatsApp y no dependen
+  // de la versión de Baileys. Si los textos que busca el parche no
+  // coinciden, falla sin tocar nada (esa es la verdadera protección).
   console.log(`Aviso: el parche se probó en ${ESPERADA}; intento aplicarlo de todas formas.`)
 }
 const js = path.join(dirBaileys, 'WAProto', 'index.js')

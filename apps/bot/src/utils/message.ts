@@ -4,8 +4,14 @@ export function unwrapMessage(message: proto.IMessage | null | undefined): proto
   if (!message) return undefined
   const loose = message as proto.IMessage & {
     lottieStickerMessage?: { message?: proto.IMessage | null }
+    audioStickerMessage?: { message?: proto.IMessage | null }
   }
   if (loose.lottieStickerMessage?.message) return unwrapMessage(loose.lottieStickerMessage.message)
+  // Sticker con sonido: el mensaje original viene envuelto en
+  // audioStickerMessage (campo 134, FutureProofMessage). Al desenvolverlo
+  // queda el stickerMessage con su audioMessage (si el parche de Baileys
+  // está aplicado; sin él, Baileys tira el campo 134 al decodificar).
+  if (loose.audioStickerMessage?.message) return unwrapMessage(loose.audioStickerMessage.message)
   if (message.ephemeralMessage?.message) return unwrapMessage(message.ephemeralMessage.message)
   if (message.viewOnceMessage?.message) return unwrapMessage(message.viewOnceMessage.message)
   if (message.viewOnceMessageV2?.message) return unwrapMessage(message.viewOnceMessageV2.message)
@@ -78,3 +84,4 @@ export async function downloadMessageMedia(message: WAMessage): Promise<Download
 }
 
 export function textContent(text: string): AnyMessageContent { return { text } }
+
