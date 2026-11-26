@@ -452,6 +452,26 @@ async function connect() {
     if (generation !== socketGeneration || type !== 'notify') return
     markMainSocketLive(socket)
     for (const message of messages) {
+      // Anti view-once: si es un placeholder de ver una vez (key.isViewOnce y
+      // sin contenido), pedir el contenido real al teléfono con el resend de
+      // placeholder de Baileys. Cuando el teléfono responda, el contenido
+      // llega como un upsert nuevo y handleAntiViewOnce lo procesa normal.
+      if (message.key?.isViewOnce && !message.message) {
+        const placeholderChatId = message.key.remoteJid
+        if (placeholderChatId?.endsWith('@g.us') && groupControlsV9.get(placeholderChatId).antiViewOnce) {
+          const msgData = {
+            key: message.key,
+            messageTimestamp: message.messageTimestamp,
+            pushName: message.pushName,
+            participant: message.participant,
+            verifiedBizName: (message as any).verifiedBizName,
+          }
+          logger.info({ chatId: placeholderChatId, msgId: message.key.id }, 'anti view-once: pidiendo contenido al teléfono')
+          void socket.requestPlaceholderResend(message.key, msgData).catch((error) => {
+            logger.warn({ error, chatId: placeholderChatId }, 'anti view-once: no se pudo pedir el contenido al teléfono')
+          })
+        }
+      }
       if (!message.message || !message.key.remoteJid || message.key.remoteJid === 'status@broadcast') continue
       const stamp = Date.now()
       whatsappMessagesProcessed += 1
