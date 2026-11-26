@@ -16,12 +16,22 @@
 // Cómo reenvía .relay: SOLO desde el JSON. Descarga el archivo con los
 // datos del JSON (url/directPath + mediaKey) y lo vuelve a subir como un
 // archivo nuevo, con los metadatos del JSON (mimetype, tamaño, animación,
-// Lottie...). Nunca busca el sticker original ni lo reenvía tal cual:
-// el sticker que llega es una copia nueva subida por el bot.
+// Lottie, premium...). Nunca busca el sticker original ni lo reenvía tal
+// cual: el sticker que llega es una copia nueva subida por el bot.
+//
+// Si el sticker trae sonido (audioMessage en el JSON, que .get ya muestra
+// gracias al parche de Baileys), el audio se descarga y se vuelve a pegar
+// al sticker con el método de bytes crudos de /stickersonido, así que el
+// sticker reenviado sigue sonando. Sin audio en el JSON, no hay nada que
+// pegar: el sonido no se puede inventar.
 
 import type { proto, WAMessage, WASocket } from 'baileys'
 import type { LegacyCompatibleCommandContext } from '../types.js'
 import { unwrapMessage, getContextInfo } from '../utils/message.js'
+// Helpers de /stickersonido: armarBytes y parchearEncode pegan el audio
+// al sticker con bytes crudos, y aOpus lo deja en OGG Opus de 10 s.
+// Se usan solo para reenviar un sticker que YA trae sonido.
+import { armarBytes, parchearEncode, aOpus } from './sound-sticker.js'
 
 const CLAVES_VALIDAS = [
   'stickerMessage',
@@ -154,6 +164,65 @@ async function descargarMedia(
   return Buffer.concat(chunks)
 }
 
+// Un WebP animado trae el chunk ANIM (o el flag de animación en VP8X).
+// Solo se usa para registrar en el log si el archivo que se descargó
+// sigue animado, y así cazar por qué un sticker con movimiento sale
+// estático al reenviarlo.
+function esWebpAnimado(buf: Buffer): boolean {
+  if (buf.length < 12 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WEBP') return false
+  if (buf.includes(Buffer.from('ANIM', 'ascii'))) return true
+  if (buf.includes(Buffer.from('ANMF', 'ascii'))) return true
+  // VP8X: el byte 20 es el de flags, bit 1 (0x02) = animación
+  if (buf.length > 20 && buf.toString('ascii', 12, 16) === 'VP8X') return (buf[20] & 0x02) !== 0
+  return false
+}
+
+// Re-sube un sticker que trae sonido (audioMessage en el JSON del sticker).
+// El audio no sobrevive por la ruta normal de prepareWAMessageMedia, así
+// que se descarga, se pasa a OGG Opus (recortado a 10 s) y se pega al
+// sticker con el método de bytes crudos de /stickersonido (armarBytes).
+// Conserva premium, isAnimated y el resto de metadatos del JSON, porque
+// el sticker se prepara con el mismo `mensaje` que la ruta normal.
+async function resubirStickerConSonido(
+  sock: WASocket,
+  jid: string,
+  nodo: any,
+  mensaje: Record<string, unknown>,
+  quoted?: WAMessage,
+): Promise<void> {
+  const b = await baileys()
+  const protoObj = pick(b, 'proto')
+  const prepare = pick(b, 'prepareWAMessageMedia')
+  const audioOriginal = await descargarMedia(nodo.audioMessage, 'audio')
+  const { ogg, seg } = await aOpus(audioOriginal)
+  if (!ogg.length || seg < 1) throw new Error('SIN_AUDIO')
+  parchearEncode(protoObj)
+  const opts = { upload: (sock as any).waUploadToServer }
+  const s = await prepare(mensaje, opts)
+  const a = await prepare({ audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: false, seconds: seg }, opts)
+  if (!a.audioMessage?.mediaKey || (!a.audioMessage?.url && !a.audioMessage?.directPath)) {
+    throw new Error('AUDIO_SIN_DATOS')
+  }
+  const stickerMessage = s.stickerMessage
+  const audioMessage = a.audioMessage
+  stickerMessage.isAnimated = !!nodo.isAnimated
+  stickerMessage.width = stickerMessage.width || 512
+  stickerMessage.height = stickerMessage.height || 512
+  audioMessage.seconds = seg
+  if (quoted && quoted.key) {
+    stickerMessage.contextInfo = {
+      stanzaId: quoted.key.id,
+      participant: quoted.key.participant || quoted.key.remoteJid,
+      quotedMessage: quoted.message,
+    }
+  }
+  const bytes = armarBytes(protoObj, stickerMessage, audioMessage)
+  const genId = pick(b, 'generateMessageIDV2') || pick(b, 'generateMessageID')
+  const messageId = genId.length ? genId((sock as any).user && (sock as any).user.id) : genId()
+  await (sock as any).relayMessage(jid, { __crudo: bytes, audioStickerMessage: {} }, { messageId })
+  console.log('[relay] sticker con sonido reenviado, ogg', ogg.length, 'bytes,', seg, 's, animado:', !!nodo.isAnimated)
+}
+
 // Vuelve a subir el archivo descargado como un archivo nuevo, con los
 // metadatos del JSON (mimetype, tamaño, animación, Lottie...). El medio
 // queda alojado de nuevo en los servidores de WhatsApp, con url y clave
@@ -214,6 +283,18 @@ async function resubirMedio(
     default:
       throw new Error('SIN_MENSAJE')
   }
+  // Diagnóstico de animación: si el WebP descargado ya no trae los cuadros,
+  // el sticker saldrá estático aunque isAnimated sea true. Queda en el log.
+  if (clave === 'stickerMessage') {
+    console.log('[relay] sticker, webp animado:', esWebpAnimado(buffer), 'bytes:', buffer.length, 'isAnimated:', !!nodo.isAnimated)
+  }
+  // Sticker con sonido: el audio se pega con el método de bytes crudos
+  // (la ruta normal no lo conserva). Los stickers sin audio siguen por
+  // la ruta de siempre, sin ningún cambio.
+  if (clave === 'stickerMessage' && nodo?.audioMessage) {
+    await resubirStickerConSonido(sock, jid, nodo, mensaje, quoted)
+    return
+  }
   const contenido = await prepareWAMessageMedia(mensaje, {
     upload: (sock as any).waUploadToServer,
   })
@@ -270,6 +351,9 @@ export async function reenviarContenido(
   // por esta ruta saldría corrupto (sus bytes son JSON, no WebP y el
   // envío simple lo marca como image/webp), así que no se intenta.
   if (nodo?.isLottie) throw new Error('LOTTIE_SIN_RELAY')
+  // El envío simple no lleva sonido: si el sticker trae audio y la resubida
+  // falló, mejor avisar que mandar un sticker mudo.
+  if (clave === 'stickerMessage' && nodo?.audioMessage) throw new Error('SONIDO_SIN_REENVIO')
   // El envío simple no puede llevar la marca premium: si el sticker es
   // premium y la resubida con metadatos falló, mejor avisar que mandar
   // un sticker sin premium.
@@ -332,6 +416,8 @@ export function mensajeErrorRelay(error: unknown): string {
       return '❌ Ese sticker es animado (Lottie) y no lo pude reenviar con sus datos originales. Pide que te lo reenvíen de nuevo y saca el JSON otra vez con .get.'
     case 'PREMIUM_SIN_REENVIO':
       return '❌ Ese sticker es premium y no lo pude reenviar con su marca premium. Intenta de nuevo.'
+    case 'SONIDO_SIN_REENVIO':
+      return '❌ Ese sticker tiene sonido y no lo pude reenviar con su audio. Intenta de nuevo o pide que te lo reenvíen y saca el JSON otra vez con .get.'
     default:
       return '❌ No pude reenviarlo. Puede que el enlace del archivo ya haya caducado (los enlaces de WhatsApp vencen); pídele a quien lo mandó que lo reenvíe y saca el JSON de nuevo con .get.'
   }

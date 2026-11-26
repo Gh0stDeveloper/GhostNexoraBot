@@ -107,7 +107,10 @@ const campo = (num: number, bytes: Buffer | Uint8Array): Buffer =>
   Buffer.concat([varint(num * 8 + 2), varint(bytes.length), Buffer.from(bytes)])
 
 // Message con audioStickerMessage, en bytes
-function armarBytes(protoObj: any, stickerMessage: any, audioMessage: any): Buffer {
+// Estos tres helpers también los usa message-inspect.ts para reenviar un
+// sticker que ya trae sonido (.relay / .stickerpremium): por eso van
+// exportados. Su lógica no cambia: /stickersonido sigue igual que antes.
+export function armarBytes(protoObj: any, stickerMessage: any, audioMessage: any): Buffer {
   const stickerBytes = protoObj.Message.StickerMessage.encode(stickerMessage).finish()
   const audioBytes = protoObj.Message.AudioMessage.encode(audioMessage).finish()
   const stickerConSonido = Buffer.concat([Buffer.from(stickerBytes), campo(26, audioBytes)]) // StickerMessage.audioMessage = 26
@@ -120,7 +123,7 @@ function armarBytes(protoObj: any, stickerMessage: any, audioMessage: any): Buff
 // con __crudo) se devuelven los bytes ya armados, también cuando Baileys los
 // envuelve para tus otros dispositivos.
 let parcheado = false
-function parchearEncode(protoObj: any): void {
+export function parchearEncode(protoObj: any): void {
   if (parcheado) return
   parcheado = true
   const orig = protoObj.Message.encode.bind(protoObj.Message)
@@ -193,7 +196,7 @@ async function tieneSonido(buffer: Buffer): Promise<boolean> {
   }
 }
 
-async function aOpus(buffer: Buffer): Promise<{ ogg: Buffer; seg: number }> {
+export async function aOpus(buffer: Buffer): Promise<{ ogg: Buffer; seg: number }> {
   const id = randomBytes(6).toString('hex')
   const entrada = join(tmpdir(), `${id}.in`)
   const salida = join(tmpdir(), `${id}.ogg`)
